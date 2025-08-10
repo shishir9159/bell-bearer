@@ -1,131 +1,53 @@
 /* ============================================================
-   Bell Bearer — Popup
-   Design tokens + components
-   Light: rose/red brand  •  Night: classic Discord blurple
+   Bell Bearer — popup
+   Fluid 340–800px. One column with a drill-in; two panes past 560px.
+   All colour comes from skins.css — nothing below hard-codes a hue.
    ============================================================ */
 
-:root {
-    color-scheme: light;
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
-    /* Brand / accent */
-    --brand-grad: linear-gradient(135deg, #ff5b78 0%, #e11d48 55%, #c80f41 100%);
-    --accent: #e11d48;
-    --accent-2: #ff5b78;
-    --accent-hover: #c40f3f;
-    --accent-grad: linear-gradient(135deg, #ff5b78 0%, #e11d48 100%);
-    --accent-soft: rgba(225, 29, 72, 0.10);
-    --accent-soft-2: rgba(225, 29, 72, 0.16);
-    --accent-ring: rgba(225, 29, 72, 0.30);
-    --accent-shadow: rgba(225, 29, 72, 0.35);
-    --on-accent: #ffffff;
+/* The browser's own `[hidden] { display: none }` is a UA rule, so any class
+   rule here that sets a display beats it on origin alone — and the element
+   stays on screen with the attribute set. Every surface that toggles
+   `hidden` in JS was patching that one selector at a time (and the popup's
+   limit-override button was the one that got missed: it drew an empty box
+   left of Dashboard for anyone with no daily limit). One rule, said once,
+   for all of them. */
+[hidden] { display: none !important; }
 
-    /* Surfaces */
-    --bg: #eef0f5;
-    --surface: #ffffff;
-    --surface-2: #f6f7fb;
-    --surface-3: #eceef4;
-    --header-text: #ffffff;
+/* Preferred popup width. A browser action popup has no resizable viewport —
+   Chrome and Firefox both size the popup to the document and cap it at
+   800x600 — so the layout is chosen by asking for a width, never by measuring
+   one. `data-bb-width` is written by src/page/popup-width.js from the
+   popupWidth setting; the media queries at the foot of this file key off the
+   result, which is why neither layout needs a rule of its own here.
 
-    /* Text */
-    --text: #14171d;
-    --text-muted: #59626f;
-    --text-faint: #8b94a3;
+   760 leaves clearance for the scrollbar under that cap. 420 is wide enough
+   for a title and its checkpoint count on one line, and narrow enough to land
+   in the drill-in branch below.
 
-    /* Borders */
-    --border: #e6e8ef;
-    --border-strong: #d3d8e2;
-
-    /* Feedback */
-    --info: #2563eb;
-    --success: #15803d;
-    --success-bg: #effdf3;
-    --success-border: #bbf7d0;
-    --warning: #b45309;
-    --warning-bg: #fffaeb;
-    --warning-border: #fde68a;
-    --danger: #dc2626;
-    --danger-bg: #fef2f2;
-    --danger-border: #fecaca;
-
-    /* Radius */
-    --r-sm: 9px;
-    --r: 13px;
-    --r-lg: 18px;
-    --r-pill: 999px;
-
-    /* Elevation */
-    --shadow-sm: 0 1px 2px rgba(20, 24, 40, .05), 0 2px 6px rgba(20, 24, 40, .07);
-    --shadow-md: 0 6px 18px rgba(20, 24, 40, .10), 0 2px 6px rgba(20, 24, 40, .06);
-    --shadow-lg: 0 22px 52px rgba(20, 24, 40, .22);
-    --shadow-accent: 0 6px 18px var(--accent-shadow);
-    --ring: 0 0 0 3px var(--accent-ring);
-
-    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+   The media queries stay live either way: at 150%+ browser zoom, or on a small
+   display, even the wide popup is forced narrower and degrades on its own. */
+html {
+    width: 760px;
+    background: transparent;
+    border-radius: var(--popup-shell-radius, 14px);
 }
 
-/* ===== Night mode — classic Discord (old blurple) ===== */
-body.dark-theme {
-    color-scheme: dark;
-
-    --brand-grad: linear-gradient(135deg, #8a9bf0 0%, #7289da 52%, #5b6eae 100%);
-    --accent: #7289da;
-    --accent-2: #8a9bf0;
-    --accent-hover: #8a9bf0;
-    --accent-grad: linear-gradient(135deg, #8a9bf0 0%, #7289da 100%);
-    --accent-soft: rgba(114, 137, 218, 0.16);
-    --accent-soft-2: rgba(114, 137, 218, 0.24);
-    --accent-ring: rgba(114, 137, 218, 0.45);
-    --accent-shadow: rgba(73, 86, 145, 0.60);
-    --on-accent: #ffffff;
-
-    /* Discord greys */
-    --bg: #202225;
-    --surface: #2f3136;
-    --surface-2: #36393f;
-    --surface-3: #40444b;
-    --header-text: #ffffff;
-
-    --text: #e3e5e8;
-    --text-muted: #b5bac1;
-    --text-faint: #80848e;
-
-    --border: #26282c;
-    --border-strong: #1f2023;
-
-    --success: #57d68b;
-    --success-bg: #16261d;
-    --success-border: #245238;
-    --warning: #f0b232;
-    --warning-bg: #2a2310;
-    --warning-border: #5a4a19;
-    --danger: #f0626c;
-    --danger-bg: #2c1517;
-    --danger-border: #4d2024;
-
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .35);
-    --shadow-md: 0 8px 22px rgba(0, 0, 0, .50);
-    --shadow-lg: 0 24px 56px rgba(0, 0, 0, .65);
-    --shadow-accent: 0 8px 22px var(--accent-shadow);
-}
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+html[data-bb-width="compact"] { width: 420px; }
 
 body {
     font-family: var(--font);
-    background: var(--bg);
+    background: transparent;
+    border-radius: var(--popup-shell-radius, 14px);
+    overflow: hidden;
     color: var(--text);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    min-width: 340px;
 }
 
-*::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-}
+*::-webkit-scrollbar { width: 9px; height: 9px; }
 
 *::-webkit-scrollbar-thumb {
     background: var(--border-strong);
@@ -134,102 +56,245 @@ body {
     background-clip: content-box;
 }
 
-*::-webkit-scrollbar-thumb:hover {
-    background: var(--text-faint);
-    background-clip: content-box;
+*::-webkit-scrollbar-thumb:hover { background: var(--text-faint); background-clip: content-box; }
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .container {
-    width: 800px;
-    min-height: 500px;
-    background: var(--surface);
+    width: 100%;
+    min-width: 340px;
+    max-width: 800px;
+    /* 600px is the tallest a browser action popup is allowed to be. */
+    height: 600px;
+    min-height: 600px;
+    max-height: 600px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    /* Shell corners are rounded on every skin; items inside keep the skin's own radius. */
+    border-radius: var(--popup-shell-radius, 14px);
     overflow: hidden;
 }
 
-/* ---------- Header (flat, minimal) ---------- */
+/* ---------- header ---------- */
+
 header {
     background: var(--surface);
-    color: var(--text);
-    padding: 14px 18px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
     border-bottom: 1px solid var(--border);
+    padding: 12px 14px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
 }
 
 header h1 {
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: .2px;
+    font-family: var(--font-head);
+    font-size: 14px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text);
     display: flex;
     align-items: center;
     gap: 9px;
     white-space: nowrap;
-    color: var(--text);
+    min-width: 0;
 }
 
 .brand-icon {
     width: 22px;
     height: 22px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    flex-shrink: 0;
+    display: block;
+}
+
+.brand-count {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-faint);
+    white-space: nowrap;
     flex-shrink: 0;
 }
 
+/* Action row: scrolls sideways rather than wrapping, so a 340px popup
+   never hides Clear behind a fold. */
 .controls {
     display: flex;
-    gap: 2px;
+    gap: 6px;
     align-items: center;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 1px;
 }
 
+.controls::-webkit-scrollbar { display: none; }
+
 .controls .btn-secondary {
-    background: transparent;
+    background: var(--surface-3);
     border: 1px solid transparent;
     color: var(--text-muted);
-    border-radius: var(--r-sm);
+    border-radius: var(--btn-radius);
     cursor: pointer;
-    font-size: 12px;
-    font-weight: 500;
-    padding: 6px 10px;
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 12px;
     white-space: nowrap;
+    flex-shrink: 0;
     transition: background .15s ease, color .15s ease;
 }
 
-.controls .btn-secondary:hover {
-    background: var(--surface-3);
-    color: var(--text);
+.controls .btn-secondary:hover { background: var(--accent-soft); color: var(--accent-ink); }
+.controls .btn-secondary:active { transform: translateY(1px); }
+
+.controls .btn-secondary.is-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
 }
 
-.controls .btn-danger {
-    color: var(--danger);
-}
+.controls .btn-secondary.is-primary:hover { background: var(--accent-hover); color: var(--on-accent); }
 
-.controls .btn-danger:hover {
+.controls .btn-danger { color: var(--danger); background: var(--danger-bg); }
+.controls .btn-danger:hover { background: var(--danger); color: #fff; }
+
+/* The daily-limit override (src/page/chess-limit-button.js). Only on screen
+   once a limit has been reached, so it can afford to be the loud one. */
+.limit-override {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    padding: 5px 10px;
+    border: 1px solid var(--danger);
+    border-radius: var(--btn-radius);
     background: var(--danger-bg);
     color: var(--danger);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
 }
 
-/* ---------- Speed control bar ---------- */
+.limit-override:hover { background: var(--danger); color: #fff; }
+.limit-override:active { transform: translateY(1px); }
+.limit-override:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+.limit-override svg { display: block; }
+
+.limit-override.is-granted {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+/* ---------- speed bar ---------- */
+
 .speed-control-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 20px;
+    gap: 10px;
+    padding: 9px 14px;
     background: var(--accent-soft);
     border-bottom: 1px solid var(--border);
 }
 
-.speed-label {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--accent);
-    letter-spacing: .3px;
+
+/* The reader button: the same accent-soft ground as the speed bar above it,
+   because both act on the page rather than on the list below. */
+.reader-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--border);
 }
 
-/* Pill stepper: [−]  1×  [+] */
+.btn-reader {
+    flex-shrink: 0;
+    padding: 5px 12px;
+    border: 1px solid var(--accent);
+    border-radius: var(--btn-radius);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-reader:hover { background: var(--accent-hover); }
+.btn-reader:disabled {
+    background: var(--surface-3);
+    border-color: transparent;
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.reader-bar-note {
+    min-width: 0;
+    color: var(--text-muted);
+    font-size: 11.5px;
+}
+
+/* The watch party's way in, under the reader's. Its views are party.css,
+   loaded with the party's code. */
+.party-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--border);
+}
+
+.btn-party-join {
+    flex-shrink: 0;
+    padding: 5px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--btn-radius);
+    background: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-party-join:hover { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* While the party's views are up they are the popup, under the header, at
+   full height on every site — Netflix's popup is otherwise only as tall as
+   its one bar. */
+body.is-party .container { height: 600px; min-height: 600px; }
+body.is-party .container > :not(header):not(#partyView) { display: none !important; }
+
+/* The speed icon. It paints with currentColor, so it takes the skin's accent
+   ink the way the other controls on an accent-soft ground do, and follows a
+   theme change without anything having to redraw it. */
+.speed-label {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: block;
+    color: var(--accent-ink);
+}
+
 .speed-buttons {
     display: flex;
     align-items: center;
@@ -237,80 +302,94 @@ header h1 {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r-pill);
-    padding: 4px;
-    box-shadow: var(--shadow-sm);
+    padding: 3px;
+    box-shadow: var(--card-shadow);
 }
 
 .btn-speed {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--accent-soft);
     border: none;
-    color: var(--accent);
-    border-radius: 50%;
-    font-size: 18px;
+    color: var(--accent-ink);
+    border-radius: var(--r-pill);
+    font-family: var(--font);
+    font-size: 16px;
     font-weight: 700;
     line-height: 1;
     cursor: pointer;
     transition: background .15s ease, color .15s ease, transform .1s ease;
 }
 
-.btn-speed:hover {
-    background: var(--accent);
-    color: var(--on-accent);
-}
+.btn-speed:hover { background: var(--accent); color: var(--on-accent); }
+.btn-speed:active { transform: scale(.92); }
 
-.btn-speed:active {
-    transform: scale(.92);
-}
+.btn-speed-reset { width: auto; padding: 0 10px; font-size: 11.5px; font-weight: 700; }
 
 .speed-display {
-    font-size: 14px;
-    font-weight: 800;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
     color: var(--text);
-    min-width: 46px;
+    min-width: 42px;
     text-align: center;
-    letter-spacing: .3px;
+    font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Main content ---------- */
+/* ---------- panes ----------
+   Narrow: one column, .main-content slides between list and detail.
+   Wide (>=560px): both panes visible side by side. */
+
 .main-content {
+    position: relative;
+    flex: 1;
     display: flex;
-    height: 350px;
+    overflow: hidden;
+    min-height: 0;
 }
 
 .video-list {
-    width: 40%;
-    border-right: 1px solid var(--border);
+    width: 100%;
+    flex-shrink: 0;
     overflow-y: auto;
-    background: var(--surface-2);
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--bg);
 }
 
 .video-item {
-    padding: 13px 16px;
-    border-bottom: 1px solid var(--border);
+    position: relative;
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-left-width: var(--rail-width);
+    border-left-color: var(--accent);
+    border-radius: var(--card-radius);
+    padding: 10px 12px;
     cursor: pointer;
-    transition: background .18s ease, box-shadow .18s ease;
-    border-left: 3px solid transparent;
+    box-shadow: var(--card-shadow);
+    transition: box-shadow .15s ease, transform .12s ease, background .15s ease;
 }
 
 .video-item:hover {
-    background: var(--surface-3);
+    box-shadow: var(--card-shadow-hover);
+    transform: translateY(-1px);
 }
+
+.video-item:active { transform: translateY(0); }
 
 .video-item.selected {
     background: var(--accent-soft);
-    border-left-color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent-soft-2);
+    border-left-color: var(--accent-ink);
 }
 
 .video-title {
     font-size: 13px;
     font-weight: 600;
-    margin-bottom: 5px;
     line-height: 1.35;
     color: var(--text);
     display: -webkit-box;
@@ -321,315 +400,495 @@ header h1 {
 }
 
 .video-meta {
-    font-size: 11px;
-    color: var(--text-muted);
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
+    margin-top: 7px;
+    font-size: 11px;
+    color: var(--text-faint);
+    min-width: 0;
 }
+
+.video-channel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .bookmark-count {
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-ink);
     border: 1px solid var(--accent-soft-2);
     padding: 1px 8px;
     border-radius: var(--r-pill);
     font-size: 10px;
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
 }
+
+/* Detail pane */
 
 .bookmark-details {
-    width: 60%;
-    padding: 18px;
+    width: 100%;
+    flex-shrink: 0;
     overflow-y: auto;
-    background: var(--surface);
+    background: var(--bg);
 }
 
-.bookmark-details h3 {
-    font-size: 15px;
-    line-height: 1.35;
-    color: var(--text);
-    margin-bottom: 4px;
-}
-
-.no-selection {
-    text-align: center;
-    color: var(--text-faint);
-    margin-top: 56px;
-    font-size: 13px;
-}
-
-.empty-icon {
-    font-size: 34px;
-    line-height: 1;
-    margin-bottom: 12px;
-    opacity: .9;
-}
-
-.bookmark-item {
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: 13px;
-    margin-bottom: 9px;
-    transition: border-color .18s ease, box-shadow .18s ease, transform .12s ease, background .18s ease;
-}
-
-.bookmark-item:hover {
-    border-color: var(--accent);
-    box-shadow: var(--shadow-sm);
-}
-
-.bookmark-time {
-    font-size: 14px;
-    font-weight: 800;
-    color: var(--accent);
-    margin-bottom: 5px;
-    letter-spacing: .2px;
-}
-
-/* ---------- Details header ---------- */
 .bd-header {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
+    align-items: center;
     gap: 10px;
-    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
-.bd-header h3 {
-    font-size: 15px;
-    line-height: 1.3;
-    color: var(--text);
-    margin: 0;
+.bd-back {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
 }
+
+.bd-back:hover { background: var(--accent-soft); color: var(--accent-ink); }
+
+.bd-heading { min-width: 0; flex: 1; }
+
+.bd-header h3 {
+    font-family: var(--font-head);
+    font-size: 13px;
+    font-weight: var(--head-weight);
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bd-sub { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; }
 
 .bd-count {
     flex-shrink: 0;
     font-size: 11px;
     font-weight: 700;
-    color: var(--accent);
+    color: var(--accent-ink);
     background: var(--accent-soft);
     border: 1px solid var(--accent-soft-2);
-    padding: 3px 10px;
+    padding: 2px 9px;
     border-radius: var(--r-pill);
-    white-space: nowrap;
 }
 
-/* ---------- Checkpoint timeline ---------- */
+/* Timeline */
+
 .checkpoint-timeline {
     position: relative;
-    padding-left: 24px;
+    padding: 14px 12px 18px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
 }
 
 .checkpoint-timeline::before {
     content: "";
     position: absolute;
-    left: 7px;
-    top: 8px;
-    bottom: 8px;
+    left: 15px;
+    top: 22px;
+    bottom: 24px;
     width: 2px;
-    border-radius: 2px;
     background: linear-gradient(var(--accent), transparent);
-    opacity: .55;
+    opacity: .6;
 }
 
-.checkpoint-timeline .bookmark-item {
+.bookmark-item {
     position: relative;
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    padding: 10px 12px;
+    box-shadow: var(--card-shadow);
+    transition: box-shadow .15s ease, border-color .15s ease;
 }
 
-.checkpoint-timeline .bookmark-item::before {
+.bookmark-item::before {
     content: "";
     position: absolute;
-    left: -22px;
-    top: 15px;
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
+    left: -18px;
+    top: 14px;
+    width: 9px;
+    height: 9px;
+    border-radius: var(--r-pill);
     background: var(--accent);
-    box-shadow: 0 0 0 3px var(--surface);
+    box-shadow: 0 0 0 3px var(--bg);
 }
 
-.bookmark-note {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-bottom: 9px;
-    line-height: 1.45;
+.bookmark-item:hover { box-shadow: var(--card-shadow-hover); }
+
+.bookmark-time {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent-ink);
+    letter-spacing: .2px;
+    font-variant-numeric: tabular-nums;
 }
 
-.bookmark-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
+.bookmark-name { font-size: 12px; font-weight: 600; color: var(--text); margin-top: 3px; }
+.bookmark-note { font-size: 11.5px; color: var(--text-muted); margin-top: 3px; line-height: 1.45; }
 
-/* ---------- Small buttons ---------- */
+.bookmark-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 9px; }
+
 .btn-small {
     background: var(--surface-3);
     border: 1px solid var(--border);
-    color: var(--text);
-    padding: 6px 11px;
+    color: var(--text-muted);
+    padding: 5px 11px;
     border-radius: var(--r-sm);
-    font-size: 11px;
-    font-weight: 600;
+    font-family: var(--font);
+    font-size: 10.5px;
+    font-weight: 700;
     cursor: pointer;
-    transition: background .18s ease, border-color .18s ease, transform .1s ease, box-shadow .18s ease;
+    transition: background .15s ease, color .15s ease, transform .1s ease;
 }
 
-.btn-small:hover {
+.btn-small:hover { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-soft-2); }
+.btn-small:active { transform: translateY(1px); }
+
+.btn-small.seek-btn { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+.btn-small.seek-btn:hover { background: var(--accent); color: var(--on-accent); }
+
+.btn-small.delete { background: transparent; color: var(--text-faint); }
+.btn-small.delete:hover { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+
+/* ---------- empty states ---------- */
+
+.empty-state, .no-selection {
+    text-align: center;
+    padding: 44px 22px;
+    color: var(--text-faint);
+}
+
+/* "Select a video to see its checkpoints" fills a pane as tall as the video
+   list beside it, so a fixed top padding left it stranded near the top of a
+   lot of empty column. Centred in whatever height the pane has instead —
+   scoped with :has() so a pane showing real checkpoints still flows from the
+   top, and its sticky header keeps working. */
+.bookmark-details:has(> .no-selection) { display: flex; }
+
+.bookmark-details > .no-selection {
+    margin: auto;
+    padding: 24px 22px;
+}
+
+.empty-state h3 {
+    font-family: var(--font-head);
+    font-size: 14px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.empty-state p, .no-selection p { font-size: 12.5px; line-height: 1.55; }
+.empty-icon { font-size: 30px; line-height: 1; margin-bottom: 10px; opacity: .8; }
+
+/* ---------- per-site panels ---------- */
+
+/* #youtubePanel wraps .main-content and .instructions without a box of its
+   own — `display: contents` — so they still take part directly in .container's
+   flex column exactly as when they sat in it unwrapped. */
+#youtubePanel { display: contents; }
+
+/* A site with no panel of its own is the header alone, so the popup shrinks
+   to it instead of standing 600px tall around nothing. */
+body[data-bb-site]:not([data-bb-site="youtube"]):not([data-bb-site="chess"]):not([data-bb-site="lichess"]) .container {
+    height: auto;
+    min-height: 0;
+}
+
+/* ---------- chess.com panel (src/page/chess-stats.js, compact) ---------- */
+
+/* Never scrolls: the panel is exactly the popup's height, the last section
+   (Recent) takes whatever is left, and its pills are cut to fit with a "…". */
+.chess-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+
+.chess-pop-body { flex: 1; min-height: 0; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+.chess-pop-figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+.chess-pop-figure {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 10px 12px;
     background: var(--surface);
-    border-color: var(--border-strong);
-    box-shadow: var(--shadow-sm);
-}
-
-.btn-small:active {
-    transform: translateY(1px);
-}
-
-.btn-small.delete {
-    background: var(--danger-bg);
-    border-color: var(--danger-border);
-    color: var(--danger);
-}
-
-.btn-small.delete:hover {
-    background: var(--danger);
-    border-color: var(--danger);
-    color: #fff;
-}
-
-.speed-up-half-btn,
-.speed-down-half-btn {
-    background: var(--accent-soft);
-    border-color: transparent;
-    color: var(--accent);
-}
-
-.speed-up-half-btn:hover,
-.speed-down-half-btn:hover {
-    background: var(--accent-grad);
-    color: var(--on-accent);
-    box-shadow: var(--shadow-accent);
-}
-
-/* ---------- Instructions ---------- */
-.instructions {
-    padding: 15px 20px 17px;
-    background: var(--surface-2);
-    border-top: 1px solid var(--border);
-}
-
-.instructions h3 {
-    font-size: 13px;
-    margin-bottom: 8px;
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    font-family: var(--font);
     color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color .15s ease, background .15s ease;
 }
+
+.chess-pop-figure:hover { border-color: var(--accent-soft-2); }
+.chess-pop-figure[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+.chess-pop-value {
+    font-family: var(--font-head);
+    font-size: 24px;
+    font-weight: var(--head-weight);
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+}
+
+.chess-pop-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.chess-pop-section {
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    padding: 11px 13px 13px;
+}
+
+.chess-pop-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.chess-pop-user { color: var(--accent-ink); text-transform: none; letter-spacing: .02em; }
+
+/* One grid for all rows (rows are `display: contents`), so every bar has the
+   same start and end whatever score sits beside it — a "—" included. */
+.chess-class-list {
+    list-style: none;
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: 9px 10px;
+}
+
+.chess-class-row { display: contents; }
+.chess-class-name { font-size: 12px; font-weight: 600; color: var(--text); }
+
+.chess-class-score {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.chess-wdl { display: flex; height: 8px; overflow: hidden; background: var(--surface-3); border-radius: var(--r-pill); }
+.chess-wdl > span { display: block; height: 100%; }
+.chess-wdl-win { background: var(--success); }
+.chess-wdl-draw { background: var(--text-faint); opacity: .55; }
+.chess-wdl-loss { background: var(--danger); }
+
+.chess-pop-clock-row { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--text-muted); }
+
+.chess-pop-clock-row strong {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.chess-pop-none { font-size: 12px; color: var(--text-faint); }
+
+.chess-pop-recent { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.chess-pop-legend { display: inline-flex; gap: 10px; letter-spacing: .06em; }
+.chess-pop-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.chess-pop-legend span::before { content: ""; width: 7px; height: 7px; border-radius: 50%; }
+.chess-pop-legend .is-win::before { background: var(--success); }
+.chess-pop-legend .is-loss::before { background: var(--danger); }
+.chess-pop-legend .is-draw::before { background: var(--text-faint); }
+
+.chess-pills {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 5px;
+}
+
+.chess-pill {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: var(--r-pill);
+    border: 1px solid transparent;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: transform .1s ease, box-shadow .15s ease;
+}
+
+.chess-pill.is-win { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+.chess-pill.is-loss { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
+.chess-pill.is-draw { background: var(--surface-3); color: var(--text-muted); border-color: var(--border); }
+.chess-pill.is-more { background: transparent; color: var(--text-faint); padding: 0 4px; }
+a.chess-pill:hover { transform: translateY(-1px); box-shadow: var(--card-shadow-hover); }
+
+.chess-loading { padding: 40px 16px; text-align: center; font-size: 12.5px; color: var(--text-faint); }
+
+.chess-empty .empty-icon svg { display: inline-block; width: 40px; height: 40px; }
+.chess-empty .btn-primary { margin-top: 14px; }
+
+/* ---------- instructions ---------- */
+
+.instructions {
+    padding: 10px 14px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.instructions h3 { display: none; }
 
 .instructions ul {
-    font-size: 12px;
+    list-style: none;
+    font-size: 11px;
     color: var(--text-muted);
-    padding-left: 18px;
-    line-height: 1.65;
-}
-
-.instructions li {
-    margin-bottom: 2px;
+    line-height: 1.55;
+    flex: 1;
+    min-width: 180px;
 }
 
 .instructions strong {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
     color: var(--text);
     background: var(--surface-3);
-    padding: 1px 6px;
-    border-radius: 5px;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 11px;
     border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
 }
 
-.instructions-footer {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 10px;
-}
+.instructions-footer { margin-left: auto; }
 
 .btn-okay {
     background: var(--accent);
     color: var(--on-accent);
     border: none;
-    padding: 6px 18px;
-    border-radius: var(--r-pill);
-    font-size: 12px;
-    font-weight: 600;
+    padding: 5px 16px;
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 700;
     cursor: pointer;
-    transition: filter .15s ease;
+    transition: background .15s ease;
 }
 
-.btn-okay:hover {
-    filter: brightness(1.05);
-    transform: translateY(-1px);
+.btn-okay:hover { background: var(--accent-hover); }
+
+/* ---------- narrow: drill-in ---------- */
+
+@media (max-width: 559px) {
+    /* The detail pane replaces the list outright. It used to be parked at
+       translateX(100%) — outside a document that `body { overflow: hidden }`
+       clips — and pulled back by `.is-detail`, so the pane was only ever on
+       screen if that transform both matched and finished animating. When it
+       did not, selecting a video looked like it had done nothing: the list
+       stayed put and the right-hand side stayed blank. The resting state is
+       now the visible one, and the slide is decoration on top of it. */
+    .bookmark-details { display: none; }
+
+    .main-content.is-detail .video-list { display: none; }
+
+    .main-content.is-detail .bookmark-details {
+        display: block;
+        /* A fade, deliberately not a slide: an entrance that starts the pane
+           offset can leave it offset if the animation never gets a frame, and
+           that is the failure this block was rewritten to remove. */
+        animation: bb-fade-in .18s ease-out;
+    }
+
+    /* Without a selection the narrow popup never shows the empty detail pane. */
+    .no-selection { display: none; }
 }
 
-.btn-okay:active {
-    transform: translateY(0);
+@keyframes bb-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
-/* ---------- States ---------- */
-.empty-state {
-    text-align: center;
-    padding: 46px 20px;
-    color: var(--text-faint);
+/* ---------- wide: two panes ---------- */
+
+@media (min-width: 560px) {
+    .bd-back { display: none; }
+
+    .video-list {
+        width: 42%;
+        max-width: 300px;
+        border-right: 1px solid var(--border);
+    }
+
+    .bookmark-details { width: 58%; flex: 1; }
+
+    header {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        padding: 11px 16px;
+    }
+
+    .controls { overflow: visible; }
+    .brand-count { display: none; }
 }
 
-.empty-state h3 {
-    margin-bottom: 8px;
-    color: var(--text-muted);
-    font-size: 15px;
+@media (min-width: 700px) {
+    .video-list { max-width: 320px; }
 }
 
-.empty-state p {
-    font-size: 13px;
-    line-height: 1.5;
-}
+/* ---------- modal ---------- */
 
-/* ---------- Inline messages ---------- */
-.import-export-info,
-.import-export-error,
-.import-export-warning {
-    border-radius: var(--r-sm);
-    padding: 10px 13px;
-    margin-bottom: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    border: 1px solid transparent;
-}
-
-.import-export-info {
-    background: var(--success-bg);
-    border-color: var(--success-border);
-    color: var(--success);
-}
-
-.import-export-error {
-    background: var(--danger-bg);
-    border-color: var(--danger-border);
-    color: var(--danger);
-}
-
-.import-export-warning {
-    background: var(--warning-bg);
-    border-color: var(--warning-border);
-    color: var(--warning);
-}
-
-/* ---------- Modal ---------- */
 .import-modal {
     position: fixed;
     inset: 0;
-    background: rgba(8, 10, 14, 0.58);
+    background: rgba(12, 8, 7, .55);
     backdrop-filter: blur(3px);
     display: flex;
     justify-content: center;
     align-items: center;
+    padding: 20px;
     z-index: 10000;
     animation: bb-fade .16s ease-out;
 }
@@ -637,152 +896,246 @@ header h1 {
 .import-modal-content {
     background: var(--surface);
     color: var(--text);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--r-lg);
-    padding: 26px;
-    max-width: 500px;
-    width: 90%;
-    max-height: 80vh;
+    padding: 20px;
+    max-width: 460px;
+    width: 100%;
+    max-height: 84vh;
     overflow-y: auto;
     box-shadow: var(--shadow-lg);
     animation: bb-pop .18s cubic-bezier(.2, .8, .2, 1);
 }
 
 .import-modal-content h3 {
-    margin-bottom: 16px;
-    color: var(--text);
-    font-size: 17px;
+    font-family: var(--font-head);
+    font-size: 16px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    margin-bottom: 12px;
 }
 
-.import-modal-content p {
-    color: var(--text-muted);
-}
+.import-modal-content p { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
 
-.import-options {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 20px;
-}
+.import-options { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
 
 .import-option-btn {
     background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: 16px;
+    border-radius: var(--card-radius);
+    padding: 13px 14px;
     cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
     text-align: left;
-    transition: all .18s ease;
     color: var(--text);
+    transition: background .15s ease, border-color .15s ease;
 }
 
-.import-option-btn:hover {
-    background: var(--accent-soft);
-    border-color: var(--accent);
-    color: var(--accent);
-    transform: translateY(-1px);
+.import-option-btn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+
+.import-modal-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
+
+.btn-primary {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: var(--on-accent);
+    padding: 9px 18px;
+    border-radius: var(--btn-radius);
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 700;
+    transition: background .15s ease;
 }
+
+.btn-primary:hover { background: var(--accent-hover); }
 
 .import-modal-close {
     background: var(--surface-3);
     border: 1px solid var(--border);
     color: var(--text-muted);
-    padding: 10px 16px;
-    border-radius: var(--r-sm);
+    padding: 9px 16px;
+    border-radius: var(--btn-radius);
     cursor: pointer;
-    font-size: 14px;
+    font-family: var(--font);
+    font-size: 13px;
     font-weight: 600;
-    transition: background .18s ease;
 }
 
-.import-modal-close:hover {
-    background: var(--border);
-}
+.import-modal-close:hover { background: var(--border); }
 
-.import-modal-buttons {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    margin-top: 16px;
-}
+.modal-message { font-size: 13px; line-height: 1.5; margin-bottom: 14px; color: var(--text-muted); }
+.modal-label { display: block; font-size: 11.5px; margin-bottom: 6px; color: var(--text-faint); }
 
-.btn-primary {
-    background: var(--accent);
-    border: none;
-    color: var(--on-accent);
-    padding: 10px 19px;
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    transition: filter .15s ease;
-}
-
-.btn-primary:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.05);
-}
-
-.btn-primary:active {
-    transform: translateY(0) scale(.99);
-}
-
+.modal-input,
+.modal-textarea,
 .import-modal-content textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 11px;
+    margin-bottom: 14px;
     border: 1px solid var(--border-strong);
     border-radius: var(--r-sm);
-    padding: 12px;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    resize: vertical;
-    min-height: 120px;
-    width: 100%;
+    font-size: 13px;
+    font-family: inherit;
     background: var(--surface-2);
     color: var(--text);
 }
 
+.modal-textarea, .import-modal-content textarea {
+    font-family: var(--font-mono);
+    resize: vertical;
+    min-height: 110px;
+}
+
+.modal-input:focus,
+.modal-textarea:focus,
 .import-modal-content textarea:focus {
     outline: none;
     border-color: var(--accent);
     box-shadow: var(--ring);
 }
 
-@keyframes bb-fade {
-    from { opacity: 0; }
-    to { opacity: 1; }
+/* ---------- toast ---------- */
+
+.bb-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 14px;
+    transform: translate(-50%, 12px);
+    max-width: calc(100% - 28px);
+    padding: 9px 15px;
+    border-radius: var(--r-sm);
+    background: var(--text);
+    color: var(--bg);
+    font-size: 12.5px;
+    line-height: 1.4;
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+    z-index: 10001;
 }
 
+.bb-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+.bb-toast-error { background: var(--danger); color: #fff; }
+.bb-toast-warning { background: var(--warning); color: #fff; }
+
+@keyframes bb-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes bb-pop {
-    from { opacity: 0; transform: translateY(10px) scale(.97); }
+    from { opacity: 0; transform: translateY(8px) scale(.98); }
     to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ---------- Responsive ---------- */
-@media (max-width: 650px) {
-    .container {
-        width: 100%;
-        min-width: 400px;
-    }
+/* ======================================================================
+   LeetCode — the popup is the queue and nothing else. It answers "what
+   should I open now", and anything else here would make it worse at that.
+   ====================================================================== */
 
-    .controls {
-        gap: 4px;
-    }
+.leet-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+.leet-pop-body { flex: 1; min-height: 0; padding: 12px; overflow-y: auto; }
 
-    .controls .btn-secondary {
-        font-size: 11px;
-        padding: 6px 9px;
-    }
+.leet-pop-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
 
-    .import-modal-content {
-        width: 95%;
-        padding: 18px;
-    }
+.leet-pop-count { color: var(--accent-ink); letter-spacing: .02em; }
 
-    .import-modal-buttons {
-        flex-direction: column;
-    }
+.leet-pop-rows { display: flex; flex-direction: column; gap: 4px; }
 
-    .import-modal-buttons button {
-        width: 100%;
-    }
+.leet-pop-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.leet-pop-row:hover { border-color: var(--accent); }
+
+.leet-pop-name {
+    width: 100%;
+    font-size: 12.5px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leet-pop-meta { display: flex; align-items: baseline; gap: 8px; font-size: 10.5px; color: var(--text-faint); }
+.leet-pop-when { color: var(--text-muted); }
+
+/* LeetCode's own three, as everywhere else this extension names them. */
+.leet-diff { font-weight: 700; }
+.leet-diff.is-easy { color: #0f9f9f; }
+.leet-diff.is-medium { color: #c98a00; }
+.leet-diff.is-hard { color: #d33a3a; }
+
+[data-theme="dark"] .leet-diff.is-easy { color: #2ccccc; }
+[data-theme="dark"] .leet-diff.is-medium { color: #ffc733; }
+[data-theme="dark"] .leet-diff.is-hard { color: #ff5c5c; }
+
+.leet-pop-more {
+    width: 100%;
+    margin-top: 8px;
+    padding: 6px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--accent-ink);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.leet-pop-more:hover { background: var(--surface-2); }
+
+.leet-pop-done { padding: 26px 12px; text-align: center; }
+.leet-pop-done-title { margin: 0 0 5px; font-size: 13.5px; font-weight: 600; color: var(--text); }
+.leet-pop-done-sub { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-muted); }
+
+/* The problem in the tab behind the popup, when it is not one of the ones
+   being offered. Ruled off, because it is about a different thing from the
+   list above it. */
+.leet-pop-add { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.leet-pop-add-why { margin: 0 0 7px; font-size: 11px; color: var(--text-faint); }
+
+.leet-pop-add-btn {
+    width: 100%;
+    /* The title inside it can be long; one line with an ellipsis rather than
+       a button that grows to three rows. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leet-pop-add-btn[disabled] { opacity: .5; cursor: default; }
+
+.leet-pop-here {
+    margin: 12px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-faint);
+    text-align: center;
 }

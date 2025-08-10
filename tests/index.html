@@ -25,13 +25,174 @@
         register their listeners at load time. -->
 <script src="mock-chrome.js"></script>
 
-<!-- 3. The extension code under test, loaded unmodified. -->
-<script src="../background.js"></script>
+<!-- 3. The extension code under test, loaded unmodified.
+        background.js itself is only an importScripts() shim for the service
+        worker, so the parts are listed here the same way manifest.firefox.json
+        lists them. Keep the three lists in step. -->
+<script src="../src/shared/settings.js"></script>
+<script src="../src/shared/chat-sites.js"></script>
+<script src="../src/shared/prompt-queue.js"></script>
+<script src="../src/shared/activity.js"></script>
+<script src="../src/background/proto.js"></script>
+<script src="../src/background/sowon.js"></script>
+<script src="../src/background/context-menus.js"></script>
+<script src="../src/background/commands.js"></script>
+<script src="../src/background/activity-heartbeat.js"></script>
+<script src="../src/background/prompt-queue.js"></script>
 <script src="../transcript.js"></script>
+
+<!-- Shared modules, loaded in dependency order (as the manifest loads them). -->
+<script src="../src/shared/time.js"></script>
+<script src="../src/shared/dom.js"></script>
+<script src="../src/shared/speed.js"></script>
+<script src="../src/shared/youtube.js"></script>
+<script src="../src/shared/bookmarks.js"></script>
+<script src="../src/shared/pins.js"></script>
+<script src="../src/shared/watched.js"></script>
+<script src="../src/shared/keybindings.js"></script>
+<script src="../src/shared/skim.js"></script>
+<script src="../src/shared/limit-sites.js"></script>
+<script src="../src/shared/time-limits.js"></script>
+<script src="../src/shared/roster.js"></script>
+<script src="../src/content/time-limit.js"></script>
+<script src="../src/content/roster.js"></script>
+<script src="../src/content/site.js"></script>
+<script src="../src/content/notify.js"></script>
+<script src="../src/content/player.js"></script>
+<script src="../src/content/shortcuts.js"></script>
+<script src="../src/content/scroll-to.js"></script>
+<script src="../src/content/composer.js"></script>
+
+<!-- The injected YouTube UI and the modules it leans on. -->
+<script src="../src/shared/subscriptions.js"></script>
+<script src="../src/shared/feed.js"></script>
+<script src="../src/shared/yt-subs.js"></script>
+<script src="../src/shared/playlists.js"></script>
+<script src="../src/content/overlay.js"></script>
+<script src="../src/content/dom-watch.js"></script>
+<script src="../src/content/theme.js"></script>
+<script src="../src/content/page-info.js"></script>
+<script src="../src/shared/x-pouch.js"></script>
+<script src="../src/shared/pouch-button.js"></script>
+<script src="../src/content/pouch-sheet.js"></script>
+<script src="../src/content/youtube-ui.js"></script>
+<script src="../src/content/checkpoints.js"></script>
+<script src="../src/content/markdown.js"></script>
+<script src="../src/content/reader-transcript.js"></script>
+<script src="../src/content/reader.js"></script>
+<script src="../src/content/twitter-page.js"></script>
+<script src="../src/content/twitter-panel.js"></script>
+<script src="../src/content/twitter-ui.js"></script>
+<script src="../src/content/twitter-ads.js"></script>
+<script src="../src/content/cookie-banner.js"></script>
+
+<!-- LeetCode. leet-page.js is deliberately absent: it is the MAIN-world half
+     and it wraps window.fetch, which the mocked chrome.* and the harness's own
+     loads would then be routed through. The specs dispatch the DOM events it
+     would have sent instead. -->
+<script src="../src/shared/fsrs.js"></script>
+<script src="../src/shared/leetcode.js"></script>
+<script src="../src/shared/leet-templates.js"></script>
+<script src="../src/shared/leet-api.js"></script>
+<script src="../src/content/leet-read.js"></script>
+<script src="../src/content/leet-panel.js"></script>
+<script src="../src/content/leet-ui.js"></script>
+<!-- A page module rather than a content script. Its arithmetic is covered in
+     tests/node-check.js; it is here so that a syntax error in it fails the
+     browser run loudly instead of only on the dashboard. -->
+<script src="../src/page/heat-map.js"></script>
+<script src="../src/page/spark.js"></script>
+<script src="../src/page/leet-stats.js"></script>
+<script src="../src/page/leet-popup.js"></script>
+<script src="../src/page/leet-templates-view.js"></script>
+
+<!-- TypeRacer. The synthesised sound module is loaded here rather than under
+     the specs, so a syntax error in it fails the run loudly; it stays silent
+     throughout, because nothing in a test run is a user gesture and the
+     context therefore never starts. -->
+<script src="../src/shared/sfx.js"></script>
+<script src="../src/shared/typeracer.js"></script>
+<script src="../src/content/typeracer-read.js"></script>
+<script src="../src/content/typeracer-ui.js"></script>
+<!-- After the store it destructures off BB, and after spark.js above — a page
+     module here for the same reason heat-map.js is. -->
+<script src="../src/page/typeracer-stats.js"></script>
+<script src="../src/page/site-sort.js"></script>
+
+<!-- The chat sites: a site-neutral core, and one adapter per site that holds
+     everything about that site's markup and its API. In manifest order, less
+     chat-sites.js and prompt-queue.js, which are loaded above with the worker
+     that shares them. -->
+<script src="../src/shared/chat-tree.js"></script>
+<script src="../src/shared/chatgpt-format.js"></script>
+<script src="../src/shared/claude-format.js"></script>
+<script src="../src/shared/chat-diff.js"></script>
+<script src="../src/shared/chat-export.js"></script>
+<script src="../src/shared/zip.js"></script>
+<script src="../src/shared/prompt-templates.js"></script>
+<script src="../src/shared/chat-pins.js"></script>
+<script src="../src/content/chatgpt-read.js"></script>
+<script src="../src/content/claude-read.js"></script>
+<script src="../src/content/chat-nav.js"></script>
+<script src="../src/content/chat-tree-view.js"></script>
+<script src="../src/content/chat-compare.js"></script>
+<script src="../src/content/chat-panel.js"></script>
+<script src="../src/content/chat-library.js"></script>
+<script src="../src/content/chat-picker.js"></script>
+<script src="../src/content/chat-runner.js"></script>
+<script src="../src/content/chat-queue-view.js"></script>
+<script src="../src/content/chat-ui.js"></script>
+<!-- The watch party. No manifest lists these — the party loader injects
+     them into a party's tab — so this page is the one place they load
+     together with the content scripts, in the loader's order. -->
+<script src="../src/shared/party-clock.js"></script>
+<script src="../src/shared/party-state.js"></script>
+<script src="../src/shared/party-drift.js"></script>
+<script src="../src/shared/party-sites.js"></script>
+<script src="../src/shared/party-chat.js"></script>
+<script src="../src/content/party-chip.js"></script>
+<script src="../src/content/party-chat-panel.js"></script>
+<script src="../src/content/party-media.js"></script>
+<script src="../src/content/netflix-page.js"></script>
+<!-- And what offscreen.html loads, for the session the tab talks to. -->
+<script src="../src/shared/party-room.js"></script>
+<script src="../src/offscreen/party-loopback.js"></script>
+<script src="../src/offscreen/party-ws.js"></script>
+<script src="../src/shared/party-code.js"></script>
+<script src="../src/offscreen/party-rtc.js"></script>
+<script src="../src/offscreen/party-host.js"></script>
+<script src="../src/offscreen/party-tracker.js"></script>
+<script src="../src/offscreen/party-session.js"></script>
 
 <!-- 4. Specs -->
 <script src="background.test.js"></script>
 <script src="transcript.test.js"></script>
+<script src="speed.test.js"></script>
+<script src="player.test.js"></script>
+<script src="bookmarks.test.js"></script>
+<script src="activity.test.js"></script>
+<script src="shortcuts.test.js"></script>
+<script src="youtube-ui.test.js"></script>
+<script src="pouch.test.js"></script>
+<script src="x-pouch.test.js"></script>
+<script src="limits.test.js"></script>
+<script src="roster.test.js"></script>
+<script src="cookie-banner.test.js"></script>
+<script src="leetcode.test.js"></script>
+<script src="typeracer.test.js"></script>
+<script src="site-sort.test.js"></script>
+<script src="chat-stage.js"></script>
+<script src="chat.test.js"></script>
+<script src="chat-queue.test.js"></script>
+<script src="chat-claude.test.js"></script>
+<script src="party-media.test.js"></script>
+<script src="party-session.test.js"></script>
+<script src="party-rtc.test.js"></script>
+<script src="party-chat.test.js"></script>
+<!-- Last, because it loads content.css for the specs that need the reader
+     laid out, and a stylesheet loaded earlier would restyle every fixture
+     after it. -->
+<script src="reader.test.js"></script>
 
 <script>
     (async () => {

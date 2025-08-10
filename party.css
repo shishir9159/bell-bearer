@@ -1,0 +1,516 @@
+/* ============================================================
+   Bell Bearer — the watch party's views in the popup
+   (src/page/party-panel.js and the view files after it).
+   Linked by popup.js only when a party is asked for or on. Every value is
+   the design's (Watch party extension design/Watch Party.dc.html), and all
+   colour is the skin's tokens from skins.css.
+   ============================================================ */
+
+.party-view {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---- The bar under the header: back, what this is, and its actions. */
+.party-sub {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+
+.party-back {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.party-sub-text { min-width: 0; flex: 1; }
+
+.party-sub h3 {
+    margin: 0;
+    font-family: var(--font-head);
+    font-size: 13px;
+    font-weight: var(--head-weight);
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.party-sub-note {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    color: var(--text-faint);
+    margin-top: 2px;
+}
+
+.party-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ---- Small caps labels, cards and fields. */
+.party-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.party-label-row { display: flex; justify-content: space-between; gap: 10px; }
+.party-label-row > span { color: var(--accent-ink); letter-spacing: .02em; }
+.party-time { font-family: var(--font-mono); text-transform: none; }
+
+.party-hint { font-size: 10.5px; color: var(--text-faint); line-height: 1.45; }
+
+.party-card {
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    padding: 11px 13px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.party-card.is-roomy { gap: 11px; }
+.party-card.is-snug { gap: 8px; }
+.party-card.is-accent { border-color: var(--accent); }
+
+.party-field { display: flex; flex-direction: column; gap: 6px; }
+
+.party-input {
+    width: 100%;
+    padding: 8px 11px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.party-input.is-mono { font-family: var(--font-mono); font-size: 12px; }
+
+.party-input:focus,
+.party-code-in:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: var(--ring);
+}
+
+/* ---- The four ways to connect, two by two. */
+.party-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.party-mode {
+    text-align: left;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    padding: 9px 11px;
+    font-family: var(--font);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.party-mode.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+
+.party-mode-name {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.party-mode-count { font-size: 10px; color: var(--success); font-weight: 700; }
+.party-mode-count.is-none { color: var(--danger); }
+
+.party-mode-note { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; line-height: 1.35; }
+.party-mode.is-on .party-mode-note { color: var(--text-muted); }
+
+/* ---- Two-way choices, as a pill with the chosen half raised. */
+.party-seg {
+    display: flex;
+    background: var(--surface-3);
+    border-radius: var(--r-pill);
+    padding: 3px;
+    gap: 2px;
+}
+
+.party-seg button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: var(--r-pill);
+    cursor: pointer;
+}
+
+.party-seg button.is-on { background: var(--surface); color: var(--accent-ink); box-shadow: var(--card-shadow); }
+
+/* ---- Buttons. */
+.party-foot { margin-top: auto; display: flex; justify-content: flex-end; gap: 10px; }
+.party-end { display: flex; justify-content: flex-end; }
+.party-row { display: flex; align-items: center; gap: 8px; }
+
+.party-btn {
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 9px 16px;
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.party-btn.is-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+    padding: 9px 18px;
+    font-weight: 700;
+}
+
+.party-btn.is-primary:hover { background: var(--accent-hover); }
+.party-btn.is-small { padding: 7px 16px; font-size: 12.5px; }
+.party-btn:disabled { opacity: .6; cursor: default; }
+
+.party-copy {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border: 1px solid transparent;
+    padding: 5px 11px;
+    border-radius: var(--r-sm);
+    font-family: var(--font);
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.party-copy.is-solid { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+
+.party-fail { font-size: 11px; line-height: 1.4; color: var(--danger); }
+.party-fail:empty { display: none; }
+
+/* ---- Codes. */
+.party-code {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 8px 10px;
+    word-break: break-all;
+}
+
+.party-code-in {
+    width: 100%;
+    min-height: 64px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    background: var(--surface-2);
+    color: var(--text);
+    resize: none;
+}
+
+.party-code-read { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+.party-code-read:empty { display: none; }
+.party-code-read .is-ok { color: var(--success); font-weight: 700; }
+.party-code-read .is-bad { color: var(--danger); font-weight: 700; }
+
+.party-wait { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+
+.party-spin {
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--accent-soft-2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: party-spin 1s linear infinite;
+}
+
+@keyframes party-spin { to { transform: rotate(360deg); } }
+
+/* ---- How a party ended. */
+.party-ended {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 22px;
+}
+
+.party-ended-box {
+    max-width: 300px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.party-ended-box svg { color: var(--text-faint); margin-bottom: 4px; }
+
+.party-ended-box h3 {
+    margin: 0;
+    font-family: var(--font-head);
+    font-size: 14px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text-muted);
+}
+
+.party-ended-box p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text-faint); text-wrap: pretty; }
+.party-ended-box .party-row { margin-top: 10px; }
+.party-ended-box .party-btn { padding: 8px 14px; font-size: 12.5px; }
+.party-ended-box .party-btn.is-primary { padding: 8px 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .party-spin { animation-duration: 3s; }
+}
+
+/* ---- The room. */
+.party-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+.party-dot.is-off { background: var(--text-faint); }
+.party-line { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.party-small {
+    flex-shrink: 0;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 5px 11px;
+    border-radius: var(--r-sm);
+    font-family: var(--font);
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.party-small.is-danger { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+
+.party-pill {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border: 1px solid var(--accent-soft-2);
+    padding: 0 7px;
+    border-radius: var(--r-pill);
+    font-size: 9.5px;
+    font-weight: 700;
+}
+
+.party-pill.is-warn { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-border); }
+.party-pill.is-big { flex-shrink: 0; font-size: 11px; padding: 2px 9px; }
+
+.party-card.is-list { padding: 9px 13px 4px; gap: 0; }
+.party-card.is-list > .party-label { margin-bottom: 6px; }
+.party-card.is-tight { padding: 9px 13px 11px; gap: 8px; }
+
+.party-member { display: flex; flex-direction: column; gap: 5px; padding: 4px 0; border-top: 1px solid var(--border); }
+.party-member-main { display: flex; align-items: center; gap: 8px; }
+.party-member-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.party-member-name { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.party-member-state { font-size: 10.5px; color: var(--text-faint); }
+.party-rtt { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+
+.party-menu {
+    width: 24px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-faint);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+}
+
+.party-member-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.party-act {
+    background: var(--surface-3);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: var(--r-sm);
+    font-family: var(--font);
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.party-act.is-soft { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+.party-act.is-danger { background: transparent; color: var(--danger); border-color: var(--danger-border); }
+.party-act.is-ghost { background: transparent; color: var(--text-faint); padding: 3px 8px; }
+
+.party-lock {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.party-lock svg { color: var(--text-muted); }
+.party-lock-text { flex: 1; }
+.party-lock-text span { font-size: 10.5px; font-weight: 400; color: var(--text-faint); }
+
+.party-switch {
+    flex-shrink: 0;
+    width: 28px;
+    height: 16px;
+    border-radius: 999px;
+    background: rgba(127, 127, 127, .4);
+    position: relative;
+}
+
+.party-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--surface);
+    transition: left .15s ease;
+}
+
+.party-lock[aria-checked="true"] .party-switch { background: var(--accent); }
+.party-lock[aria-checked="true"] .party-switch::after { left: 14px; }
+
+/* ---- Invites. */
+.party-warn {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 9px 11px;
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-radius: var(--card-radius);
+    color: var(--warning);
+}
+
+.party-warn svg { flex-shrink: 0; margin-top: 1px; }
+.party-warn div { font-size: 11px; line-height: 1.4; color: var(--text); }
+.party-warn strong { color: var(--warning); }
+#partyNat:empty { display: none; }
+
+.party-share { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+.party-mono { font-family: var(--font-mono); color: var(--text); }
+
+.party-code-in.is-short { min-height: 34px; height: 34px; padding: 7px 10px; }
+.party-end.is-tucked { margin-top: -2px; }
+.party-btn.is-tiny { padding: 5px 14px; font-size: 12px; }
+
+.party-pendings { display: flex; flex-direction: column; gap: 4px; }
+.party-pendings:empty { display: none; }
+
+.party-pending {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+}
+
+.party-pending-code {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.party-pending-left { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
+
+/* ---- Chat said while the page's panel was shut, and the way to it. */
+.party-chat-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-soft-2);
+    border-radius: var(--card-radius);
+}
+
+.party-chat-strip svg { flex-shrink: 0; color: var(--accent-ink); }
+
+.party-chat-strip-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 11.5px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.party-chat-open {
+    flex-shrink: 0;
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: var(--on-accent);
+    padding: 4px 10px;
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+}

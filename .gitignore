@@ -1,36 +1,53 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Whitelist, not blacklist.
+#
+# What this repo ships is a Chrome extension with no build step: hand-written
+# JS, CSS, HTML, a manifest and some icons. Nothing is generated, so anything
+# that is not one of those is something that wandered in — an editor's scratch
+# file, a zip of the packed extension, a stray note. Listing what is allowed
+# keeps those out without having to guess at their names in advance.
+#
+# Everything is ignored, then the shipped file types are let back in. Git only
+# looks inside a directory it has not ignored, so `!*/` is what lets it walk
+# down to them at all; the last few lines shut the doors that opens.
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
+*
+!*/
 
-# testing
-/coverage
+# What the extension is made of.
+!*.js
+!*.css
+!*.html
+!*.json
+!*.png
+!*.svg
+!*.woff2
+!LICENSE
+!.gitignore
 
-# next.js
-/.next/
-/out/
+# Prose. Every other .md stays ignored on purpose: notes, plans, summaries and
+# generated write-ups do not belong in the tree, and a whitelist is the only
+# way to keep them out without naming each one.
+!README.md
 
-# production
-/build
+# ---------------------------------------------------------------------------
+# Doors the whitelist above would otherwise leave open.
 
-# misc
-.DS_Store
+# Dependencies and packed builds are .js and .json too.
+node_modules/
+dist/
+build/
+*.zip
+*.crx
+*.xpi
 *.pem
 
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Editor and tool state.
+.vscode/
+.idea/
+.DS_Store
+*.log
 
-# local env files
-.env*.local
+# Local secrets, which are not covered by the extension list but cost nothing
+# to name twice.
 .env
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+.env*.local

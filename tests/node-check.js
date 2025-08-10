@@ -1,0 +1,8783 @@
+/**
+ * A Node smoke-check for the parts of the suite that are pure logic.
+ *
+ * The browser suite in tests/index.html stays the real thing — it drives real
+ * KeyboardEvents against a real <video>, which Node cannot do. But a browser
+ * throttles timers hard in a backgrounded tab, and the mock defers every
+ * chrome.* callback through one, so a full run there can take minutes. This
+ * runs the timestamp arithmetic and the activity store in a second, which is
+ * what you want while actually changing that code.
+ *
+ *     node tests/node-check.js
+ */
+'use strict';
+
+let passed = 0;
+let failed = 0;
+
+function check(name, fn) {
+    try {
+        fn();
+        passed++;
+    } catch (error) {
+        failed++;
+        console.log(`  FAIL  ${name}\n        ${error.message}`);
+    }
+}
+
+async function checkAsync(name, fn) {
+    try {
+        await fn();
+        passed++;
+    } catch (error) {
+        failed++;
+        console.log(`  FAIL  ${name}\n        ${error.message}`);
+    }
+}
+
+function eq(actual, expected, msg) {
+    const a = JSON.stringify(actual);
+    const e = JSON.stringify(expected);
+    if (a !== e) throw new Error(`${msg ? msg + ': ' : ''}expected ${e}, got ${a}`);
+}
+
+function assert(condition, msg) {
+    if (!condition) throw new Error(msg || 'expected truthy');
+}
+
+/**
+ * A curve's shape rather than its values. The FSRS formulas are somebody
+ * else's arithmetic and pinning them to constants would only record what this
+ * machine computed today; what actually has to hold is that a more stable card
+ * waits longer and a higher retention target waits less.
+ */
+function assertRising(values, msg) {
+    for (let i = 1; i < values.length; i++) {
+        assert(values[i] > values[i - 1], `${msg}: not rising at ${i} — ${values.join(', ')}`);
+    }
+}
+
+function assertFalling(values, msg) {
+    for (let i = 1; i < values.length; i++) {
+        assert(values[i] < values[i - 1], `${msg}: not falling at ${i} — ${values.join(', ')}`);
+    }
+}
+
+// --------------------------------------------------------------- speed
+
+const Speed = require('../src/shared/speed.js');
+
+console.log('\n# speed ladder');
+check('steps to the next rung strictly above', () => {
+    eq(Speed.nextStep(1), 1.25);
+    eq(Speed.nextStep(2), 2.25);
+});
+check('an off-ladder rate does not skip a rung', () => {
+    // The old "nearest index + 1" turned 2.4 into 3 and skipped 2.5 entirely.
+    eq(Speed.nextStep(2.4), 2.5);
+    eq(Speed.prevStep(2.4), 2.25);
+});
+check('stepping stops at the ends rather than wrapping', () => {
+    eq(Speed.nextStep(5), 5);
+    eq(Speed.prevStep(0.25), 0.25);
+});
+check('direction 0 is a reset to 1x', () => eq(Speed.step(2.5, 0), 1));
+check('clamps out-of-range rates', () => {
+    eq(Speed.clamp(99), Speed.MAX_RATE);
+    eq(Speed.clamp(0), Speed.MIN_RATE);
+});
+
+// ----------------------------------------------------------------- dom
+
+const Dom = require('../src/shared/dom.js');
+
+console.log('\n# escaping and URL safety');
+check('escapes markup in text', () => eq(Dom.escapeHtml('<b>&"x"'), '&lt;b&gt;&amp;&quot;x&quot;'));
+check('javascript: URLs are neutralised', () => {
+    eq(Dom.safeUrl('javascript:alert(1)'), '#');
+    eq(Dom.safeUrl('data:text/html,<script>'), '#');
+});
+check('http(s) URLs pass through', () => {
+    eq(Dom.safeUrl('https://youtube.com/watch?v=x'), 'https://youtube.com/watch?v=x');
+});
+
+// ------------------------------------------------------------- youtube
+
+const YouTube = require('../src/shared/youtube.js');
+
+console.log('\n# youtube URLs');
+check('reads the id from every watch form', () => {
+    eq(YouTube.extractVideoId('https://www.youtube.com/watch?v=abcdefghijk'), 'abcdefghijk');
+    eq(YouTube.extractVideoId('https://youtu.be/abcdefghijk'), 'abcdefghijk');
+    eq(YouTube.extractVideoId('https://www.youtube.com/shorts/abcdefghijk'), 'abcdefghijk');
+    eq(YouTube.extractVideoId('https://www.youtube.com/embed/abcdefghijk'), 'abcdefghijk');
+});
+check('a v= inside a redirect target is not the video id', () => {
+    // The old regex matched the first v= anywhere in the string.
+    const url = 'https://www.youtube.com/redirect?q=https%3A%2F%2Fex.com%2F%3Fv%3Dnope';
+    eq(YouTube.extractVideoId(url), null);
+});
+check('non-watch pages have no id', () => {
+    eq(YouTube.extractVideoId('https://www.youtube.com/feed/subscriptions'), null);
+});
+
+const PageInfo = require('../src/content/page-info.js');
+
+console.log('\n# youtube channel pages');
+check('a channel page is recognised in all four spellings', () => {
+    eq(PageInfo.channelPagePath('/@mathwithming'), '/@mathwithming');
+    eq(PageInfo.channelPagePath('/channel/UCabcdefghijklmnopqrstuv'), '/channel/UCabcdefghijklmnopqrstuv');
+    eq(PageInfo.channelPagePath('/c/mathwithming'), '/c/mathwithming');
+    eq(PageInfo.channelPagePath('/user/mathwithming'), '/user/mathwithming');
+});
+check('every tab of a channel answers with the same root', () => {
+    // Otherwise the same channel files twice — once from /videos and once
+    // from the home tab — and the tick never comes back on either.
+    eq(PageInfo.channelPagePath('/@mathwithming/videos'), '/@mathwithming');
+    eq(PageInfo.channelPagePath('/@mathwithming/streams?view=0'), '/@mathwithming');
+    eq(PageInfo.channelPagePath('/@mathwithming/'), '/@mathwithming');
+});
+check('a watch page is not a channel page', () => {
+    eq(PageInfo.channelPagePath('/watch'), '');
+    eq(PageInfo.channelPagePath('/feed/subscriptions'), '');
+    eq(PageInfo.channelPagePath('/playlist'), '');
+    eq(PageInfo.channelPagePath('/'), '');
+});
+
+// ----------------------------------------------------------- bookmarks
+
+const Bookmarks = require('../src/shared/bookmarks.js');
+
+console.log('\n# checkpoints');
+check('adding dedupes against every existing time, not just the last', () => {
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [
+        { time: 10 }, { time: 30 }, { time: 20 } ] }];
+    const out = Bookmarks.addBookmarks(videos, { id: 'v', title: 'V', url: 'u' }, [{ time: 30 }]);
+    eq(out.added, 0, 'a duplicate of a non-adjacent time is still a duplicate');
+    eq(out.videos[0].bookmarks.length, 3);
+});
+check('a genuinely new time is added, and the list stays sorted', () => {
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [{ time: 30 }, { time: 10 }] }];
+    const out = Bookmarks.addBookmarks(videos, { id: 'v', title: 'V', url: 'u' }, [{ time: 20 }]);
+    eq(out.added, 1);
+    eq(out.videos[0].bookmarks.map((b) => b.time), [10, 20, 30]);
+});
+check('a checkpoint at t=0 is kept', () => {
+    const out = Bookmarks.addBookmarks([], { id: 'v', title: 'V', url: 'u' }, [{ time: 0 }]);
+    eq(out.added, 1);
+    eq(out.videos[0].bookmarks.length, 1);
+});
+check('two checkpoints starting in the same second both survive', () => {
+    // The regression test for the collision: de-duplicating by whole second
+    // silently dropped the second of two highlights made close together.
+    const video = { id: 'v', title: 'V', url: 'u' };
+    let out = Bookmarks.addBookmarks([], video, [{ id: 'a', time: 62, start: 62.1, end: 64 }]);
+    out = Bookmarks.addBookmarks(out.videos, video, [{ id: 'b', time: 62, start: 62.7, end: 66 }]);
+    eq(out.added, 1);
+    eq(out.videos[0].bookmarks.map((b) => b.id), ['a', 'b']);
+});
+check('the same id twice is one checkpoint', () => {
+    const video = { id: 'v', title: 'V', url: 'u' };
+    const first = Bookmarks.addBookmarks([], video, [{ id: 'a', time: 5 }]);
+    const again = Bookmarks.addBookmarks(first.videos, video, [{ id: 'a', time: 90, note: 'edited elsewhere' }]);
+    eq(again.added, 0, 're-importing an export added its own checkpoints a second time');
+});
+check('records from before ids still de-duplicate by time', () => {
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [{ time: 30, start: 30, end: 34 }] }];
+    const out = Bookmarks.addBookmarks(videos, { id: 'v' }, [{ time: 30, start: 30, end: 40 }]);
+    eq(out.added, 0, 'two id-less records in the same second are one, as they always were');
+});
+check('a new checkpoint is not swallowed by an old one in the same second', () => {
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [{ time: 30, start: 30, end: 34 }] }];
+    eq(Bookmarks.addBookmarks(videos, { id: 'v' }, [{ id: 'n', time: 30, start: 30, end: 38 }]).added, 1);
+    eq(Bookmarks.addBookmarks(videos, { id: 'v' }, [{ id: 'n', time: 30, start: 30, end: 34 }]).added, 0,
+        'but the very same span is the same checkpoint');
+});
+check('removing by id takes the right one when three share a second', () => {
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [
+        { id: 'a', time: 7 }, { id: 'b', time: 7 }, { id: 'c', time: 7 } ] }];
+    eq(Bookmarks.removeBookmarkById(videos, 'v', 'b')[0].bookmarks.map((b) => b.id), ['a', 'c']);
+    eq(Bookmarks.removeBookmarkById(videos, 'v', 'zz'), videos, 'an unknown id changes nothing');
+});
+check('a record from before ids can still be edited and removed', () => {
+    const old = { time: 12, start: 12, end: 15, timestamp: 1700000000000, note: 'n' };
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [old, { id: 'x', time: 12 }] }];
+    const key = Bookmarks.bookmarkKey(old);
+    const edited = Bookmarks.editBookmark(videos, 'v', key, { note: 'changed' });
+    eq(edited[0].bookmarks[0].note, 'changed');
+    eq(Bookmarks.bookmarkKey(edited[0].bookmarks[0]), key, 'editing the note moved the handle');
+    eq(Bookmarks.removeBookmarkById(edited, 'v', key)[0].bookmarks.map((b) => b.id), ['x']);
+});
+check('ids are unique across a tight loop', () => {
+    const ids = new Set();
+    for (let i = 0; i < 1000; i++) ids.add(Bookmarks.newId());
+    eq(ids.size, 1000);
+});
+check('removing the last checkpoint drops the video entry', () => {
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [{ time: 5 }] }];
+    eq(Bookmarks.removeBookmark(videos, 'v', 0).length, 0);
+});
+check('timestamp links parse out of pasted text, one per line', () => {
+    const found = Bookmarks.parseTimestampLinks(
+        'https://youtu.be/abcdefghijk?t=90' + String.fromCharCode(10) +
+        'https://www.youtube.com/watch?v=abcdefghijk&t=2m30s');
+    eq(found.length, 1, 'both links are the same video, so one entry');
+    eq(found[0].bookmarks.map((b) => b.time), [90, 150]);
+});
+
+// ------------------------------------------------------ reader transcript
+
+globalThis.BB = globalThis.BB || {};
+globalThis.BB.Dom = globalThis.BB.Dom || require('../src/shared/dom.js');
+const ReaderTranscript = require('../src/content/reader-transcript.js');
+const { FetchedTranscript } = require('../transcript.js');
+
+/** Snippets in the shape transcript.js hands over. */
+const SNIPPETS = [
+    { text: 'first  line', start: 0, duration: 2.5 },
+    { text: '', start: 2.5, duration: 0.5 },
+    { text: 'second <line>', start: 3, duration: 2 },
+    { text: 'third line', start: 6, duration: 3 },
+];
+
+console.log('\n# reader — the transcript column');
+check('blank snippets are left out and the text is tidied', () => {
+    const entries = ReaderTranscript.entriesOf({ snippets: SNIPPETS });
+    eq(entries.map((e) => e.text), ['first line', 'second <line>', 'third line']);
+    eq(entries[2], { start: 6, end: 9, text: 'third line' });
+    eq(ReaderTranscript.entriesOf(null), []);
+});
+check('the playing row is the last one started, gaps included', () => {
+    const entries = ReaderTranscript.entriesOf({ snippets: SNIPPETS });
+    eq(ReaderTranscript.activeIndex(entries, -1), -1);
+    eq(ReaderTranscript.activeIndex(entries, 0), 0);
+    eq(ReaderTranscript.activeIndex(entries, 5.5), 1, 'a pause in speech lost the row');
+    eq(ReaderTranscript.activeIndex(entries, 6), 2);
+    eq(ReaderTranscript.activeIndex(entries, 6), ReaderTranscript.activeIndex(entries, 6), 'unstable at one time');
+});
+check('at a snippet boundary it agrees with the transcript’s own lookup', () => {
+    const snippets = SNIPPETS.filter((s) => s.text);
+    const transcript = new FetchedTranscript({ snippets, videoId: 'v', language: 'en', languageCode: 'en' });
+    const entries = ReaderTranscript.entriesOf(transcript);
+    for (const t of [0, 3, 6]) {
+        eq(entries[ReaderTranscript.activeIndex(entries, t)].text,
+            transcript.getSnippetAtTime(t).text.replace(/\s+/g, ' '), `at ${t}`);
+    }
+});
+check('row text is escaped', () => {
+    const html = ReaderTranscript.rowsHtml(ReaderTranscript.entriesOf({ snippets: SNIPPETS }));
+    assert(html.includes('second &lt;line&gt;'), 'a caption could inject markup');
+    assert(/data-i="2" data-start="6"/.test(html));
+});
+/**
+ * Rows shaped the way rowsHtml draws them — a container of <p>s with the
+ * markup's whitespace between them — as bare objects, so a range can be
+ * pointed at any node in it.
+ */
+function fakeRows(count) {
+    const container = { nodeType: 1, classList: { contains: () => false }, childNodes: [] };
+    container.querySelectorAll = () => container.childNodes.filter((n) => n.row);
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+        const row = { nodeType: 1, row: true, parentNode: container, dataset: { i: String(i) },
+            classList: { contains: (c) => c === ReaderTranscript.ROW_CLASS } };
+        row.text = { nodeType: 3, parentNode: { nodeType: 1, classList: { contains: () => false }, parentNode: row } };
+        container.childNodes.push({ nodeType: 3, parentNode: container }, row);
+        rows.push(row);
+    }
+    container.childNodes.push({ nodeType: 3, parentNode: container });
+    return { container, rows };
+}
+
+const RANGE_ENTRIES = [
+    { start: 0, end: 3, text: 'a' }, { start: 3, end: 6.5, text: 'b' },
+    { start: 6, end: 9, text: 'c' }, { start: 9, end: 12, text: 'd' },
+];
+
+check('a selection inside one line covers that line', () => {
+    const { rows } = fakeRows(4);
+    const range = { collapsed: false, startContainer: rows[1].text, startOffset: 2, endContainer: rows[1].text, endOffset: 5 };
+    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES), { first: 1, last: 1, start: 3, end: 6 },
+        'the overlap into the next caption was kept as part of this one');
+});
+check('a selection across three lines runs from the first start to the last end', () => {
+    const { rows } = fakeRows(4);
+    const range = { collapsed: false, startContainer: rows[0].text, startOffset: 4, endContainer: rows[2].text, endOffset: 1 };
+    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES), { first: 0, last: 2, start: 0, end: 9 });
+});
+check('a drag let go in the whitespace past the last line ends on that line', () => {
+    const { container, rows } = fakeRows(4);
+    const range = { collapsed: false, startContainer: rows[2].text, startOffset: 0,
+        endContainer: container, endOffset: container.childNodes.length };
+    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES).last, 3);
+});
+check('a triple-click does not take the next line with it', () => {
+    // Chrome ends a triple-clicked paragraph at offset 0 of the one after.
+    const { rows } = fakeRows(4);
+    const range = { collapsed: false, startContainer: rows[1].text, startOffset: 0, endContainer: rows[2].text, endOffset: 0 };
+    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES).last, 1);
+});
+check('a collapsed or foreign selection is no range at all', () => {
+    const { rows } = fakeRows(2);
+    eq(ReaderTranscript.selectionToRange({ collapsed: true, startContainer: rows[0].text }, RANGE_ENTRIES), null);
+    const elsewhere = { nodeType: 3, parentNode: null };
+    eq(ReaderTranscript.selectionToRange({ collapsed: false, startContainer: elsewhere, startOffset: 0,
+        endContainer: elsewhere, endOffset: 1 }, RANGE_ENTRIES), null);
+});
+check('a checkpoint shades the lines that start inside it', () => {
+    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ start: 3, end: 9 }]), [0, 1, 1, 0]);
+    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ start: 3, end: 9 }, { start: 6, end: 12 }]), [0, 1, 2, 1],
+        'overlapping checkpoints deepen rather than fight');
+});
+check('an old whole-second checkpoint and a point in time both shade sensibly', () => {
+    // Ctrl+B checkpoints were floored to the second: 3.4 is stored as 3.
+    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ time: 3, start: 3, end: 5 }]), [0, 1, 0, 0]);
+    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ time: 7 }]), [0, 0, 1, 0], 'a point shades the line playing then');
+    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ note: 'no time at all' }]), [0, 0, 0, 0]);
+});
+checkAsync('a transcript asked for by language is its own fetch, and tracks are listed once', async () => {
+    const asked = [];
+    let listed = 0;
+    globalThis.YouTubeTranscriptApi = class {
+        fetch(id, { languages }) {
+            asked.push(languages.join(','));
+            return Promise.resolve({ videoId: id, languageCode: languages[0], language: languages[0], snippets: [] });
+        }
+        listTranscripts() {
+            listed++;
+            return Promise.resolve([
+                { languageCode: 'en', language: 'English' },
+                { languageCode: 'en', language: 'English', isGenerated: true },
+                { languageCode: 'de', language: 'German', isGenerated: true },
+            ]);
+        }
+    };
+    try {
+        const Transcripts = require('../src/content/transcripts.js');
+        const wrapper = Transcripts.createTranscripts({ getPreferredLanguage: () => 'en', notify() {} });
+        const plain = await wrapper.fetch('v');
+        const german = await wrapper.fetch('v', { language: 'de' });
+        assert(plain !== german, 'the German track replaced the default one');
+        await wrapper.fetch('v', { language: 'de' });
+        eq(asked, ['en,en', 'de'], 'a cached language was fetched again');
+
+        eq(await wrapper.list('v'), [
+            { code: 'en', label: 'English' },
+            { code: 'de', label: 'German (auto-generated)' },
+        ], 'one entry per language, the way fetch picks it');
+        await wrapper.list('v');
+        eq(listed, 1);
+    } finally {
+        delete globalThis.YouTubeTranscriptApi;
+    }
+});
+check('checkpoints copy out as a timestamped markdown list', () => {
+    globalThis.BB.YouTube = globalThis.BB.YouTube || require('../src/shared/youtube.js');
+    const Markdown = require('../src/content/markdown.js');
+    const Time = require('../src/shared/time.js');
+    const text = Markdown.checkpointList({ id: 'abcdefghijk', title: 'A [talk]' }, [
+        { time: 62, start: 62.4, end: 75, subtitle: 'the  point', note: 'worth rewatching' },
+        { time: 90, start: 90, end: 95, subtitle: 'later', note: 'Checkpoint 1:30 - 1:35' },
+    ], Time.formatTime);
+    eq(text.split('\n'), [
+        '## [A \\[talk\\]](https://www.youtube.com/watch?v=abcdefghijk)',
+        '',
+        '- [1:02](https://www.youtube.com/watch?v=abcdefghijk&t=62s) “the point” — worth rewatching',
+        '- [1:30](https://www.youtube.com/watch?v=abcdefghijk&t=90s) “later”',
+    ], 'the generated "Checkpoint 1:30" note only repeats the time beside it');
+});
+check('a text node is walked up to its row', () => {
+    const row = { nodeType: 1, classList: { contains: (c) => c === ReaderTranscript.ROW_CLASS }, dataset: { i: '4' } };
+    const span = { nodeType: 1, classList: { contains: () => false }, parentNode: row };
+    const text = { nodeType: 3, parentNode: span };
+    eq(ReaderTranscript.rowAt(text) === row, true);
+    eq(ReaderTranscript.indexOf(ReaderTranscript.rowAt(text)), 4);
+    eq(ReaderTranscript.rowAt({ nodeType: 3, parentNode: null }), null);
+});
+
+// ---------------------------------------------------------------- time
+
+const Time = require('../src/shared/time.js');
+const now = Date.parse('2026-08-30T12:00:00Z');
+const ago = (ms) => Time.relativeTime(now - ms, now);
+
+console.log('\n# relative time');
+check('under a minute is "just now"', () => eq(ago(59 * 1000), 'just now'));
+check('rounds down (13 days is 1 week)', () => eq(ago(13 * 864e5), '1 week ago'));
+check('singular', () => eq(ago(864e5), '1 day ago'));
+check('plural', () => eq(ago(3 * 864e5), '3 days ago'));
+check('a future date is not a negative age', () => eq(Time.relativeTime(now + 5e6, now), 'just now'));
+check('a missing date gets no label', () => {
+    eq(Time.relativeTime(0, now), '', 'zero');
+    eq(Time.relativeTime(undefined, now), '', 'undefined');
+    eq(Time.relativeTime(null, now), '', 'null');
+});
+check('formatTime still works', () => {
+    eq(Time.formatTime(65), '1:05');
+    eq(Time.formatTime(3725), '1:02:05');
+});
+
+// ---------------------------------------------------------------- fsrs
+
+const Fsrs = require('../src/shared/fsrs.js');
+
+console.log('\n# fsrs — the forgetting curve');
+check('retrievability is 1 on the day and falls from there', () => {
+    eq(Fsrs.retrievability(10, 0), 1);
+    assertFalling([1, 5, 20, 90].map((days) => Fsrs.retrievability(10, days)), 'elapsed days');
+});
+check('stability means "days until 90%"', () => {
+    // The whole point of FACTOR: R(S, S) is 0.9 exactly, for any S. If this
+    // fails, DECAY and FACTOR have drifted apart.
+    for (const S of [0.5, 3.173, 40, 900]) {
+        eq(Math.round(Fsrs.retrievability(S, S) * 1e6) / 1e6, 0.9, `S=${S}`);
+    }
+});
+check('intervalFor rises with stability and falls as retention is raised', () => {
+    assertRising([1, 3, 10, 60, 300].map((S) => Fsrs.intervalFor(S, 0.9)), 'stability');
+    assertFalling([0.7, 0.8, 0.9, 0.97].map((r) => Fsrs.intervalFor(300, r)), 'retention');
+});
+check('intervalFor is clamped to whole days inside the cap', () => {
+    eq(Fsrs.intervalFor(0.01, 0.9), 1, 'never under a day');
+    eq(Fsrs.intervalFor(1e6, 0.9, 365), 365, 'never over the cap');
+});
+
+console.log('\n# fsrs — reviewing');
+check('a first Good matches the published numbers', () => {
+    const card = Fsrs.review(null, 3, 0, { retention: 0.9, now: 0 });
+    // S_0(Good) is w[2] by definition, and at 90% retention the interval is
+    // that many days — the identity checked above, read the other way round.
+    eq(card.stability, Fsrs.W[2]);
+    eq(card.interval, 3);
+    eq(card.due, 3 * Fsrs.DAY_MS);
+    eq(card.reps, 1);
+    eq(card.lapses, 0);
+});
+check('each grade starts a card where its own weight says', () => {
+    eq([1, 2, 3, 4].map((g) => Fsrs.review(null, g, 0, { now: 0 }).stability), Fsrs.W.slice(0, 4));
+});
+/** A card taken through five clean Good reviews — S in the hundreds of days. */
+function matured() {
+    let card = Fsrs.review(null, 3, 0, { now: 0 });
+    for (let i = 0; i < 4; i++) card = Fsrs.review(card, 3, card.interval, { now: 0 });
+    return card;
+}
+
+check('Again after a long gap lapses without falling through the floor', () => {
+    const card = matured();
+    const lapsed = Fsrs.review(card, 1, card.interval, { now: 0 });
+    assert(lapsed.stability < card.stability, 'a lapse has to cost stability');
+    assert(lapsed.stability >= Fsrs.MIN_STABILITY, 'but never all of it');
+    assert(lapsed.difficulty > card.difficulty, 'and the problem is now harder');
+    eq(lapsed.lapses, 1);
+});
+check('a lapse never raises stability, however long the gap', () => {
+    // The lapse curve is not "S times a constant", and on a card that is still
+    // young it genuinely computes a *higher* stability than the card has —
+    // forgetting after 120 days something whose stability is 3 says little.
+    // The cap is what keeps that from reading as a reward for forgetting.
+    const young = Fsrs.review(null, 3, 0, { now: 0 });
+    eq(Fsrs.review(young, 1, 120, { now: 0 }).stability, young.stability);
+});
+check('a lapse keeps more of a long gap than of a short one', () => {
+    // Forgetting what you last saw a year ago says less about the card than
+    // forgetting what you saw on Tuesday.
+    const card = matured();
+    const soon = Fsrs.review(card, 1, 2, { now: 0 }).stability;
+    const late = Fsrs.review(card, 1, 600, { now: 0 }).stability;
+    assert(late > soon, `expected the later lapse to keep more, got ${late} <= ${soon}`);
+});
+check('a same-day re-grade actually moves the card', () => {
+    // Through the long-term formula this is a no-op — elapsed 0 means R is 1
+    // means the growth term is exactly zero — so the dashboard's re-grade
+    // would silently do nothing. FSRS-5's short-term branch is what saves it.
+    const card = Fsrs.review(null, 3, 0, { now: 0 });
+    assert(Fsrs.review(card, 4, 0, { now: 0 }).stability > card.stability, 'Easy should lengthen it');
+    assert(Fsrs.review(card, 1, 0, { now: 0 }).stability < card.stability, 'Again should shorten it');
+});
+check('difficulty stays in [1, 10] across a hundred alternating grades', () => {
+    let card = Fsrs.review(null, 3, 0, { now: 0 });
+    for (let i = 0; i < 100; i++) {
+        card = Fsrs.review(card, i % 2 ? 1 : 4, 7, { now: 0 });
+        assert(card.difficulty >= 1 && card.difficulty <= 10, `drifted to ${card.difficulty}`);
+        assert(card.stability >= Fsrs.MIN_STABILITY, `stability fell to ${card.stability}`);
+    }
+});
+check('a stray grade is clamped rather than poisoning the card', () => {
+    eq(Fsrs.review(null, 9, 0, { now: 0 }).grade, 4);
+    eq(Fsrs.review(null, 0, 0, { now: 0 }).grade, 1);
+    eq(Fsrs.review(null, undefined, 0, { now: 0 }).grade, 3);
+});
+
+console.log('\n# fsrs — suggesting a grade');
+check('a 45-minute Medium with two failures is Hard, not Good', () => {
+    eq(Fsrs.suggestGrade({ seconds: 45 * 60, failures: 2, difficulty: 'Medium' }), 2);
+});
+check('a six-minute Easy with a clean run is Easy', () => {
+    eq(Fsrs.suggestGrade({ seconds: 6 * 60, failures: 0, difficulty: 'Easy' }), 4);
+});
+check('three failures is Again whatever the clock said', () => {
+    eq(Fsrs.suggestGrade({ seconds: 30, failures: 3, difficulty: 'Easy' }), 1);
+    eq(Fsrs.suggestGrade({ seconds: 90 * 60, failures: 3, difficulty: 'Hard' }), 1);
+});
+check('one failure caps it at Hard however fast the accepted one was', () => {
+    eq(Fsrs.suggestGrade({ seconds: 60, failures: 1, difficulty: 'Hard' }), 2);
+});
+check('over twice the budget is Again even with a clean run', () => {
+    eq(Fsrs.suggestGrade({ seconds: 61 * 60, failures: 0, difficulty: 'Medium' }), 1);
+});
+check('an unknown difficulty is budgeted as a Medium', () => {
+    eq(Fsrs.budgetFor(''), Fsrs.BUDGETS.Medium);
+    eq(Fsrs.budgetFor('Impossible'), Fsrs.BUDGETS.Medium);
+});
+check('a clean run inside the budget but over half of it is Good', () => {
+    eq(Fsrs.suggestGrade({ seconds: 20 * 60, failures: 0, difficulty: 'Medium' }), 3);
+});
+
+// ------------------------------------------------------------- leetcode
+
+const Leet = require('../src/shared/leetcode.js');
+
+// Two in the afternoon today rather than a fixed calendar date, for the same
+// reason the activity suite uses one: the store prunes anything older than
+// KEEP_DAYS on write, so a hard-coded date quietly stops being recorded once
+// the suite is run a year after it was written. Local, and set with setHours
+// so a tester west of UTC lights up the same square as one east of it.
+const L0 = new Date().setHours(14, 0, 0, 0);
+const days = (n) => n * Leet.DAY_MS;
+
+const problemPage = {
+    slug: 'two-sum',
+    title: 'Two Sum',
+    difficulty: 'Easy',
+    tags: ['Array', 'Hash Table'],
+    url: 'https://leetcode.com/problems/two-sum/',
+};
+
+console.log('\n# leetcode — seeing a problem');
+check('the first sighting records what the page says', () => {
+    const state = Leet.seeIn(Leet.blank(), problemPage, L0);
+    const problem = state.problems['two-sum'];
+    eq(problem.title, 'Two Sum');
+    eq(problem.difficulty, 'Easy');
+    eq(problem.tags, ['Array', 'Hash Table']);
+    eq(problem.seenAt, L0);
+    eq(problem.note, '');
+    eq(problem.fsrs, null);
+});
+check('seeing it again keeps the note and the schedule', () => {
+    let state = Leet.seeIn(Leet.blank(), problemPage, L0);
+    state.problems['two-sum'].note = 'two pointers, sorted input only';
+    state.problems['two-sum'].fsrs = { stability: 9, difficulty: 5, due: L0 + days(9) };
+
+    state = Leet.seeIn(state, { ...problemPage, title: 'Two Sum II' }, L0 + days(1));
+    const problem = state.problems['two-sum'];
+    eq(problem.note, 'two pointers, sorted input only', 'the note is the user’s');
+    eq(problem.fsrs.stability, 9, 'and so is the schedule');
+    eq(problem.title, 'Two Sum II', 'the title is LeetCode’s and is refreshed');
+    eq(problem.seenAt, L0 + days(1));
+});
+check('a field the reader could not find does not wipe the stored one', () => {
+    let state = Leet.seeIn(Leet.blank(), problemPage, L0);
+    state = Leet.seeIn(state, { slug: 'two-sum' }, L0 + days(1));
+    eq(state.problems['two-sum'].difficulty, 'Easy');
+    eq(state.problems['two-sum'].tags, ['Array', 'Hash Table']);
+});
+check('a difficulty that is not one of the three is dropped', () => {
+    const state = Leet.seeIn(Leet.blank(), { ...problemPage, difficulty: 'Medium-ish' }, L0);
+    eq(state.problems['two-sum'].difficulty, '');
+});
+check('a page with no slug is not a problem page', () => {
+    eq(Leet.seeIn(Leet.blank(), { title: 'Problems' }, L0).problems, {});
+});
+
+console.log('\n# leetcode — attempts and day buckets');
+check('an attempt buckets into the local day it happened on', () => {
+    const state = Leet.addAttempt(Leet.blank(), {
+        slug: 'two-sum', status: 'Wrong Answer', seconds: 300, at: L0,
+    });
+    eq(state.days[Leet.dayKey(L0)], { submitted: 1, solved: 0, seconds: 300 });
+    eq(state.problems['two-sum'].solvedAt, 0);
+});
+check('an accept counts as solved and sets solvedAt', () => {
+    let state = Leet.addAttempt(Leet.blank(), { slug: 'two-sum', status: 'Wrong Answer', seconds: 200, at: L0 });
+    state = Leet.addAttempt(state, { slug: 'two-sum', status: 'Accepted', seconds: 420, runtime: '52 ms', at: L0 + 60000 });
+    eq(state.days[Leet.dayKey(L0)], { submitted: 2, solved: 1, seconds: 620 });
+    eq(state.problems['two-sum'].solvedAt, L0 + 60000);
+    eq(state.problems['two-sum'].attempts[0].runtime, '52 ms', 'newest first');
+});
+check('a submission either side of midnight lands on its own square', () => {
+    const lastNight = new Date(L0).setHours(23, 50, 0, 0);
+    let state = Leet.addAttempt(Leet.blank(), { slug: 'a', status: 'Accepted', seconds: 60, at: lastNight });
+    state = Leet.addAttempt(state, { slug: 'a', status: 'Accepted', seconds: 60, at: lastNight + days(1) });
+    eq(Object.keys(state.days).length, 2);
+    eq(state.days[Leet.dayKey(lastNight)].submitted, 1);
+    eq(state.days[Leet.dayKey(lastNight + days(1))].submitted, 1);
+});
+check('attempts are capped and the oldest fall off', () => {
+    let state = Leet.blank();
+    for (let i = 0; i < Leet.ATTEMPT_CAP + 6; i++) {
+        state = Leet.addAttempt(state, { slug: 'two-sum', status: 'Wrong Answer', at: L0 + i * 1000 });
+    }
+    const { attempts } = state.problems['two-sum'];
+    eq(attempts.length, Leet.ATTEMPT_CAP);
+    eq(attempts[0].at, L0 + (Leet.ATTEMPT_CAP + 5) * 1000, 'the newest is kept');
+});
+check('an attempt on a problem never seen still records it', () => {
+    const state = Leet.addAttempt(Leet.blank(), { slug: 'ghost', status: 'Accepted', at: L0 });
+    eq(state.problems.ghost.seenAt, L0);
+});
+
+console.log('\n# leetcode — pruning');
+check('prune drops day 401 and keeps day 400', () => {
+    const state = {
+        problems: {},
+        days: {
+            [Leet.dayKey(L0 - days(Leet.KEEP_DAYS - 1))]: { submitted: 1, solved: 1, seconds: 10 },
+            [Leet.dayKey(L0 - days(Leet.KEEP_DAYS))]: { submitted: 9, solved: 9, seconds: 90 },
+        },
+    };
+    const kept = Leet.prune(state.days, L0);
+    eq(Object.keys(kept), [Leet.dayKey(L0 - days(Leet.KEEP_DAYS - 1))]);
+});
+check('prune throws away a key that is not a date', () => {
+    eq(Leet.prune({ yesterday: { submitted: 3 } }, L0), {});
+});
+
+console.log('\n# leetcode — the three rails');
+check('lists splits due, to-solve and solved', () => {
+    let state = Leet.blank();
+    state = Leet.seeIn(state, { slug: 'due-now' }, L0);
+    state = Leet.seeIn(state, { slug: 'never-solved' }, L0);
+    state = Leet.seeIn(state, { slug: 'done' }, L0);
+    state = Leet.addAttempt(state, { slug: 'due-now', status: 'Accepted', at: L0 });
+    state = Leet.addAttempt(state, { slug: 'done', status: 'Accepted', at: L0 });
+    state = Leet.addAttempt(state, { slug: 'never-solved', status: 'Wrong Answer', at: L0 });
+    state.problems['due-now'].fsrs = { stability: 3, difficulty: 5, due: L0 - days(1) };
+    state.problems.done.fsrs = { stability: 30, difficulty: 5, due: L0 + days(30) };
+
+    const { due, toSolve, solved } = Leet.lists(state, L0);
+    eq(due.map((p) => p.slug), ['due-now']);
+    eq(toSolve.map((p) => p.slug), ['never-solved']);
+    eq(solved.map((p) => p.slug), ['done']);
+});
+check('a solved problem that has come round again is due, not solved', () => {
+    let state = Leet.addAttempt(Leet.blank(), { slug: 'x', status: 'Accepted', at: L0 });
+    state.problems.x.fsrs = { stability: 3, difficulty: 5, due: L0 - 1 };
+    eq(Leet.lists(state, L0).solved.length, 0);
+    eq(Leet.lists(state, L0).due.length, 1);
+});
+check('due comes back soonest first', () => {
+    let state = Leet.blank();
+    for (const [slug, when] of [['c', 3], ['a', 1], ['b', 2]]) {
+        state = Leet.addAttempt(state, { slug, status: 'Accepted', at: L0 });
+        state.problems[slug].fsrs = { stability: 3, difficulty: 5, due: L0 - days(when) };
+    }
+    eq(Leet.lists(state, L0).due.map((p) => p.slug), ['c', 'b', 'a']);
+});
+
+console.log('\n# leetcode — grading inputs');
+check('failuresSince counts only what came after the last accept', () => {
+    let state = Leet.blank();
+    state = Leet.addAttempt(state, { slug: 's', status: 'Wrong Answer', at: L0 });
+    state = Leet.addAttempt(state, { slug: 's', status: 'Accepted', at: L0 + 1000 });
+    const solvedBefore = state.problems.s.solvedAt;
+
+    state = Leet.addAttempt(state, { slug: 's', status: 'Wrong Answer', at: L0 + 2000 });
+    state = Leet.addAttempt(state, { slug: 's', status: 'Runtime Error', at: L0 + 3000 });
+    state = Leet.addAttempt(state, { slug: 's', status: 'Accepted', at: L0 + 4000 });
+
+    eq(Leet.failuresSince(state.problems.s, solvedBefore), 2, 'this session only');
+    eq(Leet.failuresSince(state.problems.s, 0), 3, 'every failure on record');
+});
+check('the grade a session suggests follows from its own numbers', () => {
+    let state = Leet.seeIn(Leet.blank(), problemPage, L0);
+    state = Leet.addAttempt(state, { slug: 'two-sum', status: 'Wrong Answer', at: L0 });
+    state = Leet.addAttempt(state, { slug: 'two-sum', status: 'Accepted', seconds: 6 * 60, at: L0 + 1000 });
+    const problem = state.problems['two-sum'];
+    eq(Fsrs.suggestGrade({
+        seconds: Leet.lastAttempt(problem).seconds,
+        failures: Leet.failuresSince(problem, 0),
+        difficulty: problem.difficulty,
+    }), 2, 'quick, but it took two goes');
+});
+
+console.log('\n# leetcode — putting something back in the queue');
+check('inQueue is exactly what the due and to-solve rails hold', () => {
+    let state = Leet.seeIn(Leet.blank(), { slug: 'fresh' }, L0);
+    eq(Leet.inQueue(state, 'fresh', L0), true, 'seen and unsolved is waiting');
+
+    state = Leet.addAttempt(state, { slug: 'fresh', status: 'Accepted', at: L0 });
+    state.problems.fresh.fsrs = { stability: 30, difficulty: 5, due: L0 + days(30) };
+    eq(Leet.inQueue(state, 'fresh', L0), false, 'solved and not yet due is not');
+
+    eq(Leet.inQueue(state, 'never-heard-of-it', L0), false);
+    eq(Leet.inQueue(state, '', L0), false);
+});
+check('a solved problem is pulled forward rather than given a grade', () => {
+    // Inventing a grade would write a stability nobody earned. Moving the due
+    // date says "I want to see this again" and nothing more.
+    let state = Leet.addAttempt(Leet.blank(), { slug: 'x', status: 'Accepted', at: L0 });
+    state.problems.x.fsrs = { stability: 30, difficulty: 5, due: L0 + days(30), reps: 2, lapses: 0 };
+
+    const problems = Leet.problemsOf(state);
+    problems.x = { ...problems.x, fsrs: { ...problems.x.fsrs, due: L0 } };
+    const after = { ...state, problems };
+
+    eq(Leet.inQueue(after, 'x', L0), true);
+    eq(after.problems.x.fsrs.stability, 30, 'the schedule it earned is untouched');
+});
+check('a problem already waiting is left exactly where it is', () => {
+    // queueNow on an unsolved problem must not drag a due date onto it, or it
+    // moves from "to solve" to "due" and the two rails stop meaning anything.
+    const state = Leet.seeIn(Leet.blank(), { slug: 'fresh' }, L0);
+    eq(Leet.lists(state, L0).toSolve.map((p) => p.slug), ['fresh']);
+    eq(Leet.lists(state, L0).due.length, 0);
+});
+
+console.log('\n# leetcode — the heat map');
+check('heatDays colours by the metric it is asked for', () => {
+    let state = Leet.addAttempt(Leet.blank(), { slug: 'a', status: 'Accepted', seconds: 600, at: L0 });
+    state = Leet.addAttempt(state, { slug: 'a', status: 'Wrong Answer', seconds: 90, at: L0 });
+    const key = Leet.dayKey(L0);
+    eq(Leet.heatDays(state, 'submitted', L0)[key].value, 2);
+    eq(Leet.heatDays(state, 'solved', L0)[key].value, 1);
+    eq(Leet.heatDays(state, 'seconds', L0)[key].value, 690);
+    eq(Leet.heatDays(state, 'nonsense', L0)[key].value, 2, 'an unknown metric falls back to submissions');
+});
+check('a square carries all three numbers whichever one it is coloured by', () => {
+    const state = Leet.addAttempt(Leet.blank(), { slug: 'a', status: 'Accepted', seconds: 600, at: L0 });
+    eq(Leet.heatDays(state, 'solved', L0)[Leet.dayKey(L0)],
+        { submitted: 1, solved: 1, seconds: 600, value: 1 });
+});
+check('the heat map levels fall on the steps the panel uses', () => {
+    // heat-map.js is a page module: it hangs itself off BB and exports
+    // nothing, so it is required for the side effect and read off the global.
+    require('../src/page/heat-map.js');
+    const { HeatMap } = globalThis.BB;
+    const steps = [2, 5, 10];
+    eq([0, 1, 2, 3, 5, 6, 10, 11].map((n) => HeatMap.levelOf(n, steps)), [0, 1, 1, 2, 2, 3, 3, 4]);
+});
+check('a streak counts back from today and stops at the first gap', () => {
+    let state = Leet.blank();
+    for (const back of [0, 1, 2, 4]) {
+        state = Leet.addAttempt(state, { slug: 'a', status: 'Accepted', at: L0 - days(back) });
+    }
+    eq(Leet.streak(state, L0), 3);
+});
+check('a day not practised yet does not break yesterday’s streak', () => {
+    let state = Leet.blank();
+    for (const back of [1, 2, 3]) {
+        state = Leet.addAttempt(state, { slug: 'a', status: 'Accepted', at: L0 - days(back) });
+    }
+    eq(Leet.streak(state, L0), 3);
+});
+
+// -------------------------------------------------- reading leetcode.com
+
+const LeetRead = require('../src/content/leet-read.js');
+
+console.log('\n# leetcode — reading the address bar');
+check('a problem page gives up its slug', () => {
+    eq(LeetRead.slugOf('/problems/two-sum/'), 'two-sum');
+    eq(LeetRead.slugOf('/problems/two-sum'), 'two-sum', 'with no trailing slash');
+    eq(LeetRead.slugOf('/problems/longest-substring-without-repeating-characters/description/'),
+        'longest-substring-without-repeating-characters');
+    eq(LeetRead.slugOf('/problems/two-sum/submissions/1234/'), 'two-sum', 'after a submission');
+    eq(LeetRead.slugOf('/problems/two-sum/?envType=daily'), 'two-sum', 'with a query string');
+});
+check('everything else on the site is not a problem page', () => {
+    eq(LeetRead.slugOf('/problemset/all/'), null);
+    eq(LeetRead.slugOf('/contest/weekly-425/'), null);
+    eq(LeetRead.slugOf('/'), null);
+    eq(LeetRead.slugOf('/problems/'), null, 'the list is not a problem');
+    eq(LeetRead.onProblem('/problems/two-sum/'), true);
+    eq(LeetRead.onProblem('/problemset/all/'), false);
+});
+
+console.log('\n# leetcode — reading the stopwatch');
+check('both shapes of clock parse', () => {
+    eq(LeetRead.parseClock('05:30'), 330);
+    eq(LeetRead.parseClock('1:02:05'), 3725, 'an hour in');
+    eq(LeetRead.parseClock('00:00'), 0);
+});
+check('a reading that is not a clock is passed over, not read as zero', () => {
+    // A zero and a "could not read it" have to stay distinguishable: the
+    // first means the timer was just reset, the second means the selector
+    // has stopped matching, and the fallback clock turns on for one of them.
+    eq(LeetRead.parseClock('Start'), null);
+    eq(LeetRead.parseClock(''), null);
+    eq(LeetRead.parseClock(null), null);
+});
+
+// ---------------------------------------------------- the leetcode clock
+
+const LeetUi = require('../src/content/leet-ui.js');
+
+/**
+ * Drive the clock without a browser.
+ *
+ * Only what createLeetUi actually touches is stubbed — it reads the page's
+ * visibility, registers listeners it is never sent, and asks LeetRead what
+ * the stopwatch says. That last one is the seam: `reads` is the sequence of
+ * readings LeetCode's widget is pretending to show, and null means "no widget
+ * on this page", which is the branch the wall clock covers.
+ */
+function withStubbedPage(path, run) {
+    const saved = {
+        document: global.document, window: global.window,
+        location: global.location, reader: globalThis.BB.LeetRead.timerSeconds,
+        see: globalThis.BB.Leet.see,
+    };
+    global.document = { visibilityState: 'visible', hasFocus: () => true, addEventListener() {} };
+    global.window = { addEventListener() {} };
+    global.location = { pathname: path };
+    // Filing the problem is storage's business and has its own tests.
+    globalThis.BB.Leet.see = () => Promise.resolve(null);
+
+    const tasks = new Map();
+    const watcher = {
+        add: (name, fn) => tasks.set(name, fn),
+        remove: (name) => tasks.delete(name),
+        schedule() {}, has: (name) => tasks.has(name),
+    };
+    const ui = LeetUi.createLeetUi({ watcher, notify: () => {}, getSettings: () => globalThis.BB.Settings.DEFAULTS });
+    // install() is what registers the watcher task the stub drives below, and
+    // it lands on the first problem on its own way in.
+    ui.install();
+
+    /** Show the widget one reading, then let the watcher task run. */
+    const show = (seconds) => {
+        globalThis.BB.LeetRead.timerSeconds = () => seconds;
+        tasks.get('leet-clock')();
+    };
+
+    try {
+        return run({ ui, show, watcher, tasks });
+    } finally {
+        Object.assign(global, { document: saved.document, window: saved.window, location: saved.location });
+        globalThis.BB.LeetRead.timerSeconds = saved.reader;
+        globalThis.BB.Leet.see = saved.see;
+    }
+}
+
+console.log('\n# leetcode — the clock');
+check('elapsed is whatever LeetCode’s own stopwatch reads', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(30);
+        eq(ui.elapsedSeconds(), 30);
+        show(125);
+        eq(ui.elapsedSeconds(), 125);
+    });
+});
+check('a reset closes the segment rather than losing it', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(300);
+        show(4);   // the user pressed reset
+        eq(ui.elapsedSeconds(), 304, 'the first five minutes still count');
+        show(60);
+        eq(ui.elapsedSeconds(), 360);
+    });
+});
+check('a pause costs nothing', () => {
+    // Pausing shows the same number for a while and then carries on. Nothing
+    // about that should bank a segment or lose one.
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(90); show(90); show(90);
+        eq(ui.elapsedSeconds(), 90);
+        show(91);
+        eq(ui.elapsedSeconds(), 91);
+    });
+});
+check('a reading a shade below the last is drift, not a reset', () => {
+    // Our reads are not aligned to LeetCode's ticks, so the two drift past
+    // each other by a second. Treating that as a reset would double the time
+    // every few seconds.
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(120);
+        show(119);
+        eq(ui.elapsedSeconds(), 120);
+    });
+});
+check('a different problem starts a new clock', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(600);
+        eq(ui.elapsedSeconds(), 600);
+
+        global.location.pathname = '/problems/add-two-numbers/';
+        ui.onNavigate();
+        show(5);
+        eq(ui.elapsedSeconds(), 5, 'the last problem’s ten minutes are not this one’s');
+    });
+});
+check('switching panes on the same problem keeps the clock running', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(600);
+        global.location.pathname = '/problems/two-sum/solutions/';
+        ui.onNavigate();
+        show(610);
+        eq(ui.elapsedSeconds(), 610);
+    });
+});
+check('leaving the problem pages stops the clock', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(600);
+        global.location.pathname = '/problemset/all/';
+        ui.onNavigate();
+        eq(ui.elapsedSeconds(), 0);
+    });
+});
+check('with no widget to read, nothing is invented', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(null);
+        show(null);
+        // The wall-clock fallback banks real gaps, and no real time has
+        // passed here — so the answer is zero rather than one per look.
+        eq(ui.elapsedSeconds(), 0, 'ticks are not seconds');
+    });
+});
+check('the widget taking over does not stack on the wall clock', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(null);
+        show(240);
+        eq(ui.elapsedSeconds(), 240, 'the widget was running for that time too');
+    });
+});
+// ------------------------------------------------------ leetcode templates
+
+const LeetTemplates = require('../src/shared/leet-templates.js');
+
+/** Templates as stored, without going near storage. */
+const tpl = (name, lang, body = '', usedAt = 0) =>
+    LeetTemplates.clean({ id: `lt_${name}`, name, lang, body, usedAt });
+
+console.log('\n# leetcode — template languages');
+check('monaco’s names are mapped onto LeetCode’s', () => {
+    eq(LeetTemplates.normalize('python'), 'python3', 'monaco has one Python mode');
+    eq(LeetTemplates.normalize('go'), 'golang');
+    eq(LeetTemplates.normalize('CPP'), 'cpp', 'case does not matter');
+    eq(LeetTemplates.normalize('cpp'), 'cpp');
+});
+check('a language nobody recognises files as "any"', () => {
+    eq(LeetTemplates.normalize('brainfuck'), '');
+    eq(LeetTemplates.normalize(''), '');
+    eq(LeetTemplates.normalize(undefined), '');
+    eq(LeetTemplates.labelFor(''), 'Any language');
+    eq(LeetTemplates.labelFor('golang'), 'Go');
+});
+
+console.log('\n# leetcode — offering templates');
+check('forLang puts this language first and the language-free ones after', () => {
+    const state = [tpl('anything', ''), tpl('bisect', 'python3'), tpl('vector', 'cpp')];
+    eq(LeetTemplates.forLang(state, 'python3').map((t) => t.name), ['bisect', 'anything']);
+    eq(LeetTemplates.forLang(state, 'cpp').map((t) => t.name), ['vector', 'anything']);
+});
+check('another language’s templates are not offered at all', () => {
+    const state = [tpl('vector', 'cpp')];
+    eq(LeetTemplates.forLang(state, 'python3').map((t) => t.name), []);
+});
+check('with no language to go on, everything is offered', () => {
+    // The page world could not tell us what the editor is in. Offering
+    // nothing would be worse than offering too much.
+    const state = [tpl('bisect', 'python3'), tpl('vector', 'cpp')];
+    eq(LeetTemplates.forLang(state, '').length, 2);
+});
+check('the one reached for most recently leads', () => {
+    const state = [tpl('old', 'python3', '', 1000), tpl('recent', 'python3', '', 9000)];
+    eq(LeetTemplates.forLang(state, 'python3').map((t) => t.name), ['recent', 'old']);
+});
+check('a list nobody has used yet keeps the order it was arranged in', () => {
+    const state = [tpl('first', 'python3'), tpl('second', 'python3')];
+    eq(LeetTemplates.forLang(state, 'python3').map((t) => t.name), ['first', 'second']);
+});
+check('search matches the name and the body', () => {
+    const state = [
+        tpl('binary search', 'python3', 'while lo < hi:'),
+        tpl('union find', 'python3', 'def find(x):'),
+    ];
+    eq(LeetTemplates.search(state, 'python3', 'binary').map((t) => t.name), ['binary search']);
+    eq(LeetTemplates.search(state, 'python3', 'lo < hi').map((t) => t.name), ['binary search'],
+        'found by what is in it');
+    eq(LeetTemplates.search(state, 'python3', 'FIND').map((t) => t.name), ['union find'], 'case-insensitive');
+    eq(LeetTemplates.search(state, 'python3', '').length, 2, 'an empty filter narrows nothing');
+});
+
+console.log('\n# leetcode — what a template may hold');
+check('a template with no name is not a template', () => {
+    eq(LeetTemplates.templatesOf([{ name: '   ', body: 'x' }]), []);
+});
+check('a body keeps its indentation', () => {
+    // Trimming a template is trimming the thing that makes it paste cleanly.
+    eq(LeetTemplates.clean({ name: 'x', body: '    return 1\n' }).body, '    return 1\n');
+});
+check('a whole solution pasted in as a template is capped', () => {
+    const huge = LeetTemplates.clean({ name: 'x', body: 'y'.repeat(20000) });
+    eq(huge.body.length, LeetTemplates.BODY_CAP);
+});
+check('a stored record that is nonsense does not take the list down', () => {
+    const rows = LeetTemplates.templatesOf(['not an object', null, { name: 'ok', lang: 42, uses: 'many' }]);
+    eq(rows.length, 1);
+    eq(rows[0].lang, '');
+    eq(rows[0].uses, 0);
+});
+
+// ------------------------------------------- leetcode's own submission calendar
+
+const LeetApi = require('../src/shared/leet-api.js');
+
+/** A reply shaped the way LeetCode's GraphQL endpoint actually answers. */
+function calendarReply(map, extra = {}) {
+    return {
+        submissionCalendar: JSON.stringify(map),
+        streak: 8,
+        totalActiveDays: Object.keys(map).length,
+        activeYears: [2025, 2026],
+        ...extra,
+    };
+}
+
+/** A unix seconds value for a UTC midnight. */
+const utcMidnight = (iso) => Date.parse(`${iso}T00:00:00.000Z`) / 1000;
+
+console.log('\n# leetcode — reading the submission calendar');
+check('the calendar comes back as one count per day', () => {
+    const parsed = LeetApi.parseCalendar(calendarReply({
+        [utcMidnight('2026-09-10')]: 4,
+        [utcMidnight('2026-09-02')]: 5,
+    }));
+    // Ordered oldest first: the incoming keys are unix seconds, which JS
+    // treats as integer keys and hands back in ascending order.
+    eq(parsed.days, { '2026-09-02': 5, '2026-09-10': 4 });
+    eq(parsed.total, 9);
+    eq(parsed.streak, 8);
+    eq(parsed.activeDays, 2);
+});
+check('the day keys are UTC, the way LeetCode itself draws them', () => {
+    // Read back in local time, a midnight timestamp lands on the day before
+    // for anyone west of Greenwich and the day after for anyone far enough
+    // east. Matching LeetCode's own profile page is the answer a person can
+    // actually check against.
+    eq(LeetApi.dayKeyUtc(utcMidnight('2026-01-01')), '2026-01-01');
+    eq(LeetApi.dayKeyUtc(utcMidnight('2026-12-31')), '2026-12-31');
+});
+check('a submissionCalendar that is not JSON does not take the map down', () => {
+    // It arrives as a string rather than an object, so it is the one field
+    // that can arrive malformed without the response itself being invalid.
+    eq(LeetApi.parseCalendar({ submissionCalendar: 'not json' }).days, {});
+    eq(LeetApi.parseCalendar({}).days, {});
+    eq(LeetApi.parseCalendar({ submissionCalendar: '{}' }).total, 0);
+});
+check('a day with a nonsense count is dropped rather than drawn as NaN', () => {
+    const parsed = LeetApi.parseCalendar(calendarReply({
+        [utcMidnight('2026-09-10')]: 'lots',
+        [utcMidnight('2026-09-11')]: 3,
+    }));
+    eq(parsed.days, { '2026-09-11': 3 });
+    eq(parsed.total, 3);
+});
+check('a username is cleaned the way LeetCode spells one', () => {
+    eq(LeetApi.cleanUsername('  Shishir43 '), 'Shishir43');
+    eq(LeetApi.cleanUsername('@Shishir43'), 'Shishir43');
+    eq(LeetApi.cleanUsername(''), '');
+    eq(LeetApi.cleanUsername(null), '');
+});
+
+console.log('\n# leetcode — asking LeetCode for it');
+checkAsync('the request is public: no cookies, just a username', async () => {
+    let sent = null;
+    const fetcher = async (url, options) => {
+        sent = { url, options };
+        return { ok: true, json: async () => ({ data: { matchedUser: { userCalendar: calendarReply({ [utcMidnight('2026-09-10')]: 2 }) } } }) };
+    };
+    const out = await LeetApi.fetchCalendar('Shishir43', { fetcher });
+
+    eq(sent.url, LeetApi.ENDPOINT);
+    eq(sent.options.credentials, 'omit', 'the request must not carry the user’s session');
+    eq(JSON.parse(sent.options.body).variables, { username: 'Shishir43' });
+    eq(out.days, { '2026-09-10': 2 });
+    eq(out.user, 'Shishir43');
+});
+checkAsync('a username nobody has is said so, not drawn as an empty year', async () => {
+    const fetcher = async () => ({ ok: true, json: async () => ({ data: { matchedUser: null } }) });
+    let code = null;
+    try { await LeetApi.fetchCalendar('nobody-at-all', { fetcher }); } catch (error) { code = error.code; }
+    eq(code, 'not-found');
+});
+checkAsync('an unreachable LeetCode is an error, not an empty calendar', async () => {
+    const fetcher = async () => { throw new Error('offline'); };
+    let code = null;
+    try { await LeetApi.fetchCalendar('Shishir43', { fetcher }); } catch (error) { code = error.code; }
+    eq(code, 'network');
+});
+checkAsync('an empty username never reaches the network', async () => {
+    let called = false;
+    const fetcher = async () => { called = true; };
+    let code = null;
+    try { await LeetApi.fetchCalendar('  ', { fetcher }); } catch (error) { code = error.code; }
+    eq(code, 'no-username');
+    eq(called, false);
+});
+
+console.log('\n# leetcode — the pouch panel');
+const LeetPanel = require('../src/content/leet-panel.js');
+
+check('the rail is the three lists Leet.lists hands back', () => {
+    // The row's sentinel id is the key on the lists object, so picking a row
+    // is a lookup rather than a switch. If these ever diverge, every rail row
+    // draws an empty pane.
+    const lists = Leet.lists(Leet.blank(), L0);
+    for (const view of LeetPanel.VIEWS) {
+        assert(Array.isArray(lists[view.id]), `no list answers to "${view.id}"`);
+        assert(view.label && view.empty, `${view.id} has nothing to say when empty`);
+    }
+});
+check('a due date reads as how late or how far off it is', () => {
+    const at = (due) => LeetPanel.dueText({ fsrs: { due } }, L0);
+    eq(at(L0 - days(5)), '5 days overdue');
+    eq(at(L0), 'due today');
+    eq(at(L0 + days(1)), 'due tomorrow');
+    eq(at(L0 + days(6)), 'in 6 days');
+    eq(at(L0 + days(90)), 'in 3 months');
+    eq(at(L0 + days(365)), 'in 1 year');
+});
+check('a problem nobody has graded says so rather than showing a date', () => {
+    eq(LeetPanel.dueText({ fsrs: null }, L0), 'not graded yet');
+    eq(LeetPanel.dueText({}, L0), 'not graded yet');
+});
+check('a rail row escapes what it is given', () => {
+    const row = LeetPanel.railRow('<img src=x>', '<b>Due</b>', 3, true);
+    assert(!row.includes('<img'), 'an id went into an attribute unescaped');
+    assert(!row.includes('<b>'), 'a label went into the markup unescaped');
+    assert(row.includes('aria-pressed="true"'), 'the selected row is not marked');
+});
+
+console.log('\n# leetcode — what the grade card offers');
+check('the four grades are offered with what each would schedule', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui }) => {
+        const fresh = { slug: 'two-sum', difficulty: 'Medium', fsrs: null };
+        const options = ui.previewIntervals(fresh, Date.now());
+        eq(options.map((o) => o.label), ['Again', 'Hard', 'Good', 'Easy']);
+        // Harder answers bring it back sooner. Not *strictly* — on a first
+        // review Again and Hard both round down to tomorrow, which is the
+        // honest answer for both — but it must never invert, or the buttons
+        // are lying about their own consequences.
+        const schedule = options.map((o) => o.days);
+        for (let i = 1; i < schedule.length; i++) {
+            assert(schedule[i] >= schedule[i - 1], `grade: inverted at ${i} — ${schedule.join(', ')}`);
+        }
+        assert(schedule[3] > schedule[0], 'Easy has to buy more than Again');
+    });
+});
+check('the schedule is capped by the longest gap the settings allow', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui }) => {
+        const mature = { slug: 'x', difficulty: 'Easy', fsrs: { stability: 5000, difficulty: 3, reviewedAt: 0, reps: 9, lapses: 0 } };
+        for (const option of ui.previewIntervals(mature, Date.now())) {
+            assert(option.days <= globalThis.BB.Settings.DEFAULTS.leetMaxInterval,
+                `${option.label} scheduled ${option.days} days out`);
+        }
+    });
+});
+check('a schedule is written in words rather than a date', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui }) => {
+        eq(ui.inDays(1), 'tomorrow');
+        eq(ui.inDays(6), 'in 6 days');
+        eq(ui.inDays(30), 'in 30 days');
+        eq(ui.inDays(60), 'in 2 months');
+        eq(ui.inDays(365), 'in 1 year');
+    });
+});
+
+check('human() reads as a stopwatch at every scale', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui }) => {
+        eq(ui.human(45), '45s');
+        eq(ui.human(90), '1m 30s');
+        eq(ui.human(600), '10m 00s');
+        eq(ui.human(3725), '1h 02m');
+    });
+});
+
+// ------------------------------------------------- the leetcode dashboard
+
+require('../src/page/leet-stats.js');
+const LeetStats = globalThis.BB.LeetStats;
+
+console.log('\n# leetcode — the settings panel');
+check('every leetcode setting has a control carrying its key as an id', () => {
+    // This is the whole binding. src/page/settings-form.js matches a control
+    // to a setting by id and nothing else, so a setting with no element is a
+    // setting that can never be changed, and it fails silently — which is
+    // exactly the kind of thing a reader would not notice.
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const Settings = globalThis.BB.Settings;
+    const controls = new Set([...html.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+
+    const leetKeys = Settings.KEYS.filter((key) => /^leet/.test(key));
+    assert(leetKeys.length, 'no leetcode settings at all');
+    for (const key of leetKeys) assert(controls.has(key), `${key} has no control bound to it`);
+});
+check('the number fields cannot be set outside what the code accepts', () => {
+    // The clamps in leet-ui.js and leet-stats.js are the real guard, but a
+    // field that lets you type 400% retention and then quietly ignores it is
+    // a field that lies about what it does.
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const attrs = (id) => (new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html) || [''])[0];
+    const retention = attrs('leetRetention');
+    assert(/min="70"/.test(retention) && /max="97"/.test(retention), `retention is unbounded: ${retention}`);
+    assert(/type="number"/.test(attrs('leetMaxInterval')), 'the interval cap is not a number field');
+    assert(/min="1"/.test(attrs('leetMockMinutes')), 'a zero-minute mock interview is offerable');
+});
+check('a leetcode panel exists for every dashboard tab', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    for (const id of ['leetReviewPanel', 'leetHeatPanel', 'leetNotesPanel', 'leetcodeSettingsPanel']) {
+        assert(html.includes(`id="${id}"`), `${id} is referenced but not in the page`);
+    }
+    assert(/data-site-settings="leetcode"/.test(html), 'the settings launcher has no leetcode card to open');
+});
+
+console.log('\n# leetcode — the dashboard panels');
+check('each heat metric is banded on its own scale', () => {
+    // One set of bounds cannot colour both counts and seconds: two
+    // submissions is a quiet day and two seconds is nothing at all. Sharing
+    // a scale made the Time map one flat block of the darkest level.
+    const scales = Object.values(LeetStats.METRICS).map((m) => m.steps.join(','));
+    eq(new Set(scales).size, scales.length, 'two metrics are sharing a scale');
+    for (const [id, spec] of Object.entries(LeetStats.METRICS)) {
+        assertRising(spec.steps, `${id} steps`);
+        eq(spec.legend.length, 5, `${id} needs a word per level, zero included`);
+    }
+});
+check('the heat metrics are the ones the store can answer', () => {
+    eq(Object.keys(LeetStats.METRICS).sort(), Leet.METRICS.map((m) => m.id).sort());
+});
+check('the median shrugs off one runaway reading', () => {
+    // A problem left open in a background tab for two hours is exactly what
+    // the wall-clock fallback mis-measures, and a mean would move to it.
+    const attempt = (seconds) => ({ attempts: [{ at: L0, status: 'Accepted', seconds, runtime: '' }] });
+    const sane = [attempt(300), attempt(600), attempt(900)];
+    eq(LeetStats.medianSeconds(sane), 600);
+    eq(LeetStats.medianSeconds([...sane, attempt(7200)]), 750, 'not the 2250 a mean would give');
+});
+check('problems never timed are left out of the median rather than counted as nought', () => {
+    const attempt = (seconds) => ({ attempts: [{ at: L0, status: 'Accepted', seconds, runtime: '' }] });
+    eq(LeetStats.medianSeconds([attempt(0), attempt(600), attempt(0)]), 600);
+    eq(LeetStats.medianSeconds([]), 0);
+    eq(LeetStats.medianSeconds([attempt(0)]), 0, 'nothing timed is not a median of zero');
+});
+check('the dashboard writes durations the way the panel does', () => {
+    eq(LeetStats.human(45), '45s');
+    eq(LeetStats.human(900), '15m');
+    eq(LeetStats.human(3900), '1h 05m');
+});
+
+// ----------------------------------------------------------- typeracer
+
+const Typer = require('../src/shared/typeracer.js');
+
+/**
+ * A keystroke stream, written the way a race actually happens.
+ *
+ * `quote` is what was on screen; `typed` is what went in, where a `<` is one
+ * backspace. Every gap is `step` unless the character is preceded by a number
+ * in braces, which is that gap in milliseconds — so a test can put a four
+ * second stare or a three millisecond key repeat exactly where it wants one
+ * without arithmetic in the test body.
+ */
+function stream(quote, typed, { start = 1000, step = 200 } = {}) {
+    const events = [];
+    const buffer = [];
+    let at = start;
+    let i = 0;
+    while (i < typed.length) {
+        let gap = step;
+        if (typed[i] === '{') {
+            const close = typed.indexOf('}', i);
+            gap = Number(typed.slice(i + 1, close));
+            i = close + 1;
+        }
+        at += gap;
+        const ch = typed[i++];
+        if (ch === '<') {
+            buffer.pop();
+            events.push({ del: true, at });
+            continue;
+        }
+        const expected = quote[buffer.length] || '';
+        events.push({ ch, expected, at, ok: ch === expected });
+        buffer.push(ch);
+    }
+    return events;
+}
+
+const gramsOf = (quote, typed, options) => Typer.gramsFrom(stream(quote, typed, options));
+const msOf = (table, gram) => (table[gram] ? table[gram].ms : null);
+
+// Half past eleven at night, today. The day bucket is keyed in local time,
+// and a hard-coded date would stop being recorded once the suite is run more
+// than KEEP_DAYS after it was written.
+const R0 = new Date().setHours(23, 30, 0, 0);
+
+console.log('\n# typeracer — folding a character');
+check('case folds, because the shift is already its own interval', () => {
+    eq(Typer.foldChar('A'), 'a');
+    eq(Typer.foldChar('a'), 'a');
+    eq(Typer.foldGram(['T', 'h']), 'th');
+});
+check('every digit is one key, and everything unreachable is another', () => {
+    eq(Typer.foldChar('7'), '#');
+    eq(Typer.foldChar('0'), '#');
+    // An accented letter is somebody else's keyboard. Folding it to itself
+    // would fill the table with pairs you never meet twice.
+    eq(Typer.foldChar('é'), '?');
+    eq(Typer.foldChar('€'), '?');
+});
+check('the punctuation you actually type survives', () => {
+    for (const ch of [' ', "'", ',', '.', '-']) eq(Typer.foldChar(ch), ch);
+    // A quote is typeset with curly marks and long dashes; the keyboard has
+    // neither, so they fold onto the key that was actually pressed.
+    eq(Typer.foldChar('’'), "'");
+    eq(Typer.foldChar('—'), '-');
+});
+
+console.log('\n# typeracer — reading the keystrokes');
+check('a clean run credits each pair once and the roll once', () => {
+    const grams = gramsOf('the', 'the');
+    eq(Object.keys(grams.bi).sort(), ['he', 'th']);
+    eq(Object.keys(grams.tri), ['the']);
+    eq(grams.tri.the.ms, 200, 'the roll is its second interval, not its span');
+    eq(grams.totalN, 2);
+    eq(grams.errors, 0);
+});
+check('an interval spanning a backspace is credited to nothing', () => {
+    // Typing "the" as t, x, backspace, h, e. Both intervals touching the
+    // retyped position measure how long the fix took, not how fast the pair
+    // is, so neither belongs in a table about speed.
+    const grams = gramsOf('the', 'tx<he');
+    // The miss itself is filed as a slip on "th", with no reading beside it.
+    const read = (table) => Object.keys(table).filter((gram) => table[gram].n > 0);
+    eq(read(grams.bi), []);
+    eq(read(grams.tri), []);
+    eq(grams.bi.th.err, 1);
+    eq(grams.errors, 1);
+});
+check('a stare and a key repeat are both dropped', () => {
+    const grams = gramsOf('theirs', 'th{4000}e{3}i{200}r{200}s');
+    eq(Object.keys(grams.bi).sort(), ['ir', 'rs', 'th']);
+    eq(Object.keys(grams.tri), ['irs'], 'a roll needs both of its intervals');
+});
+check('dropping a reading does not shift the ones around it', () => {
+    // Every interval is the difference of two absolute timestamps rather
+    // than a step in a chain, which is the whole reason dropping is safe.
+    const clean = gramsOf('theirs', 'th{200}e{200}i{200}r{200}s');
+    const gappy = gramsOf('theirs', 'th{4000}e{3}i{200}r{200}s');
+    eq(msOf(gappy.bi, 'th'), msOf(clean.bi, 'th'));
+    eq(msOf(gappy.bi, 'rs'), msOf(clean.bi, 'rs'));
+});
+check('a mistype is filed against the character that was due', () => {
+    const grams = gramsOf('the', 'tge');
+    eq(grams.chars.h.due, 1);
+    eq(grams.chars.h.wrong, 1);
+    eq(grams.chars.h.subs.g, 1, 'what was hit instead is the interesting half');
+    eq(grams.chars.t.wrong, 0);
+});
+check('a character typed twice was due twice', () => {
+    // Otherwise the error rate for a key you fumble and fix is 1/1, and
+    // every such key sits at the top of the table for ever.
+    const grams = gramsOf('the', 'tg<he');
+    eq(grams.chars.h.due, 2);
+    eq(grams.chars.h.wrong, 1);
+});
+
+console.log('\n# typeracer — slips');
+check('a first-try miss after a clean key is a slip on the pair and the roll being typed', () => {
+    // "thx<e": going for "e" after a clean "th", "x" was hit.
+    const { bi, tri } = gramsOf('the quick', 'thx<e');
+    eq(bi.he.err, 1, 'the pair going for e');
+    eq(tri.the.err, 1, 'the roll going for e');
+    eq((bi.th && bi.th.err) || 0, 0, 'the clean pair before it was blamed');
+});
+check('the retype that fixed it is not a second slip, and a run of misses is one', () => {
+    const { bi } = gramsOf('the quick', 'txx<<he');
+    eq(bi.th.err, 1, 'going for h');
+    eq((bi.he && bi.he.err) || 0, 0, 'the second miss of the run was filed against the pair after');
+});
+check('slips are keyed by what was due, folded like everything else', () => {
+    const { bi } = gramsOf('The quick', 'Tx<he');
+    eq(bi.th.err, 1);
+});
+check('a clean race has no slips at all', () => {
+    const { bi, tri } = gramsOf('the quick', 'the quick');
+    eq(Object.values(bi).concat(Object.values(tri)).reduce((sum, e) => sum + e.err, 0), 0);
+});
+check('slips merge like every other sum, and rank by count then rate', () => {
+    let grams = Typer.blankGrams();
+    for (let i = 0; i < 3; i++) grams = Typer.mergeGrams(grams, gramsOf('the quick', 'thx<e quick'));
+    const state = { races: [], days: {}, grams };
+    const [top] = Typer.slips(state, 'bi');
+    eq(top.gram, 'he');
+    eq(top.err, 3);
+    eq(top.rate, 1, 'three slips and no clean readings is every attempt');
+    eq(Typer.slips(state, 'bi', { minSlips: 4 }), [], 'under the floor a gram is not named');
+});
+check('a pair you always slip on is not evicted for having no clean readings', () => {
+    const grams = Typer.blankGrams();
+    for (let i = 0; i < Typer.GRAM_CAP + 10; i++) grams.bi[`x${i}`] = { n: 1, ms: 100, err: 0 };
+    grams.bi.zq = { n: 0, ms: 0, err: Typer.KEEP_N };
+    assert(Typer.pruneGrams(grams).bi.zq, 'the slips table lost the pair it exists for');
+});
+check('the slowest-pairs rows carry their slips for the table', () => {
+    const grams = Typer.blankGrams();
+    grams.bi.th = { n: 10, ms: 2400, err: 4 };
+    eq(Typer.slowest({ grams }, 'bi', { minSamples: 1 })[0].err, 4);
+});
+
+console.log('\n# typeracer — merging and evicting');
+check('merging is commutative, because it is all sums', () => {
+    const a = gramsOf('the', 'the');
+    const b = gramsOf('then', 'then');
+    const ab = Typer.mergeGrams(Typer.mergeGrams(Typer.blankGrams(), a), b);
+    const ba = Typer.mergeGrams(Typer.mergeGrams(Typer.blankGrams(), b), a);
+    eq(ab.bi, ba.bi);
+    eq(ab.totalMs, ba.totalMs);
+    eq(ab.bi.th.n, 2, 'the pair both quotes hold is counted twice');
+});
+check('a sum is stored rather than a mean', () => {
+    const once = Typer.mergeGrams(Typer.blankGrams(), gramsOf('the', 'th{100}e'));
+    const twice = Typer.mergeGrams(once, gramsOf('the', 'th{300}e'));
+    eq(twice.bi.he.n, 2);
+    eq(twice.bi.he.ms, 400, 'means do not merge; sums do');
+});
+check('eviction takes the rarest first and never a gram you know', () => {
+    const grams = Typer.blankGrams();
+    for (let i = 0; i < Typer.GRAM_CAP + 100; i++) {
+        grams.bi[`x${i}`] = { n: i < 100 ? Typer.KEEP_N : 1, ms: 100, err: 0 };
+    }
+    const pruned = Typer.pruneGrams(grams);
+    eq(Object.keys(pruned.bi).length, Typer.GRAM_CAP);
+    for (let i = 0; i < 100; i++) assert(pruned.bi[`x${i}`], `x${i} was evicted at KEEP_N`);
+});
+check('a table of nothing but known grams stays over the cap', () => {
+    // The cap is there to keep one-offs out, not to throw away the answer.
+    const grams = Typer.blankGrams();
+    for (let i = 0; i < Typer.GRAM_CAP + 50; i++) grams.bi[`x${i}`] = { n: Typer.KEEP_N, ms: 100, err: 0 };
+    eq(Object.keys(Typer.pruneGrams(grams).bi).length, Typer.GRAM_CAP + 50);
+});
+check('the cap holds after a thousand races of novel grams', () => {
+    let state = Typer.blank();
+    const letters = 'abcdefghijklmnopqrstuvwxyz';
+    for (let race = 0; race < 1000; race++) {
+        // A different quote every time, so nothing ever reaches KEEP_N and
+        // the table is under maximum pressure to grow.
+        let quote = '';
+        for (let i = 0; i < 40; i++) quote += letters[(race * 7 + i * 11) % 26];
+        state = Typer.recordRace(state, { at: R0, seconds: 30 }, stream(quote, quote), R0);
+    }
+    assert(Object.keys(state.grams.bi).length <= Typer.GRAM_CAP, 'the bigram table ran away');
+    assert(Object.keys(state.grams.tri).length <= Typer.GRAM_CAP_TRI, 'the trigram table ran away');
+});
+
+console.log('\n# typeracer — the race log');
+check('a race lands on the local day it was typed on', () => {
+    // toISOString() would file this one under tomorrow east of Greenwich —
+    // the square that lights up would not be the one you were sitting at.
+    const state = Typer.recordRace(Typer.blank(), { at: R0, wpm: 80, accuracy: 97, seconds: 30, chars: 200 }, [], R0);
+    const local = new Date(R0);
+    const key = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
+    eq(Object.keys(state.days), [key]);
+    eq(state.days[key], { races: 1, seconds: 30, best: 80 });
+});
+check('the day keeps the best of its races, not the last', () => {
+    let state = Typer.recordRace(Typer.blank(), { at: R0, wpm: 90, seconds: 30 }, [], R0);
+    state = Typer.recordRace(state, { at: R0, wpm: 70, seconds: 30 }, [], R0);
+    eq(state.days[Typer.dayKey(R0)], { races: 2, seconds: 60, best: 90 });
+});
+check('the page is believed when it parses and measured when it does not', () => {
+    const told = Typer.recordRace(Typer.blank(), { at: R0, wpm: 84.4, accuracy: 96.5, seconds: 30, chars: 200 }, [], R0);
+    eq(told.races[0].wpm, 84.4, 'the number the user just saw on screen');
+
+    // 200 characters in 30 seconds is 80 wpm by the five-character word.
+    const measured = Typer.recordRace(Typer.blank(), { at: R0, seconds: 30, chars: 200 }, [], R0);
+    eq(measured.races[0].wpm, 80);
+});
+check('accuracy is computed from the stream when the panel says nothing', () => {
+    const state = Typer.recordRace(Typer.blank(), { at: R0, seconds: 10 }, stream('the', 'tge'), R0);
+    eq(state.races[0].errors, 1);
+    eq(state.races[0].accuracy, 66.7);
+});
+check('the log is newest first and capped', () => {
+    let state = Typer.blank();
+    for (let i = 0; i < Typer.RACE_CAP + 20; i++) {
+        state = Typer.recordRace(state, { at: R0 + i, wpm: i, seconds: 1 }, [], R0);
+    }
+    eq(state.races.length, Typer.RACE_CAP);
+    eq(state.races[0].wpm, Typer.RACE_CAP + 19, 'newest first');
+});
+check('day buckets older than the map are dropped rather than aged', () => {
+    const old = R0 - (Typer.KEEP_DAYS + 5) * Typer.DAY_MS;
+    const days = { [Typer.dayKey(old)]: { races: 3, seconds: 90, best: 60 }, [Typer.dayKey(R0)]: { races: 1, seconds: 30, best: 70 } };
+    eq(Object.keys(Typer.prune(days, R0)), [Typer.dayKey(R0)]);
+});
+check('a stored race written by an older version cannot hand back nonsense', () => {
+    // Every field is interpolated into markup somewhere, so nothing is
+    // trusted as stored — the rule shared/leetcode.js follows.
+    const race = Typer.cleanRace({ at: '12', wpm: -5, accuracy: 300, seconds: 'x', quoteId: { nope: 1 }, chars: 4.6 });
+    eq(race, {
+        at: 12, wpm: 0, accuracy: 100, seconds: 0, chars: 5, errors: 0,
+        correctionMs: 0, cleanWpm: 0, quoteId: '[object Object]', place: 0, of: 0,
+    });
+});
+
+// ------------------------------------------------ reading typeracer.com
+
+const TyperRead = require('../src/content/typeracer-read.js');
+
+/**
+ * A page shaped like TypeRacer's, without a browser.
+ *
+ * `bySelector` maps one of the spellings in TyperRead.SELECTORS to the node
+ * (or nodes) it finds. That is the whole seam: the readers are selector list
+ * plus validation, and it is the validation these tests are about — whether
+ * the real spelling is still current is the browser suite's question, and
+ * beyond that, the site's.
+ */
+function stubPage(bySelector) {
+    const pick = (selector) => bySelector[selector] || null;
+    return {
+        querySelector: (selector) => {
+            const hit = pick(selector);
+            return Array.isArray(hit) ? (hit[0] || null) : hit;
+        },
+        querySelectorAll: (selector) => {
+            const hit = pick(selector);
+            if (!hit) return [];
+            return Array.isArray(hit) ? hit : [hit];
+        },
+    };
+}
+
+/** One element, on screen and the size of a line of text. */
+const stubNode = (textContent, extra = {}) => ({
+    textContent,
+    isConnected: true,
+    children: [],
+    firstElementChild: null,
+    getAttribute: (name) => (extra.attrs || {})[name] || null,
+    getBoundingClientRect: () => ({ width: extra.hidden ? 0 : 200, height: extra.hidden ? 0 : 18 }),
+    ...extra,
+});
+
+console.log('\n# typeracer — reading the address bar');
+check('the pit and a race are race pages, and the rest of the site is not', () => {
+    eq(TyperRead.isRacePage('/'), true, 'the front door is the pit');
+    eq(TyperRead.isRacePage('/pit/'), true);
+    eq(TyperRead.isRacePage('/race'), true);
+    eq(TyperRead.isRacePage('/play'), true);
+    eq(TyperRead.isRacePage('/pit/profile'), true, 'still under the pit');
+    eq(TyperRead.isRacePage('/texts'), false);
+    eq(TyperRead.isRacePage('/forum/thread'), false);
+});
+
+console.log('\n# typeracer — reading the quote');
+check('a quote is believed only once it is long enough to be one', () => {
+    const long = 'The quick brown fox jumps over the lazy dog and keeps going.';
+    eq(TyperRead.quoteText(stubPage({ '.inputPanelText': stubNode(long) })), long);
+    // A selector that has started matching a chat bubble reports nothing,
+    // the same way a chess move list that does not parse is passed over.
+    eq(TyperRead.quoteText(stubPage({ '.inputPanelText': stubNode('Loading…') })), null);
+    eq(TyperRead.quoteText(stubPage({})), null);
+});
+check('the panel’s line wrapping does not end up in the quote', () => {
+    const wrapped = stubNode('  The quick brown\n  fox jumps over   the lazy dog.  ');
+    eq(TyperRead.quoteText(stubPage({ '.inputPanelText': wrapped })),
+        'The quick brown fox jumps over the lazy dog.');
+});
+check('a later spelling is used when the first no longer matches', () => {
+    const long = 'The quick brown fox jumps over the lazy dog and keeps going.';
+    eq(TyperRead.quoteText(stubPage({ '.raceQuote': stubNode(long) })), long);
+});
+
+console.log('\n# typeracer — the box you type in');
+check('a read-only box between races is not the one to listen on', () => {
+    const live = stubNode('', { tagName: 'INPUT' });
+    const spent = stubNode('', { tagName: 'INPUT', readOnly: true });
+    eq(TyperRead.inputBox(stubPage({ 'input.txtInput': spent })), null);
+    assert(TyperRead.inputBox(stubPage({ 'input.txtInput': live })) === live, 'the live box was passed over');
+});
+check('a box with no box is not on screen', () => {
+    const hidden = stubNode('', { tagName: 'INPUT', hidden: true });
+    eq(TyperRead.inputBox(stubPage({ 'input.txtInput': hidden })), null);
+});
+check('something that is not a field cannot be the field', () => {
+    const div = stubNode('', { tagName: 'DIV' });
+    eq(TyperRead.inputBox(stubPage({ 'input.txtInput': div })), null);
+});
+
+console.log('\n# typeracer — the results panel');
+const resultsOf = (text) => TyperRead.readResult(stubPage({ 'table.raceResults': stubNode(text) }));
+
+check('speed, accuracy and finishing place are read off the scoreboard', () => {
+    const result = resultsOf('You finished 2nd out of 5! Speed: 84 WPM Accuracy: 97.4%');
+    eq(result.wpm, 84);
+    eq(result.accuracy, 97.4);
+    eq(result.place, 2);
+    eq(result.of, 5);
+});
+check('a solo run has a speed and no placing', () => {
+    const result = resultsOf('Speed: 71 WPM Accuracy: 95%');
+    eq(result.wpm, 71);
+    eq(result.place, null);
+    eq(result.of, null);
+});
+check('a field that does not parse is null rather than nought', () => {
+    // A zero is a value: it would go into the mean the dashboard draws and
+    // stay there. Nothing read has to stay distinguishable from nothing done.
+    eq(resultsOf('Race complete!'), { wpm: null, accuracy: null, place: null, of: null });
+    eq(TyperRead.readResult(stubPage({})), { wpm: null, accuracy: null, place: null, of: null });
+});
+check('a reading outside what a race can be is dropped', () => {
+    // 4000 WPM is a renamed table whose digits happen to sit next to the
+    // letters "wpm", not somebody typing.
+    eq(resultsOf('Speed: 4000 WPM Accuracy: 99%').wpm, null);
+    eq(resultsOf('Speed: 0 WPM').wpm, null);
+    eq(resultsOf('Speed: 60 WPM Accuracy: 140%').accuracy, null);
+});
+check('the quote’s own id is taken from the link beside the result', () => {
+    const link = stubNode('see this text', { attrs: { href: '/text?id=3810721' } });
+    eq(TyperRead.quoteId(stubPage({ 'a[href*="/text?id="]': link })), '3810721');
+    eq(TyperRead.quoteId(stubPage({})), '', 'a race with no link is not an error');
+});
+
+console.log('\n# typeracer — where the caret belongs');
+check('nothing typed yet puts the caret on the front of the quote', () => {
+    const first = stubNode('The');
+    const panel = stubNode('The quick brown fox', { firstElementChild: first, children: [first] });
+    assert(TyperRead.caretAnchor(stubPage({ '.inputPanelText': panel })) === first, 'not the first piece');
+});
+check('the caret is the first piece the site has not marked as typed', () => {
+    const done = stubNode('The quick ');
+    const next = stubNode('brown fox');
+    const panel = stubNode('The quick brown fox', { firstElementChild: done, children: [done, next] });
+    const page = stubPage({ '.inputPanelText': panel, '.inputPanelText span.txtHighlight': done });
+    assert(TyperRead.caretAnchor(page) === next, 'the caret stayed on what was already typed');
+});
+check('a quote that cannot be read draws no caret at all', () => {
+    // Degrade, never guess. A caret in the wrong place over the word you are
+    // reading is worse than none, and worse in a way you cannot switch off
+    // without going to find the setting.
+    eq(TyperRead.caretAnchor(stubPage({})), null);
+    const bare = stubNode('The quick brown fox');
+    eq(TyperRead.caretAnchor(stubPage({ '.inputPanelText': bare })), null, 'no pieces to point at');
+});
+check('a finished quote has nothing left to point at', () => {
+    const done = stubNode('The quick brown fox');
+    const panel = stubNode('The quick brown fox', { firstElementChild: done, children: [done] });
+    eq(TyperRead.caretAnchor(stubPage({ '.inputPanelText': panel, '.inputPanelText span.txtHighlight': done })), null);
+});
+
+// ------------------------------------------------ typing on typeracer.com
+
+const TyperUi = require('../src/content/typeracer-ui.js');
+
+/**
+ * Drive a race without a browser.
+ *
+ * Only what createTyperUi actually touches is stubbed: the capture listener it
+ * registers on `document`, the monotonic clock it timestamps with, and the
+ * four readers it asks about the page. `record` is intercepted rather than
+ * left to storage — what is written is the thing under test here, and the
+ * store's own arithmetic has its own section above.
+ *
+ * `clock` is moved by hand. A typing test measured against a clock that some
+ * test slept through would be a test of how fast this machine is.
+ */
+function withTyperPage(run, { settings = {}, quote = '' } = {}) {
+    const BB = globalThis.BB;
+    const saved = {
+        document: global.document,
+        performance: global.performance,
+        location: global.location,
+        raf: global.requestAnimationFrame,
+        caf: global.cancelAnimationFrame,
+        record: BB.Typer.record,
+        readResult: BB.TyperRead.readResult,
+        quoteId: BB.TyperRead.quoteId,
+        quoteText: BB.TyperRead.quoteText,
+        find: BB.TyperRead.find,
+    };
+
+    const handlers = {};
+    global.document = {
+        addEventListener: (type, fn) => { handlers[type] = fn; },
+        removeEventListener: (type) => { delete handlers[type]; },
+        // The caret is on its default ('site') through all of these, so it
+        // draws nothing — but tearing it down is unconditional, and a page
+        // with no <html> on it would fail there rather than in the code
+        // these tests are about.
+        documentElement: { classList: { add() {}, remove() {}, contains: () => false, toggle() {} } },
+    };
+    global.location = { pathname: '/' };
+    // Frames are collected rather than run: what these tests are about is what
+    // the keystroke handler does, and a caret redraw is a page away.
+    const frames = [];
+    global.requestAnimationFrame = (fn) => frames.push(fn);
+    global.cancelAnimationFrame = () => {};
+
+    let clock = 1000;
+    global.performance = { now: () => clock };
+
+    const page = { quote, results: null, quoteId: '' };
+    BB.TyperRead.quoteText = () => page.quote || null;
+    BB.TyperRead.find = (names) => (names === 'results' ? page.results : null);
+    BB.TyperRead.readResult = () => page.results || { wpm: null, accuracy: null, place: null, of: null };
+    BB.TyperRead.quoteId = () => page.quoteId;
+
+    const written = [];
+    BB.Typer.record = (race, events) => {
+        written.push({ race, events });
+        return Promise.resolve(null);
+    };
+
+    const tasks = new Map();
+    const watcher = {
+        add: (name, fn) => tasks.set(name, fn),
+        remove: (name) => tasks.delete(name),
+        schedule() {}, has: (name) => tasks.has(name),
+    };
+
+    const ui = TyperUi.createTyperUi({
+        watcher,
+        notify: () => {},
+        getSettings: () => ({ ...BB.Settings.DEFAULTS, ...settings }),
+    });
+    ui.install();
+
+    /**
+     * Type `text` into the box, one `beforeinput` per character, `step`
+     * milliseconds apart. A `<` is one backspace, as in the store's tests.
+     */
+    const box = makeBox();
+    const type = (text, { step = 200, into = box } = {}) => {
+        for (const ch of text) {
+            clock += step;
+            into.selectionStart = into.selectionEnd = 1;
+            if (ch === '<') {
+                into.value = 'x';
+                handlers.beforeinput({ inputType: 'deleteContentBackward', data: null, target: into });
+            } else {
+                into.value = ch;
+                handlers.beforeinput({ inputType: 'insertText', data: ch, target: into });
+            }
+        }
+    };
+
+    const pass = () => tasks.get('typer-race')();
+
+    try {
+        return run({ ui, page, type, pass, written, watcher, handlers, box, wait: (ms) => { clock += ms; } });
+    } finally {
+        ui.uninstall();
+        Object.assign(global, {
+            document: saved.document, performance: saved.performance, location: saved.location,
+            requestAnimationFrame: saved.raf, cancelAnimationFrame: saved.caf,
+        });
+        BB.Typer.record = saved.record;
+        BB.TyperRead.readResult = saved.readResult;
+        BB.TyperRead.quoteId = saved.quoteId;
+        BB.TyperRead.quoteText = saved.quoteText;
+        BB.TyperRead.find = saved.find;
+    }
+}
+
+/**
+ * A stand-in for a text box, answering only what the keystroke path asks:
+ * what it is, what it holds and which of the reader's spellings it matches.
+ */
+function makeBox(selector = 'input.txtInput') {
+    return {
+        nodeType: 1, tagName: 'INPUT', readOnly: false, disabled: false,
+        value: '', selectionStart: 0, selectionEnd: 0,
+        matches: (spelling) => spelling === selector,
+    };
+}
+
+console.log('\n# typeracer — counting what a delete took away');
+check('a plain backspace is one character', () => {
+    eq(TyperUi.deletedCount({ value: 'the', selectionStart: 3, selectionEnd: 3 }, 'deleteContentBackward'), 1);
+});
+check('a selection being replaced takes all of it', () => {
+    eq(TyperUi.deletedCount({ value: 'the quick', selectionStart: 4, selectionEnd: 9 }, 'deleteContentBackward'), 5);
+});
+check('a word delete is measured off the text rather than guessed at', () => {
+    // Guessing 1 would leave our position in the quote wrong for the rest of
+    // the race, and every interval after it silently spoiled.
+    eq(TyperUi.deletedCount({ value: 'the quick', selectionStart: 9, selectionEnd: 9 }, 'deleteWordBackward'), 5);
+    eq(TyperUi.deletedCount({ value: 'the', selectionStart: 3, selectionEnd: 3 }, 'deleteWordBackward'), 3);
+});
+check('a forward delete at the end of the box takes nothing', () => {
+    eq(TyperUi.deletedCount({ value: 'the', selectionStart: 3, selectionEnd: 3 }, 'deleteContentForward'), 0);
+    eq(TyperUi.deletedCount({ value: 'the', selectionStart: 1, selectionEnd: 1 }, 'deleteContentForward'), 1);
+});
+check('an input that cannot say is treated as one character', () => {
+    eq(TyperUi.deletedCount(null, 'deleteContentBackward'), 1);
+    eq(TyperUi.deletedCount({ value: 'x' }, 'deleteContentBackward'), 1);
+});
+
+console.log('\n# typeracer — measuring a race');
+check('a new quote starts a race and the keys go into it', () => {
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('the');
+        const race = ui.currentRace();
+        eq(race.events.map((e) => e.ch), ['t', 'h', 'e']);
+        eq(race.events.every((e) => e.ok), true);
+        eq(race.depth, 3);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('the expected character is our own position, not the box’s', () => {
+    // TypeRacer empties the box after every word, so its length stops being
+    // the position in the quote the moment the first space goes in.
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('the quick');
+        const race = ui.currentRace();
+        eq(race.events.map((e) => e.expected).join(''), 'the quick');
+        eq(race.events.some((e) => !e.ok), false);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a wrong key is recorded against what was due', () => {
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('tge');
+        const [, wrong] = ui.currentRace().events;
+        eq(wrong.ch, 'g');
+        eq(wrong.expected, 'h');
+        eq(wrong.ok, false);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a backspace steps the position back and is recorded as one', () => {
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('tg<h');
+        const race = ui.currentRace();
+        eq(race.depth, 2);
+        eq(race.events.map((e) => (e.del ? '<' : e.ch)).join(''), 'tg<h');
+        eq(race.events[3].expected, 'h', 'the retype is compared against the same position');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('keys typed into another box on the page are not part of the race', () => {
+    // The listener is on document, so TypeRacer's chat is heard too. Those
+    // keys used to push the position on and mark the rest of the quote wrong.
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('the');
+        type('gg', { into: makeBox('.chatInput') });
+        type(' qu');
+        const race = ui.currentRace();
+        eq(race.depth, 6);
+        eq(race.events.every((e) => e.ok), true, 'the chat keys were counted as mistakes');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('the race box is the first one a key lands in, and only that one', () => {
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        const first = makeBox();
+        const second = makeBox();
+        type('th', { into: first });
+        type('xx', { into: second });
+        eq(ui.currentRace().depth, 2, 'a second matching box mid-race was taken as the race box');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('deleting past the start of the quote is not recorded', () => {
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('t<<<');
+        eq(ui.currentRace().depth, 0);
+        eq(ui.currentRace().events.filter((e) => e.del).length, 1, 'only the one that had something to take');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+
+console.log('\n# typeracer — ending a race');
+check('the results panel appearing files the race', () => {
+    withTyperPage(({ page, pass, type, written }) => {
+        pass();
+        type('the quick brown fox');
+        page.results = { wpm: 84, accuracy: 97, place: 2, of: 5 };
+        page.quoteId = '3810721';
+        pass();
+
+        eq(written.length, 1);
+        const { race } = written[0];
+        eq(race.wpm, 84);
+        eq(race.accuracy, 97);
+        eq(race.place, 2);
+        eq(race.of, 5);
+        eq(race.chars, 19);
+        eq(race.quoteId, '3810721');
+        // 19 characters at 200ms each, measured from the first to the last.
+        eq(race.seconds, 3.6);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a quote typed to the end is a finished race, scoreboard or not', () => {
+    const quote = 'the quick brown fox jumps';
+    withTyperPage(({ ui, pass, type, written, wait }) => {
+        pass();
+        type(quote);
+        pass();
+        eq(written.length, 0, 'the scoreboard is still worth a moment’s wait');
+        wait(TyperUi.RESULT_WAIT_MS);
+        pass();
+        eq(written.length, 1, 'a race with no results panel was left open');
+        eq(written[0].race.chars, quote.length);
+        eq(written[0].race.wpm, null, 'a speed was invented rather than left to the store');
+        eq(ui.currentRace(), null);
+    }, { quote });
+});
+check('a quote ending on a wrong character is not finished until it is fixed', () => {
+    const quote = 'the quick brown fox jumps';
+    withTyperPage(({ ui, pass, type, written, wait }) => {
+        pass();
+        type(`${quote.slice(0, -1)}x`);
+        wait(TyperUi.RESULT_WAIT_MS);
+        pass();
+        eq(written.length, 0, 'a box still holding a mistake was taken as the finish');
+        type('<s');
+        wait(TyperUi.RESULT_WAIT_MS);
+        pass();
+        eq(written.length, 1);
+        eq(ui.currentRace(), null);
+    }, { quote });
+});
+check('the last race’s scoreboard neither ends this one nor is filed with it', () => {
+    // It used to end the new race on the first pass, too short to bank, and
+    // the whole race went with it.
+    withTyperPage(({ page, pass, type, written, wait }) => {
+        page.results = { wpm: 61, accuracy: 90, place: 3, of: 4 };
+        page.quoteId = '111';
+        pass();
+        type('the quick brown fox jumps');
+        pass();
+        eq(written.length, 0, 'a stale panel ended the race');
+        wait(TyperUi.RESULT_WAIT_MS);
+        pass();
+        eq(written.length, 1);
+        eq(written[0].race.wpm, null, 'the old race’s speed was filed against this one');
+        eq(written[0].race.quoteId, '', 'and its quote id');
+    }, { quote: 'the quick brown fox jumps' });
+});
+check('a false start is not a race', () => {
+    withTyperPage(({ page, pass, type, written }) => {
+        pass();
+        type('the');
+        page.results = { wpm: 84, accuracy: 97, place: null, of: null };
+        pass();
+        eq(written.length, 0);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a new quote under a running race banks the old one', () => {
+    withTyperPage(({ page, pass, type, written, wait }) => {
+        pass();
+        type('the quick brown fox');
+        page.quote = 'every good boy deserves favour and so on';
+        wait(TyperUi.QUOTE_SAMPLE_MS + 1);
+        pass();
+        eq(written.length, 1, 'the first race was dropped rather than banked');
+        eq(written[0].race.chars, 19, 'what was typed belongs to the quote it was typed against');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('the quote is not re-read on every pass of the observer', () => {
+    // TypeRacer moves its own highlight as you type, so the shared observer
+    // fires continuously through a race; textContent on the quote panel
+    // concatenates three hundred characters every time it is asked.
+    withTyperPage(({ pass, type, wait }) => {
+        pass();
+        type('the quick');
+        pass();
+
+        let reads = 0;
+        const real = globalThis.BB.TyperRead.quoteText;
+        globalThis.BB.TyperRead.quoteText = () => { reads++; return real(); };
+        for (let i = 0; i < 60; i++) pass();
+        eq(reads, 0, 'a frame inside the sample window re-read the quote');
+
+        wait(TyperUi.QUOTE_SAMPLE_MS + 1);
+        pass();
+        globalThis.BB.TyperRead.quoteText = real;
+        eq(reads, 1, 'and the window never reopens');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('tracking turned off stops the race already in progress', () => {
+    withTyperPage(({ ui, page, pass, type, written }) => {
+        pass();
+        type('the quick brown fox');
+        ui.refreshSurfaces();
+        page.results = { wpm: 84, accuracy: 97, place: null, of: null };
+        pass();
+        eq(written.length, 0);
+        eq(ui.currentRace(), null);
+    }, { quote: 'the quick brown fox jumps over it', settings: { typerTrack: false } });
+});
+check('leaving the pit abandons the race rather than banking it', () => {
+    // A race you navigated away from mid-quote has no honest finishing time.
+    withTyperPage(({ ui, pass, type, written }) => {
+        pass();
+        type('the quick brown fox');
+        ui.onNavigate();
+        eq(ui.currentRace(), null);
+        eq(written.length, 0);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a page of the site with no race on it gets no race', () => {
+    withTyperPage(({ ui, pass }) => {
+        global.location.pathname = '/texts';
+        pass();
+        eq(ui.currentRace(), null);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+
+console.log('\n# typeracer — what correcting cost');
+check('the window is the span from the wrong key to the restored prefix', () => {
+    // "the quick" typed as t, h, x, q, u, then three backspaces taking the
+    // x back off, then the right letters. The clock starts on the x and
+    // stops on the backspace that removed it — not on the retype, because
+    // the moment the box is a correct prefix again is the moment the
+    // correcting is over.
+    const at = (ms) => ms;
+    const events = [
+        { ch: 't', expected: 't', at: at(0), ok: true },
+        { ch: 'h', expected: 'h', at: at(200), ok: true },
+        { ch: 'x', expected: 'e', at: at(400), ok: false },
+        { ch: ' ', expected: ' ', at: at(600), ok: true },
+        { ch: 'q', expected: 'q', at: at(800), ok: true },
+        { del: true, at: at(1000) },
+        { del: true, at: at(1150) },
+        { del: true, at: at(1300) },
+        { ch: 'e', expected: 'e', at: at(1500), ok: true },
+    ];
+    eq(Typer.gramsFrom(events).correctionMs, 900, 'from the x at 400 to the last backspace at 1300');
+});
+check('a race typed clean bills nothing', () => {
+    eq(gramsOf('the quick', 'the quick').correctionMs, 0);
+});
+check('two separate mistakes are two windows, not one span', () => {
+    // A span from the first mistake to the last would bill every clean
+    // keystroke in between as correction.
+    const events = [
+        { ch: 'x', expected: 't', at: 0, ok: false },
+        { del: true, at: 100 },
+        { ch: 't', expected: 't', at: 200, ok: true },
+        { ch: 'h', expected: 'h', at: 400, ok: true },
+        { ch: 'e', expected: 'e', at: 600, ok: true },
+        { ch: 'z', expected: ' ', at: 800, ok: false },
+        { del: true, at: 950 },
+    ];
+    eq(Typer.gramsFrom(events).correctionMs, 250, '100 for the first, 150 for the second');
+});
+check('a race abandoned in an error state is billed to its last key', () => {
+    // Leaving it out would make the race you gave up on halfway through a
+    // word look like the cleanest one in the log.
+    const events = [
+        { ch: 't', expected: 't', at: 0, ok: true },
+        { ch: 'x', expected: 'h', at: 200, ok: false },
+        { ch: 'y', expected: 'e', at: 700, ok: false },
+    ];
+    eq(Typer.gramsFrom(events).correctionMs, 500);
+});
+check('correcting one mistake does not close the window on another', () => {
+    const events = [
+        { ch: 'x', expected: 't', at: 0, ok: false },
+        { ch: 'y', expected: 'h', at: 100, ok: false },
+        { del: true, at: 200 },
+        { ch: 'h', expected: 'h', at: 300, ok: true },
+        { del: true, at: 400 },
+        { del: true, at: 500 },
+        { ch: 't', expected: 't', at: 600, ok: true },
+    ];
+    // The box still held the wrong `x` at 200 and at 400; it is only clean
+    // once the second backspace at 500 takes that one off too.
+    eq(Typer.gramsFrom(events).correctionMs, 500);
+});
+
+console.log('\n# typeracer — clean speed');
+check('clean speed is the same race with the error windows taken out', () => {
+    // 60 seconds, 6 of them spent correcting: the same characters in 54
+    // seconds is 60/54 of the speed.
+    eq(Typer.cleanWpmOf(90, 60, 6000), 100);
+    eq(Typer.cleanWpmOf(90, 60, 0), 90, 'a clean race is its own clean speed');
+});
+check('clean speed is above the race’s own whenever anything was corrected', () => {
+    const state = Typer.recordRace(Typer.blank(), { at: R0, seconds: 10 }, stream('the quick', 'thx q<<<e quick'), R0);
+    const race = state.races[0];
+    assert(race.correctionMs > 0, 'nothing was billed');
+    assert(race.cleanWpm > race.wpm, `${race.cleanWpm} is not above ${race.wpm}`);
+});
+check('a race with nothing to correct has one speed under two names', () => {
+    const state = Typer.recordRace(Typer.blank(), { at: R0, seconds: 10 }, stream('the quick', 'the quick'), R0);
+    eq(state.races[0].correctionMs, 0);
+    eq(state.races[0].cleanWpm, state.races[0].wpm);
+});
+check('a race that was nothing but correcting reports its own speed', () => {
+    // Rather than an infinity, or a division by what is left of nothing.
+    eq(Typer.cleanWpmOf(40, 5, 5000), 40);
+    eq(Typer.cleanWpmOf(40, 0, 0), 40);
+});
+
+console.log('\n# typeracer — the cost over a range');
+const costRace = (at, wpm, cleanWpm, seconds, correctionMs) =>
+    ({ at, wpm, cleanWpm, seconds, correctionMs, accuracy: 95, chars: 200 });
+
+check('the cost is the seconds lost and the speed they cost', () => {
+    const cost = Typer.correctionCost([
+        costRace(R0, 80, 88, 30, 3000),
+        costRace(R0 - 1000, 70, 77, 30, 3000),
+    ]);
+    eq(cost.races, 2);
+    eq(cost.seconds, 6);
+    eq(cost.wpm, 75);
+    eq(cost.cleanWpm, 82.5);
+    eq(cost.delta, 7.5);
+    eq(cost.percent, 10, 'six seconds out of sixty');
+});
+check('a range leaves out what is outside it', () => {
+    const cost = Typer.correctionCost([
+        costRace(R0, 80, 88, 30, 3000),
+        costRace(R0 - 10 * Typer.DAY_MS, 40, 60, 30, 9000),
+    ], { since: R0 - Typer.DAY_MS });
+    eq(cost.races, 1);
+    eq(cost.wpm, 80);
+});
+check('no races in the range is nought rather than a division by none', () => {
+    eq(Typer.correctionCost([], { since: R0 }), { races: 0, seconds: 0, wpm: 0, cleanWpm: 0, delta: 0, percent: 0 });
+});
+check('a race stored before clean speed existed falls back to its own', () => {
+    // The store is older than this figure; a missing cleanWpm must read as
+    // "no correction measured", not as a race typed at nought.
+    const cost = Typer.correctionCost([{ at: R0, wpm: 80, seconds: 30 }]);
+    eq(cost.cleanWpm, 80);
+    eq(cost.delta, 0);
+});
+
+console.log('\n# typeracer — the typing caret');
+check('the caret cycles through every shape and back to the site’s own', () => {
+    const seen = [];
+    let mode = 'site';
+    for (let i = 0; i < TyperUi.SHAPES.length + 1; i++) {
+        mode = TyperUi.SHAPES[(TyperUi.SHAPES.indexOf(mode) + 1) % TyperUi.SHAPES.length];
+        seen.push(mode);
+    }
+    eq(seen, ['bar', 'block', 'underline', 'outline', 'site', 'bar']);
+    eq(TyperUi.SHAPES[0], 'site', 'the setting’s default has to be the first rung');
+    eq(globalThis.BB.Settings.DEFAULTS.typerCaret, 'site');
+});
+check('the caret shapes and the setting cannot drift apart', () => {
+    // The settings <select> is built from this list, and a shape the panel
+    // can offer but the page cannot draw would fail silently.
+    const html = require('fs').readFileSync(`${__dirname}/../content.css`, 'utf8');
+    for (const shape of TyperUi.SHAPES) {
+        if (shape === 'site') continue;
+        assert(html.includes(`[data-bb-caret="${shape}"]`), `${shape} has no rule to draw it`);
+    }
+});
+check('the caret is drawn from the skin’s tokens rather than a colour', () => {
+    // So it follows a skin or a day/night change without being redrawn, the
+    // rule every surface this extension injects follows.
+    const css = require('fs').readFileSync(`${__dirname}/../content.css`, 'utf8');
+    const block = css.slice(css.indexOf('.bb-typer-caret {'));
+    const hard = block.match(/:\s*#[0-9a-f]{3,8}\b/gi) || [];
+    eq(hard, [], `a colour was baked into the caret: ${hard.join(', ')}`);
+    assert(/\.bb-typer-caret\[data-bb-caret="bar"\][^}]*var\(--bb-accent\)/.test(block), 'the bar is not the accent');
+});
+check('the caret hotkey is modified enough to survive a race', () => {
+    const Keybindings = require('../src/shared/keybindings.js');
+    eq(Keybindings.SCOPES.typeracer, 'TypeRacer');
+    eq(Keybindings.list({}, 'typeracer').map((b) => b.id), ['typer-caret']);
+    const [binding] = Keybindings.list({}, 'typeracer');
+    // It fires with the caret inside the box you are racing in, where a bare
+    // letter is a letter you meant to type.
+    assert(binding.combo.ctrl && binding.combo.alt, 'a racer would trigger this by typing');
+    eq(Keybindings.conflicts({}, binding.id, binding.combo), []);
+});
+
+/** A quote panel whose untyped remainder is one text node, like the site's. */
+function withCaretPage(run, { settings = {}, anchor = 'the quick brown fox' } = {}) {
+    const BB = globalThis.BB;
+    const saved = { caretAnchor: BB.TyperRead.caretAnchor, appearance: BB.Theme.appearance };
+
+    const html = { classes: new Set(), classList: null };
+    html.classList = {
+        add: (name) => html.classes.add(name),
+        remove: (name) => html.classes.delete(name),
+        contains: (name) => html.classes.has(name),
+        toggle: (name, want) => (want ? html.classes.add(name) : html.classes.delete(name)),
+    };
+
+    const made = [];
+    const element = () => {
+        const node = {
+            style: {}, dataset: {}, isConnected: true, attributes: {},
+            classList: { toggle() {}, add() {}, remove() {} },
+            setAttribute(name, value) { this.attributes[name] = value; },
+            removeAttribute(name) { delete this.attributes[name]; },
+            remove() { this.isConnected = false; },
+        };
+        made.push(node);
+        return node;
+    };
+
+    const page = { anchor: null };
+    const setAnchor = (text) => {
+        page.anchor = text == null ? null : {
+            firstChild: { nodeType: 3, data: text },
+            attributes: {},
+            setAttribute(name, value) { this.attributes[name] = value; },
+            removeAttribute(name) { delete this.attributes[name]; },
+            getBoundingClientRect: () => ({ left: 40, top: 120, width: 300, height: 22 }),
+        };
+    };
+    setAnchor(anchor);
+
+    const frames = [];
+    const savedGlobals = {
+        document: global.document, window: global.window, location: global.location,
+        raf: global.requestAnimationFrame, caf: global.cancelAnimationFrame,
+        performance: global.performance,
+    };
+
+    global.document = {
+        documentElement: html,
+        body: { appendChild() {} },
+        createElement: () => element(),
+        createRange: () => ({
+            setStart() {}, setEnd() {},
+            getBoundingClientRect: () => ({ left: 40, top: 120, width: 9, height: 22 }),
+        }),
+        addEventListener() {}, removeEventListener() {},
+    };
+    global.location = { pathname: '/' };
+    global.performance = { now: () => 1000 };
+    global.requestAnimationFrame = (fn) => { frames.push(fn); return frames.length; };
+    global.cancelAnimationFrame = () => {};
+
+    BB.TyperRead.caretAnchor = () => page.anchor;
+    BB.Theme.appearance = () => Promise.resolve({ theme: 'light', skin: 'default' });
+
+    const tasks = new Map();
+    const watcher = { add: (n, f) => tasks.set(n, f), remove: (n) => tasks.delete(n), schedule() {}, has: (n) => tasks.has(n) };
+    const ui = TyperUi.createTyperUi({
+        watcher, notify: () => {},
+        getSettings: () => ({ ...BB.Settings.DEFAULTS, ...settings }),
+    });
+    ui.install();
+
+    const flush = () => { const queued = frames.splice(0); queued.forEach((fn) => fn()); };
+
+    try {
+        return run({ ui, html, flush, frames, setAnchor, made, anchorNode: () => page.anchor });
+    } finally {
+        ui.uninstall();
+        Object.assign(global, {
+            document: savedGlobals.document, window: savedGlobals.window, location: savedGlobals.location,
+            requestAnimationFrame: savedGlobals.raf, cancelAnimationFrame: savedGlobals.caf,
+            performance: savedGlobals.performance,
+        });
+        BB.TyperRead.caretAnchor = saved.caretAnchor;
+        BB.Theme.appearance = saved.appearance;
+    }
+}
+
+check('the default setting draws nothing and asks for no frames', () => {
+    // 'site' is the default, so on an ordinary visit this whole section is
+    // one comparison per keystroke and nothing else.
+    withCaretPage(({ ui, frames, html }) => {
+        eq(ui.caretMode(), 'site');
+        eq(frames.length, 0);
+        eq(ui.caretElement(), null);
+        eq(html.classes.has(TyperUi.CARET_ON), false);
+    });
+});
+check('a shape puts a caret over the next character', () => {
+    withCaretPage(({ ui, flush, html }) => {
+        flush();
+        const caret = ui.caretElement();
+        assert(caret, 'nothing was drawn');
+        // The glyph box, not the block of untyped text the anchor spans.
+        eq(caret.style.width, '9px');
+        eq(caret.style.height, '22px');
+        eq(caret.style.transform, 'translate(40px, 120px)');
+        eq(caret.dataset.bbCaret, 'bar');
+        eq(html.classes.has(TyperUi.CARET_ON), true, 'the site’s own caret is still up');
+    }, { settings: { typerCaret: 'bar' } });
+});
+check('the element holding the next character is marked, never rewritten', () => {
+    // Nothing is removed from TypeRacer's markup: a class on <html> plus a
+    // mark on that one element is the whole mechanism, so leaving is one
+    // class removal rather than a reconstruction of somebody else's page.
+    withCaretPage(({ ui, flush, anchorNode, html }) => {
+        flush();
+        eq(Object.keys(anchorNode().attributes), [TyperUi.ANCHOR_ATTR]);
+        eq(html.classes.has(TyperUi.CARET_ON), true);
+
+        ui.applyCaret('site');
+        eq(Object.keys(anchorNode().attributes), [], 'the mark was left on the page');
+    }, { settings: { typerCaret: 'block' } });
+});
+check('the caret follows the quote rather than staying on one piece', () => {
+    withCaretPage(({ ui, flush, setAnchor, anchorNode }) => {
+        flush();
+        const first = anchorNode();
+        setAnchor('brown fox');
+        ui.drawCaret();
+        assert(anchorNode() !== first, 'the page did not move on');
+        eq(Object.keys(first.attributes), [], 'the piece already typed kept the mark');
+        eq(Object.keys(anchorNode().attributes), [TyperUi.ANCHOR_ATTR]);
+    }, { settings: { typerCaret: 'bar' } });
+});
+check('one frame is asked for however many keys land in it', () => {
+    withCaretPage(({ ui, frames }) => {
+        frames.length = 0;
+        ui.applyCaret('bar');
+        const first = frames.length;
+        ui.applyCaret('bar');
+        ui.applyCaret('bar');
+        eq(frames.length, first, 'a second frame was queued before the first ran');
+    }, { settings: { typerCaret: 'bar' } });
+});
+check('two misses in a row and the caret leaves the page alone', () => {
+    // A caret in the wrong place over the word you are reading is worse than
+    // none, and worse in a way you cannot switch off without going to look.
+    withCaretPage(({ ui, flush, setAnchor, html }) => {
+        flush();
+        assert(ui.caretElement(), 'nothing was drawn to begin with');
+
+        setAnchor(null);
+        ui.applyCaret('bar');
+        ui.drawCaret();
+        eq(ui.caretGaveUp(), false, 'one miss is the gap between races');
+        ui.drawCaret();
+        eq(ui.caretGaveUp(), true);
+        eq(ui.caretElement(), null);
+        eq(html.classes.has(TyperUi.CARET_ON), false, 'the page was not given back');
+    }, { settings: { typerCaret: 'bar' } });
+});
+check('turning the caret off gives the page back on the spot', () => {
+    withCaretPage(({ ui, flush, html }) => {
+        flush();
+        assert(ui.caretElement(), 'nothing was drawn');
+        ui.applyCaret('site');
+        eq(ui.caretElement(), null);
+        eq(html.classes.has(TyperUi.CARET_ON), false);
+    }, { settings: { typerCaret: 'outline' } });
+});
+check('uninstalling takes the caret and the class with it', () => {
+    let after = null;
+    withCaretPage(({ ui, flush, html }) => {
+        flush();
+        assert(html.classes.has(TyperUi.CARET_ON), 'the class never went on');
+        after = html;
+        void ui;
+    }, { settings: { typerCaret: 'block' } });
+    eq(after.classes.has(TyperUi.CARET_ON), false, 'uninstall left the page marked');
+});
+
+// ------------------------------------------------------ typing sounds
+
+const Sfx = require('../src/shared/sfx.js');
+
+console.log('\n# the sound module');
+check('a page with no Web Audio is quiet rather than broken', () => {
+    // Node has no AudioContext, which is the same shape as a browser that
+    // refuses one. Nothing here may throw: play() sits inside a keydown
+    // handler on a typing test.
+    eq(Sfx.available(), false);
+    eq(Sfx.state(), 'none');
+    Sfx.unlock();
+    Sfx.play('click');
+    Sfx.play('click', { volume: 150, detune: -36 });
+    Sfx.play('nonesuch');
+    eq(Sfx.state(), 'none', 'a context was opened without a gesture');
+});
+check('every voice is playable and says how to play it', () => {
+    for (const id of Sfx.VOICE_IDS) {
+        const voice = Sfx.VOICES[id];
+        assert(['sine', 'square', 'triangle', 'sawtooth'].includes(voice.type), `${id} has no waveform`);
+        assert(voice.freq > 20 && voice.freq < 8000, `${id} is outside hearing`);
+        assert(voice.decay > 0 && voice.decay < 0.5, `${id} rings for ${voice.decay}s`);
+        assert(voice.gain > 0 && voice.gain <= 1, `${id} has no level`);
+    }
+});
+check('the key voices are a subset of the voices', () => {
+    // The settings <select> is built from KEY_VOICE_IDS, so one that is not
+    // in the table would be a silent choice the user could pick.
+    for (const id of Sfx.KEY_VOICE_IDS) assert(Sfx.VOICES[id], `${id} is offered but not defined`);
+    assert(Sfx.KEY_VOICE_IDS.includes(globalThis.BB.Settings.DEFAULTS.typerSoundVoice),
+        'the default voice is not one of the ones offered');
+});
+check('a key sound is short enough to be over before the next key', () => {
+    // 120 words a minute is ten characters a second. A key voice that rings
+    // for longer than that overlaps itself into a drone.
+    for (const id of Sfx.KEY_VOICE_IDS) {
+        assert(Sfx.VOICES[id].decay <= 0.1, `${id} rings for ${Sfx.VOICES[id].decay}s`);
+    }
+});
+check('the three chimes slide rather than sitting on one note', () => {
+    // What makes them read as events rather than as another key.
+    for (const id of ['start', 'done', 'best']) {
+        assert(Sfx.VOICES[id].then, `${id} does not move`);
+    }
+    assert(Sfx.VOICES.best.then > Sfx.VOICES.done.then, 'a personal best has to land higher than an ordinary finish');
+});
+
+console.log('\n# typeracer — the sound of typing');
+
+/** What was played, without an AudioContext anywhere near it. */
+function withSoundPage(run, settings) {
+    const played = [];
+    const real = globalThis.BB.Sfx.play;
+    globalThis.BB.Sfx.play = (id, options) => played.push({ id, ...options });
+    try {
+        return withTyperPage((tools) => run({ ...tools, played }), {
+            settings, quote: 'the quick brown fox jumps over it',
+        });
+    } finally {
+        globalThis.BB.Sfx.play = real;
+    }
+}
+
+check('nothing is played while the setting is off', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('the quick');
+        eq(played, []);
+    }, { typerSound: false });
+});
+check('a volume of nought is silence rather than a silent sound', () => {
+    // The whole path is skipped, so the common case costs one comparison.
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('the quick');
+        eq(played, []);
+    }, { typerSound: true, typerSoundVolume: 0 });
+});
+check('each letter takes the chosen voice, pitched by where it is', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('the');
+        eq(played.map((one) => one.id), ['start', 'thock', 'thock', 'thock']);
+        const detunes = played.slice(1).map((one) => one.detune);
+        eq(new Set(detunes).size, 3, 'three letters in a row came out on one note');
+        eq(detunes, [-36, -24, -12]);
+    }, { typerSound: true, typerSoundVolume: 60, typerSoundVoice: 'thock' });
+});
+check('a space is the end of a word rather than another letter', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('the ');
+        eq(played[played.length - 1].id, 'word');
+    }, { typerSound: true, typerSoundVolume: 60 });
+});
+check('a wrong key interrupts, even on a space', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('thx');
+        eq(played[played.length - 1].id, 'error');
+    }, { typerSound: true, typerSoundVolume: 60 });
+});
+check('the error sound can be turned off without turning the rest off', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('thx');
+        eq(played.map((one) => one.id), ['start', 'click', 'click', 'click']);
+    }, { typerSound: true, typerSoundVolume: 60, typerErrorSound: false });
+});
+check('the volume is carried through and may go above a hundred', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('t');
+        eq(played[1].volume, 150, 'gain is not capped at 1 the way an <audio> volume is');
+    }, { typerSound: true, typerSoundVolume: 150 });
+});
+check('a volume past what the slider allows is brought back to it', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('t');
+        eq(played[1].volume, 150);
+    }, { typerSound: true, typerSoundVolume: 9000 });
+});
+check('a voice the table does not hold falls back rather than going quiet', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('t');
+        eq(played[1].id, 'click');
+    }, { typerSound: true, typerSoundVolume: 60, typerSoundVoice: 'trumpet' });
+});
+check('the chime at the end says whether it beat anything', () => {
+    withSoundPage(({ ui, page, pass, type, played }) => {
+        pass();
+        type('the quick brown fox');
+        page.results = { wpm: 84, accuracy: 97, place: null, of: null };
+        // The store is asked rather than a field kept here: the log is
+        // written from every tab, so a best measured against what this page
+        // saw would congratulate you for a race you had already beaten.
+        ui.endSound({ races: [{ wpm: 84 }, { wpm: 70 }, { wpm: 62 }] });
+        eq(played[played.length - 1].id, 'best');
+        ui.endSound({ races: [{ wpm: 60 }, { wpm: 70 }] });
+        eq(played[played.length - 1].id, 'done');
+        ui.endSound({ races: [{ wpm: 60 }] });
+        eq(played[played.length - 1].id, 'done', 'the first race ever has nothing to have beaten');
+    }, { typerSound: true, typerSoundVolume: 60 });
+});
+
+// ------------------------------------------------------- the line chart
+
+const Spark = require('../src/page/spark.js');
+
+/** Every "M12.3 45" and "L12.3 45" in a path, as pairs of numbers. */
+function pointsIn(svg, className) {
+    const path = new RegExp(`class="${className}" d="([^"]+)"`).exec(svg);
+    if (!path) return [];
+    return [...path[1].matchAll(/[ML]([-\d.]+) ([-\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+}
+
+console.log('\n# the line chart');
+check('an empty series draws nothing rather than an empty chart', () => {
+    // A 640-pixel box of nothing above the panel's own "no races yet" reads
+    // as a chart that has broken.
+    eq(Spark.line({ points: [] }), '');
+    eq(Spark.line({}), '');
+    eq(Spark.line({ points: [{ x: 'soon', y: null }] }), '', 'nothing plottable is nothing');
+});
+check('one point is still a chart', () => {
+    const svg = Spark.line({ points: [{ x: 1000, y: 80 }] });
+    assert(svg.includes('<svg'), 'drew nothing at all');
+    eq(pointsIn(svg, 'spark-line').length, 1);
+});
+check('x is scaled by time, not by index', () => {
+    // Three races: two on one day and the third a fortnight later. Spacing
+    // them evenly is the obvious shape and it is wrong — it draws a break in
+    // practice as one flat step.
+    const day = 864e5;
+    const svg = Spark.line({ points: [
+        { x: 0, y: 70 },
+        { x: day, y: 75 },
+        { x: 15 * day, y: 80 },
+    ], width: 640 });
+    const [a, b, c] = pointsIn(svg, 'spark-line').map(([x]) => x);
+    const first = b - a;
+    const second = c - b;
+    assert(second > first * 10, `a fortnight (${second}px) was drawn like a day (${first}px)`);
+});
+check('the series is drawn oldest first however it arrives', () => {
+    const svg = Spark.line({ points: [{ x: 300, y: 1 }, { x: 100, y: 2 }, { x: 200, y: 3 }] });
+    const xs = pointsIn(svg, 'spark-line').map(([x]) => x);
+    eq(xs.slice().sort((p, q) => p - q), xs, 'the line doubles back on itself');
+});
+check('a run of identical scores is a flat line, not a line at nought', () => {
+    const svg = Spark.line({ points: [{ x: 1, y: 80 }, { x: 2, y: 80 }, { x: 3, y: 80 }], height: 160 });
+    const ys = pointsIn(svg, 'spark-line').map(([, y]) => y);
+    eq(new Set(ys).size, 1, 'a flat series is not flat');
+    assert(ys[0] > 40 && ys[0] < 120, `drawn at ${ys[0]}, which is the frame rather than the middle`);
+});
+check('every race on one day is spaced out rather than stacked', () => {
+    // The one case where "by value" has nothing to say, because the span is
+    // zero and dividing by it is not an answer.
+    const svg = Spark.line({ points: [{ x: 5, y: 70 }, { x: 5, y: 80 }, { x: 5, y: 75 }] });
+    const xs = pointsIn(svg, 'spark-line').map(([x]) => x);
+    eq(new Set(xs).size, 3);
+});
+check('nothing about the chart is a colour', () => {
+    // The line takes --accent and the band --accent-soft from dashboard.css,
+    // so a skin change is followed without redrawing a thing.
+    const svg = Spark.line({
+        points: [{ x: 1, y: 70 }, { x: 2, y: 80 }],
+        band: [{ x: 1, lo: 60, hi: 80 }, { x: 2, lo: 70, hi: 90 }],
+        trend: [{ x: 1, y: 70 }, { x: 2, y: 75 }],
+        describe: (row) => `${row.y} wpm`,
+    });
+    eq(svg.match(/#[0-9a-f]{3,8}\b/gi), null);
+    eq(/\b(?:fill|stroke)="(?!none)[^"]/.test(svg), false, 'a paint was written into the markup');
+});
+check('a band and a trend are drawn behind the line, not instead of it', () => {
+    const svg = Spark.line({
+        points: [{ x: 1, y: 70 }, { x: 2, y: 80 }],
+        band: [{ x: 1, lo: 60, hi: 80 }, { x: 2, lo: 70, hi: 90 }],
+        trend: [{ x: 1, y: 70 }, { x: 2, y: 75 }],
+    });
+    assert(svg.indexOf('spark-band') < svg.indexOf('spark-line'), 'the band is over the line');
+    assert(svg.indexOf('spark-trend') < svg.indexOf('spark-line'), 'the trend is over the line');
+});
+check('a tooltip is escaped like everything else this extension writes', () => {
+    const svg = Spark.line({ points: [{ x: 1, y: 70 }], describe: () => '<script>&"' });
+    assert(svg.includes('&lt;script&gt;&amp;&quot;'), svg);
+});
+
+console.log('\n# the line chart — the run rather than the jitter');
+check('the average is trailing, so the last point is the run as it stands', () => {
+    // A centred window cannot produce a value for the points at the end,
+    // which are the only ones anybody looks at on a chart of how they are
+    // doing.
+    const points = [10, 20, 30, 40].map((y, i) => ({ x: i, y }));
+    eq(Spark.trend(points, 2).map((row) => row.y), [10, 15, 25, 35]);
+});
+check('the window fills up rather than starting empty', () => {
+    const points = [60, 80].map((y, i) => ({ x: i, y }));
+    eq(Spark.trend(points, 10).map((row) => row.y), [60, 70], 'the first points are their own average');
+});
+check('a trend of nothing is nothing', () => {
+    eq(Spark.trend([], 5), []);
+    eq(Spark.trend(null, 5), []);
+});
+check('a window of nought does not divide by it', () => {
+    eq(Spark.trend([{ x: 1, y: 50 }, { x: 2, y: 70 }], 0).map((row) => row.y), [50, 70]);
+});
+
+console.log('\n# typeracer — the headline figures');
+const raceAt = (at, wpm, accuracy = 96, seconds = 30) => ({ at, wpm, accuracy, seconds, chars: 200 });
+
+check('best and the mean of the last ten are both reported', () => {
+    // A mean over everything moves too slowly to answer "am I getting
+    // faster", and a best on its own is one good afternoon in March.
+    const races = [];
+    for (let i = 0; i < 20; i++) races.push(raceAt(R0 - i * 1000, i < 10 ? 90 : 50));
+    const summary = Typer.summarize(races);
+    eq(summary.count, 20);
+    eq(summary.best, 90);
+    eq(summary.mean, 70);
+    eq(summary.meanLast10, 90, 'the last ten are the newest ten, not the first ten stored');
+});
+check('a range leaves out what is outside it', () => {
+    const summary = Typer.summarize([
+        raceAt(R0, 90),
+        raceAt(R0 - 10 * Typer.DAY_MS, 40),
+    ], { since: R0 - Typer.DAY_MS });
+    eq(summary.count, 1);
+    eq(summary.best, 90);
+});
+check('an empty range is nought rather than a division by none', () => {
+    eq(Typer.summarize([], { since: R0 }),
+        { races: [], count: 0, best: 0, mean: 0, meanLast10: 0, accuracy: 0, seconds: 0 });
+});
+check('the races come back newest first, whatever order they were stored in', () => {
+    const summary = Typer.summarize([raceAt(R0 - 5000, 60), raceAt(R0, 80), raceAt(R0 - 1000, 70)]);
+    eq(summary.races.map((race) => race.wpm), [80, 70, 60]);
+});
+
+console.log('\n# typeracer — the races panel');
+
+require('../src/page/typeracer-stats.js');
+const TyperStats = globalThis.BB.TyperStats;
+
+check('the ranges start at the week rather than at everything', () => {
+    // The question a typing log is opened to ask is about this week, and a
+    // mean over two years of races cannot answer it.
+    eq(TyperStats.RANGES.map((range) => range.id), ['7', '30', 'all']);
+    eq(TyperStats.RANGES[0].days, 7);
+    eq(TyperStats.sinceOf('all', R0), 0, '"all" is not a window at all');
+    eq(TyperStats.sinceOf('30', R0), R0 - 30 * Typer.DAY_MS);
+    eq(TyperStats.sinceOf('nonesuch', R0), R0 - 7 * Typer.DAY_MS, 'a range that is not one falls back');
+});
+check('a solo run has no finishing position to report', () => {
+    eq(TyperStats.placeText({ place: 2, of: 5 }), '2 of 5');
+    eq(TyperStats.placeText({ place: 0, of: 0 }), '—', 'not "0 of 0"');
+});
+check('the dashboard writes durations the way the other views do', () => {
+    eq(TyperStats.human(45), '45s');
+    eq(TyperStats.human(600), '10m');
+    eq(TyperStats.human(3900), '1h 05m');
+    eq(TyperStats.human(0), '0s');
+});
+check('a typeracer panel exists for every dashboard tab it draws', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    assert(/<script src="src\/shared\/typeracer\.js">/.test(html), 'the store is not loaded on the dashboard');
+    assert(/<script src="src\/page\/typeracer-stats\.js">/.test(html), 'the panels are not loaded');
+    // Load order is manual here — there is no bundler — so a module that
+    // destructures another off BB has to come after it or it gets undefined.
+    const tagAt = (src) => html.indexOf(`<script src="${src}">`);
+    assert(tagAt('src/page/spark.js') < tagAt('src/page/typeracer-stats.js'),
+        'the panel is loaded before the chart it draws with');
+    assert(tagAt('src/shared/typeracer.js') < tagAt('src/page/typeracer-stats.js'),
+        'the panel is loaded before the store it reads');
+});
+
+console.log('\n# typeracer — the slowest grams');
+
+/** A grams table built by hand, so the ranking can be asked exact questions. */
+function gramsWith(bi, chars = {}, { totalN = 100, totalMs = 20000 } = {}) {
+    const state = { races: [], days: {}, grams: Typer.blankGrams() };
+    state.grams.bi = bi;
+    state.grams.chars = chars;
+    state.grams.totalN = totalN;
+    state.grams.totalMs = totalMs;
+    return state;
+}
+
+check('a gram with too few readings is noise rather than a finding', () => {
+    const state = gramsWith({
+        th: { n: 3, ms: 1500, err: 0 },
+        he: { n: 20, ms: 6000, err: 0 },
+    });
+    eq(Typer.slowest(state, 'bi', { minSamples: 8 }).map((row) => row.gram), ['he']);
+    eq(Typer.slowest(state, 'bi', { minSamples: 3 }).map((row) => row.gram).sort(), ['he', 'th']);
+});
+check('ranking is against your own baseline, not by raw milliseconds', () => {
+    // Reaching for a comma is slower than reaching for "e" for everybody and
+    // always will be. Ranking by mean returns every gram containing one,
+    // which is true and useless.
+    const state = gramsWith({
+        // 400ms, but every gram ending in a comma takes about 400ms.
+        'e,': { n: 30, ms: 12000, err: 0 },
+        // 260ms, where anything ending in "h" normally takes 150.
+        th: { n: 30, ms: 7800, err: 0 },
+    }, {
+        ',': { due: 30, wrong: 0, subs: {}, n: 60, ms: 24000 },
+        h: { due: 30, wrong: 0, subs: {}, n: 60, ms: 9000 },
+    });
+    const rows = Typer.slowest(state, 'bi', { minSamples: 8 });
+    eq(rows.map((row) => row.gram), ['th', 'e,'], 'the comma came first, so it was ranked by mean');
+    eq(rows[0].ratio, 1.73);
+    eq(rows[1].ratio, 1, 'a comma at comma speed is not a weak spot');
+});
+check('a character with too little of its own falls back to the whole race', () => {
+    const state = gramsWith(
+        { zq: { n: 10, ms: 4000, err: 0 } },
+        { q: { due: 10, wrong: 0, subs: {}, n: 2, ms: 800 } },
+        { totalN: 100, totalMs: 20000 },
+    );
+    const [row] = Typer.slowest(state, 'bi', { minSamples: 8 });
+    eq(row.baseline, 200, 'two readings is not a baseline; the race mean is');
+    eq(row.ratio, 2);
+});
+check('a gram reports the speed it implies as well as its mean', () => {
+    // A word is five characters, so a 240ms interval is 50 words a minute.
+    const state = gramsWith({ th: { n: 10, ms: 2400, err: 0 } });
+    const [row] = Typer.slowest(state, 'bi', { minSamples: 8 });
+    eq(row.meanMs, 240);
+    eq(row.wpm, 50);
+    eq(Typer.wpmFor(0), 0, 'and nothing does not divide by nothing');
+});
+check('the trigram table is asked for separately from the bigram one', () => {
+    const state = gramsWith({ th: { n: 10, ms: 2400, err: 0 } });
+    state.grams.tri = { the: { n: 10, ms: 3000, err: 0 } };
+    eq(Typer.slowest(state, 'bi', { minSamples: 8 }).map((row) => row.gram), ['th']);
+    eq(Typer.slowest(state, 'tri', { minSamples: 8 }).map((row) => row.gram), ['the']);
+});
+check('the order does not reshuffle between two draws of the same data', () => {
+    const state = gramsWith({
+        ab: { n: 10, ms: 2000, err: 0 },
+        cd: { n: 10, ms: 2000, err: 0 },
+        ef: { n: 10, ms: 2000, err: 0 },
+    });
+    const once = Typer.slowest(state, 'bi', { minSamples: 8 }).map((row) => row.gram);
+    eq(Typer.slowest(state, 'bi', { minSamples: 8 }).map((row) => row.gram), once);
+    eq(once, ['ab', 'cd', 'ef'], 'ties fall back to something stable');
+});
+check('an empty store is an empty table rather than a crash', () => {
+    eq(Typer.slowest(Typer.blank(), 'bi', {}), []);
+    eq(Typer.slowest(null, 'tri', {}), []);
+});
+
+console.log('\n# typeracer — the characters you get wrong');
+const charsWith = (chars) => gramsWith({}, chars);
+
+check('most often and most likely are two different tables', () => {
+    // `e` is mistyped most in absolute terms simply because `e` is
+    // everywhere; the rate is the honest number.
+    const state = charsWith({
+        e: { due: 1000, wrong: 10, subs: { r: 8, w: 2 }, n: 0, ms: 0 },
+        q: { due: 12, wrong: 8, subs: { w: 6, a: 2 }, n: 0, ms: 0 },
+    });
+    eq(Typer.mistyped(state, { by: 'wrong' }).map((row) => row.ch), ['e', 'q']);
+    eq(Typer.mistyped(state, { by: 'rate' }).map((row) => row.ch), ['q', 'e']);
+});
+check('the rate is wrong over due', () => {
+    const state = charsWith({ q: { due: 12, wrong: 8, subs: { w: 8 }, n: 0, ms: 0 } });
+    eq(Typer.mistyped(state, {})[0].rate, 0.667);
+});
+check('a character met once and fumbled is not a hundred percent of anything', () => {
+    const state = charsWith({
+        z: { due: 1, wrong: 1, subs: { x: 1 }, n: 0, ms: 0 },
+        q: { due: 12, wrong: 8, subs: { w: 8 }, n: 0, ms: 0 },
+    });
+    eq(Typer.mistyped(state, { by: 'rate' }).map((row) => row.ch), ['q'], 'the one-off topped the table');
+    eq(Typer.mistyped(state, { by: 'wrong' }).map((row) => row.ch), ['q', 'z'], 'but it is still a mistype');
+});
+check('what you hit instead is the interesting half', () => {
+    const state = charsWith({ e: { due: 100, wrong: 20, subs: { r: 12, w: 5, d: 3 }, n: 0, ms: 0 } });
+    const [row] = Typer.mistyped(state, {});
+    eq(row.topSub, 'r');
+    eq(row.subs, [{ ch: 'r', n: 12 }, { ch: 'w', n: 5 }, { ch: 'd', n: 3 }]);
+});
+check('a character never got wrong is not in a table of mistakes', () => {
+    const state = charsWith({ e: { due: 500, wrong: 0, subs: {}, n: 400, ms: 60000 } });
+    eq(Typer.mistyped(state, {}), []);
+});
+
+console.log('\n# typeracer — the weak spot panel');
+check('a space in a gram is shown rather than left to look like a fault', () => {
+    // Half the slow pairs are a letter followed by a space.
+    assert(TyperStats.gramGlyph('t ').includes('␣'), TyperStats.gramGlyph('t '));
+    eq(TyperStats.gramGlyph('th'), 'th');
+});
+check('a gram is escaped like everything else this extension writes', () => {
+    eq(TyperStats.gramGlyph('<&'), '&lt;&amp;');
+});
+check('the bar fills by how far past your own baseline the gram is', () => {
+    const bar = (ratio) => /width:([\d.]+)%/.exec(TyperStats.ratioBar({ ratio, meanMs: 1, baseline: 1, gram: 'th' }))[1];
+    eq(bar(1), '0', 'a gram at your own baseline is not a weak spot');
+    eq(bar(1.5), '50');
+    eq(bar(3), '100', 'and past twice as slow it is simply full');
+    eq(bar(0.5), '0', 'never below empty');
+});
+check('the noise floor is a setting the panel can be told about', () => {
+    const Settings = globalThis.BB.Settings;
+    eq(Settings.DEFAULTS.typerMinSamples, Typer.MIN_SAMPLES, 'the store and the setting disagree');
+    assert(Settings.DEFAULTS.typerMinSamples >= 3, 'below three there is no mean worth the name');
+});
+
+console.log('\n# typeracer — the practice map');
+check('the map is shaped for the heat map, whichever metric is picked', () => {
+    let state = Typer.recordRace(Typer.blank(), { at: R0, wpm: 80, seconds: 30 }, [], R0);
+    state = Typer.recordRace(state, { at: R0, wpm: 95, seconds: 45 }, [], R0);
+    const key = Typer.dayKey(R0);
+
+    eq(Typer.heatDays(state, 'races', R0)[key].value, 2);
+    eq(Typer.heatDays(state, 'wpm', R0)[key].value, 95, 'the best of the day, not the last');
+    eq(Typer.heatDays(state, 'seconds', R0)[key].value, 75);
+    // The other fields ride along, so a square's tooltip can name all three
+    // whichever one is being coloured by.
+    eq(Typer.heatDays(state, 'wpm', R0)[key].races, 2);
+});
+check('a metric that is not one falls back rather than colouring by nothing', () => {
+    const state = Typer.recordRace(Typer.blank(), { at: R0, wpm: 80, seconds: 30 }, [], R0);
+    eq(Typer.heatDays(state, 'nonesuch', R0)[Typer.dayKey(R0)].value, 1);
+});
+check('a day outside the map cannot draw a square on it', () => {
+    const old = Typer.dayKey(R0 - (Typer.KEEP_DAYS + 5) * Typer.DAY_MS);
+    const state = { races: [], days: { [old]: { races: 3, seconds: 90, best: 60 } } };
+    eq(Object.keys(Typer.heatDays(state, 'races', R0)), []);
+});
+check('each metric is banded on a scale of its own', () => {
+    // Two races is a quiet day and two seconds is nothing at all; one set of
+    // bounds cannot colour both. Best WPM is not a count at all.
+    const scales = Object.values(TyperStats.HEAT).map((spec) => spec.steps.join(','));
+    eq(new Set(scales).size, scales.length, 'two metrics are sharing a scale');
+    for (const [id, spec] of Object.entries(TyperStats.HEAT)) {
+        assertRising(spec.steps, `${id} steps`);
+        eq(spec.legend.length, 5, `${id} needs a word per level, zero included`);
+    }
+});
+check('the map metrics are the ones the store can answer', () => {
+    eq(Object.keys(TyperStats.HEAT).sort(), Typer.METRICS.map((one) => one.id).sort());
+});
+
+console.log('\n# typeracer — the streak');
+check('a run of days is counted back from today', () => {
+    let state = Typer.blank();
+    for (const back of [0, 1, 2]) {
+        state = Typer.recordRace(state, { at: R0 - back * Typer.DAY_MS, wpm: 70, seconds: 30 }, [], R0);
+    }
+    eq(Typer.streak(state, R0), 3);
+});
+check('today with nothing in it yet is only the afternoon', () => {
+    let state = Typer.blank();
+    for (const back of [1, 2]) {
+        state = Typer.recordRace(state, { at: R0 - back * Typer.DAY_MS, wpm: 70, seconds: 30 }, [], R0);
+    }
+    eq(Typer.streak(state, R0), 2, 'not racing yet today broke the streak');
+});
+check('a day missed in the middle ends the run', () => {
+    let state = Typer.blank();
+    for (const back of [0, 2, 3]) {
+        state = Typer.recordRace(state, { at: R0 - back * Typer.DAY_MS, wpm: 70, seconds: 30 }, [], R0);
+    }
+    eq(Typer.streak(state, R0), 1);
+});
+check('never having raced is a streak of nought', () => {
+    eq(Typer.streak(Typer.blank(), R0), 0);
+});
+
+console.log('\n# typeracer — the drill');
+const drillState = (pairs) => gramsWith(Object.fromEntries(
+    pairs.map((gram, i) => [gram, { n: 20, ms: 20 * (600 - i * 10), err: 0 }])));
+
+check('the drill is built out of the pairs you are worst at', () => {
+    const text = Typer.drill(drillState(['th', 'nk', 'rl']), { grams: 3, length: 60 });
+    for (const gram of ['th', 'nk', 'rl']) assert(text.includes(gram), `${gram} is not in "${text}"`);
+});
+check('a pair is padded into something that can be typed as a word', () => {
+    // Drilling a bare pair over and over trains it in an isolation it is
+    // never typed in.
+    eq(Typer.drillChunk('th', 0), 'athith');
+    assert(!/\bth\b/.test(Typer.drill(drillState(['th']), { grams: 1, length: 40 })), 'the bare pair was drilled');
+});
+check('a pair with a space or a comma in it is not made into a word', () => {
+    // A chunk built around a comma is not a word; it is line noise.
+    const state = drillState(['t ', 'e,', 'th']);
+    const text = Typer.drill(state, { grams: 3, length: 60 });
+    assert(text.length > 0, 'nothing was drilled at all');
+    assert(!text.includes(','), text);
+    eq(text.split(' ').every((chunk) => /^[a-z]+$/.test(chunk)), true, text);
+});
+check('the drill is long enough to be one and stops there', () => {
+    const text = Typer.drill(drillState(['th', 'nk', 'rl']), { grams: 3, length: 120 });
+    assert(text.length >= 120, `only ${text.length} characters`);
+    assert(text.length < 200, `${text.length} characters is a paragraph`);
+});
+check('the same store gives the same drill twice', () => {
+    // A drill you can compare with yesterday's is worth more than a
+    // different one every time, and Math.random() cannot be tested.
+    const state = drillState(['th', 'nk', 'rl']);
+    eq(Typer.drill(state, { grams: 3, length: 80 }), Typer.drill(state, { grams: 3, length: 80 }));
+});
+check('the chunks do not come back in the same loop every time round', () => {
+    const text = Typer.drill(drillState(['th', 'nk', 'rl']), { grams: 3, length: 200 });
+    const chunks = text.split(' ');
+    const first = chunks.slice(0, 3).join(' ');
+    assert(chunks.slice(3, 6).join(' ') !== first, `the order repeats: ${text}`);
+});
+check('nothing measured yet is no drill rather than an empty one', () => {
+    eq(Typer.drill(Typer.blank(), {}), '');
+    eq(Typer.drill(drillState(['t ', 'e,']), { grams: 2 }), '', 'punctuation alone is nothing to drill');
+});
+
+console.log('\n# typeracer — the settings panel');
+check('every reader setting has a control carrying its key as an id', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const keys = globalThis.BB.Settings.KEYS.filter((key) => /^reader/.test(key));
+    assert(keys.length, 'no reader settings at all');
+    // In the YouTube panel, which is where the reader is — the panel runs
+    // from its own id to the next settings section or the scripts.
+    const from = html.indexOf('id="youtubeSettingsPanel"');
+    const next = html.indexOf('class="settings-section"', from);
+    const panel = html.slice(from, next === -1 ? html.indexOf('<script', from) : next);
+    const controls = new Set([...panel.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+    for (const key of keys) assert(controls.has(key), `${key} has no control in the YouTube panel`);
+});
+check('the reader layout list offers exactly the layouts the reader draws', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const select = /<select id="readerLayout">([\s\S]*?)<\/select>/.exec(html)[1];
+    const offered = [...select.matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
+    eq(offered, require('../src/content/reader.js').LAYOUT_IDS.slice());
+    eq(globalThis.BB.Settings.DEFAULTS.readerLayout, 'split');
+});
+check('reader sizes are clamped on the way in, whatever the store holds', () => {
+    const Reader = require('../src/content/reader.js');
+    eq(Reader.readSizes({ split: 2 }).split, 25, 'a two-percent video');
+    eq(Reader.readSizes({ focus: 400 }).focus, 85);
+    eq(Reader.readSizes({ stacked: 'wide' }).stacked, Reader.SIZE_DEFAULTS.stacked);
+    eq(Reader.readSizes(null), Reader.SIZE_DEFAULTS, 'an empty store is every default');
+    eq(Object.keys(Reader.readSizes({ sideways: 50 })), Reader.LAYOUT_IDS.slice(), 'an unknown layout was kept');
+    eq(Reader.clampSize(50, 'nope'), 50);
+    eq(Reader.clampSize(undefined, 'nope'), Reader.SIZE_DEFAULTS.split, 'an unknown layout has no default of its own');
+});
+check('a drag is read off the edge each layout sizes from', () => {
+    const Reader = require('../src/content/reader.js');
+    const box = { left: 0, top: 100, right: 1000, width: 1000, height: 500 };
+    eq(Reader.sizeAt('split', box, 600, 0), 60);
+    eq(Reader.sizeAt('stacked', box, 0, 350), 50);
+    eq(Reader.sizeAt('theatre', box, 700, 0), 30, 'the drawer grows toward the left');
+    eq(Reader.sizeAt('focus', box, 580, 0), 40, 'the corner player sits 20px in from the edge');
+});
+check('the reader type is clamped to the ranges its controls offer', () => {
+    const Reader = require('../src/content/reader.js');
+    eq(Reader.typeStyle(globalThis.BB.Settings.DEFAULTS),
+        { '--bb-reader-size': '16px', '--bb-reader-leading': '1.6', '--bb-reader-measure': '44em' });
+    eq(Reader.typeStyle({ readerFontSize: 90, readerLineHeight: 0.5, readerLineWidth: 'x' }),
+        { '--bb-reader-size': '24px', '--bb-reader-leading': '1.2', '--bb-reader-measure': '44em' });
+
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    for (const [key, { min, max }] of Object.entries(Reader.TYPE)) {
+        const control = (new RegExp(`<input[^>]*id="${key}"[^>]*>`).exec(html) || [''])[0];
+        assert(control.includes(`min="${min}"`) && control.includes(`max="${max}"`),
+            `${key} offers a range the reader does not draw: ${control}`);
+    }
+});
+check('an open reader hears about every setting that changes how it looks', () => {
+    const main = require('fs').readFileSync(`${__dirname}/../src/content/main.js`, 'utf8');
+    const list = /READER_SURFACES = \[([^\]]*)\]/.exec(main)[1];
+    for (const key of Object.keys(require('../src/content/reader.js').TYPE)) {
+        assert(list.includes(`'${key}'`), `${key} only takes effect after a reload`);
+    }
+});
+check('the popup’s reader button reaches something that opens the reader', () => {
+    const fs = require('fs');
+    const html = fs.readFileSync(`${__dirname}/../popup.html`, 'utf8');
+    const popup = fs.readFileSync(`${__dirname}/../popup.js`, 'utf8');
+    const main = fs.readFileSync(`${__dirname}/../src/content/main.js`, 'utf8');
+    assert(html.includes('id="openReaderBtn"'), 'no button');
+    assert(popup.includes("on('openReaderBtn'"), 'the button is not wired');
+    assert(/action: 'openReader'/.test(fs.readFileSync(`${__dirname}/../src/page/tab-actions.js`, 'utf8')),
+        'the popup does not ask the page');
+    assert(main.includes("case 'openReader':"), 'the page does not answer');
+});
+check('every typeracer setting has a control carrying its key as an id', () => {
+    // This is the whole binding. src/page/settings-form.js matches a control
+    // to a setting by id and nothing else, so a setting with no element is a
+    // setting that can never be changed, and it fails silently.
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const Settings = globalThis.BB.Settings;
+    const controls = new Set([...html.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+
+    const keys = Settings.KEYS.filter((key) => /^typer/.test(key));
+    assert(keys.length, 'no typeracer settings at all');
+    for (const key of keys) assert(controls.has(key), `${key} has no control bound to it`);
+});
+check('the number fields cannot be set outside what the code accepts', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const attrs = (id) => (new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html) || [''])[0];
+
+    const samples = attrs('typerMinSamples');
+    assert(/type="number"/.test(samples) && /min="3"/.test(samples),
+        `a noise floor below three is offerable: ${samples}`);
+
+    // Above 100 really is louder — Web Audio gain is not capped the way an
+    // <audio> element's volume is — so the slider goes there on purpose.
+    const volume = attrs('typerSoundVolume');
+    assert(/type="range"/.test(volume), 'the volume is not a slider');
+    assert(/min="0"/.test(volume) && /max="150"/.test(volume), `the volume is unbounded: ${volume}`);
+});
+check('the caret list offers exactly the shapes the page can draw', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const select = /<select id="typerCaret">([\s\S]*?)<\/select>/.exec(html)[1];
+    const offered = [...select.matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
+    eq(offered, TyperUi.SHAPES.slice(), 'the panel and the page disagree about the shapes');
+});
+check('the voice list is built from the sound module rather than the page', () => {
+    // Adding a voice would otherwise be two edits with no way to notice you
+    // had only made one.
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    assert(/<select id="typerSoundVoice"><\/select>/.test(html), 'the options are spelled out in the page');
+    assert(/<script src="src\/shared\/sfx\.js">/.test(html), 'the dashboard cannot reach the voices');
+
+    const dashboard = require('fs').readFileSync(`${__dirname}/../dashboard.js`, 'utf8');
+    // A <select> with no options cannot be given a value, so it has to be
+    // filled before the form is bound.
+    assert(dashboard.indexOf('TyperStats.mountSettings') < dashboard.indexOf('SettingsForm.bindAll'),
+        'the voice list is filled after the form is bound to it');
+});
+check('the settings launcher has a typeracer card to open', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    assert(/data-site-settings="typeracer"/.test(html), 'no panel for the card to show');
+    assert(html.includes('id="typeracerSettingsPanel"'), 'the panel has no id');
+});
+check('the surfaces main.js repaints cover every typeracer setting that changes one', () => {
+    // A setting the content script never hears about is a switch that only
+    // works after a reload, which reads as a switch that did nothing.
+    const main = require('fs').readFileSync(`${__dirname}/../src/content/main.js`, 'utf8');
+    const listed = /const TYPER_SURFACES = \[([\s\S]*?)\];/.exec(main)[1];
+    const Settings = globalThis.BB.Settings;
+    for (const key of Settings.KEYS.filter((one) => /^typer/.test(one))) {
+        if (key === 'typerMinSamples') continue; // the dashboard's own, never the page's
+        assert(listed.includes(`'${key}'`), `${key} never reaches the page it governs`);
+    }
+});
+
+console.log('\n# the lists that have to move together');
+
+const readRepo = (name) => require('fs').readFileSync(`${__dirname}/../${name}`, 'utf8');
+
+check('the two manifests load exactly the same content scripts', () => {
+    // They are byte-identical today and the point is to keep them so: a
+    // module added to one and not the other fails in that browser only, at
+    // load, with "undefined is not an object".
+    const chrome = JSON.parse(readRepo('manifest.json')).content_scripts;
+    const firefox = JSON.parse(readRepo('manifest.firefox.json')).content_scripts;
+    eq(firefox, chrome);
+});
+check('typeracer needs no page-world script, and has not grown one', () => {
+    // chess.com and LeetCode each need one because the board object and
+    // window.fetch only exist in the page's world. Keystrokes are DOM events,
+    // which a capture listener in the isolated world sees in full.
+    const worlds = JSON.parse(readRepo('manifest.json')).content_scripts
+        .filter((entry) => entry.world === 'MAIN');
+    for (const entry of worlds) {
+        assert(!entry.matches.some((match) => /typeracer/.test(match)),
+            `a MAIN-world entry was added for ${entry.matches.join(', ')}`);
+    }
+});
+check('every typeracer source the manifest loads is in the browser suite too', () => {
+    const manifest = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+    const suite = readRepo('tests/index.html');
+    for (const src of manifest.filter((one) => /typeracer|sfx/.test(one))) {
+        assert(suite.includes(`../${src}`), `${src} is shipped but never loaded by the suite`);
+    }
+    assert(suite.includes('typeracer.test.js'), 'the spec itself is not loaded');
+});
+check('a module is loaded after everything it destructures off BB', () => {
+    // Load order is manual — there is no bundler — and getting it wrong fails
+    // in that one surface, at load.
+    const suite = readRepo('tests/index.html');
+    const at = (src) => suite.indexOf(`<script src="../${src}">`);
+    for (const [first, second] of [
+        ['src/shared/typeracer.js', 'src/content/typeracer-read.js'],
+        ['src/content/typeracer-read.js', 'src/content/typeracer-ui.js'],
+        ['src/shared/sfx.js', 'src/content/typeracer-ui.js'],
+        ['src/shared/typeracer.js', 'src/page/typeracer-stats.js'],
+        ['src/page/spark.js', 'src/page/typeracer-stats.js'],
+    ]) {
+        assert(at(first) !== -1 && at(second) !== -1, `${first} or ${second} is missing from the suite`);
+        assert(at(first) < at(second), `${second} is loaded before ${first}`);
+    }
+});
+check('the manifest loads them in that order as well', () => {
+    const js = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+    const at = (src) => js.indexOf(src);
+    assert(at('src/shared/sfx.js') < at('src/content/typeracer-ui.js'));
+    assert(at('src/shared/typeracer.js') < at('src/content/typeracer-read.js'));
+    assert(at('src/content/typeracer-read.js') < at('src/content/typeracer-ui.js'));
+    // main.js is the bootstrap and destructures all of them.
+    assert(at('src/content/typeracer-ui.js') < at('src/content/main.js'));
+});
+
+console.log('\n# the chess low-clock tone, on the sound module');
+check('the tone is the same two notes it always was', () => {
+    // A refactor, not a redesign: 880 then 1180, 180ms apart, a sine, and a
+    // peak of 0.3 of whatever the volume setting asks for.
+    const low = Sfx.VOICES.low;
+    eq(low.type, 'sine');
+    eq(low.freq, 880);
+    eq(low.then, 1180);
+    eq(low.gap, 0.18);
+    eq(low.gain, 0.3);
+});
+check('a gap means two notes rather than a slide', () => {
+    // Two notes carry at a low volume in a way a slide does not, and that
+    // sound is the whole point of the setting.
+    assert(Sfx.VOICES.low.gap, 'the low tone would now glide');
+    for (const id of ['start', 'done', 'best']) {
+        assert(!Sfx.VOICES[id].gap, `${id} should slide, not repeat`);
+    }
+});
+check('the low tone is not offered as a key sound', () => {
+    // It is a chess alarm. Typing to it would be unbearable.
+    assert(!Sfx.KEY_VOICE_IDS.includes('low'), 'the alarm is in the typing list');
+    assert(Sfx.VOICE_IDS.includes('low'), 'but it still has to be in the table');
+});
+check('chess.js no longer keeps an audio context of its own', () => {
+    const source = require('fs').readFileSync(`${__dirname}/../src/content/chess.js`, 'utf8');
+    assert(!/new Ctx\(\)|createOscillator|AudioContext/.test(source),
+        'the old context is still in there beside the shared one');
+    assert(/Sfx\.play\('low'/.test(source), 'the tone is not played through the module');
+    assert(/Sfx\.unlock\(\)/.test(source), 'the context is opened somewhere other than a gesture');
+});
+check('the sound module is loaded before the file that now plays through it', () => {
+    // Load order is manual. chess.js sits well before the TypeRacer cluster,
+    // so moving this one line is the whole of the migration's risk.
+    const js = JSON.parse(require('fs').readFileSync(`${__dirname}/../manifest.json`, 'utf8'))
+        .content_scripts[0].js;
+    assert(js.indexOf('src/shared/sfx.js') < js.indexOf('src/content/chess.js'),
+        'chess.js would get undefined for Sfx at load');
+});
+
+console.log('\n# typeracer — the caret hotkey');
+
+/** A keydown as the page would send one, with the two fields matching needs. */
+const keyPress = (code, { ctrl = false, alt = false, shift = false, meta = false } = {}) => ({
+    code, key: code.replace(/^Key/, '').toLowerCase(),
+    ctrlKey: ctrl, altKey: alt, shiftKey: shift, metaKey: meta,
+    preventDefault() { this.defaulted = true; },
+    stopPropagation() {},
+});
+
+check('the binding is resolved once rather than on every keystroke', () => {
+    // Keybindings.resolve spreads the binding into a fresh object, and this
+    // listener sees every key of every race. Resolving in the handler meant
+    // an allocation per keystroke on a typing test.
+    withTyperPage(({ ui }) => {
+        const Keybindings = globalThis.BB.Keybindings;
+        const real = Keybindings.resolve;
+        let calls = 0;
+        Keybindings.resolve = (...args) => { calls++; return real(...args); };
+        try {
+            for (let i = 0; i < 50; i++) ui.onHotkey(keyPress('KeyT'));
+            eq(calls, 0, 'the binding was resolved inside the handler');
+        } finally {
+            Keybindings.resolve = real;
+        }
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('the hotkey fires on its own combination and on nothing else', () => {
+    withTyperPage(({ ui }) => {
+        ui.applyHotkey();
+
+        const plain = keyPress('KeyC');
+        ui.onHotkey(plain);
+        eq(plain.defaulted, undefined, 'a bare letter was swallowed on a typing test');
+        eq(ui.caretMode(), 'site');
+
+        const combo = keyPress('KeyC', { ctrl: true, alt: true });
+        ui.onHotkey(combo);
+        eq(combo.defaulted, true, 'the key was left to the page');
+        eq(ui.caretMode(), 'bar', 'the shape did not move on');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a rebind reaches the page rather than waiting for the next load', () => {
+    // Which is why 'shortcuts' is in main.js's TYPER_SURFACES list: the
+    // binding is cached, so something has to go and take it again.
+    const main = require('fs').readFileSync(`${__dirname}/../src/content/main.js`, 'utf8');
+    const listed = /const TYPER_SURFACES = \[([\s\S]*?)\];/.exec(main)[1];
+    assert(listed.includes("'shortcuts'"), 'a rebound caret key would not reach an open tab');
+
+    withTyperPage(({ ui }) => {
+        ui.applyHotkey();
+        const moved = keyPress('KeyK', { ctrl: true, alt: true });
+        ui.onHotkey(moved);
+        eq(moved.defaulted, true, 'the rebound key did nothing');
+    }, {
+        quote: 'the quick brown fox jumps over it',
+        settings: { shortcuts: { 'typer-caret': { combo: { ctrl: true, alt: true, code: 'KeyK', key: 'k' } } } },
+    });
+});
+check('a binding turned off is a key the page keeps', () => {
+    withTyperPage(({ ui }) => {
+        ui.applyHotkey();
+        const combo = keyPress('KeyC', { ctrl: true, alt: true });
+        ui.onHotkey(combo);
+        eq(combo.defaulted, undefined);
+        eq(ui.caretMode(), 'site');
+    }, {
+        quote: 'the quick brown fox jumps over it',
+        settings: { shortcuts: { 'typer-caret': { enabled: false } } },
+    });
+});
+
+// --------------------------------------------------------- party clock
+
+const PartyClock = require('../src/shared/party-clock.js');
+
+/**
+ * A pong from a room whose clock is `skew` ahead of ours, with the two legs
+ * taking `out` and `back` milliseconds and the far end holding it `hold`.
+ */
+function pongFrom({ c = 1000, skew = 500, out = 50, back = 50, hold = 10 } = {}) {
+    const s = c + out + skew;
+    const s2 = s + hold;
+    return { pong: { c, s, s2 }, t3: s2 - skew + back };
+}
+
+console.log('\n# party clock');
+check('equal legs give the exact offset, and the round trip excludes the hold', () => {
+    const { pong, t3 } = pongFrom();
+    eq(PartyClock.sample(pong, t3), { offset: 500, rtt: 100 });
+});
+check('unequal legs are wrong by half their difference, and no more', () => {
+    const { pong, t3 } = pongFrom({ out: 20, back: 180, hold: 0 });
+    eq(PartyClock.sample(pong, t3), { offset: 420, rtt: 200 });
+});
+check('a round trip the clocks cannot have made is refused', () => {
+    eq(PartyClock.sample({ c: 1000, s: 1500, s2: 1600 }, 1050), null, 'held longer than it was away');
+    eq(PartyClock.sample({ c: 'x', s: 1, s2: 2 }, 3), null);
+    eq(PartyClock.sample({ c: 1000, s: 1600, s2: 1500 }, 1200), null, 'sent before it arrived');
+});
+check('the fastest sample sets the offset, whichever order they came in', () => {
+    const clock = PartyClock.createClock();
+    const slow = pongFrom({ c: 1000, out: 20, back: 180, hold: 0 });
+    const fast = pongFrom({ c: 2000 });
+    clock.add(fast.pong, fast.t3);
+    clock.add(slow.pong, slow.t3);
+    eq(clock.offset(), 500);
+    eq(clock.minRtt(), 100);
+});
+check('a path that stays slow is adopted once the fast sample rolls out', () => {
+    const clock = PartyClock.createClock();
+    const fast = pongFrom({ c: 0 });
+    clock.add(fast.pong, fast.t3);
+    for (let i = 1; i <= PartyClock.WINDOW; i++) {
+        const slow = pongFrom({ c: i * 5000, skew: 700, out: 150, back: 150 });
+        clock.add(slow.pong, slow.t3);
+    }
+    eq(clock.offset(), 700);
+    eq(clock.minRtt(), 300);
+});
+check('room and local time convert both ways', () => {
+    const clock = PartyClock.createClock();
+    eq(clock.offset(), 0, 'no sample is no correction');
+    const { pong, t3 } = pongFrom({ skew: -250 });
+    assert(clock.add(pong, t3));
+    eq(clock.toRoom(10000), 9750);
+    eq(clock.toLocal(clock.toRoom(10000)), 10000);
+});
+check('the displayed round trip is smoothed, not the last reading', () => {
+    const clock = PartyClock.createClock();
+    let one = pongFrom({ c: 0, out: 50, back: 50, hold: 0 });
+    clock.add(one.pong, one.t3);
+    eq(clock.rtt(), 100);
+    one = pongFrom({ c: 5000, out: 100, back: 100, hold: 0 });
+    clock.add(one.pong, one.t3);
+    eq(Math.round(clock.rtt()), 115);
+});
+check('the heartbeat slows while paused but never stops', () => {
+    assert(PartyClock.pingDelay({ paused: true }) > PartyClock.pingDelay({ paused: false }));
+    assert(Number.isFinite(PartyClock.pingDelay({ paused: true })));
+});
+
+// --------------------------------------------------------- party state
+
+const PartyState = require('../src/shared/party-state.js');
+
+const playingAt = (over = {}) => ({ ...PartyState.blank(), seq: 4, paused: false, pos: 100, at: 10000, ...over });
+const intentOf = (over = {}) => ({ id: 1, base: 4, op: 'pause', pos: 100, at: 10000, ...over });
+
+console.log('\n# party state');
+check('a playing vector extrapolates from when it was true, at its rate', () => {
+    eq(PartyState.expected(playingAt(), 12000), 102);
+    eq(PartyState.expected(playingAt({ rate: 1.5 }), 12000), 103);
+});
+check('paused, held, or not started yet, the position stands still', () => {
+    eq(PartyState.expected(playingAt({ paused: true }), 60000), 100);
+    eq(PartyState.expected(playingAt({ hold: { waiting: ['m1'], since: 10000 } }), 60000), 100);
+    eq(PartyState.expected(playingAt({ at: 15000 }), 12000), 100, 'a scheduled start is not negative time');
+    assert(PartyState.scheduled(playingAt({ at: 15000 }), 12000));
+    assert(!PartyState.scheduled(playingAt(), 12000));
+});
+check('an intent is normalised, and its timestamp only believed so far', () => {
+    eq(PartyState.validateIntent(intentOf({ at: 10200 }), 10000).at, 10200);
+    eq(PartyState.validateIntent(intentOf({ at: 99999 }), 10000).at, 10000 + PartyState.AT_FUTURE_MS);
+    eq(PartyState.validateIntent(intentOf({ at: 0 }), 10000).at, 10000 - PartyState.AT_PAST_MS);
+    eq(PartyState.validateIntent(intentOf({ at: undefined }), 10000).at, 10000);
+    eq(PartyState.validateIntent(intentOf({ pos: -3 }), 10000).pos, 0);
+});
+check('an intent that cannot be one is refused', () => {
+    const now = 10000;
+    eq(PartyState.validateIntent(intentOf({ op: 'rewind' }), now), null);
+    eq(PartyState.validateIntent(intentOf({ pos: NaN }), now), null, 'a player reporting NaN');
+    eq(PartyState.validateIntent(intentOf({ id: -1 }), now), null);
+    eq(PartyState.validateIntent(intentOf({ op: 'rate', rate: 16 }), now), null);
+    eq(PartyState.validateIntent(intentOf({ op: 'rate', rate: 1.25 }), now).rate, 1.25);
+    eq(PartyState.validateIntent(intentOf({ op: 'rate', rate: null }), now), null, 'null is not a rate of 0');
+    eq(PartyState.validateIntent(intentOf({ op: 'rate', rate: '1.5' }), now).rate, 1.5);
+});
+check('a peer names a video by id, never by address', () => {
+    const media = (m) => PartyState.validateIntent(intentOf({ op: 'media', media: m }), 10000);
+    eq(media({ site: 'youtube', id: 'dQw4w9WgXcQ' }).media, { site: 'youtube', id: 'dQw4w9WgXcQ' });
+    eq(media({ site: 'netflix', id: '81234567' }).media, { site: 'netflix', id: '81234567' });
+    eq(media({ site: 'youtube', id: 'https://evil.example/' }), null);
+    eq(media({ site: 'vimeo', id: '123' }), null);
+    eq(media({ site: 'netflix', id: '81234567' }).paused, true, 'a new video starts paused');
+});
+check('two clicks at once: the second, blind to the first, collides', () => {
+    const last = { seq: 5, by: 'ana', changedAt: 10000 };
+    assert(PartyState.conflicts(last, 'ben', 4, 10400));
+    assert(!PartyState.conflicts(last, 'ben', 5, 10400), 'Ben had seen it');
+    assert(!PartyState.conflicts(last, 'ana', 4, 10400), 'nobody collides with themselves');
+    assert(!PartyState.conflicts(last, 'ben', 4, 10000 + PartyState.CONFLICT_MS), 'a late act is a deliberate one');
+});
+check('an accepted intent rebases the vector on where its member was', () => {
+    const next = PartyState.apply(playingAt(), PartyState.validateIntent(intentOf({ pos: 101.5, at: 11500 }), 11600), 'ben');
+    eq([next.seq, next.paused, next.pos, next.at, next.by], [5, true, 101.5, 11500, 'ben']);
+    const faster = PartyState.apply(playingAt(), PartyState.validateIntent(intentOf({ op: 'rate', rate: 1.5, pos: 102 }), 12000), 'ana');
+    eq([faster.rate, faster.paused, faster.pos], [1.5, false, 102]);
+});
+check('acting on the room clears a hold, changing its speed does not', () => {
+    const held = playingAt({ hold: { waiting: ['cat'], since: 10000 } });
+    eq(PartyState.apply(held, PartyState.validateIntent(intentOf(), 10000), 'ana').hold, null);
+    const rated = PartyState.apply(held, PartyState.validateIntent(intentOf({ op: 'rate', rate: 2 }), 10000), 'ana');
+    eq(rated.hold, { waiting: ['cat'], since: 10000 });
+});
+
+check('a room rate is a finite number the room could have accepted, or nothing', () => {
+    eq([0.25, 1, '2', 5].map(PartyState.validRate), [0.25, 1, 2, 5]);
+    eq([0.1, 5.5, 16, -1, NaN, Infinity, null, undefined, '', 'fast', {}].map(PartyState.validRate),
+        [null, null, null, null, null, null, null, null, null, null, null]);
+});
+
+// --------------------------------------------------------- party drift
+
+const PartyDrift = require('../src/shared/party-drift.js');
+
+/** A drift controller and a clock that moves a second per decision. */
+function driftAt(profile) {
+    const drift = PartyDrift.createDrift({ profile });
+    let now = 100000;
+    return {
+        drift,
+        at: () => now,
+        decide(d, over = {}) {
+            now += PartyDrift.EVAL_MS;
+            return drift.decide({ actual: 50 + d, expected: 50, now, ...over });
+        },
+        wait(ms) { now += ms; },
+    };
+}
+
+console.log('\n# party drift');
+check('inside the deadband nothing is touched', () => {
+    eq(driftAt().decide(0.05), { kind: 'none' });
+    eq(driftAt().decide(-0.09), { kind: 'none' });
+});
+check('ahead slows down and behind speeds up, by no more than the cap', () => {
+    eq(driftAt().decide(0.5), { kind: 'rate', rate: 0.92 });
+    eq(driftAt().decide(-0.2), { kind: 'rate', rate: 1.05 });
+    eq(driftAt().decide(-0.2, { rate: 2 }), { kind: 'rate', rate: 2.1 }, 'relative to the room rate');
+});
+check('one decision a second, however often timeupdate asks', () => {
+    const t = driftAt();
+    eq(t.decide(0.5).kind, 'rate');
+    eq(t.drift.decide({ actual: 50.5, expected: 50, now: t.at() + 200 }), { kind: 'none' });
+});
+check('a nudge holds until the drift is nearly gone, then hands the rate back', () => {
+    const t = driftAt();
+    eq(t.decide(0.3).kind, 'rate');
+    eq(t.decide(0.08).kind, 'rate', 'below the deadband but not settled');
+    eq(t.decide(0.03), { kind: 'rate', rate: 1 });
+    eq(t.decide(0.03), { kind: 'none' }, 'handed back once');
+});
+check('a nudge is not rewritten for a change nobody could hear', () => {
+    const t = driftAt();
+    eq(t.decide(-0.4), { kind: 'rate', rate: 1.08 });
+    eq(t.decide(-0.39), { kind: 'none' });
+});
+check('a big drift seeks to where the room will be once the seek is done', () => {
+    const t = driftAt();
+    eq(t.decide(2), { kind: 'seek', to: 50 + PartyDrift.SEEK_LATENCY_START });
+    eq(t.decide(3), { kind: 'none' }, 'nothing while the seek is out');
+    t.drift.seekDone(t.at() + 500, 1000);
+    eq(Math.round(t.drift.seekLatency() * 1000), 475);
+    eq(t.decide(0.5), { kind: 'none' }, 'held off while the player settles');
+    t.wait(PartyDrift.SEEK_FREEZE_MS);
+    eq(t.decide(0.5).kind, 'rate');
+});
+check('a seek out of a nudge puts the room rate back with it', () => {
+    const t = driftAt();
+    t.decide(0.5);
+    eq(t.decide(2, { rate: 1 }), { kind: 'seek', to: 50.25, rate: 1 });
+});
+check('a second big drift inside the cooldown is nudged, not seeked', () => {
+    const t = driftAt();
+    t.decide(2);
+    t.drift.seekDone(t.at(), 200);
+    t.wait(PartyDrift.SEEK_FREEZE_MS);
+    eq(t.decide(2), { kind: 'rate', rate: 0.92 });
+});
+check('behind with nothing buffered, it runs to catch up rather than jump into the hole', () => {
+    eq(driftAt().decide(-2, { bufferedAhead: 0.5 }), { kind: 'rate', rate: 1.08 });
+    eq(driftAt().decide(-2, { bufferedAhead: 30 }).kind, 'seek');
+});
+check('three seeks in a minute and the thresholds widen for a while', () => {
+    const t = driftAt();
+    for (let i = 0; i < PartyDrift.STRUGGLE_SEEKS; i++) {
+        t.decide(2);
+        t.drift.seekDone(t.at(), 300);
+        t.wait(PartyDrift.SEEK_COOLDOWN_MS);
+    }
+    assert(t.drift.struggling(t.at()));
+    eq(t.decide(2).kind, 'rate', 'what was a seek is a nudge now');
+    t.wait(PartyDrift.STRUGGLE_MS);
+    assert(!t.drift.struggling(t.at()));
+});
+check('paused, an overshoot is taken back exactly, with no lead', () => {
+    eq(driftAt().decide(0.3, { paused: true }), { kind: 'seek', to: 50 });
+    eq(driftAt().decide(0.05, { paused: true }), { kind: 'none' });
+});
+check('a player that will not hold a rate is only ever seeked, and less eagerly', () => {
+    const t = driftAt('seekOnly');
+    eq(t.decide(0.8), { kind: 'none' });
+    eq(t.decide(1.2).kind, 'seek');
+    const switched = driftAt();
+    switched.drift.setProfile('seekOnly');
+    eq(switched.drift.profile(), 'seekOnly');
+    eq(switched.decide(0.5), { kind: 'none' });
+});
+
+// ---------------------------------------------------------- party room
+
+const PartyRoom = require('../src/shared/party-room.js');
+
+/** A room with ids minted in order and every message it sends kept. */
+function roomOf(policy = {}) {
+    const sent = [];
+    let n = 0;
+    const room = PartyRoom.createRoom({
+        id: 'room1', policy,
+        send: (to, msg) => sent.push({ to, msg }),
+        mint: (prefix) => `${prefix}${++n}`,
+    });
+    return {
+        room,
+        sent,
+        join: (name, now = 0) => room.join({ name }, now).member,
+        /** What `to` has been sent of type `t`, oldest first. */
+        got: (to, t) => sent.filter((one) => one.to === to && one.msg.t === t).map((one) => one.msg),
+        clear: () => { sent.length = 0; },
+    };
+}
+
+const play = (over = {}) => ({ t: 'intent', id: 1, base: 0, op: 'play', pos: 10, at: 1000, ...over });
+
+console.log('\n# party room');
+check('the first in is the host, and everyone hears who else is here', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('  Ben  ');
+    const welcome = r.got(ben, 'welcome')[0];
+    eq([welcome.v, welcome.you, welcome.room.id], [PartyRoom.VERSION, ben, 'room1']);
+    eq(r.got(ana, 'members').pop().list.map((m) => [m.name, m.role]), [['Ana', 'host'], ['Ben', 'guest']]);
+});
+check('an accepted intent reaches everyone, acknowledged to its sender', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, play(), 1000);
+    const seen = r.got(ana, 'state').pop();
+    eq([seen.seq, seen.paused, seen.pos, seen.by], [1, false, 10, ben]);
+    eq(r.got(ben, 'state').pop().ack, { member: ben, id: 1 });
+});
+check('a refused intent is said to its sender alone, with the state to snap back to', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.clear();
+    r.room.handle(ben, play({ pos: NaN }), 1000);
+    eq(r.got(ben, 'reject'), [{ t: 'reject', id: 1, why: 'invalid' }]);
+    eq(r.got(ben, 'state').length, 1);
+    eq(r.got(ana, 'state').length, 0);
+});
+check('in host control only the host and co-hosts drive', () => {
+    const r = roomOf({ control: 'host' });
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, play(), 1000);
+    eq(r.got(ben, 'reject').pop().why, 'policy');
+    r.room.handle(ana, { t: 'role', member: ben, role: 'cohost' }, 1100);
+    r.room.handle(ben, play({ id: 2 }), 1200);
+    eq(r.room.state().by, ben);
+});
+check('two clicks at once: the first stands and the second is refused', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ana, play({ op: 'pause' }), 1000);
+    r.room.handle(ben, play({ at: 1100 }), 1100);
+    eq(r.got(ben, 'reject').pop().why, 'conflict');
+    eq(r.room.state().paused, true);
+    r.room.handle(ben, play({ id: 2, at: 3000 }), 3000);
+    eq(r.room.state().paused, false, 'the same stale view, acted on later, is let through');
+});
+check('a member hammering the room is slowed down', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    for (let i = 1; i <= PartyRoom.INTENTS_PER_S + 1; i++) {
+        r.room.handle(ana, play({ id: i, base: i - 1, op: 'seek', at: 1000 + i }), 1000 + i);
+    }
+    eq(r.got(ana, 'reject').pop().why, 'rate-limit');
+    eq(r.room.state().seq, PartyRoom.INTENTS_PER_S);
+});
+check('a ping is answered, and a member behind on the state is sent it', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    r.room.handle(ana, play(), 1000);
+    r.clear();
+    r.room.handle(ana, { t: 'ping', c: 5, seq: 1, rtt: 80 }, 2000);
+    eq(r.got(ana, 'pong'), [{ t: 'pong', c: 5, s: 2000, s2: 2000, seq: 1 }]);
+    eq(r.got(ana, 'state').length, 0);
+    r.room.handle(ana, { t: 'ping', c: 6, seq: 0 }, 3000);
+    eq(r.got(ana, 'state').length, 1);
+    eq(r.room.members()[0].rtt, 80);
+});
+check('a guest asking to pause is heard by the hosts, not by the other guests', () => {
+    const r = roomOf({ control: 'host' });
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    const cat = r.join('Cat');
+    r.room.handle(ben, { t: 'request', op: 'pause' }, 1000);
+    eq(r.got(ana, 'request'), [{ t: 'request', from: ben, op: 'pause' }]);
+    eq(r.got(cat, 'request'), []);
+});
+check('only the host sets the rules, hands over, or shows someone out', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, { t: 'policy', control: 'host' }, 1000);
+    eq(r.room.policy().control, 'everyone');
+    r.room.handle(ana, { t: 'policy', control: 'host', locked: true }, 1000);
+    eq(r.room.policy(), { control: 'host', wait: true, locked: true });
+    eq(r.room.join({ name: 'Dee' }, 1000), { error: 'locked' });
+    r.room.handle(ana, { t: 'role', member: ben, role: 'host' }, 1100);
+    eq(r.room.members().map((m) => m.role), ['cohost', 'host']);
+    r.room.handle(ben, { t: 'kick', member: ana }, 1200);
+    eq(r.got(ana, 'error'), [{ t: 'error', code: 'kicked' }]);
+    eq(r.room.members().map((m) => m.name), ['Ben']);
+});
+check('a member comes back as themselves with the token from their welcome', () => {
+    const r = roomOf();
+    r.join('Ana');
+    const ben = r.join('Ben');
+    const token = r.got(ben, 'welcome')[0].resume;
+    eq(r.room.join({ resume: token }, 5000), { member: ben });
+    eq(r.room.join({ resume: 'r-unknown' }, 5000), { error: 'expired' });
+});
+check('the host leaving hands the room to the first co-host, else the earliest', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    r.join('Ben');
+    const cat = r.join('Cat');
+    r.room.handle(ana, { t: 'role', member: cat, role: 'cohost' }, 100);
+    r.room.handle(ana, { t: 'bye' }, 200);
+    eq(r.room.members().map((m) => [m.name, m.role]), [['Ben', 'guest'], ['Cat', 'host']]);
+});
+check('a member gone quiet is shown away, and back on their next word', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ana, { t: 'ping', c: 0, seq: 0 }, PartyRoom.AWAY_MS);
+    r.room.tick(PartyRoom.AWAY_MS);
+    eq(r.room.members().map((m) => m.away), [false, true]);
+    r.room.handle(ben, { t: 'ping', c: 0, seq: 0 }, PartyRoom.AWAY_MS + 100);
+    eq(r.got(ana, 'members').pop().list.map((m) => m.away), [false, false]);
+});
+check('a minute of silence ends the grace: gone, and the token with them', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    const token = r.got(ben, 'welcome')[0].resume;
+    r.room.handle(ana, { t: 'ping', c: 0, seq: 0 }, PartyRoom.REMOVE_MS);
+    r.room.tick(PartyRoom.REMOVE_MS);
+    eq(r.room.members().map((m) => m.name), ['Ana']);
+    eq(r.room.join({ resume: token }, PartyRoom.REMOVE_MS), { error: 'expired' });
+});
+check('a host gone quiet hands over at once, and comes back a co-host', () => {
+    const r = roomOf({ control: 'host' });
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, { t: 'ping', c: 0, seq: 0 }, PartyRoom.AWAY_MS);
+    r.room.tick(PartyRoom.AWAY_MS);
+    eq(r.room.members().map((m) => m.role), ['cohost', 'host']);
+    r.room.handle(ana, play({ at: PartyRoom.AWAY_MS + 50 }), PartyRoom.AWAY_MS + 50);
+    eq(r.room.state().by, ana, 'still allowed to drive');
+});
+check('with the whole room quiet the host keeps it', () => {
+    const r = roomOf();
+    r.join('Ana');
+    r.join('Ben');
+    r.room.tick(PartyRoom.AWAY_MS);
+    eq(r.room.members().map((m) => [m.role, m.away]), [['host', true], ['guest', true]]);
+});
+check('a solo member watches alone and cannot drive', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    r.room.handle(ana, { t: 'solo', solo: true }, 100);
+    r.room.handle(ana, play(), 1000);
+    eq(r.got(ana, 'reject').pop().why, 'policy');
+    eq(r.room.members()[0].solo, true);
+});
+
+// ---------------------------------------------------------- party holds
+
+/** Ana and Ben (and `extra` more), playing from 10s at t=1000. */
+function playingRoom(policy = {}, extra = 0) {
+    const r = roomOf(policy);
+    const ids = ['Ana', 'Ben', ...Array.from({ length: extra }, (_, i) => `M${i}`)].map((name) => r.join(name));
+    r.room.handle(ids[0], play(), 1000);
+    return { ...r, ana: ids[0], ben: ids[1], ids };
+}
+const stall = (why = 'buffering') => ({ t: 'ready', ready: false, why });
+
+console.log('\n# party holds');
+check('a member buffering holds the room where it had got to', () => {
+    const r = playingRoom();
+    r.room.handle(r.ben, stall(), 3000);
+    const held = r.room.state();
+    eq([held.paused, held.pos, held.at, held.hold], [false, 12, 3000, { waiting: [r.ben], since: 3000 }]);
+    eq(PartyState.expected(held, 9000), 12, 'the position stands still while held');
+});
+check('everyone ready, the room goes again together, a little ahead', () => {
+    const r = playingRoom();
+    r.room.handle(r.ana, { t: 'ping', c: 0, seq: 0, rtt: 400 }, 2000);
+    r.room.handle(r.ben, stall(), 3000);
+    r.room.handle(r.ana, stall(), 3100);
+    eq(r.room.state().hold.waiting, [r.ben, r.ana]);
+    r.room.handle(r.ben, { t: 'ready', ready: true }, 4000);
+    r.room.handle(r.ana, { t: 'ready', ready: true }, 5000);
+    const going = r.room.state();
+    eq([going.hold, going.pos, going.at], [null, 12, 5000 + 200 + PartyRoom.LEAD_PAD_MS]);
+    assert(PartyState.scheduled(going, 5100));
+});
+check('an ad, a paused room, or a room that said not to wait holds nothing', () => {
+    const ad = playingRoom();
+    ad.room.handle(ad.ben, stall('ad'), 3000);
+    eq(ad.room.state().hold, null);
+    eq(ad.room.members()[1].why, 'ad');
+    const paused = playingRoom();
+    paused.room.handle(paused.ana, play({ id: 2, base: 1, op: 'pause', at: 2000 }), 2000);
+    paused.room.handle(paused.ben, stall(), 3000);
+    eq(paused.room.state().hold, null);
+    const off = playingRoom({ wait: false });
+    off.room.handle(off.ben, stall(), 3000);
+    eq(off.room.state().hold, null);
+});
+check('past six people nobody waits for anyone', () => {
+    const r = playingRoom({}, PartyRoom.HOLD_MAX_MEMBERS - 1);
+    r.room.handle(r.ben, stall(), 3000);
+    eq(r.room.state().hold, null);
+});
+check('the wait is capped, and the straggler catches up rather than holding again', () => {
+    const r = playingRoom();
+    r.room.handle(r.ben, stall(), 3000);
+    r.room.handle(r.ana, { t: 'ping', c: 0, seq: 3 }, 3000 + PartyRoom.HOLD_TIMEOUT_MS);
+    r.room.tick(3000 + PartyRoom.HOLD_TIMEOUT_MS);
+    eq(r.room.state().hold, null);
+    eq(r.room.members()[1].lagging, true);
+    r.room.handle(r.ben, { t: 'ready', ready: true }, 12000);
+    r.room.handle(r.ben, stall(), 13000);
+    eq(r.room.state().hold, null, 'still excluded');
+    for (const id of [r.ana, r.ben]) r.room.handle(id, { t: 'ping', c: 0, seq: 4 }, 3000 + PartyRoom.HOLD_TIMEOUT_MS + PartyRoom.EXCLUDE_MS);
+    r.room.tick(3000 + PartyRoom.HOLD_TIMEOUT_MS + PartyRoom.EXCLUDE_MS);
+    eq(r.room.members()[1].lagging, false);
+});
+check('a member who keeps holding the room stops holding it', () => {
+    const r = playingRoom();
+    for (let i = 0; i < PartyRoom.FLAP_HOLDS; i++) {
+        r.room.handle(r.ben, stall(), 3000 + i * 10000);
+        r.room.handle(r.ben, { t: 'ready', ready: true }, 4000 + i * 10000);
+    }
+    eq(r.room.members()[1].lagging, true);
+    eq(r.room.state().hold, null);
+});
+check('somebody pausing during a hold wins, and can act on the held state', () => {
+    const r = playingRoom();
+    r.room.handle(r.ben, stall(), 3000);
+    const seen = r.room.state().seq;
+    r.room.handle(r.ana, play({ id: 2, base: seen, op: 'pause', pos: 12, at: 3200 }), 3200);
+    eq([r.room.state().paused, r.room.state().hold], [true, null]);
+    eq(r.got(r.ana, 'reject'), []);
+});
+check('play pressed while someone is still loading starts the room held on them', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, stall('loading'), 500);
+    r.room.handle(ana, play(), 1000);
+    eq([r.room.state().paused, r.room.state().hold], [false, { waiting: [ben], since: 1000 }]);
+});
+check('a member leaving or stepping out is not waited for', () => {
+    const r = playingRoom();
+    r.room.handle(r.ben, stall(), 3000);
+    r.room.handle(r.ben, { t: 'solo', solo: true }, 3500);
+    eq(r.room.state().hold, null);
+    const gone = playingRoom();
+    gone.room.handle(gone.ben, stall(), 3000);
+    gone.room.handle(gone.ben, { t: 'bye' }, 3500);
+    eq(gone.room.state().hold, null);
+});
+
+// ---------------------------------------------------------- party chat
+
+const PartyChat = require('../src/shared/party-chat.js');
+const say = (text) => ({ t: 'chat', text });
+
+console.log('\n# party chat');
+check('a line is one line of plain text, cut at a whole character', () => {
+    eq(PartyChat.clean('  hi \n\t there\u0000\u001b[31m '), 'hi there[31m');
+    eq([PartyChat.clean('   '), PartyChat.clean(42), PartyChat.clean(null)], ['', '', '']);
+    const long = `${'a'.repeat(PartyChat.MAX_CHARS - 1)}😀😀`;
+    eq(Array.from(PartyChat.clean(long)).length, PartyChat.MAX_CHARS);
+    assert(PartyChat.clean(long).endsWith('😀'), 'the emoji is kept whole, not half a surrogate');
+});
+check('a line reaches everyone, its sender too, named and with an id of its own', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, say('  the drone shot   is unreal '), 1200);
+    const line = { t: 'chat', id: 'c5', from: ben, name: 'Ben', at: 1200, text: 'the drone shot is unreal' };
+    eq([r.got(ana, 'chat'), r.got(ben, 'chat')], [[line], [line]]);
+    r.room.handle(ben, say(' \n '), 1300);
+    r.room.handle(ben, { t: 'chat' }, 1300);
+    eq(r.got(ana, 'chat').length, 1, 'nothing to say is not said');
+});
+check('chat has its own budget: a sixth line in five seconds is dropped, and a pause still goes', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    for (let i = 0; i < 6; i++) r.room.handle(ana, say(`line ${i}`), 1000 + i * 100);
+    eq(r.got(ana, 'chat').map((msg) => msg.text), ['line 0', 'line 1', 'line 2', 'line 3', 'line 4']);
+    r.room.handle(ana, play({ op: 'pause' }), 1700);
+    eq([r.got(ana, 'reject'), r.room.state().paused], [[], true]);
+    r.room.handle(ana, say('later'), 1000 + PartyChat.WINDOW_MS);
+    eq(r.got(ana, 'chat').pop().text, 'later', 'the window moves on');
+});
+check('whoever joins or comes back is sent the last lines after the welcome, oldest first', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    const resume = r.got(ben, 'welcome')[0].resume;
+    for (let i = 0; i < PartyChat.HISTORY + 2; i++) r.room.handle(i % 2 ? ana : ben, say(`line ${i}`), i * 3000);
+    r.clear();
+    const cy = r.join('Cy', 200000);
+    const toCy = r.sent.filter((one) => one.to === cy).map((one) => one.msg);
+    eq(toCy[0].t, 'welcome');
+    const past = toCy.filter((msg) => msg.t === 'chat');
+    eq([past.length, past[0].text, past.pop().text], [PartyChat.HISTORY, 'line 2', `line ${PartyChat.HISTORY + 1}`]);
+    assert(toCy.filter((msg) => msg.t === 'chat').every((msg) => msg.past === true), 'marked as history');
+    r.clear();
+    r.room.join({ resume }, 200500);
+    eq(r.got(ben, 'chat').length, PartyChat.HISTORY, 'a resume is replayed the same, for the member to drop what it has');
+});
+check('a room carried on from another keeps its lines and their ids, and mints new ones', () => {
+    const old = [{ id: 'cold1', from: 'm9', name: 'Ana', at: 10, text: 'still here?' }, { id: '', text: 'no id' }, { id: 'cold2', at: 11, text: ' ' }];
+    const sent = [];
+    const room = PartyRoom.createRoom({ id: 'room2', chat: old, send: (to, msg) => sent.push({ to, msg }) });
+    const ben = room.join({ name: 'Ben' }, 0).member;
+    room.handle(ben, say('yes'), 100);
+    const lines = sent.filter((one) => one.msg.t === 'chat').map((one) => one.msg);
+    eq(lines.map((msg) => [msg.id, msg.name, msg.text, msg.past]), [['cold1', 'Ana', 'still here?', true], [lines[1].id, 'Ben', 'yes', undefined]]);
+    assert(/^c[0-9a-f]{16}$/.test(lines[1].id), 'a minted id, not a count that could meet an old one');
+});
+check('a member\'s log keeps each line once, in the order it came, and no more than it may', () => {
+    const log = PartyChat.createLog(3);
+    const line = (id) => ({ id, text: id });
+    eq(['a', 'b', 'a', 'c', 'd'].map((id) => log.add(line(id))), [true, true, false, true, true]);
+    eq(log.lines().map((one) => one.id), ['b', 'c', 'd']);
+    eq(log.add(line('a')), false, 'pushed out, and still not taken back as new when a resume replays it');
+    eq([PartyChat.fromWire({ id: 'c1', text: ' hi ', at: 5 }), PartyChat.fromWire({ id: 'c2', text: '' }), PartyChat.fromWire({ text: 'x' })],
+        [{ id: 'c1', from: null, name: 'Someone', at: 5, text: 'hi' }, null, null]);
+});
+check('the notes say who came, went, stepped out or hosts, and never about yourself', () => {
+    const m = (id, name, extra = {}) => ({ id, name, role: 'guest', solo: false, ...extra });
+    const before = [m('me', 'Nadia', { role: 'host' }), m('a', 'Ana'), m('r', 'Rafi'), m('s', 'Sam')];
+    const after = [m('me', 'Nadia', { solo: true }), m('a', 'Ana', { role: 'host' }), m('r', 'Rafi', { solo: true }), m('b', 'Ben')];
+    eq(PartyChat.memberNotes(before, after, 'me'), ['Ana is the host now', 'Rafi stepped out to watch solo', 'Ben joined', 'Sam left']);
+    eq(PartyChat.memberNotes(after, before, 'me'), ['Rafi rejoined', 'Sam joined', 'Ben left']);
+    const members = [m('me', 'Nadia'), m('s', 'Sam'), m('a', 'Ana')];
+    const held = (waiting) => ({ hold: { waiting } });
+    eq(PartyChat.waitNote({ hold: null }, held(['s']), members, 'me'), 'Waiting for Sam…');
+    eq(PartyChat.waitNote(held(['s']), held(['s', 'me', 'a', 'x']), members, 'me'), 'Waiting for Ana and 1 more…');
+    eq([PartyChat.waitNote(held(['s']), held(['s']), members, 'me'), PartyChat.waitNote(null, held(['me']), members, 'me')], [null, null]);
+});
+
+// ------------------------------------------------ party protocol vectors
+
+/**
+ * The cases in party-vectors.json, run against this authority. The same file
+ * is what a party server is checked against, so a case here that needs this
+ * implementation's internals to pass is a case the server cannot — which is
+ * why these only ever look at messages sent.
+ */
+const PartyVectors = require('./party-vectors.json');
+
+/** "@a" becomes alias a's member id, wherever it appears in a value. */
+function withIds(value, ids) {
+    if (typeof value === 'string' && value.startsWith('@')) return ids[value.slice(1)] || value;
+    if (Array.isArray(value)) return value.map((one) => withIds(one, ids));
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([key, one]) => [key, withIds(one, ids)]));
+    }
+    return value;
+}
+
+/** Every field `want` names, `got` has the same; arrays have the same length too. */
+function matches(got, want) {
+    if (Array.isArray(want)) return Array.isArray(got) && got.length === want.length && want.every((one, i) => matches(got[i], one));
+    if (want && typeof want === 'object') return !!got && typeof got === 'object' && Object.keys(want).every((key) => matches(got[key], want[key]));
+    return got === want;
+}
+
+function runVector(vector) {
+    const r = roomOf(vector.policy || {});
+    const ids = {};
+    for (const step of vector.steps) {
+        if (step.join) {
+            const token = step.resume && (ids[step.resume] ? r.got(ids[step.resume], 'welcome')[0].resume : step.resume);
+            const out = r.room.join(token ? { resume: token } : { name: step.name }, step.at);
+            // What the server does with a refused join: error, then close.
+            if (out.error) r.sent.push({ to: `alias:${step.join}`, msg: { t: 'error', code: out.error } });
+            else ids[step.join] = out.member;
+        } else if (step.tick) {
+            r.room.tick(step.at);
+        } else {
+            r.room.handle(ids[step.from], withIds(step.msg, ids), step.at);
+        }
+    }
+
+    const inbox = (alias) => r.sent.filter((one) => one.to === ids[alias] || one.to === `alias:${alias}`).map((one) => one.msg);
+    const next = {};
+    for (const { to, msg } of vector.expect || []) {
+        const want = withIds(msg, ids);
+        const got = inbox(to);
+        const found = got.findIndex((one, i) => i >= (next[to] || 0) && matches(one, want));
+        if (found < 0) throw new Error(`${to} was never sent ${JSON.stringify(want)} (in order)`);
+        next[to] = found + 1;
+    }
+    for (const { to, msg } of vector.absent || []) {
+        const want = withIds(msg, ids);
+        if (inbox(to).some((one) => matches(one, want))) throw new Error(`${to} was sent ${JSON.stringify(want)}`);
+    }
+}
+
+console.log('\n# party protocol vectors');
+check('the vector file is the version this suite reads', () => eq(PartyVectors.version, 1));
+for (const vector of PartyVectors.cases) {
+    check(vector.name, () => runVector(vector));
+}
+
+// ---------------------------------------------------------- party sites
+
+const PartySites = require('../src/shared/party-sites.js');
+
+console.log('\n# party sites');
+check('a watch page names its media; anything else names none', () => {
+    eq(PartySites.mediaOf('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s'), { site: 'youtube', id: 'dQw4w9WgXcQ' });
+    eq(PartySites.mediaOf('https://www.netflix.com/watch/81234567?trackId=1'), { site: 'netflix', id: '81234567' });
+    eq(PartySites.mediaOf('https://www.netflix.com/browse'), null);
+    eq(PartySites.mediaOf('https://www.youtube.com/watch?v=short'), null, 'not an id the authority would take');
+    eq(PartySites.mediaOf('https://example.com/watch/81234567'), null);
+});
+check('the way back to a video is built here, never taken from a peer', () => {
+    eq(PartySites.urlFor({ site: 'youtube', id: 'dQw4w9WgXcQ' }), 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    eq(PartySites.urlFor({ site: 'netflix', id: '81234567' }), 'https://www.netflix.com/watch/81234567');
+    eq(PartySites.urlFor({ site: 'netflix', id: '1/../../logout' }), null);
+    eq(PartySites.urlFor({ site: 'javascript', id: 'alert(1)' }), null);
+});
+check('every party site has a media pattern the authority checks, and no more', () => {
+    eq(PartySites.list().map((site) => site.id).sort(), Object.keys(PartyState.MEDIA_ID).sort());
+});
+check('only netflix seeks through its api and probes the rate', () => {
+    eq(PartySites.list().map((site) => [site.id, site.seek, site.rate]),
+        [['youtube', 'video', 'nudge'], ['netflix', 'api', 'probe']]);
+});
+check('the loader and the registry agree on which tab is a party site', () => {
+    const PartyLoader = require('../src/background/party-loader.js');
+    for (const url of ['https://www.youtube.com/', 'https://m.youtube.com/watch?v=dQw4w9WgXcQ',
+        'https://www.netflix.com/watch/1', 'https://example.com/', 'not a url']) {
+        eq(PartyLoader.siteOf(url), PartySites.siteOf(url), url);
+    }
+});
+check('the loader injects each party module after the ones it reads', () => {
+    const files = require('../src/background/party-loader.js').CONTENT_FILES;
+    const at = (name) => files.indexOf(`src/shared/${name}.js`);
+    assert(at('party-state') >= 0 && at('party-state') < at('party-sites'), 'party-sites reads PartyState');
+    const page = (name) => files.indexOf(`src/content/${name}.js`);
+    assert(at('party-chat') >= 0 && page('party-chip') < page('party-chat-panel'), 'the chat reads PartyChat and the chip\'s player');
+    assert(page('party-chat-panel') < page('party-media'), 'party-media builds the chat as it boots');
+});
+
+// ---------------------------------------------------------- party media
+
+const PartyMedia = require('../src/content/party-media.js');
+
+console.log('\n# party media — the expectation ledger');
+check('an event matching a write of ours is ours, once', () => {
+    const ledger = PartyMedia.createLedger();
+    ledger.expect('pause', null, 1000);
+    assert(ledger.consume('pause', null, 1100));
+    assert(!ledger.consume('pause', null, 1150), 'a second pause is the user');
+});
+check('a seek is ours if it lands near where we sent it; a rate only if it is the rate', () => {
+    const ledger = PartyMedia.createLedger();
+    ledger.expect('seek', 42, 0);
+    ledger.expect('rate', 0.95, 0);
+    assert(!ledger.consume('seek', 50, 10), 'the user seeking elsewhere meanwhile');
+    assert(ledger.consume('seek', 42.3, 10), 'a keyframe away');
+    assert(!ledger.consume('rate', 1, 10), 'the page putting its own rate back');
+    assert(ledger.consume('rate', 0.95, 10));
+});
+check('two quick rate writes are both ours, though both events read the second', () => {
+    const ledger = PartyMedia.createLedger();
+    ledger.expect('rate', 1.5, 0);
+    ledger.expect('rate', 1.08, 0);
+    assert(ledger.consume('rate', 1.08, 5));
+    assert(ledger.consume('rate', 1.08, 6));
+});
+check('asking whether an event is ours does not spend the match', () => {
+    const ledger = PartyMedia.createLedger();
+    ledger.expect('seek', 42, 0);
+    assert(ledger.has('seek', 42.2, 5), 'seeking');
+    assert(ledger.consume('seek', 42.2, 6), 'then seeked');
+    assert(!ledger.has('seek', 42.2, 7));
+});
+check('an expectation that never came back stops matching', () => {
+    const ledger = PartyMedia.createLedger();
+    ledger.expect('play', null, 0);
+    assert(!ledger.consume('play', null, PartyMedia.EXPECT_MS + 1));
+});
+check('the browser suite loads the party the way the loader injects it', () => {
+    const html = require('fs').readFileSync(`${__dirname}/index.html`, 'utf8');
+    const files = require('../src/background/party-loader.js').CONTENT_FILES;
+    const loaded = [...html.matchAll(/src="\.\.\/(src\/[^"]*party[^"]*)"/g)].map((one) => one[1]);
+    // What offscreen.html loads comes after these, for its own specs: it is not the tab's.
+    eq(loaded.slice(0, files.length), [...files]);
+});
+
+// ------------------------------------------------------------ activity
+
+// Just enough chrome.* for the store: a local key/value area, promise form.
+const store = {};
+global.chrome = {
+    storage: {
+        local: {
+            get: (keys, cb) => {
+                const out = {};
+                (Array.isArray(keys) ? keys : [keys]).forEach((k) => {
+                    if (Object.prototype.hasOwnProperty.call(store, k)) out[k] = store[k];
+                });
+                if (cb) return void cb(out);
+                return Promise.resolve(out);
+            },
+            set: (values, cb) => {
+                Object.assign(store, values);
+                if (cb) return void cb();
+                return Promise.resolve();
+            },
+        },
+    },
+};
+
+require('../src/shared/settings.js');
+require('../src/shared/activity.js');
+const Activity = globalThis.BB.Activity;
+const Feed = require('../src/shared/feed.js');
+
+// One o'clock today, not a fixed calendar date. The store prunes any day older
+// than KEEP_DAYS, and it prunes on write — so a hard-coded date quietly stops
+// being recorded at all once the suite is run more than sixty days after it was
+// written, and every tick starts the day over. One o'clock because these tests
+// add seconds and minutes to it and none of them should cross midnight.
+const T0 = new Date().setHours(13, 0, 0, 0);
+const secs = (n) => n * 1000;
+const tabAt = (url, title) => ({ url, title });
+
+function reset({ on = true } = {}) {
+    Object.keys(store).forEach((k) => delete store[k]);
+    store.trackActivity = on;
+    Activity.blur();
+}
+
+const dayRecord = (at = T0) =>
+    (store[Activity.KEY] || {})[new Date(at).toISOString().slice(0, 10)] || null;
+
+(async () => {
+    console.log('\n# activity — recording');
+
+    await checkAsync('records nothing while tracking is off', async () => {
+        reset({ on: false });
+        await Activity.tick(tabAt('https://github.com/a', 'A'), T0);
+        await Activity.tick(tabAt('https://github.com/a', 'A'), T0 + secs(60));
+        eq(store[Activity.KEY], undefined);
+    });
+
+    await checkAsync('the first tick records nothing', async () => {
+        reset();
+        await Activity.tick(tabAt('https://github.com/a', 'A'), T0);
+        eq(dayRecord(), null);
+    });
+
+    await checkAsync('credits the gap to what was focused first', async () => {
+        reset();
+        await Activity.tick(tabAt('https://github.com/one', 'One'), T0);
+        await Activity.tick(tabAt('https://example.com/two', 'Two'), T0 + secs(30));
+        const day = dayRecord();
+        eq(day.hosts['github.com'], 30);
+        eq(day.hosts['example.com'], undefined, 'the new tab has accrued nothing');
+        eq(day.total, 30);
+    });
+
+    await checkAsync('elapsed time is measured, not counted in ticks', async () => {
+        reset();
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(45));
+        eq(dayRecord().total, 45);
+    });
+
+    await checkAsync('a gap past the idle threshold is dropped', async () => {
+        reset();
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(600));
+        eq(dayRecord(), null);
+    });
+
+    await checkAsync('blur() stops the clock', async () => {
+        reset();
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+        Activity.blur();
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(30));
+        eq(dayRecord(), null);
+    });
+
+    await checkAsync('a non-http page clears the marker', async () => {
+        reset();
+        await Activity.tick(tabAt('https://github.com/a', 'A'), T0);
+        await Activity.tick(tabAt('chrome://extensions', 'Extensions'), T0 + secs(10));
+        const afterFirst = dayRecord().total;
+        await Activity.tick(tabAt('https://github.com/a', 'A'), T0 + secs(70));
+        eq(afterFirst, 10);
+        eq(dayRecord().total, afterFirst, 'time on chrome:// is credited to nothing');
+    });
+
+    await checkAsync('the marker survives the worker being torn down between ticks', async () => {
+        reset();
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+
+        // What MV3 does between two alarms: the worker is discarded and the
+        // module is evaluated afresh, with only storage carrying over. The stub
+        // above has no chrome.storage.session, so this covers the local
+        // fallback too.
+        delete require.cache[require.resolve('../src/shared/activity.js')];
+        const restarted = require('../src/shared/activity.js');
+
+        await restarted.tick(tabAt('https://a.test/x', 'X'), T0 + secs(30));
+        eq(dayRecord().total, 30, 'the gap is credited, not thrown away with the worker');
+    });
+
+    await checkAsync('the longest page accumulates across ticks', async () => {
+        reset();
+        await Activity.tick(tabAt('https://a.test/x', 'Short page'), T0);
+        await Activity.tick(tabAt('https://b.test/y', 'Long page'), T0 + secs(10));
+        await Activity.tick(tabAt('https://b.test/y', 'Long page'), T0 + secs(40));
+        await Activity.tick(tabAt('https://c.test/z', 'Another'), T0 + secs(70));
+        const day = dayRecord();
+        eq(day.top.title, 'Long page');
+        eq(day.top.seconds, 60);
+        eq(day.total, 70);
+    });
+
+    await checkAsync('time lands in the hour it happened in', async () => {
+        reset();
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(30));
+        const day = dayRecord();
+        eq(day.hours.length, 24);
+        eq(day.hours[new Date(T0).getHours()], 30);
+        eq(day.hours.reduce((a, b) => a + b, 0), day.total);
+    });
+
+    await checkAsync('a gap is filed under the day it started', async () => {
+        reset();
+        const beforeMidnight = new Date(2026, 6, 15, 23, 59, 40).getTime();
+        await Activity.tick(tabAt('https://a.test/x', 'X'), beforeMidnight);
+        await Activity.tick(tabAt('https://a.test/x', 'X'), beforeMidnight + secs(40));
+        eq(Object.keys(store[Activity.KEY]),
+            [new Date(beforeMidnight).toISOString().slice(0, 10)]);
+    });
+
+    console.log('\n# activity — hosts');
+    check('www. is stripped', () => {
+        eq(Activity.hostOf('https://www.youtube.com/x'), 'youtube.com');
+        eq(Activity.hostOf('https://youtube.com/x'), 'youtube.com');
+    });
+    check('non-http is not a site', () => {
+        eq(Activity.hostOf('chrome://extensions'), null);
+        eq(Activity.hostOf('about:blank'), null);
+        eq(Activity.hostOf(''), null);
+        eq(Activity.hostOf('file:///c:/notes.txt'), null);
+    });
+
+    console.log('\n# activity — summary');
+
+    function seed(data, offsetDays, record) {
+        const key = new Date(Date.now() - offsetDays * 864e5).toISOString().slice(0, 10);
+        data[key] = Object.assign(
+            { total: 0, hours: new Array(24).fill(0), hosts: {}, top: null }, record);
+        return data;
+    }
+    const hoursAt = (hour, seconds) => {
+        const hours = new Array(24).fill(0);
+        hours[hour] = seconds;
+        return hours;
+    };
+
+    await checkAsync('sums the requested window only', async () => {
+        const data = {};
+        seed(data, 0, { total: 100, hosts: { 'a.test': 100 }, hours: hoursAt(9, 100) });
+        seed(data, 3, { total: 50, hosts: { 'b.test': 50 }, hours: hoursAt(14, 50) });
+        seed(data, 20, { total: 999, hosts: { 'c.test': 999 }, hours: hoursAt(2, 999) });
+        reset();
+        store[Activity.KEY] = data;
+
+        const week = await Activity.summary(7);
+        eq(week.total, 150, 'the 20-day-old day is outside a 7-day window');
+        eq(week.sites, 2);
+        eq(week.hosts[0].host, 'a.test');
+        eq(week.peakHour, 9);
+        eq(week.days, 2);
+
+        const month = await Activity.summary(30);
+        eq(month.total, 1149);
+        eq(month.hosts[0].host, 'c.test');
+    });
+
+    await checkAsync('report() answers both windows from one read', async () => {
+        const data = {};
+        seed(data, 0, { total: 100, hosts: { 'a.test': 100 } });
+        seed(data, 8, { total: 40, hosts: { 'b.test': 40 } });
+        reset();
+        store[Activity.KEY] = data;
+
+        const { now, previousTotal } = await Activity.report(7);
+        eq(now.total, 100, 'the last 7 days');
+        eq(previousTotal, 40, 'the 7 days before those');
+    });
+
+    await checkAsync('the page of the day is only answered for a week back', async () => {
+        const data = {};
+        seed(data, 2, { total: 60, hosts: { 'a.test': 60 }, top: { title: 'This week', host: 'a.test', seconds: 60 } });
+        seed(data, 9, { total: 900, hosts: { 'b.test': 900 }, top: { title: 'Last week', host: 'b.test', seconds: 900 } });
+        reset();
+        store[Activity.KEY] = data;
+
+        const month = await Activity.summary(30);
+        eq(month.total, 960, 'the older day still counts towards the totals');
+        eq(month.daily.length, 1, 'but it no longer names a page');
+        eq(month.daily[0].title, 'This week');
+        eq(month.longest.title, 'This week');
+    });
+
+    await checkAsync('report() carries the week the page panel draws', async () => {
+        const data = {};
+        seed(data, 0, { total: 60, hosts: { 'a.test': 60 }, top: { title: 'Today', host: 'a.test', seconds: 60 } });
+        seed(data, 4, { total: 30, hosts: { 'b.test': 30 }, top: { title: 'Midweek', host: 'b.test', seconds: 30 } });
+        reset();
+        store[Activity.KEY] = data;
+
+        const { now, week } = await Activity.report(1);
+        eq(now.days, 1, 'the range on screen is still today');
+        eq(week.daily.length, 2, 'the page panel gets the whole week whatever the range');
+        eq(week.daily[0].title, 'Today', 'newest day first');
+    });
+
+    await checkAsync('a tick drops the page titles that have aged out', async () => {
+        const data = {};
+        seed(data, 30, { total: 900, hosts: { 'b.test': 900 }, top: { title: 'Ancient', host: 'b.test', seconds: 900 } });
+        reset();
+        store[Activity.KEY] = data;
+
+        const old = Object.keys(data)[0];
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(30));
+
+        eq(store[Activity.KEY][old].top, null, 'the title is gone from storage, not just from the view');
+        eq(store[Activity.KEY][old].total, 900, 'the day itself is inside the 60-day window and stays');
+    });
+
+    await checkAsync('an empty store summarises to zeroes', async () => {
+        reset();
+        const summary = await Activity.summary(7);
+        eq(summary.total, 0);
+        eq(summary.sites, 0);
+        eq(summary.days, 0);
+        eq(summary.longest, null);
+        eq(summary.hosts, []);
+    });
+
+    console.log('\n# activity — formatting');
+    check('human() reads naturally', () => {
+        eq(Activity.human(0), '0m');
+        eq(Activity.human(45), '45s');
+        eq(Activity.human(90), '2m');
+        eq(Activity.human(3600), '1h');
+        eq(Activity.human(3720), '1h 2m');
+    });
+
+    console.log('\n# feed — whose channel is this page?');
+
+    // A channel page names a dozen channels, and only three of those mentions
+    // are the page's own. The resolver used to take none of them: it took the
+    // first "channelId" in the document, which on a real page belongs to a
+    // recommendation. Every handle in the pouch therefore pulled a stranger's
+    // feed, which is how the pouch filled up with channels nobody had filed.
+    const OWN = 'UCHnyfMqiRRG1u-2MsSQLbXA';
+    const OTHER = 'UCin0m13qWv3-051xlWlHamA';
+
+    const channelPage = (own, stranger) =>
+        '<html><head>' +
+        '<link rel="canonical" href="https://www.youtube.com/channel/' + own + '">' +
+        '</head><body>' +
+        '{"channelId":"' + stranger + '","title":"Recommended for you"}' +
+        '{"channelMetadataRenderer":{"externalId":"' + own + '"}}' +
+        '</body></html>';
+
+    check('takes the channel the page is about, not the first one it mentions', () => {
+        eq(Feed.ownChannelId(channelPage(OWN, OTHER)), OWN);
+    });
+
+    check('falls back to the metadata when there is no canonical link', () => {
+        // Consent-wall and signed-out variants of the page have dropped it.
+        const noLink = channelPage(OWN, OTHER).replace(/<link[^>]*>/, '');
+        eq(Feed.ownChannelId(noLink), OWN);
+    });
+
+    check('a page carrying nobody but other channels resolves to nothing', () => {
+        // No feed is a better answer than confidently the wrong feed.
+        eq(Feed.ownChannelId('<html>{"channelId":"' + OTHER + '"}</html>'), null);
+        eq(Feed.ownChannelId(''), null);
+        eq(Feed.ownChannelId(null), null);
+    });
+
+    console.log('\n# checkpoint ordering');
+
+    const Pins = require('../src/shared/pins.js');
+
+    /** A video entry whose newest checkpoint was saved at `at`. */
+    const vid = (id, title, at, count = 1) => ({
+        id,
+        title,
+        url: 'u',
+        bookmarks: Array.from({ length: count }, (_, i) =>
+            ({ time: i * 10, timestamp: at - (count - 1 - i) * 1000 })),
+    });
+    const order = (videos, by) => Bookmarks.sortVideos(videos, by).map((v) => v.id);
+
+    check('newest first, which is not the order the store keeps', () => {
+        // The store appends, so an unsorted list opens on the first video ever
+        // saved — which is what the popup was showing.
+        eq(order([vid('old', 'Old', 1000), vid('new', 'New', 9000)], 'recent'), ['new', 'old']);
+    });
+    check('a video is dated by its newest checkpoint, not its first', () => {
+        eq(order([vid('a', 'A', 5000, 3), vid('b', 'B', 4000, 1)], 'recent'), ['a', 'b']);
+    });
+    check('checkpoints saved before timestamps existed keep append order', () => {
+        const undated = (id) => ({ id, title: id, bookmarks: [{ time: 0 }] });
+        eq(order([undated('first'), undated('second'), undated('third')], 'recent'),
+            ['third', 'second', 'first']);
+    });
+    check('the other three orders', () => {
+        const videos = [vid('a', 'Zebra', 1000, 5), vid('b', 'Apple', 9000, 1)];
+        eq(order(videos, 'oldest'), ['a', 'b']);
+        eq(order(videos, 'title'), ['b', 'a']);
+        eq(order(videos, 'most'), ['a', 'b']);
+    });
+    check('sorting leaves the caller’s array alone', () => {
+        const videos = [vid('old', 'Old', 1000), vid('new', 'New', 9000)];
+        Bookmarks.sortVideos(videos, 'recent');
+        eq(videos.map((v) => v.id), ['old', 'new']);
+    });
+
+    console.log('\n# pinning');
+    const hoisted = (videos, pins) => Pins.hoist(videos, pins).map((v) => v.id);
+    const three = [vid('a', 'A', 3), vid('b', 'B', 2), vid('c', 'C', 1)];
+
+    check('pinned first, most recently pinned at the very top', () => {
+        eq(hoisted(three, ['c', 'b']), ['c', 'b', 'a']);
+    });
+    check('the unpinned keep whatever order the sort gave them', () => {
+        eq(hoisted(three, ['b']), ['b', 'a', 'c']);
+        eq(hoisted(three, []), ['a', 'b', 'c']);
+    });
+    check('a pin on a video since deleted is ignored, not a hole in the list', () => {
+        eq(hoisted(three, ['gone', 'a']), ['a', 'b', 'c']);
+    });
+    await checkAsync('toggling pins, then unpins', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        eq(await Pins.toggle('x'), ['x']);
+        eq(await Pins.toggle('y'), ['y', 'x'], 'the newest pin goes to the top');
+        eq(await Pins.toggle('x'), ['y']);
+    });
+
+    console.log('\n# playlist ids');
+    check('a real playlist is picked out of either URL form', () => {
+        eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=abc&list=PLabc123'), 'PLabc123');
+        eq(YouTube.extractPlaylistId('https://www.youtube.com/playlist?list=PLabc123'), 'PLabc123');
+    });
+    check('an autoplay mix is not something anyone can follow', () => {
+        // RD/UL/TL ids are generated per viewer and have no RSS feed at all,
+        // so offering to follow one would be offering to follow nothing.
+        eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=a&list=RDabc'), null);
+        eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=a&list=WL'), null);
+        eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=a'), null);
+    });
+
+    console.log('\n# feed — fetching a large pouch');
+    await checkAsync('never opens more than MAX_PARALLEL at once', async () => {
+        let running = 0;
+        let peak = 0;
+        const out = await Feed.mapLimit(Array.from({ length: 40 }, (_, i) => i),
+            Feed.MAX_PARALLEL, async (n) => {
+                peak = Math.max(peak, ++running);
+                await new Promise((r) => setTimeout(r, 1));
+                running--;
+                return n;
+            });
+
+        if (peak > Feed.MAX_PARALLEL) throw new Error('peaked at ' + peak + ' in flight');
+        if (peak < 2) throw new Error('it must still be concurrent, peaked at ' + peak);
+        eq(out.slice(0, 4), [0, 1, 2, 3], 'results come back in input order');
+    });
+
+    console.log('\n# reading the account’s own subscriptions');
+
+    const YtSubs = require('../src/shared/yt-subs.js');
+
+    /** A stand-in /feed/channels document, shaped the way YouTube ships one. */
+    const subsPage = (channels, alsoMentioned) =>
+        '<script>var ytInitialData = ' + JSON.stringify({
+            contents: {
+                sectionListRenderer: {
+                    contents: channels.map((entry) => ({
+                        channelRenderer: {
+                            channelId: entry.id,
+                            title: { simpleText: entry.name },
+                            navigationEndpoint: { browseEndpoint: { canonicalBaseUrl: entry.handle } },
+                        },
+                    })),
+                },
+            },
+            ...(alsoMentioned || {}),
+        }) + ';</script>';
+
+    const uc = (ch) => 'UC' + ch.repeat(22);
+
+    check('pulls out every subscribed channel, with its handle URL', () => {
+        const found = YtSubs.parseSubscriptionsPage(subsPage([
+            { id: uc('a'), name: 'First', handle: '/@first' },
+            { id: uc('b'), name: 'Second', handle: '/@second' },
+        ]));
+        eq(found.length, 2);
+        eq(found[0].name, 'First');
+        eq(found[0].id, uc('a'));
+        eq(found[0].url, 'https://www.youtube.com/@first');
+    });
+
+    check('ignores channel ids the page merely mentions', () => {
+        // A subscriptions page names a dozen channels it is not listing — the
+        // viewer's own account in the masthead, anything in a recommendation
+        // shelf. This is why it walks for the grid's own renderers rather than
+        // running a regex for "channelId" over the document.
+        const found = YtSubs.parseSubscriptionsPage(subsPage(
+            [{ id: uc('a'), name: 'Subscribed', handle: '/@sub' }],
+            {
+                masthead: { channelId: uc('z') },
+                shelf: { videoRenderer: { channelId: uc('y') } },
+            }));
+        eq(found.map((c) => c.name), ['Subscribed']);
+    });
+
+    check('a title written as runs reads the same as a simpleText one', () => {
+        const html = '<script>var ytInitialData = ' + JSON.stringify({
+            gridChannelRenderer: {
+                channelId: uc('c'),
+                title: { runs: [{ text: 'Split ' }, { text: 'Name' }] },
+            },
+        }) + ';</script>';
+        eq(YtSubs.parseSubscriptionsPage(html)[0].name, 'Split Name');
+    });
+
+    check('braces inside a channel name do not end the object early', () => {
+        // This name closes the JSON if the extractor counts braces without
+        // knowing when it is inside a string literal.
+        const html = '<script>var ytInitialData = ' + JSON.stringify({
+            channelRenderer: { channelId: uc('d'), title: { simpleText: 'The } Channel {' } },
+        }) + ';</script>';
+        const found = YtSubs.parseSubscriptionsPage(html);
+        eq(found.length, 1);
+        eq(found[0].name, 'The } Channel {');
+    });
+
+    check('a page with nothing readable in it is an empty list, not a crash', () => {
+        eq(YtSubs.parseSubscriptionsPage('<html>signed out</html>'), []);
+        eq(YtSubs.parseSubscriptionsPage('var ytInitialData = {broken'), []);
+        eq(YtSubs.parseSubscriptionsPage(''), []);
+    });
+
+    console.log('\n# following a playlist');
+
+    const Playlists = require('../src/shared/playlists.js');
+
+    /** A Feed stand-in: the playlist holds v1 and v2, newest first. */
+    const twoEntries = {
+        fetchPlaylistVideos: async () => [
+            { id: 'v2', title: 'Two', published: 2 },
+            { id: 'v1', title: 'One', published: 1 },
+        ],
+    };
+
+    await checkAsync('what a playlist already holds is never reported as new', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        await Playlists.add({ id: 'PLone', title: 'Course', videoIds: ['v1', 'v2'] });
+        eq(await Playlists.newEntries(await Playlists.load(), twoEntries), [],
+            'following a two-hundred-entry playlist must not announce all two hundred');
+    });
+
+    await checkAsync('an entry added later is new, and stops being new once seen', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        await Playlists.add({ id: 'PLone', title: 'Course', videoIds: ['v1'] });
+
+        let entries = await Playlists.newEntries(await Playlists.load(), twoEntries);
+        eq(entries.map((e) => e.id), ['v2']);
+        eq(entries[0].playlistTitle, 'Course');
+
+        await Playlists.markAllSeen(entries);
+        eq(await Playlists.newEntries(await Playlists.load(), twoEntries), []);
+    });
+
+    await checkAsync('following one already followed renames it rather than duplicating', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        await Playlists.add({ id: 'PLone', title: 'Old name', videoIds: [] });
+        await Playlists.add({ id: 'PLone', title: 'New name', videoIds: [] });
+
+        const stored = await Playlists.load();
+        eq(stored.length, 1);
+        eq(stored[0].title, 'New name');
+        eq(Playlists.has(stored, 'PLone'), true);
+    });
+
+    // ------------------------------------------------------------ palette
+
+    console.log('\n# palette');
+
+    const Palette = require('../src/shared/palette.js');
+
+    check('hex colors convert to rgba, short form included', () => {
+        eq(Palette.rgba('#1c9bef', 0.5), 'rgba(28, 155, 239, 0.5)');
+        eq(Palette.rgba('#fff'), 'rgba(255, 255, 255, 1)');
+    });
+    check('anything that is not a hex color is refused, not guessed at', () => {
+        eq(Palette.isHex('red'), false);
+        eq(Palette.isHex('#12345'), false);
+        eq(Palette.rgba('javascript:1'), '');
+    });
+    check('readable text color flips on light and dark swatches', () => {
+        eq(Palette.readableOn('#f2b705'), '#000000');
+        eq(Palette.readableOn('#212529'), '#ffffff');
+    });
+
+    // ------------------------------------------------------- cookie sites
+
+    console.log('\n# remembered cookie sites');
+
+    const CookieSites = require('../src/shared/cookie-sites.js');
+    const clearStore = () => Object.keys(store).forEach((k) => delete store[k]);
+
+    check('a remembered site covers its subdomains, and www is the same site', () => {
+        const sites = { 'vulkan.org': { decision: 'accept', savedAt: 1 } };
+        eq(CookieSites.match(sites, 'docs.vulkan.org').host, 'vulkan.org');
+        eq(CookieSites.match(sites, 'www.vulkan.org').host, 'vulkan.org');
+        eq(CookieSites.match(sites, 'notvulkan.org'), null);
+    });
+    check('a bare top-level domain never matches everything under it', () => {
+        eq(CookieSites.match({ org: { decision: 'accept' } }, 'docs.vulkan.org'), null);
+    });
+
+    await checkAsync('remember and forget round-trip through storage', async () => {
+        clearStore();
+        await CookieSites.remember('www.docs.vulkan.org', 'accept', 42);
+        eq(await CookieSites.load(), { 'docs.vulkan.org': { decision: 'accept', savedAt: 42 } });
+        await CookieSites.forget('docs.vulkan.org');
+        eq(await CookieSites.load(), {});
+    });
+
+    await checkAsync('a site remembered as rejected keeps that answer', async () => {
+        clearStore();
+        await CookieSites.remember('example.com', 'decline', 7);
+        eq(CookieSites.match(await CookieSites.load(), 'shop.example.com').decision, 'decline');
+    });
+
+    // ------------------------------------------------------------ backup
+
+    console.log('\n# export / import');
+
+    const Backup = require('../src/shared/backup.js');
+
+    check('an export carries settings and data, never the caches', () => {
+        const file = Backup.build({
+            skin: 'deco',
+            shortcuts: { 'speed-up': { enabled: false } },
+            bbCookieSites: { 'a.com': { decision: 'accept' } },
+            bbFeedCache: { huge: true },
+            bbChessArchiveCache: { huge: true },
+        }, 0);
+        eq(Object.keys(file.data).sort(), ['bbCookieSites', 'shortcuts', 'skin']);
+        eq(Backup.validate(file), true);
+        eq(Backup.validate({ type: 'bell-bearer-checkpoints', data: {} }), false);
+    });
+
+    await checkAsync('importing writes the file back, still without caches', async () => {
+        clearStore();
+        store.skin = 'default';
+        await Backup.importAll({ type: Backup.TYPE, data: { skin: 'riso', bbFeedCache: { stale: true } } });
+        eq(store.skin, 'riso');
+        eq(store.bbFeedCache, undefined);
+    });
+
+    // --------------------------------------------------------- shortcuts
+
+    console.log('\n# keyboard shortcuts');
+
+    const Keybindings = require('../src/shared/keybindings.js');
+    const Shortcuts = require('../src/content/shortcuts.js');
+    const press = (code, { key = code, ctrl = false, shift = false, alt = false, meta = false, repeat = false } = {}) =>
+        ({ code, key, ctrlKey: ctrl, shiftKey: shift, altKey: alt, metaKey: meta, repeat });
+    const claimed = (overrides, event) => Shortcuts.createBindings({}, {
+        canRecord: () => true,
+        getShortcut: (id) => Keybindings.resolve(overrides, id),
+    }).filter((binding) => binding.match(event)).map((binding) => binding.name);
+
+    check('the defaults are what they always were', () => {
+        eq(claimed({}, press('KeyB', { ctrl: true, key: 'b' })), ['record-checkpoint']);
+        eq(claimed({}, press('Digit5', { alt: true })), ['skip-forward']);
+        eq(claimed({}, press('Period', { shift: true, key: '>' })), ['speed-up']);
+        eq(claimed({}, press('NumpadAdd', { key: '+' })), ['speed-reset']);
+    });
+
+    check('no two default shortcuts share keys', () => {
+        const seen = new Map();
+        for (const binding of Keybindings.BINDINGS) {
+            const signature = Keybindings.signature(binding.combo, binding.kind);
+            eq(seen.get(signature), undefined, `${binding.id} vs ${seen.get(signature)}`);
+            seen.set(signature, binding.id);
+        }
+    });
+
+    check('a shortcut turned off claims nothing', () => {
+        eq(claimed({ 'skip-forward': { enabled: false } }, press('Digit5', { alt: true })), []);
+    });
+
+    check('a shortcut for a feature that is off is not listed at all', () => {
+        const ids = (settings) => Keybindings.list(null, 'general', settings).map((b) => b.id);
+        eq(ids({ skimMode: false, linkHints: false }), ['copy-markdown-link'],
+            'the bare-Shift keys are nobody else\'s until Settings asks for them');
+        eq(ids({ skimMode: true, linkHints: false }),
+            ['skim-find', 'skim-history', 'skim-actions', 'copy-markdown-link']);
+        eq(ids({ skimMode: true, linkHints: true }).includes('link-hints'), true);
+        eq(ids({ pouchShortcut: true }).includes('open-pouch'), true);
+        eq(ids({ pouchShortcut: false }).includes('open-pouch'), false,
+            'Shift+P stays a capital P until the pouch shortcut is asked for');
+        eq(ids(null).length, 6, 'with no settings to check against, the table is the whole table');
+    });
+
+    check('every feature a binding needs is a setting that exists', () => {
+        const Settings = require('../src/shared/settings.js');
+        for (const binding of Keybindings.BINDINGS) {
+            if (!binding.needs) continue;
+            eq(binding.needs in Settings.DEFAULTS, true, `${binding.id} needs ${binding.needs}`);
+        }
+    });
+
+    check('a rebound shortcut answers its new keys and no longer its old ones', () => {
+        const overrides = { 'record-checkpoint': { combo: { alt: true, code: 'KeyK', key: 'k' } } };
+        eq(claimed(overrides, press('KeyK', { alt: true, key: 'k' })), ['record-checkpoint']);
+        eq(claimed(overrides, press('KeyB', { ctrl: true, key: 'b' })), []);
+    });
+
+    check('recording a combo: modifiers alone wait, digits need a modifier', () => {
+        eq(Keybindings.record(press('ShiftLeft', { key: 'Shift', shift: true }), 'key'), { pending: true });
+        eq(Keybindings.record(press('KeyJ', { ctrl: true, key: 'j' }), 'key').combo,
+            { ctrl: true, alt: false, shift: false, meta: false, code: 'KeyJ', key: 'j' });
+        eq(!!Keybindings.record(press('Digit4'), 'digit').error, true);
+        eq(Keybindings.record(press('Digit4', { ctrl: true, alt: true }), 'digit').combo,
+            { ctrl: true, alt: true, shift: false, meta: false });
+    });
+
+    check('a combo already in use is reported, unless that shortcut is off', () => {
+        const combo = { ctrl: true, code: 'KeyB', key: 'b' };
+        eq(Keybindings.conflicts({}, 'chess-clear-arrows', combo).map((c) => c.id), ['record-checkpoint']);
+        eq(Keybindings.conflicts({ 'record-checkpoint': { enabled: false } }, 'chess-clear-arrows', combo), []);
+        // Alt+digit rebinding a letter shortcut onto the number row still clashes with skip-forward.
+        eq(Keybindings.conflicts({}, 'chess-clear-arrows', { alt: true, code: 'Digit3', key: '3' }).map((c) => c.id), ['skip-forward']);
+    });
+
+    check('labels read the way a keyboard does', () => {
+        eq(Keybindings.format({ ctrl: true, shift: true }, 'digit'), 'Ctrl + Shift + 1-9');
+        eq(Keybindings.format({ alt: true, code: 'KeyC', key: 'c' }, 'key'), 'Alt + C');
+        eq(Keybindings.format({ shift: true, code: 'Period', key: '>', char: true }, 'key'), '>');
+    });
+
+    // --------------------------------------------------------------- chess
+
+    console.log('\n# chess.com games');
+
+    const Chess = require('../src/shared/chess.js');
+
+    const PGN = [
+        '[Event "Live Chess"]', '[Site "Chess.com"]', '[Date "2026.09.12"]', '[UTCDate "2026.09.12"]',
+        '[StartTime "18:34:08"]', '[EndDate "2026.09.12"]', '[EndTime "18:39:05"]', '',
+        '1. e4 {[%clk 0:01:00.9]} 1... e5 {[%clk 0:01:00]} 2. Nf3 {[%clk 0:00:55][%timestamp 3]} 2... Nc6 {[%clk 0:00:50.5]} 1-0',
+    ].join('\n');
+
+    const game = (overrides = {}) => ({
+        url: 'https://www.chess.com/game/live/1',
+        time_control: '60+1',
+        time_class: 'bullet',
+        end_time: 1789238345,
+        rated: true,
+        pgn: PGN,
+        white: { username: 'Me', rating: 1500, result: 'win' },
+        black: { username: 'them', rating: 1480, result: 'resigned' },
+        ...overrides,
+    });
+
+    check('time controls parse, daily games included', () => {
+        eq(Chess.parseTimeControl('180+2'), { base: 180, increment: 2, daily: false });
+        eq(Chess.parseTimeControl('600'), { base: 600, increment: 0, daily: false });
+        eq(Chess.parseTimeControl('1/86400'), { base: 86400, increment: 0, daily: true });
+    });
+
+    check('clock annotations are read per side, extra comment tags and all', () => {
+        eq(Chess.parseClocks(PGN), { white: [60.9, 55], black: [60, 50.5] });
+    });
+
+    check('time used is start plus increments minus what was left', () => {
+        // White: 60 + 1*2 - 55 = 7. Black: 60 + 1*2 - 50.5 = 11.5.
+        const used = Chess.timeUsed(game());
+        eq([used.white, used.black, used.moves], [7, 11.5, 2]);
+    });
+
+    check('a game without clocks has no inferred time rather than a wrong one', () => {
+        eq(Chess.timeUsed(game({ pgn: '1. e4 e5 1-0' })).white, null);
+        eq(Chess.timeUsed(game({ time_control: '1/86400' })).white, null);
+    });
+
+    check('normalize reads the game from the player\'s side, case-insensitively', () => {
+        const mine = Chess.normalize(game(), 'ME');
+        eq([mine.color, mine.result, mine.how, mine.opponent, mine.myTime, mine.oppTime, mine.duration],
+            ['white', 'win', 'resigned', 'them', 7, 11.5, 297]);
+
+        const theirs = Chess.normalize(game(), 'them');
+        eq([theirs.color, theirs.result, theirs.myTime], ['black', 'loss', 11.5]);
+        eq(Chess.normalize(game(), 'stranger'), null);
+    });
+
+    check('draw codes are draws; every other non-win is a loss', () => {
+        eq(Chess.resultOf('repetition'), 'draw');
+        eq(Chess.resultOf('timevsinsufficient'), 'draw');
+        eq(Chess.resultOf('timeout'), 'loss');
+        eq(Chess.resultOf('abandoned'), 'loss');
+    });
+
+    check('summaries split by time class and respect the range', () => {
+        const at = (ms, cls, result) => ({ end: ms, timeClass: cls, result, myTime: 10, oppTime: 20 });
+        const games = [
+            at(1000, 'bullet', 'win'), at(2000, 'bullet', 'loss'), at(3000, 'blitz', 'draw'),
+            at(4000, 'rapid', 'win'), at(5000, 'daily', 'win'), at(100, 'blitz', 'win'),
+        ];
+        const summary = Chess.summarize(games, { since: 500, until: 10000 });
+        eq(summary.count, 5);
+        eq(summary.games[0].end, 5000, 'newest first');
+        eq([summary.byClass.bullet.win, summary.byClass.bullet.loss, summary.byClass.blitz.draw], [1, 1, 1]);
+        eq(summary.total.games, 5, 'daily counts toward the total');
+        eq([summary.total.myTime, summary.total.oppTime], [50, 100]);
+        eq(Chess.winRate(summary.byClass.bullet), 50);
+        eq(Chess.winLossRatio({ win: 3, loss: 2 }), 1.5);
+        eq(Chess.winLossRatio({ win: 3, loss: 0 }), null);
+    });
+
+    check('"today" starts at local midnight; the weeks are rolling', () => {
+        const now = new Date(2026, 8, 13, 15, 30).getTime();
+        eq(Chess.rangeStart('today', now), new Date(2026, 8, 13).getTime());
+        eq(Chess.rangeStart('week', now), now - 7 * 86400000);
+    });
+
+    check('a 30-day window across a month boundary reads both archives', () => {
+        eq(Chess.archiveMonths(Date.UTC(2026, 8, 13), 30), ['2026/08', '2026/09']);
+        eq(Chess.archiveMonths(Date.UTC(2026, 0, 5), 30), ['2025/12', '2026/01']);
+        eq(Chess.archiveMonths(Date.UTC(2026, 8, 30), 7), ['2026/09']);
+    });
+
+    await checkAsync('games are fetched once per closed month, and the live month re-read later', async () => {
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const calls = [];
+        const fetchImpl = async (url) => {
+            calls.push(url.replace(/.*games\//, ''));
+            const month = url.endsWith('2026/09') ? 9 : 8;
+            const end = Math.floor(Date.UTC(2026, month - 1, month === 9 ? 12 : 30) / 1000);
+            return { ok: true, status: 200, json: async () => ({ games: [game({ end_time: end })] }) };
+        };
+
+        const first = await Chess.fetchGames('Me', { now, fetchImpl });
+        eq(first.length, 2);
+        eq(calls, ['2026/08', '2026/09']);
+
+        await Chess.fetchGames('me', { now: now + 60 * 1000, fetchImpl });
+        eq(calls.length, 2, 'both months fresh a minute later');
+
+        await Chess.fetchGames('me', { now: now + 10 * 60 * 1000, fetchImpl });
+        eq(calls.slice(2), ['2026/09'], 'only the live month is read again');
+    });
+
+    await checkAsync('an unknown player is reported as such', async () => {
+        clearStore();
+        const fetchImpl = async () => ({ ok: false, status: 404, json: async () => ({}) });
+        let code = null;
+        try { await Chess.fetchGames('nobody', { fetchImpl }); } catch (error) { code = error.code; }
+        eq(code, 'not-found');
+    });
+
+    check('time and control labels', () => {
+        eq(Chess.human(42), '42s');
+        eq(Chess.human(125), '2m 05s');
+        eq(Chess.human(3725), '1h 02m');
+        eq(Chess.formatControl('180+2'), '3 | 2');
+        eq(Chess.formatControl('600'), '10 min');
+        eq(Chess.formatControl('30'), '30s');
+    });
+
+    await checkAsync('a 30-day read does not prune the heat map\'s older months', async () => {
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ games: [] }) });
+        await Chess.fetchGames('me', { now, days: Chess.HISTORY_DAYS, fetchImpl });
+        eq(Object.keys(store.bbChessArchiveCache.archives).length, 13);
+        await Chess.fetchGames('me', { now: now + 10 * 60 * 1000, fetchImpl });
+        eq(Object.keys(store.bbChessArchiveCache.archives).length, 13, 'popup-sized read must keep the year');
+    });
+
+    check('flagging counts only the last 20 games of each time control', () => {
+        const at = (end, timeClass, result, how) => ({ end, timeClass, result, how });
+        const games = [];
+        // 25 bullet games: the 5 oldest are flag wins that must fall outside the window.
+        for (let i = 0; i < 5; i++) games.push(at(i, 'bullet', 'win', 'timeout'));
+        for (let i = 5; i < 25; i++) games.push(at(i, 'bullet', i % 4 === 0 ? 'loss' : 'win', i % 2 === 0 ? 'timeout' : 'resigned'));
+        games.push(at(100, 'blitz', 'win', 'timeout'), at(101, 'blitz', 'loss', 'timeout'),
+            at(102, 'blitz', 'draw', 'timevsinsufficient'), at(103, 'rapid', 'loss', 'checkmated'));
+        const stats = Chess.flagStats(games);
+        // Bullet 5..24: even i are timeouts; of those, i % 4 === 0 are losses (8,12,16,20,24) and the rest wins (6,10,14,18,22).
+        eq(stats.bullet, { games: 20, won: 5, lost: 5 });
+        eq(stats.blitz, { games: 3, won: 1, lost: 1 }, 'a timeout against insufficient material is a draw, not a flag');
+        eq(stats.rapid, { games: 1, won: 0, lost: 0 });
+    });
+
+    check('time per day adds each game\'s length and leaves daily games out', () => {
+        const noon = new Date(2026, 8, 12, 12).getTime();
+        const days = Chess.dailyTime([
+            { end: noon, timeClass: 'blitz', duration: 300 },
+            { end: noon + 3600000, timeClass: 'bullet', duration: null, myTime: 50, oppTime: 40 },
+            { end: noon, timeClass: 'daily', duration: 86400 },
+            { end: noon + 86400000, timeClass: 'rapid', duration: 1200 },
+        ]);
+        eq(days['2026-09-12'], { seconds: 390, games: 2 });
+        eq(days['2026-09-13'], { seconds: 1200, games: 1 });
+    });
+
+    // ------------------------------------------------------------- lichess
+
+    console.log('\n# lichess games');
+
+    const Lichess = require('../src/shared/lichess.js');
+
+    const lichessGame = (overrides = {}) => ({
+        id: 'abcd1234',
+        rated: true,
+        speed: 'blitz',
+        createdAt: 1000000,
+        lastMoveAt: 1300000,
+        status: 'outoftime',
+        winner: 'white',
+        players: {
+            white: { user: { name: 'Me', id: 'me' }, rating: 1700 },
+            black: { user: { name: 'Them', id: 'them' }, rating: 1690 },
+        },
+        ...overrides,
+    });
+
+    check('a Lichess flag reads as a timeout; an opponent leaving does not', () => {
+        const won = Lichess.normalize(lichessGame(), 'ME');
+        eq([won.color, won.result, won.how, won.timeClass, won.duration, won.url],
+            ['white', 'win', 'timeout', 'blitz', 300, 'https://lichess.org/abcd1234']);
+        eq(Lichess.normalize(lichessGame(), 'them').result, 'loss');
+        eq(Lichess.normalize(lichessGame({ status: 'timeout' }), 'me').how === 'timeout', false);
+        eq(Lichess.normalize(lichessGame({ winner: undefined, status: 'draw' }), 'me').result, 'draw');
+        eq(Lichess.normalize(lichessGame(), 'stranger'), null);
+    });
+
+    check('Lichess clocks give each side\'s time and the time control', () => {
+        const game = Lichess.normalize(lichessGame({
+            clock: { initial: 180, increment: 2 },
+            clocks: [18000, 18000, 17500, 17000],
+            moves: 'e4 e5 Nf3 Nc6',
+        }), 'me');
+        eq([game.timeControl, game.myTime, game.oppTime, game.moves, game.rating], ['180+2', 9, 14, 2, 1700]);
+        eq(Lichess.normalize(lichessGame(), 'me').myTime, null, 'no clocks, no time');
+    });
+
+    check('NDJSON lines parse, a torn line is skipped', () => {
+        eq(Lichess.parseNdjson('{"a":1}\n\n{"b":2}\n{"c":').length, 2);
+    });
+
+    await checkAsync('Lichess reads the newest games first, then resumes at both edges', async () => {
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const urls = [];
+        const created = now - 5 * 86400000;
+        const fetchImpl = async (url) => {
+            urls.push(new URL(url));
+            const body = urls.length === 1
+                ? [lichessGame({ id: 'g2', createdAt: created + 100000, lastMoveAt: created + 200000, winner: 'black' }),
+                    lichessGame({ id: 'g1', createdAt: created, lastMoveAt: created + 60000 })]
+                : [];
+            return { ok: true, status: 200, text: async () => body.map((g) => JSON.stringify(g)).join('\n') };
+        };
+
+        const first = await Lichess.fetchGames('me', { now, fetchImpl });
+        eq(first.map((g) => g.url.slice(-2)), ['g2', 'g1'], 'newest first');
+        eq([urls[0].searchParams.get('sort'), urls[0].searchParams.get('since'), urls[0].searchParams.get('until')],
+            ['dateDesc', String(now - 30 * 86400000), String(now)], 'a first read walks back from now over 30 days');
+
+        await Lichess.fetchGames('me', { now: now + 60000, fetchImpl });
+        eq(urls.length, 1, 'fresh for a few minutes');
+
+        const again = await Lichess.fetchGames('me', { now: now + 10 * 60000, fetchImpl });
+        eq([urls[1].searchParams.get('sort'), urls[1].searchParams.get('since')], ['dateAsc', String(created + 100001)]);
+        eq(again.length, 2, 'kept games survive an empty resume');
+
+        await Lichess.fetchGames('me', { now: now + 11 * 60000, days: Chess.HISTORY_DAYS, fetchImpl });
+        eq(urls.length, 3, 'the year needs only the older games: the newer were just read');
+        eq([urls[2].searchParams.get('sort'), urls[2].searchParams.get('until')],
+            ['dateDesc', String(now - 30 * 86400000 - 1)], 'the year continues back from where 30 days stopped');
+    });
+
+    await checkAsync('an interrupted Lichess read keeps what arrived and resumes from it', async () => {
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const created = now - 86400000;
+        const urls = [];
+        const games = Array.from({ length: 300 }, (_, i) => lichessGame({ id: `x${i}`, createdAt: created - i * 1000, lastMoveAt: created - i * 1000 + 500 }));
+        const encoder = new TextEncoder();
+        const fetchImpl = async (url) => {
+            urls.push(new URL(url));
+            if (urls.length > 1) return { ok: true, status: 200, text: async () => '' };
+            let sent = false;
+            return {
+                ok: true,
+                status: 200,
+                body: {
+                    getReader: () => ({
+                        read: async () => {
+                            if (sent) throw new Error('connection reset');
+                            sent = true;
+                            return { done: false, value: encoder.encode(games.map((g) => JSON.stringify(g)).join('\n') + '\n') };
+                        },
+                    }),
+                },
+            };
+        };
+        let code = null;
+        try { await Lichess.fetchGames('me', { now, fetchImpl }); } catch (error) { code = error.code; }
+        eq(code, 'network');
+        eq(store.bbLichessGameCache.games.length, 300, 'the games that arrived are saved');
+
+        await Lichess.fetchGames('me', { now: now + 1000, fetchImpl });
+        eq(urls[1].searchParams.get('sort'), 'dateAsc', 'newer games first');
+        eq(urls[2].searchParams.get('until'), String(created - 299 * 1000 - 1), 'then back from the oldest that arrived');
+    });
+
+    await checkAsync('an unknown Lichess player is reported as such', async () => {
+        clearStore();
+        let code = null;
+        try {
+            await Lichess.fetchGames('nobody', { fetchImpl: async () => ({ ok: false, status: 404 }) });
+        } catch (error) { code = error.code; }
+        eq(code, 'not-found');
+        eq(Backup.build({ bbLichessGameCache: { games: [] }, lichessUsername: 'me' }, 0).data, { lichessUsername: 'me' });
+    });
+
+    // --------------------------------------- in-game: clock warning, speech
+
+    console.log('\n# chess sites in game: clock warning and spoken moves');
+
+    const ChessSites = require('../src/shared/chess-sites.js');
+    const { DEFAULTS: SETTING_DEFAULTS } = require('../src/shared/settings.js');
+    const ChessContent = require('../src/content/chess.js');
+
+    check('every per-site setting the registry can name has a default', () => {
+        const missing = ChessSites.allKeys().filter((key) => !(key in SETTING_DEFAULTS));
+        eq(missing, []);
+        eq(ChessSites.settingKey('lichess', 'warnSeconds', 'blitz'), 'lichessWarnBlitzSeconds');
+        eq(ChessSites.settingKey('chess', 'limit', 'bullet'), 'chessLimitBullet');
+        eq(ChessSites.settingKey('chess', 'lowSeconds', 'rapid'), 'chessLowTimeRapidSeconds');
+        eq(ChessSites.siteKey('lichess', 'lowVolume'), 'lichessLowTimeVolume');
+        eq(ChessSites.settingKey('chess', 'nonsense', 'bullet'), null);
+    });
+
+    check('clock text parses, tenths and hours included', () => {
+        eq(ChessContent.parseClock('1:05'), 65);
+        eq(ChessContent.parseClock('0:09.8'), 9.8);
+        eq(ChessContent.parseClock('01:02:03'), 3723);
+        eq(ChessContent.parseClock(''), null);
+    });
+
+    check('the starting time picks the time control the way each site does', () => {
+        eq([60, 120, 180, 300, 540, 600].map((s) => ChessSites.classify('chess', s)),
+            ['bullet', 'bullet', 'blitz', 'blitz', 'blitz', 'rapid']);
+        eq([60, 180, 300, 480, 1800].map((s) => ChessSites.classify('lichess', s)),
+            ['bullet', 'blitz', 'blitz', 'rapid', 'rapid'], 'Lichess blitz ends at 8 minutes');
+    });
+
+    check('a warning or speech applies only to its own site and time control', () => {
+        const settings = { chessWarnBullet: true, chessWarnBulletSeconds: 8, chessWarnBlitz: false, chessWarnBlitzSeconds: 30, lichessSpeakRapid: true };
+        eq(ChessSites.thresholdFor(settings, 'chess', 'bullet'), 8);
+        eq(ChessSites.thresholdFor(settings, 'chess', 'blitz'), null);
+        eq(ChessSites.thresholdFor(settings, 'lichess', 'bullet'), null);
+        eq(ChessSites.anyWarningOn(settings, 'chess'), true);
+        eq(ChessSites.anyWarningOn({ chessWarnRapid: true, chessWarnRapidSeconds: 0 }, 'chess'), false, 'zero seconds is no warning');
+        eq([ChessSites.speaksFor(settings, 'lichess', 'rapid'), ChessSites.speaksFor(settings, 'lichess', 'blitz'),
+            ChessSites.anySpeechOn(settings, 'chess'), ChessSites.speaksFor(settings, 'lichess', null)], [true, false, false, true]);
+    });
+
+    check('moves are spoken as words', () => {
+        eq(['e4', 'Nf3', 'exd5', 'Nbd7', 'R1e2', 'Qh4xe1', 'Bxf7+', 'e8=Q#', 'O-O', 'O-O-O+', 'Qd8!?', '♘f3'].map(ChessContent.spokenMove), [
+            'E 4', 'Knight F 3', 'E takes D 5', 'Knight B D 7', 'Rook 1 E 2', 'Queen H 4 takes E 1',
+            'Bishop takes F 7, check', 'E 8 promotes to Queen, checkmate', 'Castles kingside', 'Castles queenside, check',
+            'Queen D 8', 'Knight F 3',
+        ]);
+        eq(ChessContent.spokenMove(''), '');
+    });
+
+    check('a chess.com move node gets its piece letter back from the figurine', () => {
+        const text = (value) => ({ nodeType: 3, textContent: value });
+        const element = (figurine, children = []) => ({ nodeType: 1, getAttribute: () => figurine, childNodes: children });
+        const node = element(null, [element(null, [element('N'), text('xe5+')])]);
+        eq(ChessContent.moveText(node), 'Nxe5+');
+        eq(ChessContent.moveText(element(null, [text('e8='), element('Q')])), 'e8=Q');
+
+        // What chess.com actually ships: the figurine is an empty icon span
+        // and the square follows after a space, inside a wrapper. Splitting on
+        // that space and keeping the first token — which is what this did —
+        // turned every piece move on the site into its bare letter, so "Qg4"
+        // was read aloud as "Queen".
+        const real = element(null, [text(' '), element(null, [element('Q'), text(' g4 ')])]);
+        eq(ChessContent.moveText(real), 'Qg4');
+        eq(ChessContent.spokenMove(ChessContent.moveText(real)), 'Queen G 4');
+        // A move number glued on by the same closing-up is taken off again.
+        eq(ChessContent.moveText(element(null, [text('12. '), element(null, [element('R'), text(' xh5 ')])])), 'Rxh5');
+    });
+
+    check('only actual notation counts as a move', () => {
+        // The gate that lets a move-list selector be believed or passed over:
+        // row containers and move numbers must not read as moves.
+        eq(['e4', 'Nf3', 'exd5', 'O-O', '0-0-0', 'e8=Q#', 'Qh4xe1', 'Bxf7+', 'Qd8!?']
+            .every(ChessContent.isMoveText), true);
+        eq(['12.', '1', '', 'White to move', '10:00', 'Rematch', '1-0', 'Zz9']
+            .some(ChessContent.isMoveText), false);
+    });
+
+    check('only a move list that grew, and grew from where it was, is spoken', () => {
+        const from = ['e4', 'e5', 'Nf3'];
+        eq(ChessContent.newMoves(from, ['e4', 'e5', 'Nf3', 'Nc6']), ['Nc6']);
+        eq(ChessContent.newMoves(from, from), []);
+        // A takeback, a redraw and a different game each resync in silence
+        // rather than reading the board out from the top.
+        eq(ChessContent.newMoves(from, ['e4', 'e5']), null, 'a takeback');
+        eq(ChessContent.newMoves(from, ['d4', 'd5', 'c4']), null, 'another game, same length');
+        eq(ChessContent.newMoves([], ['e4']), ['e4']);
+    });
+
+    check('an untimed game speaks whenever any speech is on', () => {
+        // The bug this fixes: Coach, bots and the analysis board have no clock,
+        // so they classify as no control at all. Gating them on a separate
+        // "Untimed" box, off by default, left a user with Blitz ticked hearing
+        // nothing on Coach.
+        const timed = { chessSpeakBlitz: true };
+        eq(ChessSites.speaksFor(timed, 'chess', null), true);
+        eq(ChessSites.speaksFor(timed, 'chess', 'bullet'), false);
+        // The Untimed box alone speaks in untimed games only.
+        const untimedOnly = { chessSpeakUntimed: true };
+        eq(ChessSites.speaksFor(untimedOnly, 'chess', null), true);
+        eq(ChessSites.speaksFor(untimedOnly, 'chess', 'bullet'), false);
+        eq(ChessSites.anySpeechOn(untimedOnly, 'chess'), true);
+        eq([ChessSites.speaksFor({}, 'chess', null), ChessSites.anySpeechOn({}, 'chess')], [false, false]);
+    });
+
+    check('a time-control label names a bucket, whichever way a site writes it', () => {
+        const chess = (text) => ChessSites.classFromLabel('chess', text);
+        eq(['1 min', '3 min', '10 min', '30 min'].map(chess), ['bullet', 'blitz', 'rapid', 'rapid']);
+        eq(['New 10 min game', '3 | 2', '1 | 1', 'Rapid'].map(chess), ['rapid', 'blitz', 'bullet', 'rapid']);
+        eq(['3+2', '30 sec', '1/2 min', 'UltraBullet'].map((t) => ChessSites.classFromLabel('lichess', t)),
+            ['blitz', 'bullet', 'bullet', 'bullet']);
+        // 5 minutes is blitz on chess.com and blitz on Lichess; 8 splits them.
+        eq([chess('8 min'), ChessSites.classFromLabel('lichess', '8 min')], ['blitz', 'rapid']);
+        eq(['Rematch', 'New game', '', 'Resign'].map(chess), [null, null, null, null]);
+    });
+
+    check('every speed either site reports lands in one of the three buckets', () => {
+        eq(['bullet', 'ultraBullet', 'blitz', 'rapid', 'classical'].map(ChessSites.bucket),
+            ['bullet', 'bullet', 'blitz', 'rapid', 'rapid']);
+        // Played over days, not at a sitting: outside every bucket on purpose.
+        eq([ChessSites.bucket('daily'), ChessSites.bucket('correspondence'), ChessSites.bucket('')],
+            [null, null, null]);
+    });
+
+    check('the low-clock tone is one switch a site, with a line per control', () => {
+        const settings = { chessLowTime: true, chessLowTimeBulletSeconds: 10, chessLowTimeBlitzSeconds: 0, chessLowTimeVolume: 150 };
+        eq(ChessSites.lowTimeFor(settings, 'chess', 'bullet'), 10);
+        eq(ChessSites.lowTimeFor(settings, 'chess', 'blitz'), null, 'zero seconds is no tone');
+        eq(ChessSites.lowTimeFor(settings, 'lichess', 'bullet'), null);
+        eq(ChessSites.lowTimeFor({ ...settings, chessLowTime: false }, 'chess', 'bullet'), null);
+        eq(ChessSites.anyLowTimeOn(settings, 'chess'), true);
+        // Percent in, gain out — above 1 really is louder, and it is capped.
+        eq([150, 0, 400, undefined].map((v) => ChessSites.lowVolumeFor({ chessLowTimeVolume: v }, 'chess')),
+            [1.5, 0, 2, 0.6]);
+    });
+
+    // -------------------------------------------------------- daily limits
+
+    console.log('\n# chess daily limits');
+
+    const ChessLimits = require('../src/shared/chess-limits.js');
+
+    const DAY = new Date(2026, 8, 16, 12, 0, 0).getTime();
+    const limitOn = {
+        chessDailyLimits: true, chessLimitBullet: 2, chessLimitBlitz: 0, chessLimitRapid: null,
+    };
+
+    check("today's games are counted per bucket, in local days", () => {
+        const games = [
+            { end: DAY, timeClass: 'bullet' },
+            { end: DAY - 60000, timeClass: 'bullet' },
+            { end: DAY, timeClass: 'ultraBullet' },
+            { end: DAY, timeClass: 'blitz' },
+            { end: DAY, timeClass: 'daily' },
+            { end: DAY - 26 * 60 * 60 * 1000, timeClass: 'bullet' },
+        ];
+        eq(ChessLimits.countToday(games, DAY), { bullet: 3, blitz: 1, rapid: 0 });
+        eq(ChessLimits.countToday([], DAY), { bullet: 0, blitz: 0, rapid: 0 });
+    });
+
+    check('a tally left over from yesterday is gone, grants and all', () => {
+        const yesterday = ChessLimits.withCounts(
+            ChessLimits.blank(DAY - 24 * 60 * 60 * 1000), 'chess', { bullet: 9 }, DAY - 24 * 60 * 60 * 1000,
+        );
+        eq(yesterday.sites.chess.counts.bullet, 9);
+        eq(ChessLimits.forDay(yesterday, DAY).sites.chess.counts.bullet, 0);
+        eq(ChessLimits.forDay(null, DAY).day, '2026-09-16');
+    });
+
+    check('a control is blocked once its count reaches what it is allowed', () => {
+        const state = ChessLimits.withCounts(ChessLimits.blank(DAY), 'chess', { bullet: 2 }, DAY);
+        const status = ChessLimits.statusFor(state, limitOn, 'chess', DAY);
+        eq(status.classes.bullet, { limit: 2, count: 2, grant: 0, allowed: 2, remaining: 0, blocked: true });
+        // Zero is a limit of none, not "no limit set".
+        eq(status.classes.blitz.blocked, true);
+        eq(status.classes.rapid, { limit: null, count: 0, grant: 0, allowed: null, remaining: null, blocked: false });
+        eq([status.anyBlocked, status.anyLimited, status.blocked], [true, true, ['bullet', 'blitz']]);
+        eq(ChessLimits.isBlocked(status, 'ultraBullet'), true, 'through the bucket, not the site name');
+        eq(ChessLimits.isBlocked(status, 'daily'), false);
+    });
+
+    check('limits apply only where they are switched on', () => {
+        const spent = ChessLimits.withCounts(ChessLimits.blank(DAY), 'chess', { bullet: 99 }, DAY);
+        eq(ChessLimits.statusFor(spent, { ...limitOn, chessDailyLimits: false }, 'chess', DAY).anyBlocked, false);
+        eq(ChessLimits.statusFor(spent, limitOn, 'lichess', DAY).anyLimited, false);
+    });
+
+    check('the override lets exactly one more game through each limited control', () => {
+        let state = ChessLimits.withCounts(ChessLimits.blank(DAY), 'chess', { bullet: 2, blitz: 0 }, DAY);
+        state = ChessLimits.withOneMore(state, 'chess', limitOn, DAY);
+
+        const after = ChessLimits.statusFor(state, limitOn, 'chess', DAY);
+        eq([after.classes.bullet.allowed, after.classes.bullet.blocked], [3, false]);
+        eq([after.classes.blitz.allowed, after.classes.blitz.blocked], [1, false]);
+        eq(after.classes.rapid.grant, 0, 'a control with no limit is granted nothing');
+
+        // That one game played, and the block is back — the point of a grant
+        // rather than a switch.
+        const played = ChessLimits.withCounts(state, 'chess', { bullet: 3, blitz: 1 }, DAY);
+        eq(ChessLimits.statusFor(played, limitOn, 'chess', DAY).blocked, ['bullet', 'blitz']);
+    });
+
+    check('a fresh count does not wipe the grants already given today', () => {
+        let state = ChessLimits.withOneMore(ChessLimits.blank(DAY), 'chess', limitOn, DAY);
+        state = ChessLimits.withCounts(state, 'chess', { bullet: 1 }, DAY);
+        eq(state.sites.chess.grants.bullet, 1);
+        eq(state.sites.chess.checkedAt, DAY);
+    });
+
+    // -------------------------------------------------------------- trials
+
+    console.log('\n# trials');
+
+    const Trials = require('../src/shared/trials.js');
+
+    check('a tab is known by one letter and a steady colour', () => {
+        eq(Trials.mono('https://mail.google.com/mail/u/0'), 'G', 'the site, not the subdomain');
+        eq(Trials.mono('https://arxiv.org/abs/2404.08236'), 'A');
+        eq(Trials.mono('about:blank'), '·', 'nothing to go on');
+        eq(Trials.domainOf('https://www.youtube.com/watch?v=1'), 'youtube.com');
+        eq(Trials.tint('https://github.com/x') === Trials.tint('https://github.com/y'), true);
+        eq(Trials.tint('https://github.com') === Trials.tint('https://gitlab.com'), false);
+    });
+
+    check('a lock runs down, and only an open group can hold the desk', () => {
+        const T = 1000000;
+        const state = Trials.lock({}, 7, 25, T);
+        eq(Trials.isLocked(state, 7, T + 60000), true);
+        eq(Trials.minutesLeft(state, 7, T + 60000), 24);
+        eq(Trials.minutesLeft(state, 7, T + 25 * 60000 - 1), 1, 'a second left still reads a minute');
+        eq(Trials.isLocked(state, 7, T + 25 * 60000), false, 'it expires on its own');
+        eq(Trials.lockedId(state, [1, 7], T + 60000), 7);
+        eq(Trials.lockedId(state, [1, 2], T + 60000), null, 'a parked group does not hold it');
+        eq(Trials.isLocked(Trials.unlock(state, 7), 7, T + 60000), false);
+    });
+
+    check('the group left longest is the one parked', () => {
+        let state = Trials.touch({}, 1, 1000);
+        state = Trials.touch(state, 2, 3000);
+        state = Trials.touch(state, 3, 2000);
+        eq(Trials.parkVictims(state, [1, 2, 3], 1, 4000), [1]);
+        eq(Trials.parkVictims(state, [1, 2, 3], 2, 4000), [1, 3]);
+        eq(Trials.parkVictims(state, [1, 2, 3], 0, 4000), [], 'nothing to free, nothing parked');
+        eq(Trials.parkVictims({}, [9], 1, 4000), [9], 'a group never touched is fair game');
+    });
+
+    check('a locked group is parked only when nothing else is left', () => {
+        const T = 1000000;
+        let state = Trials.touch({}, 1, T - 9000);
+        state = Trials.touch(state, 2, T - 1000);
+        state = Trials.lock(state, 1, 25, T);
+        eq(Trials.parkVictims(state, [1, 2], 1, T), [2], 'the newer one goes instead');
+        eq(Trials.parkVictims(state, [1, 2], 2, T), [2, 1], 'the lock is last, not exempt');
+    });
+
+    check('a record whose group has gone is dropped', () => {
+        const state = Trials.touch(Trials.touch({}, 4, 1), 5, 2);
+        eq(Object.keys(Trials.sanitize(state, [4])), ['4']);
+        eq(Object.keys(Trials.sanitize(state)), ['4', '5'], 'no list means nothing was checked');
+        eq(Trials.sanitize({ notanid: { usedAt: 1 } }, null), {});
+        eq(Trials.sanitize(null), {});
+        eq(Trials.sanitize([1, 2]), {}, 'the old array shape reads as empty');
+        eq(Object.keys(Trials.forget(state, 4)), ['5']);
+    });
+
+    check('how long ago a group was used reads in words', () => {
+        const T = 1000000000;
+        eq(Trials.usedLabel(0, T), 'not yet used');
+        eq(Trials.usedLabel(T - 10000, T), 'just now');
+        eq(Trials.usedLabel(T - 20 * 60000, T), '20m ago');
+        eq(Trials.usedLabel(T - 5 * 3600000, T), '5h ago');
+        eq(Trials.usedLabel(T - 30 * 3600000, T), 'yesterday');
+        eq(Trials.usedLabel(T - 3 * 86400000, T), '3d ago');
+        eq(Trials.usedLabel(T - 20 * 86400000, T), 'last week');
+    });
+
+    check('a record is read back whole however little was written', () => {
+        eq(Trials.recordFor({}, 3), { usedAt: 0, lockUntil: 0, lockSpan: 0 });
+        eq(Trials.recordFor({ 3: { usedAt: 'nonsense' } }, 3).usedAt, 0);
+        const state = Trials.touch({}, 3, 50);
+        eq(Trials.lock(state, 3, 25, 100).usedAt, undefined, 'the state is a map, not a record');
+        eq(Trials.lock(state, 3, 25, 100)['3'].usedAt, 50, 'locking keeps what was there');
+    });
+
+    // -------------------------------------------------------- framed plate
+
+    console.log('\n# the framed plate');
+
+    const Plate = require('../src/page/plate.js');
+
+    check('each skin gets its own corner set, and the default none', () => {
+        eq(Plate.cornerForSkin('default'), 'plain');
+        eq(Plate.cornerForSkin('riso'), 'blocks');
+        eq(Plate.cornerForSkin('medieval'), 'bracket');
+        eq(Plate.cornerForSkin('deco'), 'fan');
+        eq(Plate.cornerForSkin('nonesuch'), 'plain', 'an unknown skin is undecorated');
+    });
+
+    check('the plain skin draws no corners at all', () => {
+        eq(Plate.CORNERS.plain, []);
+        eq(Plate.cornersHtml('plain'), '', 'not one empty svg either');
+        eq(Plate.cornersHtml('nonesuch'), '');
+    });
+
+    check('a decorated skin draws its set into all four corners', () => {
+        for (const name of ['blocks', 'bracket', 'fan']) {
+            const html = Plate.cornersHtml(name);
+            const corners = html.match(/<svg/g) || [];
+            const paths = html.match(/<path/g) || [];
+            eq(corners.length, 4, `${name} fills four corners`);
+            eq(paths.length, Plate.CORNERS[name].length * 4, `${name} repeats its whole set`);
+            eq(/viewBox="0 0 56 56"/.test(html), true, `${name} is drawn in a 56 box`);
+        }
+        // One corner drawn, the other three that same set flipped into place.
+        const html = Plate.cornersHtml('blocks');
+        eq((html.match(/transform:scale/g) || []).length, 3);
+    });
+
+    check('the corner colours come from the skin, never baked in', () => {
+        const html = Plate.cornersHtml('bracket');
+        eq(/stroke="var\(--accent\)"/.test(html), true);
+        eq(/stroke="var\(--gold\)"/.test(html), true);
+        eq(/fill="var\(--surface\)"/.test(html), true, 'the lozenge centre is punched out');
+        eq(/fill="var\(--border-strong\)"/.test(Plate.cornersHtml('blocks')), true);
+        eq(/#[0-9a-f]{3,6}/i.test(html), false, 'no literal colour anywhere');
+    });
+
+    // -------------------------------------------------- the annotated board
+
+    console.log('\n# the annotated keyboard');
+
+    const KeyboardWidget = require('../src/page/keyboard.js');
+
+    check('every binding finds the keycap it is actually on', () => {
+        const on = (id) => KeyboardWidget.kidOf(Keybindings.resolve(null, id));
+        eq(on('skim-find'), 'KeyF');
+        eq(on('skim-history'), 'KeyH');
+        eq(on('skim-actions'), 'KeyA');
+        eq(on('link-hints'), 'KeyL');
+        eq(on('copy-markdown-link'), 'KeyL');
+        eq(on('record-checkpoint'), 'KeyB');
+        eq(on('chess-clear-arrows'), 'KeyC');
+        // Matched by the character its cap prints, since these have no code
+        // of their own that survives a layout change.
+        eq(on('speed-up'), 'Period', 'the > cap');
+        eq(on('speed-down'), 'Comma', 'the < cap');
+        eq(on('speed-reset'), 'Equal', 'the + cap');
+        // The three digit shortcuts share one label over the whole number row.
+        eq(on('skip-forward'), 'digits');
+        eq(on('skip-backward'), 'digits');
+        eq(on('speed-boost'), 'digits');
+    });
+
+    check('a rebound shortcut moves to its new keycap', () => {
+        const moved = Keybindings.resolve({ 'skim-find': { combo: { code: 'KeyG', key: 'G' } } }, 'skim-find');
+        eq(KeyboardWidget.kidOf(moved), 'KeyG', 'the label follows the binding');
+    });
+
+    check('an unbound keystroke has no cap to point at', () => {
+        eq(KeyboardWidget.kidOf({ kind: 'key', combo: { code: 'F13' } }), null);
+        eq(KeyboardWidget.kidOf({ kind: 'key', combo: {} }), null);
+    });
+
+    check('a cap knows which row it is on, which is the lane its label takes', () => {
+        eq(KeyboardWidget.rowOf('digits'), 0, 'the number row is annotated from above');
+        eq(KeyboardWidget.rowOf('KeyF'), 2, 'the home row from the sides');
+        eq(KeyboardWidget.rowOf('KeyB'), 3, 'the lower rows from below');
+    });
+
+    check('every scope on the tab strip is one the table knows', () => {
+        const scopes = KeyboardWidget.SCOPES.map((item) => item.id);
+        eq(scopes, ['general', 'youtube', 'chess', 'lichess']);
+        // Lichess borrows the Chess.com bindings, so it is the one tab with
+        // no scope of its own in the table.
+        eq(scopes.filter((id) => Keybindings.list(null, id).length === 0), ['lichess']);
+    });
+
+    // ------------------------------------------------- daily time limits
+
+    console.log('\n# the list of sites held to a limit');
+
+    const LimitSites = require('../src/shared/limit-sites.js');
+
+    check('a host is reduced to a host, however it was typed', () => {
+        eq(LimitSites.normalizeHost('https://www.News.YCombinator.com/item?id=1'), 'news.ycombinator.com');
+        eq(LimitSites.normalizeHost('  X.com/  '), 'x.com');
+        eq(LimitSites.isHost('x.com'), true);
+        eq(LimitSites.isHost('com'), false, 'one label is a TLD, not a site');
+        eq(LimitSites.isHost(''), false);
+    });
+
+    check('a clock time is read the way it is said', () => {
+        // A field that only takes "07:00" is a field that rejects what
+        // everybody types first.
+        eq(LimitSites.parseClock('7am'), 420);
+        eq(LimitSites.parseClock('7 AM'), 420);
+        eq(LimitSites.parseClock('7:30 pm'), 1170);
+        eq(LimitSites.parseClock('19:00'), 1140);
+        eq(LimitSites.parseClock('12am'), 0, 'midnight, not noon');
+        eq(LimitSites.parseClock('12pm'), 720, 'noon, not midnight');
+        eq(LimitSites.parseClock('25:00'), null);
+        eq(LimitSites.parseClock('7:75'), null);
+        eq(LimitSites.parseClock('13pm'), null, 'no such hour on a 12-hour clock');
+        eq(LimitSites.parseClock('elevenish'), null);
+    });
+
+    check('a stored window reads back in twelve hours', () => {
+        eq(LimitSites.clockKey(420), '07:00');
+        eq(LimitSites.clockText('19:30'), '7:30 pm');
+        eq(LimitSites.clockText('00:05'), '12:05 am');
+    });
+
+    check('a row is a budget or a window, never neither', () => {
+        eq(LimitSites.modeOf({ minutes: 30 }), 'budget');
+        eq(LimitSites.modeOf({ from: '07:00', to: '09:00' }), 'window');
+        eq(LimitSites.modeOf({ minutes: 0 }), 'none',
+            'zero reads as no limit, not as blocked from the first second');
+        eq(LimitSites.modeOf({ from: '07:00' }), 'none', 'half a window is not one');
+        eq(LimitSites.modeOf(null), 'none');
+        eq(LimitSites.allowanceOf({ minutes: 30 }), 1800);
+        eq(LimitSites.allowanceOf({ from: '07:00', to: '09:00' }), null);
+    });
+
+    check('a window that crosses midnight is a window, not an empty one', () => {
+        const at = (clock) => new Date(`2026-03-14T${clock}`).getTime();
+        const night = { from: '22:00', to: '02:00' };
+        // Read as from <= to this would block the site all day, which is the
+        // sort of bug nobody reports because they assume they typed it wrong.
+        eq(LimitSites.windowOpen(night, at('23:30')), true);
+        eq(LimitSites.windowOpen(night, at('01:30')), true);
+        eq(LimitSites.windowOpen(night, at('12:00')), false);
+
+        const morning = { from: '07:00', to: '09:00' };
+        eq(LimitSites.windowOpen(morning, at('07:00')), true, 'the start is inside');
+        eq(LimitSites.windowOpen(morning, at('09:00')), false, 'the end is not');
+        eq(LimitSites.windowOpen({ minutes: 30 }, at('12:00')), true,
+            'a budget is not stopping you at any hour');
+    });
+
+    check('a row is only made from fields that describe a limit', () => {
+        const then = 1000;
+        eq(LimitSites.rowFrom({ host: 'x.com', minutes: '45' }, then),
+            { host: 'x.com', entry: { minutes: 45, savedAt: then } });
+        eq(LimitSites.rowFrom({ host: 'x.com', from: '7am', to: '9am' }, then),
+            { host: 'x.com', entry: { from: '07:00', to: '09:00', savedAt: then } });
+        // Minutes win, so a half-filled window beside a budget cannot make a
+        // row that says one thing and behaves as the other.
+        eq(LimitSites.rowFrom({ host: 'x.com', minutes: 20, from: 'nonsense' }, then).entry.minutes, 20);
+        eq(LimitSites.rowFrom({ host: 'com', minutes: 20 }, then), null);
+        eq(LimitSites.rowFrom({ host: 'x.com' }, then), null, 'no limit at all is not a row');
+        eq(LimitSites.rowFrom({ host: 'x.com', from: '7am', to: '7am' }, then), null,
+            'a window of no length is not a limit');
+    });
+
+    check('a row answers for its subdomains but never for a bare TLD', () => {
+        const sites = { 'reddit.com': { minutes: 30 } };
+        eq(LimitSites.entryFor(sites, 'old.reddit.com').host, 'reddit.com');
+        eq(LimitSites.entryFor(sites, 'www.reddit.com').host, 'reddit.com');
+        eq(LimitSites.entryFor(sites, 'x.com'), null);
+        eq(LimitSites.entryFor({ com: { minutes: 1 } }, 'x.com'), null,
+            'a row for a TLD would answer for the web');
+    });
+
+    check('a row says what it allows in one line', () => {
+        eq(LimitSites.describe({ minutes: 30 }), '30 minutes a day');
+        eq(LimitSites.describe({ minutes: 90 }), '1h 30m a day');
+        eq(LimitSites.describe({ minutes: 120 }), '2h a day');
+        eq(LimitSites.describe({ from: '07:00', to: '09:00' }), 'only 7:00 am to 9:00 am');
+        eq(LimitSites.describe(null), 'no limit');
+    });
+
+    check('the keys the list seeds itself from are settings that exist', () => {
+        const Settings = require('../src/shared/settings.js');
+        for (const old of LimitSites.LEGACY) {
+            eq(old.onKey in Settings.DEFAULTS, true, old.onKey);
+            eq(old.minutesKey in Settings.DEFAULTS, true, old.minutesKey);
+        }
+    });
+
+    console.log('\n# what today has gone on, against the limit');
+
+    const TimeLimits = require('../src/shared/time-limits.js');
+
+    const A_DAY = 864e5;
+    const noon = new Date('2026-03-14T12:00:00').getTime();
+
+    // A tally straight into the store. add() caps a single credit, which is
+    // the right thing for a real one and no way to set up an afternoon.
+    const spent = (host, seconds, when = noon) => ({
+        day: TimeLimits.dayKey(when),
+        seconds: { [host]: seconds },
+        snoozed: {},
+    });
+
+    check('the two named sites are the ones detectSite already names', () => {
+        // Not "the sites a limit can be set on" — that is whatever is in the
+        // list. These two are the ones with a workspace, so a card can say
+        // "Twitter" rather than "x.com".
+        eq(TimeLimits.ids(), ['twitter', 'reddit']);
+        eq(TimeLimits.get('twitter').host, 'x.com');
+        eq(TimeLimits.get('twitter').name, 'Twitter', 'the site renamed itself; nobody else did');
+        eq(TimeLimits.get('youtube'), null);
+    });
+
+    check('yesterday is discarded whole, not aged out', () => {
+        const yesterday = spent('x.com', 600, noon - A_DAY);
+        eq(TimeLimits.forDay(yesterday, noon - A_DAY).seconds['x.com'], 600);
+        const today = TimeLimits.forDay(yesterday, noon);
+        eq(today.seconds['x.com'], undefined, 'the store is one day deep by design');
+        eq(today.day, TimeLimits.dayKey(noon));
+    });
+
+    check('time adds up per host, and a single credit is capped', () => {
+        let state = TimeLimits.blank(noon);
+        state = TimeLimits.add(state, 'reddit.com', 15, noon);
+        state = TimeLimits.add(state, 'www.reddit.com', 15, noon);
+        eq(state.seconds['reddit.com'], 30, 'www. is the same site');
+        // A laptop lid closed for three hours reports one enormous gap; the
+        // cap is what stops the night being charged to the morning.
+        state = TimeLimits.add(state, 'reddit.com', 3 * 3600, noon);
+        eq(state.seconds['reddit.com'], 30 + TimeLimits.MAX_CREDIT);
+        eq(TimeLimits.add(state, 'reddit.com', -5, noon).seconds['reddit.com'], 30 + TimeLimits.MAX_CREDIT,
+            'a negative gap credits nothing');
+    });
+
+    check('a host with no row has no limit at all', () => {
+        const state = spent('x.com', 4000);
+        const off = TimeLimits.statusFor(state, null, 'x.com', noon);
+        eq(off.on, false);
+        eq(off.mode, 'none');
+        eq(off.blocked, false, 'nothing is blocked by a limit nobody set');
+        eq(off.spent, 4000, 'but what was spent is still there to show');
+
+        const zero = TimeLimits.statusFor(state, { minutes: 0 }, 'x.com', noon);
+        eq(zero.on, false);
+        eq(zero.blocked, false);
+    });
+
+    check('the block lands when the day is spent, not before', () => {
+        const limit = { minutes: 30 };
+        const under = spent('reddit.com', 1700);
+        eq(TimeLimits.statusFor(under, limit, 'reddit.com', noon).blocked, false);
+        eq(TimeLimits.statusFor(under, limit, 'reddit.com', noon).remaining, 100);
+
+        const over = TimeLimits.add(under, 'reddit.com', 100, noon);
+        const status = TimeLimits.statusFor(over, limit, 'reddit.com', noon);
+        eq(status.blocked, true);
+        eq(status.remaining, 0);
+        eq(status.allowed, 1800);
+    });
+
+    check('a window blocks by the clock rather than by the tally', () => {
+        const limit = { from: '07:00', to: '09:00' };
+        const state = spent('x.com', 4000);
+        const inside = TimeLimits.statusFor(state, limit, 'x.com', new Date('2026-03-14T08:00').getTime());
+        eq(inside.blocked, false, 'four thousand seconds inside the window is fine');
+        eq(inside.allowed, null, 'a window has no budget to be a fraction of');
+
+        const outside = TimeLimits.statusFor(state, limit, 'x.com', noon);
+        eq(outside.blocked, true);
+        eq(outside.mode, 'window');
+    });
+
+    check('a snooze stands the block down without stopping the clock', () => {
+        const over = spent('reddit.com', 2000);
+        const limit = { minutes: 30 };
+        eq(TimeLimits.statusFor(over, limit, 'reddit.com', noon).blocked, true);
+
+        const once = TimeLimits.snooze(over, 'reddit.com', noon);
+        const status = TimeLimits.statusFor(once, limit, 'reddit.com', noon);
+        eq(status.blocked, false);
+        eq(status.snoozes, 1);
+        eq(status.snoozedUntil, noon + TimeLimits.SNOOZE_MS);
+        // The tally kept running, so the ten minutes come out of the same
+        // day's allowance rather than being granted on top of it.
+        eq(status.spent, 2000);
+
+        const later = noon + TimeLimits.SNOOZE_MS + 1000;
+        eq(TimeLimits.statusFor(once, limit, 'reddit.com', later).blocked, true, 'ten minutes, not forever');
+        eq(TimeLimits.snoozesOn(once, 'reddit.com', later), 1,
+            'a lapsed snooze still counts, or the sheet says "first" every ten minutes');
+        eq(TimeLimits.snoozesOn(TimeLimits.snooze(once, 'reddit.com', later), 'reddit.com', later), 2);
+    });
+
+    check('a snooze from another day is gone with the tally', () => {
+        const yesterday = TimeLimits.snooze(spent('x.com', 10, noon - A_DAY), 'x.com', noon - A_DAY);
+        eq(TimeLimits.snoozesOn(yesterday, 'x.com', noon), 0);
+    });
+
+    check('a tally from another day cannot block today', () => {
+        const yesterday = spent('reddit.com', 9999, noon - A_DAY);
+        const status = TimeLimits.statusFor(yesterday, { minutes: 30 }, 'reddit.com', noon);
+        eq(status.spent, 0);
+        eq(status.blocked, false);
+    });
+
+    check('a day is a local day, so a limit runs to local midnight', () => {
+        // Not UTC: a limit that reset at 4am because that is when midnight
+        // falls in London would be nobody's idea of a daily limit.
+        eq(TimeLimits.dayKey(noon), '2026-03-14');
+        eq(TimeLimits.dayKey(new Date('2026-03-14T23:59:59').getTime()), '2026-03-14');
+        eq(TimeLimits.dayKey(new Date('2026-03-15T00:00:01').getTime()), '2026-03-15');
+    });
+
+    check('durations read the way a person would say them', () => {
+        eq(TimeLimits.human(0), '0s');
+        eq(TimeLimits.human(45), '45s');
+        eq(TimeLimits.human(1800), '30m');
+        eq(TimeLimits.human(3600), '1h');
+        eq(TimeLimits.human(4500), '1h 15m');
+    });
+
+    check('a snooze tally reads as a count of times', () => {
+        const TimeLimitContent = require('../src/content/time-limit.js');
+        eq(TimeLimitContent.times(1), 'once');
+        eq(TimeLimitContent.times(2), 'twice');
+        eq(TimeLimitContent.times(5), '5 times');
+    });
+
+    // ------------------------------------------------------- the roster
+
+    console.log('\n# a site roster, out to a file and back');
+
+    const Roster = require('../src/shared/roster.js');
+
+    check('a line becomes a bare name however it was written', () => {
+        // The file is one a person may well have edited by hand, so the way
+        // in is generous; the way out is the site's own alphabet exactly,
+        // because the result ends up in a URL that gets navigated to.
+        eq(Roster.parseName('@alice', 'twitter'), 'alice');
+        eq(Roster.parseName('https://x.com/bob/status/12345', 'twitter'), 'bob');
+        eq(Roster.parseName('  carol,  ', 'twitter'), 'carol');
+        eq(Roster.parseName('# a comment', 'twitter'), '');
+        eq(Roster.parseName('alice # who I met once', 'twitter'), 'alice');
+        eq(Roster.parseName('a_handle_far_too_long', 'twitter'), '',
+            'X handles are fifteen characters, and this is not one');
+        eq(Roster.parseName('someone@example.com', 'twitter'), '', 'an email is not a handle');
+
+        eq(Roster.parseName('r/rust', 'reddit'), 'rust');
+        eq(Roster.parseName('/r/Rust/', 'reddit'), 'Rust');
+        eq(Roster.parseName('https://old.reddit.com/r/cpp/', 'reddit'), 'cpp');
+        eq(Roster.parseName('x', 'reddit'), '', 'too short to be a subreddit');
+    });
+
+    check('a file becomes a list in order, without duplicates', () => {
+        const names = Roster.parseList('@Alice\n# skip me\n/Alice/\n@bob\n\n@Alice\n', 'twitter');
+        // Case is folded for the duplicate check and kept in the name: a list
+        // that comes back with everybody lower-cased looks damaged.
+        eq(names, ['Alice', 'bob']);
+    });
+
+    check('the file written out can be read back in', () => {
+        const names = ['rust', 'cpp', 'Emacs'];
+        const text = Roster.toText('reddit', names, 0);
+        eq(Roster.parseList(text, 'reddit'), names, 'a round trip changes nothing');
+        eq(text.split('\n')[0].startsWith('#'), true, 'and the header is a comment');
+    });
+
+    check('the pace is per site, and Twitter gets the slower one', () => {
+        // Reddit rate-limits an account and says so; Twitter suspends one and
+        // does not. The two deserve different amounts of caution.
+        const x = Roster.siteOf('twitter').pace;
+        const reddit = Roster.siteOf('reddit').pace;
+        eq(x.cap < reddit.cap, true);
+        eq(x.minMs > reddit.minMs, true);
+    });
+
+    check('a delay lands inside the site range and is never the same twice', () => {
+        const { minMs, maxMs } = Roster.siteOf('twitter').pace;
+        eq(Roster.nextDelay('twitter', () => 0), minMs);
+        eq(Roster.nextDelay('twitter', () => 1), maxMs);
+        // Jittered rather than fixed, and not only out of politeness: a click
+        // exactly every forty seconds for an hour is a signature.
+        eq(Roster.nextDelay('twitter', () => 0.5), Math.round((minMs + maxMs) / 2));
+    });
+
+    check('a plan says how many days it is before anything starts', () => {
+        const plan = Roster.plan('twitter', new Array(412).fill('x'));
+        eq(plan.total, 412);
+        eq(plan.cap, 40);
+        eq(plan.days, 11, 'nobody should find out on day three that it is eleven');
+        eq(Roster.plan('twitter', []).total, 0);
+    });
+
+    check('a job is claimed by one page at a time', () => {
+        const job = Roster.newJob({ site: 'twitter', action: 'apply', names: ['a', 'b'], now: 1000 });
+        eq(Roster.canClaim(job, 'page1', 1000), true, 'nobody holds it yet');
+
+        const held = Roster.claim(job, 'page1', 1000);
+        eq(Roster.canClaim(held, 'page2', 1000), false, 'two tabs would follow the same account twice');
+        eq(Roster.canClaim(held, 'page1', 1000), true, 'but the holder may carry on');
+        eq(Roster.canClaim(held, 'page2', 1000 + Roster.LEASE_MS + 1), true,
+            'a tab closed mid-job cannot hold it forever');
+        eq(Roster.canClaim(Roster.release(held), 'page2', 1000), true,
+            'and it is handed back before navigating');
+    });
+
+    check('the cap is a cap per day, because the job outlives the day', () => {
+        const noonJob = { ...Roster.newJob({ site: 'twitter', action: 'apply', names: ['a'], now: noon }), today: 40 };
+        eq(Roster.atCap(noonJob, noon), true);
+        // Tomorrow it carries on rather than being finished at forty.
+        eq(Roster.atCap(noonJob, noon + A_DAY), false);
+        eq(Roster.forDay(noonJob, noon + A_DAY).today, 0);
+    });
+
+    check('progress and the current name walk the list together', () => {
+        const job = Roster.newJob({ site: 'reddit', action: 'apply', names: ['rust', 'cpp', 'go'] });
+        eq(Roster.currentName(job), 'rust');
+        eq(Roster.progress(job), 0);
+        eq(Roster.progress({ ...job, at: 3 }), 100);
+        eq(Roster.currentName({ ...job, at: 3 }), '', 'past the end is done, not a crash');
+        eq(Roster.progress(Roster.newJob({ site: 'reddit', action: 'read' })), 0,
+            'a read job has no total to be a fraction of');
+    });
+
+    check('the dashboard and the content script agree where a read starts', () => {
+        const RosterContent = require('../src/content/roster.js');
+        // Two copies of two URLs, which is two too many — but the page cannot
+        // import the content script's table and vice versa, so the next best
+        // thing is a test that fails the moment they drift.
+        const page = require('fs').readFileSync('src/page/roster-view.js', 'utf8');
+        for (const id of Roster.ids()) {
+            eq(page.includes(RosterContent.START[id]), true, `${id}: ${RosterContent.START[id]}`);
+        }
+    });
+
+    check('a handle is read off an href, and a site page is not a handle', () => {
+        const RosterContent = require('../src/content/roster.js');
+        eq(RosterContent.handleFromHref('/alice'), 'alice');
+        eq(RosterContent.handleFromHref('https://x.com/bob/following'), 'bob');
+        eq(RosterContent.handleFromHref('/home'), '', "X's own pages sit at a one-segment path too");
+        eq(RosterContent.subFromHref('https://old.reddit.com/r/rust/'), 'rust');
+        eq(RosterContent.subFromHref('/user/someone'), '');
+    });
+
+    // ------------------------------------------------------------- skim
+
+    console.log('\n# skim — where the match lands');
+
+    const Skim = require('../src/shared/skim.js');
+
+    // A 900px window with a 260px launcher centred in it: the launcher runs
+    // from 320 to 580, so a match belongs at 620 — GAP below it.
+    const window900 = { viewport: 900, scrollMax: 4000, height: 260 };
+
+    check('the match is placed just under the launcher, not down the page', () => {
+        eq(Skim.landing('center', 900, 260), 620);
+        const out = Skim.plan({ ...window900, scrollTop: 0, target: 1620 });
+        eq(out.pos, 'center', 'the launcher does not move for an ordinary match');
+        eq(out.scrollTop, 1000, 'the page comes to the match, 620px down the window');
+        eq(out.moved, true);
+    });
+
+    check('a match already under the launcher does not move the page', () => {
+        const out = Skim.plan({ ...window900, scrollTop: 1000, target: 1622 });
+        eq(out.scrollTop, 1000);
+        eq(out.moved, false, 'moving the page under someone already looking at it is the worst case');
+        eq(out.note, 'already in place');
+    });
+
+    check('at the end of the page the launcher rises instead', () => {
+        const out = Skim.plan({ ...window900, scrollTop: 3900, target: 4800 });
+        eq(out.pos, 'top', 'there is no scroll left to spend');
+        eq(out.scrollTop, 4000, 'and the page stops at its own end');
+    });
+
+    check('at the top of the page the launcher drops', () => {
+        const out = Skim.plan({ ...window900, scrollTop: 0, target: 120 });
+        eq(out.pos, 'bottom');
+        eq(out.scrollTop, 0, 'a page that cannot scroll up is not asked to');
+    });
+
+    check('a match in a sticky panel moves the launcher, never the page', () => {
+        const high = Skim.plan({ ...window900, scrollTop: 500, target: 560, pinned: true });
+        eq(high.pos, 'bottom', 'the match is near the top, so the launcher goes low');
+        eq(high.scrollTop, 500, 'scrolling cannot move a sticky panel');
+        const low = Skim.plan({ ...window900, scrollTop: 500, target: 1300, pinned: true });
+        eq(low.pos, 'top');
+    });
+
+    console.log('\n# skim — the list');
+
+    check('hint labels are one character until the alphabet runs out', () => {
+        eq(Skim.hintLabels(3, 'fjd'), ['f', 'j', 'd']);
+        eq(Skim.hintLabels(4, 'fjd'), ['ff', 'jf', 'df', 'fj'],
+            'the first character is spread, so one keystroke clears most of the board');
+        eq(Skim.hintLabels(0, 'fjd'), []);
+        eq(Skim.hintLabels(2, '123'), ['f', 'j'], 'a set with no letters in it falls back');
+    });
+
+    check('two characters begin the match, one does nothing', () => {
+        const rows = [{ title: 'Latency budgets', sub: 'notes.example' }, { title: 'Inbox', sub: 'mail.example' }];
+        eq(Skim.filterRows(rows, 'l').length, 0);
+        eq(Skim.filterRows(rows, 'la').map((r) => r.title), ['Latency budgets']);
+        eq(Skim.filterRows(rows, 'example').length, 2, 'the subtitle counts too');
+    });
+
+    check('a snippet carries the line either side of the match', () => {
+        const out = Skim.snippet('the quick brown fox', 4, 5, 4);
+        eq(out.mid, 'quick');
+        eq(out.pre, 'the ');
+        eq(out.post, ' bro…');
+    });
+
+    check('the picked source leads and the rest still follow', () => {
+        const groups = Skim.SOURCES.map((source) => ({ source }));
+        eq(Skim.orderGroups(groups, 'history').map((g) => g.source),
+            ['history', 'page', 'tabs', 'actions']);
+        eq(Skim.nextSource('actions'), 'page', 'cycling wraps');
+    });
+
+    check('every action the list offers is one the worker can run', () => {
+        const worker = require('fs').readFileSync(`${__dirname}/../src/background/skim.js`, 'utf8');
+        for (const action of Skim.ACTIONS) {
+            eq(worker.includes(`'${action.id}'`), true, `${action.id} has no branch in the worker`);
+        }
+    });
+
+    // ------------------------------------------------------------ X pouch
+
+    console.log('\n# the X pouch — two independent lists');
+
+    const XPouch = require('../src/shared/x-pouch.js');
+
+    /** Wipe the store and seed one topic per side. */
+    async function seedPouch() {
+        Object.keys(store).forEach((k) => delete store[k]);
+        return {
+            people: await XPouch.createTopic('people', 'CUDA'),
+            posts: await XPouch.createTopic('posts', 'CUDA'),
+        };
+    }
+
+    await checkAsync('a people topic and a post topic of the same name are two topics', async () => {
+        const ids = await seedPouch();
+        eq(ids.people !== ids.posts, true, 'same name, different lists, different ids');
+
+        const state = await XPouch.load();
+        eq(state.peopleTopics.length, 1);
+        eq(state.postTopics.length, 1);
+
+        // Renaming one must not touch the other: this is the rule the whole
+        // module is shaped around, and the easiest one to break by reaching
+        // for "the topics".
+        await XPouch.renameTopic('people', ids.people, 'Kernels');
+        const after = await XPouch.load();
+        eq(after.peopleTopics[0].name, 'Kernels');
+        eq(after.postTopics[0].name, 'CUDA');
+    });
+
+    await checkAsync('a topic name already taken on that side is reused, not duplicated', async () => {
+        const ids = await seedPouch();
+        eq(await XPouch.createTopic('people', 'cuda'), ids.people, 'case-insensitive');
+        eq((await XPouch.load()).peopleTopics.length, 1);
+    });
+
+    await checkAsync('a person belongs to exactly one topic, and re-filing moves them', async () => {
+        const ids = await seedPouch();
+        const second = await XPouch.createTopic('people', 'Diffusion');
+
+        await XPouch.filePerson({ handle: '@isorokin', name: 'Ilya Sorokin', avatar: '', topic: ids.people });
+        await XPouch.filePerson({ handle: '@isorokin', name: 'Ilya Sorokin', avatar: '', topic: second });
+
+        const state = await XPouch.load();
+        eq(state.people.length, 1, 'filing again is a move, not a second row');
+        eq(state.people[0].topic, second);
+    });
+
+    await checkAsync('a re-file keeps the note and refreshes the name and avatar', async () => {
+        const ids = await seedPouch();
+        const second = await XPouch.createTopic('people', 'Diffusion');
+
+        await XPouch.filePerson({ handle: '@weitan', name: 'Wei Tan', avatar: 'a.jpg', topic: ids.people });
+        const person = (await XPouch.load()).people[0];
+        await XPouch.setNote(person.id, 'distills papers daily');
+
+        // The note is the user's and must survive; the name and the picture
+        // are X's and may have changed since.
+        await XPouch.filePerson({ handle: '@weitan', name: 'Wei T.', avatar: 'b.jpg', topic: second });
+        const after = (await XPouch.load()).people[0];
+        eq(after.note, 'distills papers daily');
+        eq(after.name, 'Wei T.');
+        eq(after.avatar, 'b.jpg');
+        eq(after.id, person.id, 'the same row, not a replacement');
+    });
+
+    await checkAsync('a post is keyed by its status id, so the same post files once', async () => {
+        const ids = await seedPouch();
+        const post = { statusId: '1770', handle: '@lenaf', name: 'Lena', text: 'one', url: '', postedAt: 5 };
+
+        await XPouch.filePost({ ...post, topic: ids.posts });
+        // The same post met again in a thread, with the text X shows there.
+        await XPouch.filePost({ ...post, text: 'one (edited)', topic: ids.posts });
+
+        const state = await XPouch.load();
+        eq(state.posts.length, 1);
+        eq(state.posts[0].text, 'one (edited)');
+    });
+
+    await checkAsync('deleting a topic takes everything in it and nothing else', async () => {
+        const ids = await seedPouch();
+        const keep = await XPouch.createTopic('people', 'Hardware');
+
+        await XPouch.filePerson({ handle: '@a', name: 'A', topic: ids.people });
+        await XPouch.filePerson({ handle: '@b', name: 'B', topic: keep });
+        await XPouch.filePost({ statusId: '1', handle: '@a', text: 'x', topic: ids.posts });
+
+        await XPouch.deleteTopic('people', ids.people);
+
+        const state = await XPouch.load();
+        eq(state.people.map((p) => p.handle), ['@b'], 'its rows go with it');
+        eq(state.peopleTopics.length, 1);
+        eq(state.postTopics.length, 1, 'the other side is untouched');
+        eq(state.posts.length, 1);
+    });
+
+    await checkAsync('array order is the display order, and a move is a splice', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        const a = await XPouch.createTopic('posts', 'A');
+        const b = await XPouch.createTopic('posts', 'B');
+        const c = await XPouch.createTopic('posts', 'C');
+
+        const names = async () => (await XPouch.load()).postTopics.map((t) => t.name);
+        eq(await names(), ['A', 'B', 'C']);
+
+        await XPouch.moveTopic('posts', c, a);   // C dropped onto A
+        eq(await names(), ['C', 'A', 'B']);
+
+        await XPouch.moveTopic('posts', c, c);   // onto itself: nothing moves
+        eq(await names(), ['C', 'A', 'B']);
+        void b;
+    });
+
+    await checkAsync('a topic id from the wrong side files nothing anywhere', async () => {
+        const ids = await seedPouch();
+        // Not a guard that throws — the two id spaces simply never meet, so a
+        // post filed under a PEOPLE topic id lands in a post topic that does
+        // not exist and shows up in no card. This pins the shape that makes
+        // that impossible to do by accident: the prefixes differ.
+        eq(ids.people.startsWith('xpt_'), true);
+        eq(ids.posts.startsWith('xst_'), true);
+    });
+
+    check('the monogram falls back through name, then handle', () => {
+        eq(XPouch.monogram('Wei Tan', '@weitan'), 'WT');
+        eq(XPouch.monogram('Cher', '@cher'), 'CH', 'one word gives two letters, not one');
+        eq(XPouch.monogram('', '@isorokin'), 'IS');
+    });
+
+    console.log('\n# the X pouch — reading x.com');
+
+    const TwitterPage = require('../src/content/twitter-page.js');
+
+    check('a handle is read off a profile link, and only off a real one', () => {
+        eq(TwitterPage.handleFromHref('/weitan'), '@weitan');
+        eq(TwitterPage.handleFromHref('/weitan/status/1770'), '@weitan');
+        eq(TwitterPage.handleFromHref('https://x.com/weitan'), '@weitan');
+        // X's own pages sit at one-segment paths that look exactly like
+        // handles; filing "@home" as a person is the bug this prevents.
+        eq(TwitterPage.handleFromHref('/home'), '');
+        eq(TwitterPage.handleFromHref('/i/bookmarks'), '');
+        eq(TwitterPage.handleFromHref('/settings'), '');
+        eq(TwitterPage.handleFromHref(''), '');
+    });
+
+    check('the three X surfaces are settings, and all three are off', () => {
+        const { DEFAULTS } = require('../src/shared/settings.js');
+        // Each of them reaches into a page somebody else designed, which is
+        // not a default to assume for anyone — and the dashboard binds a
+        // control by giving it the key's own id, so a typo here is a toggle
+        // that silently does nothing.
+        for (const key of ['twitterHideBookmark', 'twitterPouchPeople', 'twitterPouchPosts']) {
+            eq(key in DEFAULTS, true, key);
+            eq(DEFAULTS[key], false, key);
+        }
+    });
+
+    check('an avatar URL is upgraded a size and anything else is left alone', () => {
+        const base = 'https://pbs.twimg.com/profile_images/1/abc';
+        eq(TwitterPage.avatarUrl({ src: `${base}_normal.jpg` }), `${base}_bigger.jpg`);
+        eq(TwitterPage.avatarUrl({ src: `${base}_400x400.png` }), `${base}_400x400.png`);
+        // Never anything but the CDN: this string is written into an <img src>
+        // on the dashboard and in the panel.
+        eq(TwitterPage.avatarUrl({ src: 'https://evil.example/profile_images/x_normal.jpg' }), '');
+        eq(TwitterPage.avatarUrl(null), '');
+    });
+
+    console.log('\n# short ages');
+
+    check('a post age reads the way X writes it', () => {
+        const now = Date.parse('2026-09-21T12:00:00Z');
+        const ago = (ms) => Time.shortAge(now - ms, now);
+        eq(ago(30 * 1000), 'now');
+        eq(ago(6 * 36e5), '6h');
+        eq(ago(2 * 864e5), '2d');
+        eq(ago(9 * 864e5), '1w', 'rounds down, so nothing ever reads older than it is');
+        eq(Time.shortAge(0), '', 'a missing date is not the epoch');
+    });
+
+    // ------------------------------------------------ opening the dashboard
+
+    console.log('\n# opening the dashboard at a site');
+
+    check('only a hash of our own shape survives into the URL', () => {
+        // The worker's openDashboard branch, driven directly. The hash it
+        // appends arrives from a content script — that is, from a page we do
+        // not own — so the guard matters: without it, x.com could ask the
+        // worker to open our own extension URL with a fragment of its
+        // choosing. Everything that is not `#<word>/<word>` is dropped
+        // rather than rejected, so a caller that gets it wrong still lands
+        // on the dashboard.
+        const opened = [];
+        let onMessage = null;
+        const saved = global.chrome;
+        global.chrome = {
+            runtime: {
+                getURL: (p) => 'x/' + p,
+                onMessage: { addListener: (f) => { onMessage = f; } },
+                onInstalled: { addListener() {} },
+                onStartup: { addListener() {} },
+            },
+            tabs: { create: (o) => opened.push(o.url), query: (q, cb) => cb && cb([]), sendMessage() {} },
+            storage: { local: { get: (k, cb) => cb && cb({}) }, onChanged: { addListener() {} } },
+            contextMenus: { create() {}, removeAll: (cb) => cb && cb(), onClicked: { addListener() {} } },
+            commands: { onCommand: { addListener() {} } },
+            tts: { speak() {} },
+        };
+
+        delete require.cache[require.resolve('../src/background/commands.js')];
+        require('../src/background/commands.js');
+
+        const send = (hash) => onMessage({ action: 'openDashboard', hash }, {}, () => {});
+        send('#site/twitter');
+        send('#settings/chess');
+        send('javascript:alert(1)');
+        send('#../../evil');
+        send(undefined);
+
+        global.chrome = saved;
+
+        eq(opened, [
+            'x/dashboard.html#site/twitter',
+            'x/dashboard.html#settings/chess',
+            'x/dashboard.html',
+            'x/dashboard.html',
+            'x/dashboard.html',
+        ]);
+    });
+
+    // ------------------------------------------------------- site detection
+
+    console.log('\n# site detection');
+
+    const Site = require('../src/content/site.js');
+
+    check('chess.com and Lichess are sites of their own', () => {
+        eq(Site.detectSite('www.chess.com'), 'chess');
+        eq(Site.detectSite('chess.com'), 'chess');
+        eq(Site.detectSite('notchess.com'), 'other');
+        eq(Site.detectSite('lichess.org'), 'lichess');
+        eq(Site.detectSite('en.lichess.org'), 'lichess');
+        eq(Site.detectSite('notlichess.org'), 'other');
+    });
+    check('chatgpt is a site of its own, under both of its names', () => {
+        eq(Site.detectSite('chatgpt.com'), 'chatgpt');
+        eq(Site.detectSite('chat.openai.com'), 'chatgpt');
+        eq(Site.detectSite('openai.com'), 'other', 'the company site has no chat on it');
+        eq(Site.detectSite('notchatgpt.com'), 'other');
+    });
+    check('a chat site is wired through its adapter, and shift+p opens its panel', () => {
+        const main = readRepo('src/content/main.js');
+        assert(/CHAT_ADAPTERS = \{ chatgpt: /.test(main), 'chatgpt has no adapter in main.js');
+        assert(/claude: \(\) => ClaudeRead\.adapter/.test(main), 'claude has no adapter in main.js');
+        assert(/ChatgptRead, ClaudeRead \} = BB;/.test(main), 'main.js does not take ClaudeRead off BB');
+        const js = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+        assert(js.indexOf('src/content/claude-read.js') > -1 && js.indexOf('src/content/claude-read.js') < js.indexOf('src/content/main.js'),
+            'main.js would get undefined for ClaudeRead at load');
+        assert(/return youtubeUi \|\| twitterUi \|\| leetUi \|\| chatUi;/.test(main), 'Shift+P would not reach the chat panel');
+    });
+
+    check('leetcode.com is a site of its own', () => {
+        eq(Site.detectSite('leetcode.com'), 'leetcode');
+        eq(Site.detectSite('www.leetcode.com'), 'leetcode');
+        // LeetCode's China site is a different account and a different
+        // problem set; it is not this one.
+        eq(Site.detectSite('leetcode.cn'), 'other');
+        eq(Site.detectSite('notleetcode.com'), 'other');
+    });
+
+    // --------------------------------------------------- the site registry
+
+    console.log('\n# the site registry');
+
+    const SiteIcons = require('../src/shared/site-icons.js');
+
+    check('every site in the order has a card to draw', () => {
+        for (const site of SiteIcons.list()) {
+            assert(site && site.id, 'an id in ORDER with no entry in SITES');
+            assert(site.name && site.description, `${site.id} is missing its plate`);
+            // A path from Simple Icons, or for a site that has no vector mark
+            // at all, its favicon.
+            assert(/^[Mm]/.test(site.path) || /^data:image\/png;base64,/.test(site.image), `${site.id} has no mark`);
+        }
+    });
+    check('typeracer is one site, whichever subdomain a race is on', () => {
+        // play.typeracer.com races, data.typeracer.com keeps the site's own
+        // stats, and typeracer.com is the front door. All three are the site.
+        eq(Site.detectSite('play.typeracer.com'), 'typeracer');
+        eq(Site.detectSite('data.typeracer.com'), 'typeracer');
+        eq(Site.detectSite('typeracer.com'), 'typeracer');
+        eq(Site.detectSite('nottyperacer.com'), 'other');
+    });
+    check('typeracer needs no player selector of its own', () => {
+        // Every other site in this table is here because it has a <video>.
+        // A typing test has nothing to play, and a selector list for it would
+        // only ever match something that is not a player.
+        eq(Site.PLAYER_SELECTORS.typeracer, undefined);
+    });
+
+    check('typeracer is in the launcher', () => {
+        eq(SiteIcons.list(['typeracer', 'youtube']).map((s) => s.id).slice(0, 3), ['typeracer', 'youtube', 'chess'],
+            'a saved order first, then every site it does not name');
+        eq(SiteIcons.list(['nope', 'chess', 'chess']).length, SiteIcons.ORDER.length, 'unknown and repeated ids were kept');
+        eq(SiteIcons.list(null).map((s) => s.id), SiteIcons.ORDER.slice());
+        eq(SiteIcons.ORDER.map((id) => SiteIcons.tint(id)).slice(0, 5), [1, 2, 3, 4, 1], 'the tint belongs to the site');
+        const SiteSort = require('../src/page/site-sort.js');
+        eq(SiteSort.moved(['a', 'b', 'c'], 0, 1), ['b', 'a', 'c']);
+        eq(SiteSort.moved(['a', 'b', 'c'], 0, -1), ['a', 'b', 'c'], 'moved past the start');
+        eq(globalThis.BB.Settings.DEFAULTS.siteOrder, []);
+        const dashboard = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+        assert(dashboard.indexOf('src/page/site-sort.js') > 0, 'the dashboard cannot drag');
+        eq(SiteIcons.get('typeracer').name, 'TypeRacer');
+        assert(SiteIcons.list().some((site) => site.id === 'typeracer'), 'not in ORDER');
+        assert(SiteIcons.svg('typeracer').includes('<svg'), 'draws nothing');
+        assert(/<image [^>]*image-rendering:pixelated/.test(SiteIcons.svg('typeracer')), 'its 16px favicon, not smoothed to mud');
+    });
+    check('the typeracer workspace has a panel behind every tab', () => {
+        const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+        const dashboard = require('fs').readFileSync(`${__dirname}/../dashboard.js`, 'utf8');
+        // The tab list and the panels are two files apart, and a tab whose
+        // panel is missing switches to a blank page rather than failing.
+        for (const id of ['typerRacesPanel', 'typerWeakPanel', 'typerPracticePanel']) {
+            assert(dashboard.includes(`'${id}'`), `${id} is in the page but no tab opens it`);
+            assert(html.includes(`id="${id}"`), `${id} is referenced but not in the page`);
+        }
+    });
+    check('leetcode is in the launcher', () => {
+        eq(SiteIcons.get('leetcode').name, 'LeetCode');
+        assert(SiteIcons.list().some((site) => site.id === 'leetcode'), 'not in ORDER');
+        assert(SiteIcons.svg('leetcode').includes('<svg'), 'draws nothing');
+    });
+
+    check('the shorts keys are the arrows, and only exist while the setting is on', () => {
+        const Keybindings = require('../src/shared/keybindings.js');
+        const ids = (settings) => Keybindings.list({}, 'youtube', settings).map((b) => b.id);
+        assert(!ids({ shortsSeek: false }).includes('shorts-forward'), 'on the keyboard map while switched off');
+        assert(ids({ shortsSeek: true }).includes('shorts-back') && ids({ shortsSeek: true }).includes('shorts-forward'));
+        eq(Keybindings.resolve({}, 'shorts-back').combo.code, 'ArrowLeft');
+        eq(Keybindings.resolve({}, 'shorts-forward').combo.code, 'ArrowRight');
+        for (const id of ['shorts-back', 'shorts-forward']) {
+            eq(Keybindings.conflicts({}, id, Keybindings.resolve({}, id).combo), []);
+        }
+    });
+    check('a shorts skip lands inside the short', () => {
+        const Site = require('../src/content/site.js');
+        eq(Site.shortsSeekTo(10, 5, 40), 15);
+        eq(Site.shortsSeekTo(2, -5, 40), 0, 'went before the start');
+        eq(Site.shortsSeekTo(38, 5, 40), 39.75, 'ran into the end, where a short starts over');
+        eq(Site.shortsSeekTo(3, 5, NaN), 8, 'a duration not known yet does not stop the skip');
+        assert(Site.isShortsPath('/shorts/abcDEF12345'));
+        assert(!Site.isShortsPath('/shorts') && !Site.isShortsPath('/watch'), 'not a short');
+    });
+    check('the shorts setting has its controls, in the youtube panel, bounded as the code is', () => {
+        const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+        const from = html.indexOf('id="youtubeSettingsPanel"');
+        const panel = html.slice(from, html.indexOf('class="settings-section"', from));
+        assert(/<input type="checkbox" id="shortsSeek">/.test(panel), 'no switch');
+        const seconds = (/<input[^>]*id="shortsSeekSeconds"[^>]*>/.exec(panel) || [''])[0];
+        assert(/min="1"/.test(seconds) && /max="30"/.test(seconds), `unbounded: ${seconds}`);
+        eq(globalThis.BB.Settings.DEFAULTS.shortsSeek, false);
+        eq(globalThis.BB.Settings.DEFAULTS.shortsSeekSeconds, 5);
+    });
+
+    check('the leetcode shortcuts are bound under their own scope', () => {
+        const Keybindings = require('../src/shared/keybindings.js');
+        eq(Keybindings.SCOPES.leetcode, 'LeetCode');
+        eq(Keybindings.list({}, 'leetcode').map((b) => b.id), ['leet-templates', 'leet-mock']);
+        // Both fire with the caret inside Monaco, so neither may be a bare
+        // letter and neither may collide with anything already bound.
+        for (const binding of Keybindings.list({}, 'leetcode')) {
+            assert(binding.combo.ctrl && binding.combo.alt, `${binding.id} is not modified enough`);
+            eq(Keybindings.conflicts({}, binding.id, binding.combo), []);
+        }
+    });
+
+    // ------------------------------------------------------ chat sites
+
+    console.log('\n# the chat site registry');
+
+    const ChatSites = require('../src/shared/chat-sites.js');
+
+    check('every chat setting the registry can name has a default', () => {
+        eq(ChatSites.allKeys().filter((key) => !(key in globalThis.BB.Settings.DEFAULTS)), []);
+        eq(ChatSites.siteKey('chatgpt', 'queueGap'), 'chatgptQueueGapSeconds');
+        eq(ChatSites.siteKey('chatgpt', 'nonsense'), null);
+        eq(ChatSites.siteKey('nowhere', 'queueGap'), null);
+    });
+    check('the composer buttons are asked for, not assumed', () => {
+        // They are drawn into somebody else's composer. The panel toggle and
+        // the hotkeys are how everything is reachable without them.
+        eq(globalThis.BB.Settings.DEFAULTS.chatgptComposerTools, false);
+    });
+    check('a chatgpt path gives up its conversation id however it is prefixed', () => {
+        const { convIdOf, isNewChat } = ChatSites.get('chatgpt');
+        const id = '6a864ad2-54d0-83e8-b47e-0716102a840c';
+        eq(convIdOf(`/c/${id}`), id);
+        eq(convIdOf(`/g/g-abc123/c/${id}`), id, 'a custom GPT');
+        eq(convIdOf(`/g/g-p-abc123-notes/c/${id}?model=x`), id, 'a project');
+        eq(convIdOf('/'), null);
+        eq(convIdOf('/codex'), null);
+        assert(isNewChat('/') && isNewChat('/g/g-abc123') && isNewChat('/g/g-p-abc-notes/project'));
+        assert(!isNewChat(`/c/${id}`) && !isNewChat('/gpts'), 'not a new chat');
+    });
+    check('a new chat can ask for its model, an existing one cannot', () => {
+        const { chatUrl } = ChatSites.get('chatgpt');
+        eq(chatUrl('abc'), 'https://chatgpt.com/c/abc');
+        eq(chatUrl(null), 'https://chatgpt.com/');
+        eq(chatUrl(null, { model: 'gpt-5' }), 'https://chatgpt.com/?model=gpt-5');
+        eq(chatUrl('abc', { model: 'gpt-5' }), 'https://chatgpt.com/c/abc');
+    });
+    check('the worker can tell which chat a tab is on from its url alone', () => {
+        eq(ChatSites.siteOfUrl('https://chatgpt.com/c/abc12345').id, 'chatgpt');
+        eq(ChatSites.siteOfUrl('https://chat.openai.com/').id, 'chatgpt');
+        eq(ChatSites.siteOfUrl('https://evil.example/chatgpt.com/'), null);
+        eq(ChatSites.convIdOfUrl('chatgpt', 'https://chatgpt.com/c/abc12345?x=1'), 'abc12345');
+        eq(ChatSites.convIdOfUrl('chatgpt', 'not a url'), null);
+    });
+
+    check('claude is a chat site of its own, with the same six settings', () => {
+        const claude = ChatSites.get('claude');
+        const id = '9a978684-1ba6-4d23-af91-b09ad7ae3f9c';
+        eq(claude.convIdOf(`/chat/${id}`), id);
+        eq(claude.convIdOf('/code/abc'), null, 'Claude Code on the web is not a chat');
+        eq(claude.convIdOf('/chat/not-a-uuid'), null);
+        assert(claude.isNewChat('/new') && claude.isNewChat(`/project/${id}`) && !claude.isNewChat('/recents'));
+        eq(claude.chatUrl(id), `https://claude.ai/chat/${id}`);
+        eq(claude.chatUrl(null, { model: 'opus' }), 'https://claude.ai/new', 'a new Claude chat has no address for a model');
+        eq(ChatSites.siteOfUrl('https://claude.ai/chat/x').id, 'claude');
+        eq(ChatSites.allKeys().filter((key) => key.startsWith('claude')).length, 6);
+        eq(ChatSites.siteKey('claude', 'queueOpenTab'), 'claudeQueueOpenTab');
+    });
+    check('every claude notice blocks, and says which allowance ran out', () => {
+        const T = new Date(2025, 10, 13, 18).getTime();
+        const five = new Date(2025, 10, 13, 21).getTime();
+        eq(ChatSites.readLimit('claude', 'You are out of free messages until 9 PM.', T),
+            { model: '', until: five, blocked: true, window: '' });
+        eq(ChatSites.readLimit('claude', '5-hour limit reached · resets 9:00 PM', T).window, 'session');
+        const weekly = ChatSites.readLimit('claude', 'Weekly limit reached. Your limit resets Monday at 9 AM.', T);
+        eq([weekly.window, weekly.blocked, new Date(weekly.until).getDay()], ['weekly', true, 1]);
+        eq(ChatSites.readLimit('claude', 'Claude can make mistakes.', T), null);
+    });
+    check('claude.ai is detected under its own name', () => {
+        const Site = require('../src/content/site.js');
+        eq(Site.detectSite('claude.ai'), 'claude');
+        eq(Site.detectSite('notclaude.ai'), 'other');
+    });
+
+    // ------------------------------------------------- the conversation tree
+
+    console.log('\n# the conversation tree');
+
+    const ChatTree = require('../src/shared/chat-tree.js');
+
+    /**
+     * A chat with the two things that make it a tree: the second prompt was
+     * edited (u2a and u2b are siblings), and the answer to the edit was asked
+     * for three times, the page showing the second.
+     */
+    function chatFixture({ current = 'a2b2' } = {}) {
+        const n = (role, parent, children, text, at, extra) => ({ role, parent, children, text, at, ...extra });
+        return ChatTree.build({
+            site: 'chatgpt', id: 'c1', title: 'Flaky test', url: 'https://chatgpt.com/c/c1',
+            createdAt: 1000, updatedAt: 9000, root: 'r', current,
+            nodes: {
+                r: n('root', null, ['u1'], '', 0),
+                u1: n('user', 'r', ['a1'], 'Why is the login test flaky?\nIt fails one run in ten.', 1),
+                a1: n('assistant', 'u1', ['u2a', 'u2b'],
+                    '## Cause\nA race on the session.\n```sh\n# not a heading\n```\n### Fix\nAwait it.', 2, { model: 'gpt-5' }),
+                u2a: n('user', 'a1', ['a2a'], 'Retry it three times?', 10),
+                a2a: n('assistant', 'u2a', [], 'Retries hide it.', 11),
+                u2b: n('user', 'a1', ['a2b1', 'a2b2', 'a2b3', 'ghost'], 'What about mocking the clock?', 20),
+                a2b1: n('assistant', 'u2b', [], 'Mock it with fake timers.', 21),
+                a2b2: n('assistant', 'u2b', [], 'Freeze the clock.\n# Steps\nOne.', 22, { ids: ['a2b2', 'tool-1', 'a2b2-final'] }),
+                a2b3: n('assistant', 'u2b', [], 'Use a clock you inject.', 23),
+            },
+        });
+    }
+
+    check('a child that names no node is dropped rather than walked into', () => {
+        eq(chatFixture().nodes.u2b.children, ['a2b1', 'a2b2', 'a2b3']);
+    });
+    check('the forks are every edit and every regenerate', () => {
+        eq(ChatTree.forks(chatFixture()).sort(), ['a1', 'u2b']);
+    });
+    check('a sibling reads the way the page numbers it', () => {
+        eq(ChatTree.siblingIndex(chatFixture(), 'a2b2'), { index: 2, count: 3 });
+        eq(ChatTree.siblingIndex(chatFixture(), 'u2a'), { index: 1, count: 2 });
+        eq(ChatTree.siblingIndex(chatFixture(), 'u1'), { index: 1, count: 1 });
+    });
+    check('the path shown follows the current leaf, and never includes the root', () => {
+        eq(ChatTree.activePath(chatFixture()), ['u1', 'a1', 'u2b', 'a2b2']);
+        eq(ChatTree.pathTo(chatFixture(), 'a2a'), ['u1', 'a1', 'u2a', 'a2a']);
+    });
+    check('with no current leaf the newest branch is the one shown', () => {
+        const conv = chatFixture({ current: 'nowhere' });
+        eq(conv.current, null);
+        eq(ChatTree.activePath(conv), ['u1', 'a1', 'u2b', 'a2b3']);
+        eq(ChatTree.leafUnder(conv, 'u2a'), 'a2a');
+    });
+    check('a raw id the page drew is found in the turn that spans it', () => {
+        const conv = chatFixture();
+        eq(ChatTree.turnOf(conv, 'tool-1'), 'a2b2');
+        eq(ChatTree.turnOf(conv, 'a2b2-final'), 'a2b2');
+        eq(ChatTree.turnOf(conv, 'unknown'), null);
+    });
+    check('the outline is every prompt and every heading, and a # in a fence is neither', () => {
+        eq(ChatTree.outline(chatFixture()).map((e) => `${e.level}:${e.text}`), [
+            '0:Why is the login test flaky?', '2:Cause', '3:Fix', '0:What about mocking the clock?', '1:Steps',
+        ]);
+    });
+    check('a fence closes only on the same mark, at least as long', () => {
+        eq(ChatTree.headings('````md\n```\n# inside\n```\n````\n## After').map((h) => h.text), ['After']);
+        eq(ChatTree.headings('~~~\n# inside\n```\n~~~\n# Out').map((h) => h.text), ['Out']);
+    });
+    check('a code block survives a fence of its own inside it', () => {
+        eq(ChatTree.fence('x = 1\n', 'python'), '```python\nx = 1\n```');
+        eq(ChatTree.fence('```js\nf()\n```', 'md'), '````md\n```js\nf()\n```\n````');
+    });
+    check('a first line is cut on a word', () => {
+        eq(ChatTree.firstLine('\n  hello   world\nmore'), 'hello world');
+        const long = ChatTree.firstLine('word '.repeat(40), 30);
+        assert(long.length <= 30 && long.endsWith('…') && !/\s…$/.test(long), long);
+    });
+
+    // ------------------------------------------------- reading chatgpt's tree
+
+    console.log('\n# reading a chatgpt conversation');
+
+    const ChatgptFormat = require('../src/shared/chatgpt-format.js');
+
+    /**
+     * backend-api/conversation/<id> as it answers: a synthetic root, a hidden
+     * system message and the custom instructions above the first prompt; an
+     * answer that searched, reasoned and then wrote, as five raw messages; a
+     * regenerate of it; and a prompt with an image whose answer ran code.
+     */
+    function chatgptRaw() {
+        const msg = (id, role, content, { t = 1700000000, recipient = 'all', metadata = {} } = {}) =>
+            ({ id, author: { role }, create_time: t, content, recipient, metadata });
+        const node = (id, parent, children, message) => ({ id, parent, children, message });
+        const text = (s) => ({ content_type: 'text', parts: [s] });
+        const cite = 'citeturn0search3';
+        const stray = 'navlistturn0news1';
+        return {
+            conversation_id: 'conv-1', title: 'Flaky login test', create_time: 1700000000.5, update_time: 1700000900,
+            current_node: 'a2b',
+            mapping: {
+                'client-created-root': node('client-created-root', null, ['sys'], null),
+                sys: node('sys', 'client-created-root', ['ctx'], msg('sys', 'system', text(''),
+                    { metadata: { is_visually_hidden_from_conversation: true } })),
+                ctx: node('ctx', 'sys', ['u1'], msg('ctx', 'user', { content_type: 'user_editable_context' })),
+                u1: node('u1', 'ctx', ['a1', 'a1x'], msg('u1', 'user', text('Why is it flaky?'), { t: 1700000001 })),
+                a1: node('a1', 'u1', ['t1'], msg('a1', 'assistant', text('{"search_query":[{"q":"flaky login test"}]}'),
+                    { recipient: 'web.run' })),
+                t1: node('t1', 'a1', ['a1b'], msg('t1', 'tool', text('ten results'))),
+                a1b: node('a1b', 't1', ['a1c'], msg('a1b', 'assistant',
+                    { content_type: 'thoughts', thoughts: [{ summary: 'Looking', content: 'It races.' }] })),
+                a1c: node('a1c', 'a1b', ['a1d'], msg('a1c', 'assistant', { content_type: 'reasoning_recap', content: 'Thought for 4s' })),
+                a1d: node('a1d', 'a1c', ['u2'], msg('a1d', 'assistant', text(`## Cause\nA race.${cite} Stray${stray}.\n\n## Fix\nAwait it.`), {
+                    metadata: {
+                        model_slug: 'gpt-5-thinking',
+                        content_references: [{ matched_text: cite, type: 'grouped_webpages',
+                            items: [{ title: 'Race conditions', url: 'https://example.com/race' }] }],
+                    },
+                })),
+                a1x: node('a1x', 'u1', [], msg('a1x', 'assistant', text('Regenerated.'), { metadata: { model_slug: 'gpt-5' } })),
+                u2: node('u2', 'a1d', ['a2'], msg('u2', 'user',
+                    { content_type: 'multimodal_text', parts: [{ content_type: 'image_asset_pointer' }, 'Run this'] })),
+                a2: node('a2', 'u2', ['t2'], msg('a2', 'assistant', { content_type: 'code', language: 'unknown', text: 'print(1)' },
+                    { recipient: 'python' })),
+                t2: node('t2', 'a2', ['a2b'], msg('t2', 'tool', { content_type: 'execution_output', text: '1' })),
+                a2b: node('a2b', 't2', [], msg('a2b', 'assistant', text('It printed 1.'), { metadata: { model_slug: 'gpt-5' } })),
+            },
+        };
+    }
+
+    check('the synthetic root and everything hidden under it drop out', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        eq(conv.root, 'client-created-root');
+        eq(conv.nodes['client-created-root'].children, ['u1']);
+        assert(!conv.nodes.sys && !conv.nodes.ctx, 'a hidden message became a turn');
+        eq(ChatTree.activePath(conv), ['u1', 'a1', 'u2', 'a2']);
+    });
+    check('a tool chain is one turn, named for its first message and spanning all five', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        eq(conv.nodes.a1.ids, ['a1', 't1', 'a1b', 'a1c', 'a1d']);
+        eq(conv.nodes.a1.blocks.map((b) => b.kind), ['tool', 'thinking', 'thinking', 'text']);
+        eq(conv.nodes.a1.blocks[0].text, 'Searched the web: "flaky login test"');
+        eq(conv.nodes.a1.model, 'gpt-5-thinking');
+        eq(ChatTree.turnOf(conv, 'a1d'), 'a1');
+    });
+    check('a regenerate is a sibling of the answer it replaced', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        eq(ChatTree.forks(conv), ['u1']);
+        eq(ChatTree.siblingIndex(conv, 'a1x'), { index: 2, count: 2 });
+    });
+    check('reasoning stays out of the text, and code and its output are fenced', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        assert(!conv.nodes.a1.text.includes('It races'), 'the thinking leaked into the answer');
+        eq(conv.nodes.u2.text, '[image]\n\nRun this');
+        eq(conv.nodes.a2.text, '```python\nprint(1)\n```\n\n```output\n1\n```\n\nIt printed 1.');
+    });
+    check('citations become footnotes and no private-use character survives anywhere', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        assert(conv.nodes.a1.text.includes('A race.[^1] Stray.'), conv.nodes.a1.text);
+        eq(conv.nodes.a1.cites, [{ n: 1, title: 'Race conditions', url: 'https://example.com/race' }]);
+        eq(/[-]/.test(JSON.stringify(conv)), false);
+    });
+    check('times arrive as seconds from one endpoint and ISO from another', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        eq(conv.createdAt, 1700000000500);
+        eq(conv.nodes.u1.at, 1700000001000);
+        eq(conv.url, 'https://chatgpt.com/c/conv-1');
+        eq(ChatgptFormat.listItem({ id: 'x', title: ' ', update_time: '2025-11-09T10:00:00Z' }),
+            { id: 'x', title: 'Untitled chat', updatedAt: Date.parse('2025-11-09T10:00:00Z') });
+    });
+    check('an empty or broken answer from the api is an empty tree, not a throw', () => {
+        eq(ChatTree.activePath(ChatgptFormat.normalize(null)), []);
+    });
+
+
+    // ------------------------------------------------- landing on a turn
+
+    console.log('\n# the shared scroll helpers');
+
+    check('skim keeps no copy of the helpers it now shares', () => {
+        const source = readRepo('src/content/skim.js');
+        assert(!/function (innerScroller|isPinned|markArrival)\b/.test(source), 'a private copy is back');
+        assert(/ScrollTo\.markArrival\(pulse/.test(source), 'skim no longer marks its arrival');
+    });
+    check('the helpers load before the launcher that calls them', () => {
+        const js = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+        assert(js.indexOf('src/content/scroll-to.js') > -1, 'not shipped');
+        assert(js.indexOf('src/content/scroll-to.js') < js.indexOf('src/content/skim.js'),
+            'skim.js would get undefined for ScrollTo at load');
+    });
+
+    // ------------------------------------------------------ the chat panel
+
+    console.log('\n# the chat panel');
+
+    const ChatPanel = require('../src/content/chat-panel.js');
+
+    check('the panel docks only where the thread leaves it room', () => {
+        // A 768px thread centred in 1180px of main pane ends at 1234 on a
+        // 1440 window: 206px of margin, which a 340px panel would cover.
+        eq(ChatPanel.fitsBeside(1440, 1234), false);
+        eq(ChatPanel.fitsBeside(1920, 1344), true);
+        eq(ChatPanel.fitsBeside(1100, null), false, 'nothing to measure on a narrow window');
+        eq(ChatPanel.fitsBeside(1600, null), true, 'nothing to measure on a wide one');
+    });
+    check('what the panel draws is painted by the skins, never by a colour of its own', () => {
+        const css = readRepo('content.css');
+        const block = css.slice(css.indexOf('Chat sites — ChatGPT and Claude'));
+        const hard = block.match(/:\s*#[0-9a-f]{3,8}\b/gi) || [];
+        eq(hard, [], `a colour was baked into the chat rules: ${hard.join(', ')}`);
+    });
+    check('the outline row being read is the last one at or above the reading line', () => {
+        const conv = chatFixture();
+        const entries = ChatTree.outline(conv);  // u1, Cause, Fix, u2b, Steps
+        const path = ChatTree.activePath(conv);
+        eq(ChatPanel.currentEntry(entries, path, { id: 'u1', heading: '' }), 0);
+        eq(ChatPanel.currentEntry(entries, path, { id: 'a1', heading: '' }), 0, 'an answer above its first heading is its prompt');
+        eq(ChatPanel.currentEntry(entries, path, { id: 'a1', heading: 'Cause' }), 1);
+        eq(ChatPanel.currentEntry(entries, path, { id: 'a1', heading: 'Fix' }), 2);
+        eq(ChatPanel.currentEntry(entries, path, { id: 'a2b2', heading: '' }), 3);
+        eq(ChatPanel.currentEntry(entries, path, null), -1);
+    });
+    check('an outline row carries its turn and heading, and escapes what the chat wrote', () => {
+        const html = ChatPanel.outlineHtml([{ id: 'u"1', level: 0, text: '<b>hi</b>' }, { id: 'a1', level: 2, text: 'Fix', heading: 'Fix' }]);
+        assert(html.includes('data-bb-chat-reach="u&quot;1"') && html.includes('&lt;b&gt;hi&lt;/b&gt;'), html);
+        assert(html.includes('class="bb-chat-entry is-l2"') && html.includes('data-bb-chat-heading="Fix"'), html);
+        assert(ChatPanel.outlineHtml([]).includes('bb-chat-empty'));
+    });
+    check('the panel remembers itself under a key of its own', () => {
+        eq(globalThis.BB.Settings.DATA.chatPanel, 'bbChatPanel');
+    });
+
+    // ---------------------------------------------- moving the page to a turn
+
+    console.log('\n# reaching a turn');
+
+    const ChatNav = require('../src/content/chat-nav.js');
+
+    check('with nothing mounted a turn is looked for at its share of the thread', () => {
+        eq(ChatNav.estimateTop({ index: 10, total: 40, scrollHeight: 20000 }), 5000);
+        eq(ChatNav.estimateTop({ index: 0, total: 0, scrollHeight: 20000 }), 0);
+    });
+    check('with turns mounted it steps from the nearest by their average height', () => {
+        // Turns 20-22 are mounted, 300px apiece, from 6000 down.
+        const mounted = [{ index: 20, top: 6000, height: 300 }, { index: 21, top: 6300, height: 300 },
+            { index: 22, top: 6600, height: 300 }];
+        eq(ChatNav.estimateTop({ index: 30, total: 40, scrollHeight: 20000, mounted }), 9000);
+        eq(ChatNav.estimateTop({ index: 5, total: 40, scrollHeight: 20000, mounted }), 1500);
+        eq(ChatNav.estimateTop({ index: 0, total: 40, scrollHeight: 20000, mounted: [{ index: 3, top: 100, height: 900 }] }), 0,
+            'never above the top of the thread');
+    });
+
+    const path = ['u1', 'a1', 'u2', 'a2', 'u3', 'a3', 'u4', 'a4'];
+    const prompts = ['u1', 'u2', 'u3', 'u4'];
+    check('the next prompt is the first one below the reading line', () => {
+        const mounted = [{ id: 'a2', top: -400 }, { id: 'u3', top: 250 }, { id: 'a3', top: 400 }];
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: 1 }), 'u3');
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: -1 }), 'u2',
+            'none mounted above the line, so the path says which');
+    });
+    check('a prompt sitting on the line is where you are, not where you go', () => {
+        const mounted = [{ id: 'u2', top: 3 }, { id: 'a2', top: 90 }];
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: 1 }), 'u3');
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: -1 }), 'u1');
+    });
+    check('there is nothing past either end', () => {
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted: [{ id: 'a4', top: -50 }], direction: 1 }), null);
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted: [{ id: 'u1', top: 0 }], direction: -1 }), null);
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted: [], direction: 1 }), 'u1', 'an unmounted thread starts at the top');
+    });
+    check('a turn not on the path shown is not somewhere to go', () => {
+        const mounted = [{ id: 'elsewhere', top: 100 }, { id: 'u1', top: -10 }];
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: 1 }), 'u2');
+    });
+
+    // ------------------------------------------------------- chat hotkeys
+
+    console.log('\n# chat hotkeys');
+
+    check('the chat keys fire in the prompt box, so none is a bare letter and none clashes', () => {
+        const Keybindings = require('../src/shared/keybindings.js');
+        eq(Keybindings.SCOPES.chat, 'ChatGPT and Claude');
+        eq(Keybindings.list({}, 'chat').map((b) => b.id), ['chat-next', 'chat-prev', 'chat-pin', 'chat-prompts', 'chat-queue']);
+        for (const binding of Keybindings.list({}, 'chat')) {
+            assert(binding.combo.ctrl && binding.combo.alt, `${binding.id} would fire while typing`);
+            assert(!/^Arrow/.test(binding.combo.code), 'Ctrl+Alt+arrows rotate the screen on Windows');
+            eq(Keybindings.conflicts({}, binding.id, binding.combo), []);
+        }
+    });
+    check('a chat hotkey is taken, and a symbol typed through AltGr is not', () => {
+        const ChatUi = require('../src/content/chat-ui.js');
+        const quiet = { add() {}, remove() {}, has: () => false, schedule() {}, stop() {} };
+        const ui = ChatUi.createChatUi({ adapter: { site: 'chatgpt' }, watcher: quiet, notify() {} });
+        const press = (key, { ctrl = true, alt = true, altGraph = false } = {}) => ({
+            code: 'KeyJ', key, ctrlKey: ctrl, altKey: alt, shiftKey: false, metaKey: false,
+            getModifierState: (name) => name === 'AltGraph' && altGraph,
+            preventDefault() { this.defaulted = true; },
+            stopPropagation() {},
+        });
+        const next = press('j');
+        ui.onHotkey(next);
+        eq(next.defaulted, true, 'Ctrl+Alt+J was left to the page');
+        for (const typed of [press('@'), press('j', { altGraph: true }), press('j', { ctrl: false, alt: false })]) {
+            ui.onHotkey(typed);
+            eq(typed.defaulted, undefined, `swallowed ${typed.key}`);
+        }
+        assert(!ui.isAltGr({ key: 'й', getModifierState: () => false }), 'a letter in another script is still that key');
+    });
+
+    // ----------------------------------------------------- the branch tree
+
+    console.log('\n# the branch tree');
+
+    const ChatTreeView = require('../src/content/chat-tree-view.js');
+
+    check('a forkless run folds into one segment, and forks, leaves and the current turn stay', () => {
+        const nodes = { r: { role: 'root', parent: null, children: ['t1'] } };
+        for (let i = 1; i <= 40; i++) {
+            nodes[`t${i}`] = { role: i % 2 ? 'user' : 'assistant', parent: i === 1 ? 'r' : `t${i - 1}`,
+                children: i < 40 ? [`t${i + 1}`] : [], text: `turn ${i}`, at: i };
+        }
+        nodes.t30.children.push('x31');
+        nodes.x31 = { role: 'user', parent: 't30', children: [], text: 'an edit', at: 99 };
+        const drawn = ChatTree.layout(ChatTree.build({ root: 'r', current: 't40', nodes }));
+        eq(drawn.nodes.map((n) => String(n.run || n.id)).sort(), ['28', '8', 't1', 't30', 't31', 't40', 'x31'],
+            'the kept turns, and the two runs by their length');
+        eq(drawn.height, 6, 'forty turns drawn six deep');
+        eq(drawn.width, 2);
+        eq(drawn.nodes.find((n) => n.id === 'x31').sib, { index: 2, count: 2 });
+        assert(drawn.nodes.find((n) => n.id === 'run:t2').onPath, 'the run on the path is not marked as on it');
+        eq(ChatTree.layout(ChatTree.build({ root: 'r', current: 't40', nodes }), { compress: false }).height, 40);
+    });
+    check('a parent sits over the middle of its children', () => {
+        const drawn = ChatTree.layout(chatFixture());
+        const at = (id) => drawn.nodes.find((n) => n.id === id);
+        eq([at('a2b1').x, at('a2b2').x, at('a2b3').x], [1, 2, 3]);
+        eq(at('u2b').x, 2);
+        eq(at('a1').x, (at('u2a').x + at('u2b').x) / 2);
+        eq(at('a2b2').sib, { index: 2, count: 3 });
+    });
+    check('the tree is drawn in classes, never in colours, and labels each fork k/n', () => {
+        const svg = ChatTreeView.render(ChatTree.layout(chatFixture()), { picked: ['a2b1'] });
+        assert(svg.includes('>2/3<'), 'a regenerate has no k/n');
+        assert(/data-bb-chat-node="a2b1"/.test(svg) && svg.includes('is-picked'), 'the picked node is not marked');
+        eq(svg.match(/#[0-9a-f]{3,8}\b|rgba?\(|fill="(?!none)|stroke="/gi), null);
+        assert(ChatTreeView.render(ChatTree.layout(chatFixture())).includes('<title>What about mocking the clock?</title>'));
+        eq(ChatTreeView.render({ nodes: [], edges: [] }), '');
+    });
+
+    // ------------------------------------------------ comparing two answers
+
+    console.log('\n# comparing two answers');
+
+    const ChatDiff = require('../src/shared/chat-diff.js');
+
+    check('identical answers are one unchanged piece', () => {
+        eq(ChatDiff.diff('same words here', 'same words here'), [{ op: '=', text: 'same words here' }]);
+        eq(ChatDiff.diff('', ''), []);
+    });
+    check('a changed word is one out and one in, with its whitespace', () => {
+        eq(ChatDiff.diff('Freeze the clock first.', 'Freeze the timer first.'),
+            [{ op: '=', text: 'Freeze the ' }, { op: '-', text: 'clock ' }, { op: '+', text: 'timer ' }, { op: '=', text: 'first.' }]);
+    });
+    check('the pieces rejoin into both inputs exactly, whatever the whitespace', () => {
+        const pairs = [
+            ['  lead\n\n- one\n- two  \n', 'lead\n- one\n-  three\n'],
+            ['a b c d e f g', 'x a c d f g y'],
+            ['', 'all new'],
+            ['all gone', ''],
+        ];
+        for (const [a, b] of pairs) {
+            const ops = ChatDiff.diff(a, b);
+            eq(ChatDiff.rejoin(ops, 'a'), a, 'the first side');
+            eq(ChatDiff.rejoin(ops, 'b'), b, 'the second side');
+        }
+    });
+    check('past the cap it diffs by line, and past that it shows the two whole', () => {
+        const a = Array.from({ length: 30 }, (_, i) => `line ${i} alpha beta gamma`).join('\n');
+        const b = Array.from({ length: 30 }, (_, i) => i % 2 ? `line ${i} alpha beta gamma` : `rewritten ${i} delta`).join('\n');
+        const byLine = ChatDiff.compare(a, b, { wordEdits: 5 });
+        eq(byLine.unit, 'line');
+        eq(ChatDiff.rejoin(byLine.ops, 'b'), b);
+        eq(ChatDiff.compare(a, b, { wordEdits: 5, lineEdits: 3 }).unit, 'whole');
+    });
+
+    const ChatCompare = require('../src/content/chat-compare.js');
+
+    check('two regenerates share their prompt, which is shown once', () => {
+        const html = ChatCompare.bodyHtml(chatFixture(), 'a2b1', 'a2b3');
+        eq((html.match(/The prompt</g) || []).length, 1);
+        assert(html.includes('>1/3<') && html.includes('>3/3<'), 'the two are not named as the page names them');
+        assert(html.includes('<del>Mock ') && html.includes('<ins>Use '), html);
+    });
+    check('branches that split at an edit lead with the edit', () => {
+        // A prompt picked stands for its answer.
+        const html = ChatCompare.bodyHtml(chatFixture(), 'u2a', 'u2b');
+        assert(html.includes('The prompts differ'), 'the edited prompts are not diffed');
+        eq(ChatCompare.sides(chatFixture(), 'u2b').answer.id, 'a2b3', 'a prompt stands for its newest answer');
+        assert(html.includes('Retries hide it.'), 'the first branch’s answer is missing');
+    });
+    check('what the chat wrote is escaped in a comparison', () => {
+        const conv = chatFixture();
+        conv.nodes.a2b1.text = '<img src=x onerror=alert(1)>';
+        assert(!ChatCompare.bodyHtml(conv, 'a2b1', 'a2b2', 'inline').includes('<img'), 'markup from an answer reached the page');
+    });
+
+    // ------------------------------------------------------- chat export
+
+    console.log('\n# exporting a chat');
+
+    const ChatExport = require('../src/shared/chat-export.js');
+
+    check('maths becomes dollars in prose and is left alone inside code', () => {
+        eq(ChatExport.toDollars('Area is \\( \\pi r^2 \\).'), 'Area is $\\pi r^2$.');
+        eq(ChatExport.toDollars('\\[\nE = mc^2\n\\]'), '$$\nE = mc^2\n$$');
+        const code = 'Match with `\\(x\\)` or:\n```regex\n\\(\\d+\\)\n```\nand \\(y\\).';
+        eq(ChatExport.toDollars(code), 'Match with `\\(x\\)` or:\n```regex\n\\(\\d+\\)\n```\nand $y$.');
+    });
+    check('a table passes through byte for byte', () => {
+        const table = '| a | b |\n|---|:-:|\n| `x|y` | \\(z\\) |';
+        const conv = chatFixture();
+        conv.nodes.a2b2.text = table;
+        conv.nodes.a2b2.blocks = [];
+        assert(ChatExport.markdown(conv, { dollars: false }).includes(table), 'the table was rewritten');
+    });
+    check('code keeps its language, and an answer quoting a fence gets a longer one', () => {
+        const md = ChatExport.markdown(ChatgptFormat.normalize(chatgptRaw()), { now: 0 });
+        assert(md.includes('```python\nprint(1)\n```'), 'the language was lost');
+        const conv = chatFixture();
+        conv.nodes.a2b2.blocks = [{ kind: 'code', lang: 'md', text: '```js\nf()\n```' }];
+        assert(ChatExport.markdown(conv).includes('````md\n```js\nf()\n```\n````'), 'the inner fence closed the outer one');
+    });
+    check('a chatgpt export reads as front matter, then You and ChatGPT turn by turn', () => {
+        const md = ChatExport.markdown(ChatgptFormat.normalize(chatgptRaw()), { now: Date.UTC(2025, 10, 9) });
+        assert(md.startsWith('---\ntitle: "Flaky login test"\nsite: ChatGPT\nurl: https://chatgpt.com/c/conv-1\n'), md.slice(0, 120));
+        assert(md.includes('models: ["gpt-5-thinking","gpt-5"]') && md.includes('exported: 2025-11-09T00:00:00.000Z'));
+        eq((md.match(/^## You$/gm) || []).length, 2);
+        eq((md.match(/^## ChatGPT$/gm) || []).length, 2);
+        assert(md.includes('A race.[^1]') && md.includes('[^1]: [Race conditions](https://example.com/race)'), 'no footnote');
+        assert(md.includes('*Searched the web: "flaky login test"*'), 'the search was dropped');
+        assert(!md.includes('It races') && !md.includes('<details>'), 'thinking was exported unasked');
+        assert(ChatExport.markdown(ChatgptFormat.normalize(chatgptRaw()), { thinking: true })
+            .includes('<details><summary>Thought for 4s</summary>\n\n**Looking**\nIt races.\n\n</details>'));
+        eq(/[\uE000-\uF8FF]/.test(md), false);
+    });
+    check('the json is the path shown, or the whole tree when asked', () => {
+        const conv = chatFixture();
+        const active = ChatExport.json(conv, { now: 0 });
+        eq(active.type, 'bell-bearer-chat');
+        eq(Object.keys(active.nodes).sort(), ['a1', 'a2b2', 'r', 'u1', 'u2b']);
+        eq(active.nodes.a1.children, ['u2b'], 'a branch not exported is still listed as a child');
+        eq(Object.keys(ChatExport.json(conv, { branches: 'all' }).nodes).length, 9);
+        eq(ChatExport.json(conv, { raw: { x: 1 } }).raw, { x: 1 });
+    });
+    check('a file name is dated and something Windows will save', () => {
+        const conv = { title: 'Why: "is" <this> a/b\\c|d?* flaky...', createdAt: new Date(2025, 10, 9, 12).getTime() };
+        const name = ChatExport.fileName(conv, 'md');
+        eq(name, '2025-11-09 Why is this a b c d flaky.md');
+        assert(!/[<>:"/\\|?*]/.test(name));
+        assert(ChatExport.fileName({ title: 'x'.repeat(400), createdAt: 1 }, 'json').length <= 120);
+    });
+
+    // ------------------------------------------------------------- zip
+
+    console.log('\n# the zip writer');
+
+    const Zip = require('../src/shared/zip.js');
+
+    /** Just enough of a zip reader to check one: the central directory, and each entry's bytes. */
+    function readZip(bytes) {
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const end = bytes.length - 22;
+        assert(view.getUint32(end, true) === 0x06054B50, 'no end-of-directory record where it should be');
+        const count = view.getUint16(end + 10, true);
+        let at = view.getUint32(end + 16, true);
+        const out = [];
+        for (let i = 0; i < count; i++) {
+            assert(view.getUint32(at, true) === 0x02014B50, `entry ${i} is not a directory record`);
+            const flags = view.getUint16(at + 8, true);
+            const size = view.getUint32(at + 24, true);
+            const nameLength = view.getUint16(at + 28, true);
+            const local = view.getUint32(at + 42, true);
+            const name = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength));
+            const start = local + 30 + view.getUint16(local + 26, true);
+            out.push({ name, size, utf8: !!(flags & 0x0800), crc: view.getUint32(at + 16, true), data: bytes.subarray(start, start + size) });
+            at += 46 + nameLength;
+        }
+        return out;
+    }
+
+    check('the checksum is the standard CRC-32', () => {
+        eq(Zip.crc32(new TextEncoder().encode('The quick brown fox jumps over the lazy dog')).toString(16), '414fa339');
+        eq(Zip.crc32(new Uint8Array(0)), 0);
+    });
+    check('an archive reads back with the same names, sizes and bytes', () => {
+        const files = [
+            { name: 'index.md', data: '# Chats\n', at: new Date(2025, 10, 13, 10, 5, 8).getTime() },
+            { name: '2025-11-09 Café — naïve.md', data: 'Ünïcödé body', at: Date.now() },
+            { name: 'raw.bin', data: new Uint8Array([0, 255, 7]) },
+        ];
+        const read = readZip(Zip.build(files));
+        eq(read.map((entry) => entry.name), files.map((file) => file.name));
+        eq(read.map((entry) => entry.size), [8, 16, 3]);
+        assert(read.every((entry) => entry.utf8), 'a name is not flagged as UTF-8');
+        eq(new TextDecoder().decode(read[1].data), 'Ünïcödé body');
+        eq(Array.from(read[2].data), [0, 255, 7]);
+        eq(read[0].crc, Zip.crc32(new TextEncoder().encode('# Chats\n')));
+    });
+    check('a DOS time stamp keeps the local time, to the two seconds it can', () => {
+        const { time, date } = Zip.dosTime(new Date(2025, 10, 13, 10, 5, 9).getTime());
+        eq([time >> 11, (time >> 5) & 63, (time & 31) * 2], [10, 5, 8]);
+        eq([(date >> 9) + 1980, (date >> 5) & 15, date & 31], [2025, 11, 13]);
+    });
+
+    // ------------------------------------------------------ bulk export
+
+    console.log('\n# bulk chat export');
+
+    const ChatLibrary = require('../src/content/chat-library.js');
+
+    check('chats are fetched about a second apart, and a 429 doubles the wait', () => {
+        eq([ChatLibrary.pace(() => 0), ChatLibrary.pace(() => 1)], [900, 1600]);
+        eq([1, 2, 3].map(ChatLibrary.backoff), [5000, 10000, 20000]);
+        eq(ChatLibrary.STRIKES, 3);
+    });
+    check('the archive has an index, and two chats with one name do not overwrite each other', () => {
+        const one = chatFixture();
+        const two = { ...chatFixture(), id: 'c2' };
+        const files = ChatLibrary.archive([one, two], { site: 'chatgpt', format: 'both', now: new Date(2025, 10, 13).getTime() });
+        eq(files.map((f) => f.name), ['index.md', '1970-01-01 Flaky test.md', '1970-01-01 Flaky test.json',
+            '1970-01-01 Flaky test (2).md', '1970-01-01 Flaky test (2).json']);
+        assert(files[0].data.startsWith('# ChatGPT export — 2025-11-13\n\n2 chats.'), files[0].data);
+        assert(files[0].data.includes('[md](1970-01-01%20Flaky%20test%20(2).md)'), 'the index does not link the renamed file');
+        eq(ChatLibrary.zipName('chatgpt', new Date(2025, 10, 13).getTime()), 'chatgpt-export-2025-11-13.zip');
+    });
+    check('a markdown-only archive has no json in it', () => {
+        const files = ChatLibrary.archive([chatFixture()], { site: 'chatgpt', format: 'md' });
+        eq(files.filter((f) => f.name.endsWith('.json')), []);
+    });
+
+    // ------------------------------------------------- prompt templates
+
+    console.log('\n# prompt templates');
+
+    const PromptTemplates = require('../src/shared/prompt-templates.js');
+
+    await checkAsync('the starters are seeded when the key is absent, and not when it is empty', async () => {
+        clearStore();
+        const first = await PromptTemplates.load();
+        eq(first.length, 10);
+        eq(first[0].name, 'Code review');
+        eq(store.bbPromptTemplates.length, 10, 'the seed was not written, so it would seed again');
+        clearStore();
+        store.bbPromptTemplates = [];
+        eq(await PromptTemplates.load(), [], 'someone who deleted all ten got them back');
+    });
+    await checkAsync('restoring the starters puts back only what is missing', async () => {
+        clearStore();
+        const all = await PromptTemplates.load();
+        await PromptTemplates.remove(all[2].id);
+        await PromptTemplates.create({ name: 'Mine', body: 'Explain {{thing}}' });
+        const back = await PromptTemplates.restoreStarters();
+        eq(back.length, 11);
+        eq(back.filter((t) => t.id === all[2].id).length, 1);
+        eq(back[9].name, 'Mine', 'restoring reordered what was there');
+    });
+    check('fields are asked for once each, in order, and the selection is never asked', () => {
+        eq(PromptTemplates.fields('Compare {{options}} for {{ goal }} — {{options}} again, on {{selection}}'), ['options', 'goal']);
+        eq(PromptTemplates.fill('Why {{code}}? See {{selection}}. {{missing}}.', { code: 'x()', selection: 'this part' }),
+            'Why x()? See this part. .');
+        assert(PromptTemplates.STARTERS.every((t) => /\S/.test(t.body) && t.body.length < PromptTemplates.BODY_CAP));
+    });
+    check('a site sees its own templates and the unfiled ones, last used first', () => {
+        const state = [
+            { id: 'a', name: 'Anywhere', body: 'x', usedAt: 1 },
+            { id: 'b', name: 'Also ChatGPT', body: 'x', sites: ['chatgpt'] },
+            { id: 'c', name: 'ChatGPT only', body: 'a review of it', sites: ['chatgpt'], usedAt: 5 },
+            { id: 'd', name: 'Nowhere real', body: 'x', sites: ['myspace'] },
+        ];
+        eq(PromptTemplates.forSite(state, 'chatgpt').map((t) => t.id), ['c', 'a', 'b', 'd'],
+            'a site that no longer exists is dropped, which leaves the template for every site');
+        eq(PromptTemplates.search(state, 'chatgpt', 'REVIEW').map((t) => t.id), ['c']);
+    });
+
+    // ------------------------------------------------------ prompt queue
+
+    console.log('\n# the prompt queue');
+
+    const PromptQueue = require('../src/shared/prompt-queue.js');
+
+    /** A queue built by the module's own functions, with the ids made readable. */
+    function queueOf(...specs) {
+        let state = PromptQueue.blank();
+        for (const [id, spec] of specs) {
+            const made = PromptQueue.add(state, { site: 'chatgpt', conv: 'c1', text: id, now: 1, ...spec });
+            state = { ...made.state, items: made.state.items.map((item) => (item.id === made.item.id ? { ...item, id } : item)) };
+        }
+        return state;
+    }
+
+    check('a chat sends its first waiting prompt, and one scheduled later holds back the rest', () => {
+        const state = queueOf(['p1', {}], ['p2', { notBefore: 5000 }], ['p3', {}], ['other', { conv: 'c2' }]);
+        eq(PromptQueue.next(state, 'chatgpt', 'c1', 100).id, 'p1');
+        const after = PromptQueue.patch(state, 'p1', { status: 'sent', sentAt: 100 });
+        eq(PromptQueue.next(after, 'chatgpt', 'c1', 100), null, 'p3 jumped the scheduled p2');
+        eq(PromptQueue.next(after, 'chatgpt', 'c1', 5000).id, 'p2');
+        eq(PromptQueue.next(after, 'chatgpt', 'c2', 100).id, 'other', 'two chats wait on each other');
+    });
+    check('a hold stops a whole site and a pause stops one chat', () => {
+        const state = queueOf(['p1', {}], ['q1', { conv: 'c2' }]);
+        const held = PromptQueue.hold(state, 'chatgpt', 1000, 'GPT-5 limit');
+        eq(PromptQueue.next(held, 'chatgpt', 'c1', 999), null);
+        eq(PromptQueue.next(held, 'chatgpt', 'c1', 1000).id, 'p1', 'the hold did not end at its time');
+        const paused = PromptQueue.pause(state, 'chatgpt:c1');
+        eq(PromptQueue.next(paused, 'chatgpt', 'c1', 1), null);
+        eq(PromptQueue.next(paused, 'chatgpt', 'c2', 1).id, 'q1');
+        eq(PromptQueue.next(PromptQueue.pause(paused, 'chatgpt:c1', false), 'chatgpt', 'c1', 1).id, 'p1');
+    });
+    check('the worker wakes at the earliest schedule or hold end, and not for nothing', () => {
+        const state = queueOf(['p1', { notBefore: 9000 }], ['p2', { notBefore: 4000 }]);
+        eq(PromptQueue.nextWake(state, 1000), 4000);
+        eq(PromptQueue.nextWake(PromptQueue.hold(state, 'chatgpt', 2500), 1000), 2500);
+        eq(PromptQueue.nextWake(PromptQueue.hold(PromptQueue.blank(), 'chatgpt', 2500), 1000), null, 'a hold with nothing behind it');
+        eq(PromptQueue.due(state, 5000).map((item) => item.id), ['p2']);
+    });
+    check('two pages cannot both hold one chat’s queue until the lease runs out', () => {
+        const state = PromptQueue.claim(PromptQueue.blank(), 'chatgpt:c1', 'page-a', 0);
+        assert(PromptQueue.canClaim(state, 'chatgpt:c1', 'page-a', 10));
+        assert(!PromptQueue.canClaim(state, 'chatgpt:c1', 'page-b', 10));
+        assert(PromptQueue.canClaim(state, 'chatgpt:c1', 'page-b', PromptQueue.LEASE_MS));
+        assert(PromptQueue.canClaim(state, 'chatgpt:c2', 'page-b', 10), 'another chat waited on this one');
+        eq(PromptQueue.release(state, 'chatgpt:c1', 'page-b').leases['chatgpt:c1'].by, 'page-a', 'a page let go of a lease it did not hold');
+        eq(PromptQueue.release(state, 'chatgpt:c1', 'page-a').leases, {});
+    });
+    check('a new chat’s chain follows the first prompt to the chat it made', () => {
+        const state = queueOf(['n1', { conv: null, chain: 'pc_x' }], ['n2', { conv: null, chain: 'pc_x' }], ['m1', { conv: null, chain: 'pc_y' }]);
+        eq(PromptQueue.next(state, 'chatgpt', null, 1).id, 'n1');
+        const bound = PromptQueue.bind(state, 'pc_x', 'c9');
+        eq(PromptQueue.itemsFor(bound, 'chatgpt', 'c9').map((item) => item.id), ['n1', 'n2']);
+        eq(PromptQueue.itemsFor(bound, 'chatgpt', null).map((item) => item.id), ['m1']);
+        eq(PromptQueue.chatKey('chatgpt', null, 'pc_y'), 'chatgpt:new:pc_y');
+    });
+    check('a schedule that passed while the browser was shut is held for a yes', () => {
+        const state = queueOf(['late', { notBefore: 1000 }], ['fresh', { notBefore: 1000 + PromptQueue.STALE_MS }], ['now', {}]);
+        const out = PromptQueue.holdStale(state, 1001 + PromptQueue.STALE_MS);
+        eq(out.items.map((item) => item.status), ['held', 'waiting', 'waiting']);
+        assert(/browser was shut/.test(out.items[0].note));
+    });
+    check('what has finished is kept a day and then let go', () => {
+        const state = PromptQueue.patch(queueOf(['p1', {}]), 'p1', { status: 'sent', sentAt: 1000 });
+        eq(PromptQueue.clean(state, 1000 + 1000).items.length, 1);
+        eq(PromptQueue.clean(state, 1000 + PromptQueue.KEEP_DONE_MS).items.length, 0);
+    });
+
+    // -------------------------------------------------------- queue strip
+
+    console.log('\n# the queue strip');
+
+    const ChatQueueView = require('../src/content/chat-queue-view.js');
+
+    check('the strip lists what is still to go, and says when each goes', () => {
+        const now = new Date(2025, 10, 13, 18).getTime();
+        let state = queueOf(['p1', {}], ['p2', { notBefore: new Date(2025, 10, 13, 19, 42).getTime() }], ['p3', {}]);
+        state = PromptQueue.patch(state, 'p3', { status: 'sent', sentAt: now });
+        const html = ChatQueueView.listHtml(state.items, { now });
+        assert(html.includes('2 queued'), 'a sent prompt is counted as queued');
+        assert(html.includes('>next<') && /at 7:42/.test(html), html);
+        eq(ChatQueueView.listHtml([], { now }), '', 'an empty strip should not be drawn at all');
+        assert(ChatQueueView.listHtml(state.items, { paused: true, now }).includes('data-bb-q="resume"'));
+    });
+    check('what a row’s buttons ask for is done to the queue', () => {
+        let state = queueOf(['p1', {}], ['p2', {}], ['p3', {}]);
+        const write = (mutate) => { state = mutate(state); };
+        const press = (verb, id, editing = null) => ChatQueueView.onClick(
+            { target: { closest: () => ({ dataset: { bbQ: verb, bbQId: id }, closest: () => null }) } },
+            { items: state.items, key: 'chatgpt:c1', write, editing });
+        press('up', 'p3');
+        eq(state.items.map((i) => i.id), ['p1', 'p3', 'p2']);
+        press('down', 'p1');
+        eq(state.items.map((i) => i.id), ['p3', 'p1', 'p2']);
+        press('remove', 'p1');
+        eq(state.items.map((i) => i.id), ['p3', 'p2']);
+        eq(press('edit', 'p2'), 'p2', 'edit did not open the row');
+        press('pause');
+        eq(state.paused, { 'chatgpt:c1': true });
+        state = PromptQueue.patch(state, 'p2', { status: 'failed', note: 'no box' });
+        press('retry', 'p2');
+        eq([state.items[1].status, state.items[1].note, state.paused], ['waiting', '', {}], 'a retry should unpause too');
+    });
+    check('a queued prompt can be sent now, in an hour, or at a time picked', () => {
+        const T = new Date(2025, 10, 13, 18).getTime();
+        let state = queueOf(['p1', {}]);
+        const write = (mutate) => { state = mutate(state); };
+        const press = (verb, extra = {}) => ChatQueueView.onClick({ target: { closest: () => ({
+            dataset: { bbQ: verb, bbQId: 'p1', ...extra },
+            closest: () => ({ querySelector: () => ({ value: '2025-11-13T21:30' }) }),
+        }) } }, { items: state.items, key: 'chatgpt:c1', write, editing: null, now: () => T });
+        eq(press('when'), 'when:p1', 'the time editor did not open');
+        eq(press('hour'), null);
+        eq(state.items[0].notBefore, T + 3600000);
+        press('at');
+        eq(state.items[0].notBefore, new Date(2025, 10, 13, 21, 30).getTime(), 'a picked time is local time');
+        press('reset', { bbQAt: String(T + 5000) });
+        eq(state.items[0].notBefore, T + 5000 + 60000, 'a reset is rounded; a minute after it is the first safe send');
+        press('now');
+        eq(state.items[0].notBefore, 0);
+        const form = ChatQueueView.listHtml(state.items, { editing: 'when:p1', now: T, resetAt: T + 5000 });
+        assert(form.includes('type="datetime-local"') && form.includes('When the limit resets'), form);
+    });
+    check('a prompt someone wrote is escaped in the strip', () => {
+        const html = ChatQueueView.listHtml(queueOf(['<b>x</b>', { text: '<img src=x onerror=alert(1)>' }]).items);
+        assert(!html.includes('<img'), 'markup from a prompt reached the page');
+    });
+
+    check('chatgpt is in the launcher, its mark in the page’s ink', () => {
+        const SiteIcons = require('../src/shared/site-icons.js');
+        eq(SiteIcons.get('chatgpt').name, 'ChatGPT');
+        eq(SiteIcons.get('chatgpt').color, 'currentColor');
+        assert(SiteIcons.list().some((site) => site.id === 'chatgpt'), 'not in ORDER');
+    });
+    check('the chatgpt workspace has a panel behind every tab', () => {
+        const html = readRepo('dashboard.html');
+        const dashboard = readRepo('dashboard.js');
+        const tabs = /chatgpt: \[([\s\S]*?)\],/.exec(dashboard)[1];
+        for (const [, id] of tabs.matchAll(/panel: '([^']+)'/g)) {
+            assert(html.includes(`id="${id}"`), `${id} is opened by a tab but is not in the page`);
+        }
+        assert(html.indexOf('src/page/chat-views.js') < html.indexOf('dashboard.js"'), 'the views load after the page that mounts them');
+    });
+    check('the chatgpt settings panel binds a control to every setting the site has', () => {
+        require('../src/page/chat-settings.js');
+        const html = globalThis.BB.ChatSettings.panelHtml(ChatSites.get('chatgpt'));
+        for (const key of ChatSites.allKeys().filter((one) => one.startsWith('chatgpt'))) {
+            assert(html.includes(`id="${key}"`), `${key} has no control`);
+        }
+        assert(/id="chatgptQueueGapSeconds"[^>]*min="1"/.test(html), 'the gap can be set below a second');
+        const page = readRepo('dashboard.html');
+        assert(page.includes('data-chat-settings="chatgpt"'), 'no panel for the settings card to open');
+        const dashboard = readRepo('dashboard.js');
+        assert(dashboard.indexOf('ChatSettings.mountAll') < dashboard.indexOf('SettingsForm.bindAll'), 'the controls are drawn after the form is bound');
+    });
+    check('claude has its card, a panel behind every tab, and its settings', () => {
+        const SiteIcons = require('../src/shared/site-icons.js');
+        eq([SiteIcons.get('claude').name, SiteIcons.get('claude').color], ['Claude', '#D97757']);
+        assert(SiteIcons.list().some((site) => site.id === 'claude'), 'not in ORDER');
+        const html = readRepo('dashboard.html');
+        const tabs = /claude: \[([\s\S]*?)\],/.exec(readRepo('dashboard.js'))[1];
+        eq([...tabs.matchAll(/panel: '([^']+)'/g)].map((m) => m[1]), ['claudePinsPanel', 'claudePromptsPanel', 'claudeQueuePanel']);
+        for (const id of ['claudePinsPanel', 'claudePromptsPanel', 'claudeQueuePanel']) assert(html.includes(`id="${id}"`), `${id} is not in the page`);
+        assert(html.includes('data-chat-settings="claude"'), 'no settings panel for the card to open');
+        const panel = globalThis.BB.ChatSettings.panelHtml(ChatSites.get('claude'));
+        for (const key of ChatSites.allKeys().filter((one) => one.startsWith('claude'))) assert(panel.includes(`id="${key}"`), `${key} has no control`);
+    });
+    check('a pin opens its chat with the turn named in the address', () => {
+        require('../src/page/chat-views.js');
+        eq(globalThis.BB.ChatViews.pinUrl({ site: 'chatgpt', conv: 'abc12345', node: 'n/1', url: '' }),
+            'https://chatgpt.com/c/abc12345#bb-node=n%2F1');
+    });
+    check('a chat setting that changes the page reaches the page that is open', () => {
+        const main = readRepo('src/content/main.js');
+        assert(/const CHAT_SURFACES = \[[\s\S]*?'composerTools', 'limitSuggest'[\s\S]*?\];/.test(main), 'the chat surfaces are not listed');
+        assert(/chatSurfacesChanged && chatUi\) chatUi\.refreshSurfaces\(\)/.test(main), 'nothing repaints them');
+    });
+    check('the worker loads the same scripts in Chrome and Firefox, the queue among them', () => {
+        const chrome = [...readRepo('background.js').matchAll(/'(src\/[^']+)'/g)].map((m) => m[1]);
+        const firefox = JSON.parse(readRepo('manifest.firefox.json')).background.scripts;
+        eq(firefox, chrome);
+        assert(chrome.indexOf('src/shared/prompt-queue.js') < chrome.indexOf('src/background/prompt-queue.js'),
+            'the worker would get undefined for PromptQueue at load');
+        assert(chrome.indexOf('src/shared/chat-sites.js') < chrome.indexOf('src/background/prompt-queue.js'));
+    });
+
+    // --------------------------------------------------- when limits reset
+
+    console.log('\n# reading when a chat limit resets');
+
+    /** 18:00 today, built with setHours so the check runs in any time zone. */
+    const clock = (hours, minutes = 0, days = 0) => {
+        const d = new Date(2025, 10, 13);
+        d.setDate(d.getDate() + days);
+        d.setHours(hours, minutes, 0, 0);
+        return d.getTime();
+    };
+    const T18 = clock(18);
+
+    check('a clock time later today is today, and one already past is tomorrow', () => {
+        eq(PromptQueue.parseReset('after 7:42 PM', T18), clock(19, 42));
+        eq(PromptQueue.parseReset('after 7:42 PM', clock(20)), clock(19, 42, 1));
+        eq(PromptQueue.parseReset('until 3 PM', T18), clock(15, 0, 1));
+        eq(PromptQueue.parseReset('at 23:05', T18), clock(23, 5));
+        eq(PromptQueue.parseReset('resets at 12 a.m.', T18), clock(0, 0, 1));
+    });
+    check('relative times, tomorrow and a weekday are read too', () => {
+        eq(PromptQueue.parseReset('in 2 hours 13 minutes', T18), T18 + (2 * 60 + 13) * 60000);
+        eq(PromptQueue.parseReset('try again in 45 minutes', T18), T18 + 45 * 60000);
+        eq(PromptQueue.parseReset('tomorrow at 9 AM', T18), clock(9, 0, 1));
+        // 13 November 2025 is a Thursday.
+        eq(PromptQueue.parseReset('Monday at 9 AM', T18), clock(9, 0, 4));
+        eq(PromptQueue.parseReset('Thursday at 5 PM', T18), clock(17, 0, 7), 'this Thursday has gone');
+    });
+    check('what is not a time is null, never a guess', () => {
+        eq(PromptQueue.parseReset('soon', T18), null);
+        eq(PromptQueue.parseReset('', T18), null);
+        eq(PromptQueue.parseReset('at 25:00', T18), null);
+        eq(PromptQueue.parseReset('your weekly limit resets Monday', T18), null, 'a day with no time on it');
+    });
+    check('a chatgpt limit notice gives up its model, its time and whether it blocks', () => {
+        const fallback = ChatSites.readLimit('chatgpt',
+            'You\'ve hit the Free plan limit for GPT-4.5. Responses will use another model until your limit resets after 7:42 PM.', T18);
+        eq(fallback, { model: 'GPT-4.5', until: clock(19, 42), blocked: false, window: '' });
+        const blocked = ChatSites.readLimit('chatgpt', 'You\'ve reached our limit of messages per hour. Please try again in 30 minutes.', T18);
+        eq(blocked, { model: '', until: T18 + 30 * 60000, blocked: true, window: '' });
+        eq(ChatSites.readLimit('chatgpt', 'Nothing to see', T18), null);
+        eq(ChatSites.readLimit('nowhere', 'limit', T18), null);
+    });
+
+    // ------------------------------------------------------ chat pins
+
+    console.log('\n# chat pins');
+
+    const ChatPins = require('../src/shared/chat-pins.js');
+
+    await checkAsync('a pin is kept by turn id, once, with its chat beside it', async () => {
+        clearStore();
+        const where = { site: 'chatgpt', conv: 'c1', title: 'Flaky test', url: 'https://chatgpt.com/c/c1' };
+        await ChatPins.pin({ ...where, node: 'a1', excerpt: '## Cause\nA **race** on the session.', now: 10 });
+        await ChatPins.pin({ ...where, node: 'a1', excerpt: 'again', now: 20 });
+        await ChatPins.pin({ ...where, node: 'a3', excerpt: 'Await it.', now: 30 });
+        const state = await ChatPins.load();
+        eq(ChatPins.forConv(state, 'chatgpt', 'c1').map((p) => p.node), ['a1', 'a3']);
+        eq(ChatPins.forConv(state, 'chatgpt', 'c1')[0].excerpt, 'Cause A race on the session.');
+        eq(state['chatgpt:c1'].title, 'Flaky test');
+        assert(ChatPins.isPinned(state, 'chatgpt', 'c1', 'a3') && !ChatPins.isPinned(state, 'chatgpt', 'c2', 'a3'));
+    });
+    await checkAsync('a label is the pin’s own, and the last unpin forgets the chat', async () => {
+        clearStore();
+        const where = { site: 'chatgpt', conv: 'c1' };
+        await ChatPins.pin({ ...where, node: 'a1', now: 1 });
+        await ChatPins.relabel({ ...where, node: 'a1', label: '  the fix  ' });
+        eq(ChatPins.forConv(await ChatPins.load(), 'chatgpt', 'c1')[0].label, 'the fix');
+        await ChatPins.unpin({ ...where, node: 'a1' });
+        eq(await ChatPins.load(), {});
+    });
+    await checkAsync('the dashboard gets every pin on a site, newest first', async () => {
+        clearStore();
+        await ChatPins.pin({ site: 'chatgpt', conv: 'c1', node: 'a1', now: 1 });
+        await ChatPins.pin({ site: 'chatgpt', conv: 'c2', node: 'b1', now: 5 });
+        await ChatPins.pin({ site: 'claude', conv: 'k1', node: 'z1', now: 9 });
+        const all = ChatPins.all(await ChatPins.load(), 'chatgpt');
+        eq(all.map((p) => `${p.conv}/${p.node}`), ['c2/b1', 'c1/a1']);
+    });
+    check('an excerpt drops fenced code rather than showing its fence', () => {
+        eq(ChatPins.excerptOf('```python\nprint(1)\n```\nThen [run it](https://x.y).'), 'Then run it.');
+        assert(ChatPins.excerptOf('word '.repeat(60)).length <= ChatPins.EXCERPT);
+    });
+
+    // ------------------------------------------------------ the composer
+
+    console.log('\n# the composer');
+
+    check('a prompt is only ever typed and sent by the page, never posted by us', () => {
+        // The sites' send endpoints want tokens only their own page mints.
+        // Anything else is a request they are built to refuse, and one that
+        // looks exactly like the automation they are watching for.
+        const source = readRepo('src/content/composer.js');
+        assert(!/\bfetch\(|XMLHttpRequest|sendBeacon/.test(source), 'the composer makes a request');
+        assert(!/new KeyboardEvent/.test(source), 'the composer sends a synthetic Enter');
+    });
+
+    // ------------------------------------------------ reading claude's tree
+
+    console.log('\n# reading a claude conversation');
+
+    const ClaudeFormat = require('../src/shared/claude-format.js');
+
+    /**
+     * chat_conversations/<uuid>?tree=True as it answers: the sentinel parent,
+     * a prompt edited once (h2, h2b), an answer retried (a2, a2r), thinking, a
+     * web search with a cited answer, pasted text on a prompt, and one old
+     * message with text and no content.
+     */
+    function claudeRaw({ leaf = 'a2r' } = {}) {
+        const m = (uuid, parent, sender, at, content, extra = {}) => ({
+            uuid, parent_message_uuid: parent, sender, index: 0, created_at: `2025-11-13T10:00:${String(at).padStart(2, '0')}Z`,
+            content, text: '', attachments: [], files: [], ...extra,
+        });
+        const text = (t, citations) => ({ type: 'text', text: t, citations });
+        return {
+            uuid: 'conv-uuid', name: 'Why the build fails', model: 'claude-sonnet-4',
+            created_at: '2025-11-13T10:00:00Z', updated_at: '2025-11-13T10:05:00Z',
+            current_leaf_message_uuid: leaf,
+            chat_messages: [
+                m('h1', ClaudeFormat.SENTINEL, 'human', 1, [], { text: 'Old style prompt' }),
+                m('a1', 'h1', 'assistant', 2, [{ type: 'thinking', thinking: 'Let me look.' }, text('It is the linker.')]),
+                m('h2', 'a1', 'human', 3, [text('Here is the log')], { attachments: [{ file_name: 'paste.txt', extracted_content: 'ld: undefined symbol' }] }),
+                m('a2', 'h2', 'assistant', 4, [
+                    { type: 'tool_use', name: 'web_search', input: { query: 'ld undefined symbol' } },
+                    { type: 'tool_result', name: 'web_search', content: [] },
+                    text('Link the math library.', [{ url: 'https://example.com/ld', title: 'ld manual', start_index: 0, end_index: 22 }]),
+                ]),
+                m('a2r', 'h2', 'assistant', 5, [text('Add -lm to the link line.')]),
+                m('h2b', 'a1', 'human', 6, [text('An edited question')], { files: [{ file_name: 'screenshot.png' }] }),
+            ],
+        };
+    }
+
+    check('the sentinel parent is the root and the current leaf is the path shown', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(conv.root, ClaudeFormat.SENTINEL);
+        eq(ChatTree.activePath(conv), ['h1', 'a1', 'h2', 'a2r']);
+        eq(conv.site, 'claude');
+        eq(conv.url, 'https://claude.ai/chat/conv-uuid');
+    });
+    check('an edit and a retry are siblings, numbered by when each was written', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(ChatTree.siblingIndex(conv, 'a2r'), { index: 2, count: 2 });
+        eq(ChatTree.siblingIndex(conv, 'h2b'), { index: 2, count: 2 });
+        eq(ChatTree.forks(conv).sort(), ['a1', 'h2']);
+    });
+    check('with no current leaf yet, the newest message is the leaf', () => {
+        const raw = claudeRaw();
+        delete raw.current_leaf_message_uuid;
+        eq(ChatTree.activePath(ClaudeFormat.normalize(raw)), ['h1', 'a1', 'h2b']);
+    });
+    check('thinking stays out of the text, citations become footnotes, pasted text is kept', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw({ leaf: 'a2' }));
+        eq(conv.nodes.a1.text, 'It is the linker.');
+        eq(conv.nodes.a1.blocks[0], { kind: 'thinking', text: 'Let me look.' });
+        eq(conv.nodes.a2.text, 'Link the math library.[^1]');
+        eq(conv.nodes.a2.blocks[0].text, 'Searched the web: "ld undefined symbol"');
+        eq(conv.nodes.a2.cites, [{ n: 1, title: 'ld manual', url: 'https://example.com/ld' }]);
+        eq(conv.nodes.h2.blocks[1], { kind: 'attachment', name: 'paste.txt', text: 'ld: undefined symbol' });
+        eq(conv.nodes.h2b.text, 'An edited question\n\n[file: screenshot.png]');
+        eq(conv.nodes.h1.text, 'Old style prompt', 'a message with only text did not read');
+        eq(conv.nodes.a1.model, 'claude-sonnet-4');
+    });
+    check('a list row reads as the library wants it', () => {
+        eq(ClaudeFormat.listItem({ uuid: 'u', name: '', updated_at: '2025-11-13T10:00:00Z' }),
+            { id: 'u', title: 'Untitled chat', updatedAt: Date.parse('2025-11-13T10:00:00Z') });
+    });
+
+    // ------------------------------------------------ replaying artifacts
+
+    console.log('\n# replaying claude artifacts');
+
+    /** A chat that builds a component over four answers, and makes a second document too. */
+    function artifactChat() {
+        const tool = (input) => ({ type: 'tool_use', name: 'artifacts', input });
+        const said = (t) => ({ type: 'text', text: t });
+        const m = (uuid, parent, sender, at, content) => ({
+            uuid, parent_message_uuid: parent, sender, created_at: `2025-11-13T10:00:${String(at).padStart(2, '0')}Z`, content,
+        });
+        const code = 'function add(a, b) {\n  return a + b;\n}\n```not a fence end```';
+        return ClaudeFormat.normalize({
+            uuid: 'c', name: 'Adder', current_leaf_message_uuid: 'a4',
+            chat_messages: [
+                m('h1', ClaudeFormat.SENTINEL, 'human', 1, [said('Write add')]),
+                m('a1', 'h1', 'assistant', 2, [said('Here:'), tool({ command: 'create', id: 'add', title: 'add.js', type: 'application/vnd.ant.code', language: 'javascript', content: code })]),
+                m('h2', 'a1', 'human', 3, [said('Rename a')]),
+                m('a2', 'h2', 'assistant', 4, [tool({ command: 'update', id: 'add', old_str: 'a, b', new_str: 'x, b' }),
+                    tool({ command: 'create', id: 'notes', title: 'Notes', type: 'text/markdown', content: '# Notes' })]),
+                m('h3', 'a2', 'human', 5, [said('Start over')]),
+                m('a3', 'h3', 'assistant', 6, [tool({ command: 'rewrite', id: 'add', content: 'const add = (x, y) => x + y;' })]),
+                m('h4', 'a3', 'human', 7, [said('Rename x')]),
+                m('a4', 'h4', 'assistant', 8, [tool({ command: 'update', id: 'add', old_str: '(x, y) => x', new_str: '(p, y) => p' }),
+                    tool({ command: 'update', id: 'notes', old_str: 'nowhere', new_str: 'x' })]),
+                // An abandoned branch that rewrote it into something else.
+                m('a4x', 'h4', 'assistant', 9, [tool({ command: 'rewrite', id: 'add', content: 'BRANCH' })]),
+            ],
+        });
+    }
+
+    check('create, update, rewrite and update replay to the final text', () => {
+        const [add, notes] = ChatExport.artifacts(artifactChat());
+        eq(add.content, 'const add = (p, y) => p + y;');
+        eq([add.title, add.language, add.lastTurn, add.stale], ['add.js', 'javascript', 'a4', false]);
+        eq([notes.language, notes.content], ['markdown', '# Notes'], 'a second document crossed with the first');
+    });
+    check('an update whose passage is missing marks the document stale and changes nothing', () => {
+        const notes = ChatExport.artifacts(artifactChat())[1];
+        eq([notes.stale, notes.content], [true, '# Notes']);
+    });
+    check('an artifact is exported once, in full, after the turn that last touched it', () => {
+        const md = ChatExport.markdown(artifactChat(), { now: 0 });
+        eq((md.match(/### add\.js/g) || []).length, 1);
+        assert(md.indexOf('### add.js') > md.indexOf('Rename x'), 'printed before its last edit');
+        assert(md.includes('*(wrote "add.js" — final version below)*') && md.includes('*(updated "add.js" — final version below)*'));
+        assert(md.includes('```javascript\nconst add = (p, y) => p + y;\n```'), 'the final text is not what was printed');
+        assert(!md.includes('BRANCH'), 'an abandoned branch reached the export');
+        assert(md.includes('may be out of date'), 'a stale document was not said to be one');
+        eq(ChatExport.json(artifactChat()).artifacts.map((a) => a.id), ['add', 'notes']);
+    });
+    check('a fence inside an artifact never closes the export’s fence around it', () => {
+        const chat = artifactChat();
+        chat.current = 'a1';
+        const md = ChatExport.markdown(chat);
+        assert(md.includes('````javascript\nfunction add(a, b)'), md);
+    });
+    check('pasted text rides along under the prompt, folded', () => {
+        const md = ChatExport.markdown(ClaudeFormat.normalize(claudeRaw()), { now: 0 });
+        assert(md.includes('<details><summary>paste.txt</summary>\n\n```\nld: undefined symbol\n```\n\n</details>'), md);
+        assert(md.includes('## Claude'), 'the other side is not named Claude');
+    });
+
+    // ------------------------------------------------------ reading claude.ai
+
+    console.log('\n# reading claude.ai');
+
+    const ClaudeRead = require('../src/content/claude-read.js');
+
+    check('a row is its place on the path shown, when its words say so', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(ClaudeRead.matchTurn(conv, 1, 'Thought for 3s It is the linker.'), ['a1']);
+        eq(ClaudeRead.matchTurn(conv, 3, 'Add -lm to the link line. Copy Retry'), ['a2r']);
+    });
+    check('a row whose words disagree is no turn at all — never the likely one', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(ClaudeRead.matchTurn(conv, 1, 'Something else entirely'), []);
+        eq(ClaudeRead.matchTurn(conv, 9, 'It is the linker.'), [], 'past the end of the path');
+    });
+    check('a row showing a sibling — the page’s own arrows were used — is that sibling', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(ClaudeRead.matchTurn(conv, 3, 'Link the math library. 1'), ['a2']);
+        eq(ClaudeRead.matchTurn(conv, 2, 'An edited question'), ['h2b']);
+    });
+    check('nothing is drawn under /code, or anywhere that is not a chat', () => {
+        assert(ClaudeRead.onChatPage('/new') && ClaudeRead.onChatPage('/chat/9a978684-1ba6-4d23-af91-b09ad7ae3f9c'));
+        for (const path of ['/code', '/code/session_1', '/settings/profile', '/recents', '/projects', '/artifacts']) {
+            assert(!ClaudeRead.onChatPage(path), `${path} is not a chat`);
+        }
+    });
+
+    await checkAsync('the organisation comes from the page’s cookie, or the first that can chat', async () => {
+        const calls = [];
+        const answer = (body) => ({ ok: true, status: 200, json: async () => body });
+        const impl = async (url) => {
+            calls.push(url);
+            if (url === '/api/organizations') return answer([{ uuid: 'api-only', capabilities: ['api'] }, { uuid: 'org-2', capabilities: ['chat'] }]);
+            return answer([{ uuid: 'k1', name: 'First', updated_at: '2025-11-13T10:00:00Z' }]);
+        };
+        const fromCookie = ClaudeRead.createApi(impl, () => 'a=1; lastActiveOrg=org-1; b=2');
+        eq((await fromCookie.listConversations({ limit: 1 })).total, 2, 'a full page should admit there may be more');
+        eq(calls, ['/api/organizations/org-1/chat_conversations?limit=1&offset=0']);
+        calls.length = 0;
+        const fromApi = ClaudeRead.createApi(impl, () => '');
+        eq((await fromApi.listConversations({ limit: 5 })).items, [{ id: 'k1', title: 'First', updatedAt: Date.parse('2025-11-13T10:00:00Z') }]);
+        eq(calls[1], '/api/organizations/org-2/chat_conversations?limit=5&offset=0');
+    });
+    await checkAsync('a conversation arrives already in the tree shape', async () => {
+        const impl = async () => ({ ok: true, status: 200, json: async () => claudeRaw() });
+        const conv = await ClaudeRead.createApi(impl, () => 'lastActiveOrg=o').fetchConversation('conv-uuid');
+        eq(ChatTree.activePath(conv), ['h1', 'a1', 'h2', 'a2r']);
+    });
+
+    // ------------------------------------------------ claude's page bridge
+
+    console.log('\n# the claude page bridge');
+
+    /**
+     * claude-page.js run against a fetch that answers `response`, with a
+     * document that records what it says. Node has Response, streams and
+     * CustomEvent of its own, which is all the bridge touches.
+     */
+    async function throughBridge(response, url) {
+        const saved = { window: global.window, document: global.document };
+        const heard = [];
+        global.document = new EventTarget();
+        for (const name of ['bb:claude:stream', 'bb:claude:limit']) {
+            document.addEventListener(name, (event) => heard.push([name.slice(10), JSON.parse(event.detail)]));
+        }
+        global.window = { fetch: async () => response };
+        try {
+            delete require.cache[require.resolve('../src/content/claude-page.js')];
+            require('../src/content/claude-page.js');
+            const answer = await window.fetch(url, { method: 'POST' });
+            const pageRead = answer.ok ? await answer.text() : '';
+            for (let i = 0; i < 50 && !heard.some(([, d]) => d.phase === 'end'); i++) await new Promise((done) => setTimeout(done, 5));
+            return { heard, pageRead };
+        } finally {
+            global.window = saved.window;
+            global.document = saved.document;
+        }
+    }
+
+    const completion = '/api/organizations/o/chat_conversations/9a978684-1ba6-4d23-af91-b09ad7ae3f9c/completion';
+    const sse = (...events) => events.map((body) => `event: ${body.type}\r\ndata: ${JSON.stringify(body)}\r\n\r\n`).join('');
+
+    await checkAsync('the bridge reports the start, the exact limit and the end, and the page still reads it all', async () => {
+        const body = sse({ type: 'message_start' },
+            { type: 'message_limit', message_limit: { type: 'approaching_limit', resetsAt: 1763000000, remaining: 2 } },
+            { type: 'content_block_delta', delta: { text: 'hi' } }, { type: 'message_stop' });
+        const { heard, pageRead } = await throughBridge(new Response(body), completion);
+        eq(heard, [
+            ['stream', { phase: 'start', conv: '9a978684-1ba6-4d23-af91-b09ad7ae3f9c' }],
+            ['limit', { type: 'approaching_limit', resetsAt: 1763000000000, remaining: 2 }],
+            ['stream', { phase: 'end', conv: '9a978684-1ba6-4d23-af91-b09ad7ae3f9c' }],
+        ]);
+        eq(pageRead, body, 'the page did not get its whole stream');
+    });
+    await checkAsync('a 429 says which limit and when it resets, and ends the answer', async () => {
+        const error = { type: 'error', error: { type: 'rate_limit_error', message: JSON.stringify({ type: 'exceeded_limit', resetsAt: 1763003600 }) } };
+        const { heard } = await throughBridge(new Response(JSON.stringify(error), { status: 429 }), completion);
+        eq(heard.slice(1), [
+            ['limit', { type: 'exceeded_limit', resetsAt: 1763003600000, remaining: null }],
+            ['stream', { phase: 'end', conv: '9a978684-1ba6-4d23-af91-b09ad7ae3f9c', error: 429 }],
+        ]);
+    });
+    await checkAsync('any other request goes by untouched and unreported', async () => {
+        const { heard } = await throughBridge(new Response('{}'), '/api/organizations/o/chat_conversations?limit=5');
+        eq(heard, []);
+    });
+    check('the bridge runs in the page’s world on claude.ai alone, before the page takes its fetch', () => {
+        const entry = JSON.parse(readRepo('manifest.json')).content_scripts.find((one) => one.js.includes('src/content/claude-page.js'));
+        eq([entry.world, entry.run_at, entry.matches], ['MAIN', 'document_start', ['*://claude.ai/*']]);
+        const source = readRepo('src/content/claude-page.js');
+        assert(!/chrome\./.test(source.replace(/\/\*[\s\S]*?\*\//g, '')), 'a MAIN-world script cannot use chrome.*');
+    });
+
+    // ------------------------------------------------- reading chatgpt.com
+
+    console.log('\n# reading chatgpt.com');
+
+    const ChatgptRead = require('../src/content/chatgpt-read.js');
+
+    check('a sibling count reads as k/n or it is not the sibling control', () => {
+        eq(ChatgptRead.readCount(' 2 / 3 '), { index: 2, count: 3 });
+        eq(ChatgptRead.readCount('2/3 answers'), null, 'prose that mentions a count');
+        eq(ChatgptRead.readCount('1/1'), null, 'a single sibling has no control');
+        eq(ChatgptRead.readCount('4/3'), null);
+    });
+    check('the turn selectors lead with the markup chatgpt.com draws now', () => {
+        // A <section> since 2026. The older spellings stay below it.
+        eq(ChatgptRead.SELECTORS.turn[0], 'section[data-testid^="conversation-turn-"]');
+        assert(ChatgptRead.SELECTORS.turn.some((s) => s.startsWith('article')), 'the old spelling was collapsed away');
+    });
+
+    /** A stand-in fetch that answers from a table and records what it was asked. */
+    function fakeFetch(routes) {
+        const calls = [];
+        const impl = async (url, options = {}) => {
+            calls.push({ url, auth: options.headers && options.headers.Authorization });
+            const route = Object.keys(routes).find((prefix) => url.startsWith(prefix));
+            const answer = route ? routes[route](calls.length) : { status: 404 };
+            return { ok: answer.status === 200, status: answer.status, json: async () => answer.body };
+        };
+        return { impl, calls };
+    }
+
+    await checkAsync('the token is fetched once, and once more on a 401', async () => {
+        let issued = 0;
+        let rejected = false;
+        const { impl, calls } = fakeFetch({
+            '/api/auth/session': () => ({ status: 200, body: { accessToken: `t${++issued}` } }),
+            '/backend-api/conversations': () => {
+                if (!rejected) { rejected = true; return { status: 401 }; }
+                return { status: 200, body: { items: [{ id: 'a', title: 'One', update_time: 1700000000 }], total: 40 } };
+            },
+        });
+        const api = ChatgptRead.createApi(impl);
+        const page = await api.listConversations({ offset: 0, limit: 1 });
+        eq(page, { items: [{ id: 'a', title: 'One', updatedAt: 1700000000000 }], total: 40 });
+        eq(calls.map((c) => c.url.split('?')[0]), ['/api/auth/session', '/backend-api/conversations',
+            '/api/auth/session', '/backend-api/conversations']);
+        eq(calls[3].auth, 'Bearer t2', 'the retry went out with the stale token');
+        await api.listConversations();
+        eq(calls.filter((c) => c.url === '/api/auth/session').length, 2, 'the token was not kept');
+    });
+    await checkAsync('a conversation arrives already in the tree shape', async () => {
+        const { impl } = fakeFetch({
+            '/api/auth/session': () => ({ status: 200, body: { accessToken: 't' } }),
+            '/backend-api/conversation/conv-1': () => ({ status: 200, body: chatgptRaw() }),
+        });
+        const conv = await ChatgptRead.createApi(impl).fetchConversation('conv-1');
+        eq(ChatTree.activePath(conv), ['u1', 'a1', 'u2', 'a2']);
+    });
+    await checkAsync('signed out is said as such, not as an empty list', async () => {
+        const { impl } = fakeFetch({ '/api/auth/session': () => ({ status: 200, body: {} }) });
+        let code = null;
+        try { await ChatgptRead.createApi(impl).listConversations(); } catch (error) { code = error.code; }
+        eq(code, 'signed-out');
+    });
+
+    // ---------------------------------------------------- party loader
+
+    console.log('\n# party loader — nothing loads until a party starts');
+    const PartyLoader = require('../src/background/party-loader.js');
+    const fs = require('fs');
+
+    check('no manifest loads party code into a page', () => {
+        for (const name of ['manifest.json', 'manifest.firefox.json']) {
+            const manifest = JSON.parse(fs.readFileSync(`${__dirname}/../${name}`, 'utf8'));
+            const listed = manifest.content_scripts.flatMap((one) => one.js || []);
+            eq(listed.filter((file) => /party/.test(file)), [], name);
+        }
+    });
+    check('every file the loader injects is on disk', () => {
+        const files = [...PartyLoader.CONTENT_FILES, ...PartyLoader.CSS_FILES, ...Object.values(PartyLoader.PAGE_FILES).flat()];
+        for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
+    });
+
+    /** Just the chrome.* the loader touches, recording what it injects. */
+    function loaderWith(session = {}) {
+        const injected = [];
+        const styled = [];
+        const api = {
+            storage: { session: {
+                get: async (key) => (key in session ? { [key]: session[key] } : {}),
+                set: async (values) => { Object.assign(session, values); },
+                remove: async (key) => { delete session[key]; },
+            } },
+            scripting: {
+                executeScript: async ({ target, files, world }) => { injected.push({ tab: target.tabId, files, world }); },
+                insertCSS: async ({ target, files }) => { styled.push({ tab: target.tabId, files }); },
+            },
+        };
+        return { loader: PartyLoader.createLoader(api), injected, styled, session };
+    }
+    const done = { status: 'complete' };
+
+    await checkAsync('a tab that has never been in a party is never injected', async () => {
+        const { loader, injected } = loaderWith();
+        await loader.onUpdated(7, done, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
+        eq(injected, []);
+    });
+    await checkAsync('starting a party brings the code into that tab only', async () => {
+        const { loader, injected, styled, session } = loaderWith();
+        assert(await loader.bind(7, 'https://www.netflix.com/watch/81234567'));
+        eq(styled, [{ tab: 7, files: ['party-page.css'] }], 'the chip\'s styles, with its code');
+        eq(injected.map((one) => one.tab), [7, 7]);
+        eq(injected[0].files, [...PartyLoader.CONTENT_FILES]);
+        eq([injected[1].world, injected[1].files], ['MAIN', ['src/content/netflix-page.js']], 'the player bridge, in the page\'s world');
+        eq(session[PartyLoader.KEY], { tabId: 7, site: 'netflix' });
+        assert(!(await loader.bind(8, 'https://example.com/')), 'not a site the party plays on');
+    });
+    await checkAsync('the party tab reloading is injected again; others and elsewhere are not', async () => {
+        const { loader, injected } = loaderWith({ [PartyLoader.KEY]: { tabId: 7, site: 'youtube' } });
+        await loader.onUpdated(7, { status: 'loading' }, { url: 'https://www.youtube.com/' });
+        await loader.onUpdated(8, done, { url: 'https://www.youtube.com/' });
+        await loader.onUpdated(7, done, { url: 'https://example.com/' });
+        eq(injected, [], 'not complete, not the party tab, not a party site');
+        await loader.onUpdated(7, done, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
+        eq(injected.map((one) => one.tab), [7], 'read back from the session after a worker restart');
+    });
+    await checkAsync('leaving, or closing the tab, shuts the gate again', async () => {
+        const { loader, injected, session } = loaderWith();
+        const closed = [];
+        loader.onClosed((tabId) => closed.push(tabId));
+        await loader.bind(7, 'https://www.youtube.com/');
+        await loader.onRemoved(8);
+        await loader.onRemoved(7);
+        eq(session[PartyLoader.KEY], undefined);
+        eq(closed, [7], 'told about the party\'s tab, not any tab');
+        await loader.onUpdated(7, done, { url: 'https://www.youtube.com/' });
+        eq(injected.length, 1);
+    });
+
+    // --------------------------------------------------- party loopback
+
+    console.log('\n# party loopback — the room, with no network in between');
+    const PartyLoopback = require('../src/offscreen/party-loopback.js');
+
+    /** A loopback and a way to open members on it, each keeping what it hears. */
+    function loopbackWith(policy = {}) {
+        const loop = PartyLoopback.createLoopback({ policy, now: () => 1000 });
+        const member = () => {
+            const heard = [];
+            const link = loop.open((msg) => heard.push(msg));
+            return { link, heard, last: (t) => heard.filter((msg) => msg.t === t).pop() };
+        };
+        return { loop, member };
+    }
+
+    check('a link is nobody until it says create or hello', () => {
+        const { loop, member } = loopbackWith();
+        const ana = member();
+        ana.link.send({ t: 'intent', id: 1, base: 0, op: 'play', pos: 0 });
+        eq([ana.heard, loop.room.members()], [[], []]);
+        ana.link.send({ t: 'create', v: 1, name: 'Ana' });
+        eq(ana.heard.map((msg) => msg.t), ['welcome', 'members'], 'its own welcome, caught before its id was known');
+        eq(ana.last('welcome').room.members.map((m) => [m.name, m.role]), [['Ana', 'host']]);
+        loop.close();
+    });
+    check('members on one loopback share the room', () => {
+        const { loop, member } = loopbackWith();
+        const ana = member();
+        const ben = member();
+        ana.link.send({ t: 'create', v: 1, name: 'Ana' });
+        ben.link.send({ t: 'hello', v: 1, name: 'Ben' });
+        ben.link.send({ t: 'intent', id: 1, base: 0, op: 'play', pos: 4 });
+        eq([ana.last('state').paused, ana.last('state').by], [false, ben.last('welcome').you]);
+        loop.close();
+    });
+    check('hanging up keeps the member for a resume; bye does not', () => {
+        const { loop, member } = loopbackWith();
+        const ana = member();
+        ana.link.send({ t: 'create', v: 1, name: 'Ana' });
+        const { you, resume } = ana.last('welcome');
+        ana.link.close();
+        const back = member();
+        back.link.send({ t: 'hello', v: 1, resume });
+        eq(back.last('welcome').you, you);
+        back.link.send({ t: 'bye' });
+        eq(loop.room.members(), []);
+        const late = member();
+        late.link.send({ t: 'hello', v: 1, resume });
+        eq(late.heard, [{ t: 'error', code: 'expired' }]);
+        loop.close();
+    });
+    check('a resume on a new link is welcomed there, and the old link is nobody', () => {
+        const { loop, member } = loopbackWith();
+        const ana = member();
+        ana.link.send({ t: 'create', v: 1, name: 'Ana' });
+        const { you, resume } = ana.last('welcome');
+        const back = member();
+        back.link.send({ t: 'hello', v: 1, resume });
+        eq([back.last('welcome').you, ana.heard.filter((msg) => msg.t === 'welcome').length], [you, 1], 'not sent down the old link');
+        ana.link.send({ t: 'intent', id: 1, base: 0, op: 'play', pos: 0 });
+        ana.link.close();
+        eq([loop.room.state().paused, loop.room.members().length], [true, 1]);
+        back.link.send({ t: 'intent', id: 2, base: 0, op: 'play', pos: 0 });
+        eq(loop.room.state().paused, false, 'the old link hanging up did not take the new one with it');
+        loop.close();
+    });
+    check('a refused join is told why', () => {
+        const { loop, member } = loopbackWith();
+        const ana = member();
+        ana.link.send({ t: 'create', v: 1, name: 'Ana' });
+        ana.link.send({ t: 'policy', locked: true });
+        const ben = member();
+        ben.link.send({ t: 'hello', v: 1, name: 'Ben' });
+        eq(ben.heard, [{ t: 'error', code: 'locked' }]);
+        loop.close();
+    });
+
+    // ---------------------------------------------------- party session
+
+    console.log('\n# party session — the member the party tab plugs into');
+    const PartySession = require('../src/offscreen/party-session.js');
+
+    /** A runtime port as the session sees it, with the tab's end to talk and hang up on. */
+    function tabPort(name = PartySession.PORT) {
+        const on = { message: [], disconnect: [] };
+        const port = {
+            name, heard: [], gone: false,
+            postMessage: (msg) => port.heard.push(JSON.parse(JSON.stringify(msg))),
+            disconnect() { port.gone = true; },
+            onMessage: { addListener: (fn) => on.message.push(fn) },
+            onDisconnect: { addListener: (fn) => on.disconnect.push(fn) },
+            say: (msg) => on.message.forEach((fn) => fn(msg)),
+            hangUp: () => on.disconnect.forEach((fn) => fn()),
+            last: (t) => port.heard.filter((msg) => msg.t === t).pop(),
+        };
+        return port;
+    }
+    async function inParty(t = 50000) {
+        const session = PartySession.createSession({ now: () => t });
+        const started = await session.control({ op: 'start', name: 'Ana', policy: { control: 'everyone' } });
+        const you = started.status.you;
+        const leave = () => session.control({ op: 'leave' });
+        return { session, started, you, leave };
+    }
+
+    await checkAsync('a tab joining is handed the room, and its play comes back acknowledged', async () => {
+        const { session, started, you, leave } = await inParty();
+        eq([started.ok, started.status.members.map((m) => [m.name, m.role])], [true, [['Ana', 'host']]]);
+        const tab = tabPort();
+        session.connect(tab);
+        const welcome = tab.last('welcome');
+        eq([welcome.you, welcome.room.state.paused], [you, true]);
+        tab.say({ t: 'intent', id: 1, base: welcome.room.state.seq, op: 'play', pos: 3, at: 50000 });
+        const state = tab.last('state');
+        eq([state.paused, state.pos, state.ack], [false, 3, { member: you, id: 1 }]);
+        await leave();
+    });
+    await checkAsync('the tab\'s ping is answered in room time, with the state when it is behind', async () => {
+        const { session, leave } = await inParty(50000);
+        const tab = tabPort();
+        session.connect(tab);
+        tab.heard.length = 0;
+        tab.say({ t: 'ping', c: 49990, seq: 0 });
+        eq(tab.heard.map((msg) => msg.t), ['pong'], 'up to date: just the pong');
+        eq(tab.last('pong'), { t: 'pong', c: 49990, s: 50000, s2: 50000 });
+        tab.say({ t: 'ping', c: 49995, seq: -1 });
+        eq(tab.heard.map((msg) => msg.t), ['pong', 'pong', 'state']);
+        await leave();
+    });
+    await checkAsync('a tab going keeps the member, and stops the room waiting on it', async () => {
+        const { session, you, leave } = await inParty();
+        const flags = () => session.status().members.map((m) => [m.ready, m.solo]);
+        for (const replaced of [false, true]) {
+            const before = tabPort();
+            session.connect(before);
+            before.say({ t: 'ready', ready: false, why: 'buffering' });
+            before.say({ t: 'solo', solo: true });
+            eq(flags(), [[false, true]]);
+            const after = tabPort();
+            if (replaced) session.connect(after);
+            else before.hangUp();
+            eq(flags(), [[true, false]], 'the next document starts ready and in the room');
+            if (!replaced) session.connect(after);
+            eq(after.last('welcome').you, you, 'the same member, not a new one');
+            if (!replaced) continue;
+            assert(before.last('detach') && before.gone, 'the tab taken over from is let go');
+            before.say({ t: 'intent', id: 1, base: 0, op: 'play', pos: 0, at: 50000 });
+            eq(session.status().state.paused, true, 'and no longer heard');
+        }
+        await leave();
+    });
+    await checkAsync('the tab says how far off its player is, for the popup, and the room never hears it', async () => {
+        const loop = PartyLoopback.createLoopback();
+        const session = PartySession.createSession({ transports: { loopback: () => loop }, now: () => 1000 });
+        await session.control({ op: 'start', name: 'Ana' });
+        const heard = [];
+        const room = loop.room.handle;
+        loop.room.handle = (id, msg, at) => { heard.push(msg.t); return room(id, msg, at); };
+        const tab = tabPort();
+        session.connect(tab);
+        eq(session.status().drift, undefined, 'nothing said yet');
+        tab.say({ t: 'drift', ms: -42 });
+        tab.say({ t: 'drift', ms: 'far' });
+        tab.say({ t: 'drift', ms: 38 });
+        tab.say({ t: 'ready', ready: true });
+        eq([session.status().drift, heard], [38, ['ready']], 'what the tab says for the room still reaches it');
+        await session.control({ op: 'leave' });
+    });
+    await checkAsync('chat said on the tab comes back as the log keeps it, and others\' lines are unread until the panel is open', async () => {
+        const loop = PartyLoopback.createLoopback();
+        const session = PartySession.createSession({ transports: { loopback: () => loop }, now: () => 1000 });
+        const { status } = await session.control({ op: 'start', name: 'Ana' });
+        const ben = loop.open(() => {});
+        ben.send({ t: 'hello', v: 1, name: 'Ben' });
+        const tab = tabPort();
+        session.connect(tab);
+        tab.say({ t: 'chat', text: ' hi all ' });
+        const mine = tab.last('chat-line');
+        eq([mine.line.text, mine.line.from, mine.line.name, mine.unread], ['hi all', status.you, 'Ana', 0]);
+        ben.send({ t: 'chat', text: 'hey' });
+        ben.send({ t: 'chat', text: 'ready?' });
+        eq(session.status().chat, { unread: 2, last: 'Ben' });
+        tab.say({ t: 'chat-read', open: true });
+        ben.send({ t: 'chat', text: 'now?' });
+        eq([session.status().chat, tab.last('chat-line').unread], [{ unread: 0, last: null }, 0], 'read as it comes');
+        tab.hangUp();
+        ben.send({ t: 'chat', text: 'hello?' });
+        eq(session.status().chat.unread, 1, 'open on a tab that has gone is nobody reading');
+        const next = tabPort();
+        session.connect(next);
+        const log = next.last('chat-log');
+        eq([log.open, log.unread], [true, 1], 'the next tab opens it again');
+        eq(log.lines.map((one) => one.sys ? `(${one.text})` : `${one.name}: ${one.text}`), ['(Ben joined)', 'Ana: hi all', 'Ben: hey', 'Ben: ready?', 'Ben: now?', 'Ben: hello?']);
+        await session.control({ op: 'leave' });
+    });
+    await checkAsync('the room\'s history is not unread; a line missed while away, replayed after the next welcome, is', async () => {
+        let deliver = null;
+        const welcome = (you) => ({ t: 'welcome', v: 1, you, resume: 'r', room: { id: 'p', policy: {}, members: [], state: { seq: 0, paused: true } } });
+        const transport = { open: (fn) => { deliver = fn; return { send: (msg) => { if (msg.t === 'create') fn(welcome('m1')); }, close() {} }; }, close() {} };
+        const session = PartySession.createSession({ transports: { loopback: () => transport }, now: () => 1000 });
+        await session.control({ op: 'start', name: 'Ana' });
+        const line = (id, extra = {}) => ({ t: 'chat', id, from: 'm2', name: 'Ben', at: 900, text: id, past: true, ...extra });
+        deliver(line('c1'));
+        eq(session.status().chat.unread, 0, 'said before we came');
+        deliver(welcome('m1'));
+        deliver(line('c1'));
+        deliver(line('c2'));
+        deliver(line('c3', { from: 'm1', past: undefined }));
+        eq(session.status().chat, { unread: 1, last: 'Ben' }, 'c1 we had, c2 we missed, c3 is our own');
+        await session.control({ op: 'leave' });
+    });
+    await checkAsync('the popup\'s "Open on page" reaches the tab, if there is one', async () => {
+        const { session, leave } = await inParty();
+        eq(await session.control({ op: 'chat' }), { ok: false });
+        const tab = tabPort();
+        session.connect(tab);
+        eq([await session.control({ op: 'chat' }), !!tab.last('chat-show')], [{ ok: true }, true]);
+        await leave();
+        eq(await session.control({ op: 'chat' }), { ok: false, error: 'inactive' });
+    });
+    await checkAsync('the tab cannot leave, kick or reconfigure the room', async () => {
+        const { session, leave } = await inParty();
+        const tab = tabPort();
+        session.connect(tab);
+        tab.say({ t: 'policy', control: 'host', locked: true });
+        tab.say({ t: 'bye' });
+        const now = session.status();
+        eq([now.active, now.members.length, now.policy.control, now.policy.locked], [true, 1, 'everyone', false]);
+        await leave();
+    });
+    await checkAsync('the host\'s controls from the popup reach the room, with only the fields each one takes', async () => {
+        const loop = PartyLoopback.createLoopback();
+        const session = PartySession.createSession({ transports: { loopback: () => loop }, now: () => 1000 });
+        await session.control({ op: 'start', name: 'Ana', policy: { control: 'everyone', wait: true } });
+        for (const name of ['Ben', 'Cy']) loop.open(() => {}).send({ t: 'hello', v: 1, name });
+        const [, ben, cy] = session.status().members.map((m) => m.id);
+        eq(await session.control({ op: 'policy', control: 'host', locked: true, member: ben }), { ok: true });
+        eq(session.status().policy, { control: 'host', wait: true, locked: true });
+        await session.control({ op: 'role', member: ben, role: 'cohost' });
+        await session.control({ op: 'kick', member: cy });
+        eq(session.status().members.map((m) => [m.name, m.role]), [['Ana', 'host'], ['Ben', 'cohost']]);
+        await session.control({ op: 'leave' });
+        eq(await session.control({ op: 'kick', member: ben }), { ok: false, error: 'inactive' });
+    });
+    await checkAsync('leaving lets the tab go, and a tab outside a party is hung up on at once', async () => {
+        const { session, leave } = await inParty();
+        const tab = tabPort();
+        session.connect(tab);
+        await leave();
+        assert(tab.last('detach') && tab.gone);
+        eq(session.status(), { active: false });
+        const late = tabPort();
+        const other = tabPort('bb:other');
+        session.connect(late);
+        session.connect(other);
+        assert(late.gone, 'its adapter detaches when the port does');
+        assert(!other.gone, 'somebody else\'s port is not ours to close');
+    });
+
+    // -------------------------------------------------- party websocket
+
+    console.log('\n# party websocket — a party server, and getting back to it');
+    const PartyWs = require('../src/offscreen/party-ws.js');
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+    const until = async (test, what) => {
+        for (let i = 0; i < 400 && !test(); i++) await tick();
+        assert(test(), `timed out waiting for ${what}`);
+    };
+
+    /** WebSockets the test plays the server for: accept, say, and die on demand. */
+    function fakeSockets() {
+        const all = [];
+        class Fake {
+            constructor(url) {
+                Object.assign(this, { url, sent: [], closed: false });
+                all.push(this);
+            }
+            send(text) { this.sent.push(JSON.parse(text)); }
+            close() { this.closed = true; }
+            accept() { this.onopen(); }
+            say(msg) { this.onmessage({ data: JSON.stringify(msg) }); }
+            die() { this.onclose(); }
+        }
+        return { Fake, all, last: () => all[all.length - 1] };
+    }
+    const wsWelcome = (you, resume) => ({ t: 'welcome', v: 1, you, resume, now: 0, room: { id: 'r1', policy: {}, members: [], state: { seq: 3 } } });
+
+    /** A transport on fake sockets, opened, with what it delivers kept. */
+    function wsLink(options) {
+        const sockets = fakeSockets();
+        const transport = PartyWs.createTransport({ WebSocket: sockets.Fake, random: () => 0, ...options });
+        const heard = [];
+        const link = transport.open((msg) => heard.push(msg));
+        return { ...sockets, transport, link, heard };
+    }
+
+    check('an invite round-trips, and only a ws address is one', () => {
+        const code = PartyWs.inviteCode({ url: 'wss://party.example/', room: 'r1', secret: 's3cr3t' });
+        assert(code.startsWith(PartyWs.PREFIX) && !/[+/=]/.test(code), code);
+        eq(PartyWs.readInvite(` ${code} `), { url: 'wss://party.example/', room: 'r1', secret: 's3cr3t' });
+        eq(PartyWs.readInvite(PartyWs.inviteCode({ url: 'https://party.example/', room: 'r1', secret: 's' })), null);
+        eq([PartyWs.readInvite('bbp1s.@@@'), PartyWs.readInvite('bbp1i.abc')], [null, null]);
+        eq([PartyWs.serverUrl(' ws://192.168.1.5:7070 '), PartyWs.serverUrl('192.168.1.5:7070')], ['ws://192.168.1.5:7070/', null]);
+        eq(PartyWs.createTransport({ url: 'http://x', WebSocket: fakeSockets().Fake }), null);
+    });
+    check('starting a room says create, and the secret that comes back stays in the transport', () => {
+        const w = wsLink({ url: 'ws://127.0.0.1:7070' });
+        w.link.send({ t: 'create', v: 1, name: 'Ana', policy: { control: 'host' } });
+        eq(w.all.map((ws) => ws.url), ['ws://127.0.0.1:7070/']);
+        w.link.send({ t: 'ping', c: 1, seq: 0 });
+        w.last().accept();
+        eq(w.last().sent, [{ t: 'create', v: 1, name: 'Ana', policy: { control: 'host' } }], 'nothing but the greeting before the welcome');
+        w.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        w.last().say(wsWelcome('m1', 'z1'));
+        eq(w.heard.map((msg) => msg.t), ['welcome']);
+        eq(PartyWs.readInvite(w.transport.invite()), { url: 'ws://127.0.0.1:7070/', room: 'r1', secret: 'k' });
+        w.transport.close();
+    });
+    check('an invite says hello with its room and secret', () => {
+        const w = wsLink({ code: PartyWs.inviteCode({ url: 'ws://h:1', room: 'r1', secret: 'k' }) });
+        w.link.send({ t: 'create', v: 1, name: 'Ben', policy: {} });
+        w.last().accept();
+        eq(w.last().sent, [{ t: 'hello', v: 1, room: 'r1', secret: 'k', name: 'Ben' }]);
+        w.transport.close();
+    });
+    await checkAsync('a dropped socket comes back as the same member, with only the latest of what was said while down', async () => {
+        const w = wsLink({ url: 'ws://h:1' });
+        w.link.send({ t: 'create', v: 1, name: 'Ana' });
+        w.last().accept();
+        w.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        w.last().say(wsWelcome('m1', 'z1'));
+        w.last().die();
+        eq(w.heard.map((msg) => msg.t), ['welcome', 'link']);
+        for (const msg of [
+            { t: 'intent', id: 4, base: 3, op: 'pause', pos: 10 }, { t: 'ping', c: 1, seq: 3 },
+            { t: 'intent', id: 5, base: 3, op: 'play', pos: 10 }, { t: 'request', op: 'pause' }, { t: 'ready', ready: false },
+        ]) w.link.send(msg);
+        await tick();
+        eq(w.all.length, 2, 'retried');
+        w.last().accept();
+        eq(w.last().sent, [{ t: 'hello', v: 1, room: 'r1', resume: 'z1' }]);
+        w.last().say(wsWelcome('m1', 'z2'));
+        eq(w.last().sent.slice(1), [{ t: 'ready', ready: false }, { t: 'intent', id: 5, base: 3, op: 'play', pos: 10 }]);
+        w.link.send({ t: 'ping', c: 2, seq: 3 });
+        eq(w.last().sent.length, 4, 'up again: sent as it is said');
+        w.transport.close();
+    });
+    await checkAsync('lines typed while the socket is down go on the way back, as many as the room takes at once', async () => {
+        const w = wsLink({ url: 'ws://h:1' });
+        w.link.send({ t: 'create', v: 1, name: 'Ana' });
+        w.last().accept();
+        w.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        w.last().say(wsWelcome('m1', 'z1'));
+        w.last().die();
+        for (let i = 1; i <= PartyChat.BURST + 2; i++) w.link.send({ t: 'chat', text: `line ${i}` });
+        w.link.send({ t: 'ready', ready: false });
+        await tick();
+        w.last().accept();
+        w.last().say(wsWelcome('m1', 'z2'));
+        eq(w.last().sent.slice(1).map((msg) => msg.text || msg.t), ['ready', 'line 3', 'line 4', 'line 5', 'line 6', 'line 7']);
+        w.transport.close();
+    });
+    await checkAsync('past the grace it joins again as someone new instead of ending the party', async () => {
+        const w = wsLink({ url: 'ws://h:1' });
+        w.link.send({ t: 'create', v: 1, name: 'Ana' });
+        w.last().accept();
+        w.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        w.last().say(wsWelcome('m1', 'z1'));
+        w.last().die();
+        await tick();
+        w.last().accept();
+        w.last().say({ t: 'error', code: 'expired' });
+        eq(w.all.length, 3);
+        w.last().accept();
+        eq(w.last().sent, [{ t: 'hello', v: 1, room: 'r1', secret: 'k', name: 'Ana' }]);
+        eq(w.heard.map((msg) => msg.t), ['welcome', 'link'], 'the expiry is not the session\'s business');
+        w.transport.close();
+    });
+    await checkAsync('an address that never answered, or a refusal, ends it without a retry', async () => {
+        for (const refused of [false, true]) {
+            const w = wsLink({ url: 'ws://h:1' });
+            w.link.send({ t: 'create', v: 1, name: 'Ana' });
+            if (refused) {
+                w.last().accept();
+                w.last().say({ t: 'error', code: 'bad-secret' });
+            } else {
+                w.last().die();
+            }
+            await tick();
+            eq([w.heard, w.all.length], [[{ t: 'error', code: refused ? 'bad-secret' : 'unreachable' }], 1]);
+        }
+    });
+    await checkAsync('a session on a server waits for the welcome, and offers the invite', async () => {
+        const sockets = fakeSockets();
+        const server = (options) => PartyWs.createTransport({ ...options, WebSocket: sockets.Fake });
+        const session = PartySession.createSession({ transports: { server }, now: () => 1000 });
+        eq(await session.control({ op: 'start', mode: 'server', url: 'nonsense' }), { ok: false, error: 'address' });
+        const starting = session.control({ op: 'start', mode: 'server', url: 'ws://h:1', name: 'Ana' });
+        sockets.last().accept();
+        sockets.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        sockets.last().say(wsWelcome('m1', 'z1'));
+        const started = await starting;
+        eq([started.ok, started.status.you, started.status.up], [true, 'm1', true]);
+        eq(PartyWs.readInvite(started.status.invite).room, 'r1');
+        sockets.last().die();
+        eq(session.status().up, false, 'reconnecting');
+        await session.control({ op: 'leave' });
+    });
+
+    // ------------------------------------------------------ party codes
+
+    console.log('\n# party codes — a peer connection in a chat message');
+    const PartyCode = require('../src/shared/party-code.js');
+
+    /**
+     * Chrome 154's own offer for a negotiated data channel, gathered against
+     * two STUN servers. The public address and the ICE credentials are
+     * replaced with stand-ins of the same shape; the rest is as Chrome wrote it.
+     */
+    const CHROME_OFFER = [
+        'v=0', 'o=- 2274914143508482837 2 IN IP4 127.0.0.1', 's=-', 't=0 0', 'a=group:BUNDLE 0', 'a=extmap-allow-mixed', 'a=msid-semantic: WMS',
+        'm=application 55253 UDP/DTLS/SCTP webrtc-datachannel', 'c=IN IP4 203.0.113.7',
+        'a=candidate:3725240560 1 udp 2113937151 5b8d7825-a86d-4a3e-a5cb-aabdf9f47caf.local 55253 typ host generation 0 network-cost 999',
+        'a=candidate:2790751920 1 udp 1677729535 203.0.113.7 55253 typ srflx raddr 0.0.0.0 rport 0 generation 0 network-cost 999',
+        'a=candidate:1 1 tcp 1518280447 192.168.1.20 9 typ host tcptype active generation 0',
+        'a=ice-ufrag:q9Zr', 'a=ice-pwd:hT3k+vJ9sLx/0bWq2Fe7yRnA', 'a=ice-options:trickle',
+        'a=fingerprint:sha-256 F4:67:98:82:5B:D5:65:2C:A6:D9:49:17:C8:B8:7C:97:66:64:0E:FF:E0:17:7C:82:8B:34:F0:80:D0:B4:1D:81',
+        'a=setup:actpass', 'a=mid:0', 'a=sctp-port:5000', 'a=max-message-size:262144', '',
+    ].join('\r\n');
+    const inviteFields = (desc = PartyCode.parseSdp(CHROME_OFFER)) => ({
+        tag: Uint8Array.from([1, 2, 3, 4]), desc, room: Uint8Array.from([9, 9, 9, 9, 9, 9]), secret: new Uint8Array(16).fill(7),
+        expires: 4102444800789,
+    });
+
+    check('a chrome offer comes down to credentials, a fingerprint and its udp addresses', () => {
+        const desc = PartyCode.parseSdp(CHROME_OFFER);
+        eq([desc.ufrag, desc.pwd, desc.mid, desc.fingerprint.length, desc.fingerprint[0]], ['q9Zr', 'hT3k+vJ9sLx/0bWq2Fe7yRnA', '0', 32, 0xf4]);
+        eq(desc.candidates, [
+            { type: 'host', address: '5b8d7825-a86d-4a3e-a5cb-aabdf9f47caf.local', port: 55253 },
+            { type: 'srflx', address: '203.0.113.7', port: 55253 },
+        ], 'tcp dropped');
+        eq(PartyCode.parseSdp('v=0\r\na=ice-ufrag:abcd\r\n'), null);
+    });
+    check('an invite round-trips in under 200 characters, and a reply is not an invite', () => {
+        const code = PartyCode.inviteCode(inviteFields());
+        assert(code.startsWith('bbp1i.') && code.length < 200 && /^[A-Za-z0-9._-]+$/.test(code), `${code.length}: ${code}`);
+        const back = PartyCode.readInvite(` ${code}\n`);
+        const { mid, ...carried } = PartyCode.parseSdp(CHROME_OFFER);
+        eq([back.desc, [...back.tag], [...back.secret]], [carried, [1, 2, 3, 4], new Array(16).fill(7)], 'all but the mid, which an answer takes from its offer');
+        eq(back.expires, 4102444800000, 'the expiry, to the second, past the 32-bit sign bit');
+        eq([PartyCode.readInvite(code.slice(0, -3)), PartyCode.readInvite(code.replace('bbp1i.', 'bbp1r.')), PartyCode.readInvite('bbp1i.!!')], [null, null, null]);
+    });
+    check('ipv6 and odd-length credentials survive the packing', () => {
+        const desc = {
+            ufrag: 'Ab+/9', pwd: 'x'.repeat(22) + '/+/', fingerprint: new Array(32).fill(0xab),
+            candidates: [{ type: 'host', address: '2001:db8::7', port: 1 }, { type: 'relay', address: 'fe80::1:2', port: 65535 }],
+        };
+        const back = PartyCode.readInvite(PartyCode.inviteCode(inviteFields(desc))).desc;
+        eq([back.ufrag, back.pwd], [desc.ufrag, desc.pwd]);
+        eq(back.candidates.map((c) => [c.type, c.address, c.port]), [['host', '2001:db8:0:0:0:0:0:7', 1], ['relay', 'fe80:0:0:0:0:0:1:2', 65535]]);
+    });
+    check('the rebuilt description is sdp that parses back to the same description', () => {
+        const desc = PartyCode.parseSdp(CHROME_OFFER);
+        for (const type of ['offer', 'answer']) {
+            const sdp = PartyCode.buildSdp(desc, { type, mid: '0' });
+            assert(sdp.includes(`a=setup:${type === 'offer' ? 'actpass' : 'active'}\r\n`) && sdp.endsWith('\r\n'), sdp);
+            eq(PartyCode.parseSdp(sdp), desc);
+        }
+        const lines = PartyCode.buildSdp(desc, { type: 'offer' }).split('\r\n').filter((line) => line.startsWith('a=candidate'));
+        eq(lines[1], 'a=candidate:2 1 udp 1694498559 203.0.113.7 55253 typ srflx raddr 0.0.0.0 rport 0');
+    });
+    await checkAsync('a reply is signed with the invite\'s secret, and a changed byte or another secret fails it', async () => {
+        const { tag, desc, secret } = inviteFields();
+        const code = await PartyCode.replyCode({ tag, desc }, secret);
+        assert(code.startsWith('bbp1r.') && code.length < 160, code);
+        const reply = PartyCode.readReply(code);
+        eq([[...reply.tag], reply.desc.candidates.length], [[1, 2, 3, 4], 2]);
+        assert(await PartyCode.verifyReply(reply, secret));
+        assert(!(await PartyCode.verifyReply(reply, new Uint8Array(16))), 'another secret');
+        const bytes = PartyCode.fromBase64Url(code.slice(6));
+        bytes[12] ^= 1;
+        assert(!(await PartyCode.verifyReply(PartyCode.readReply('bbp1r.' + PartyCode.toBase64Url(bytes)), secret)), 'tampered');
+    });
+    check('a code says in words which addresses it gives away', () => {
+        eq(PartyCode.describe({ candidates: [
+            { type: 'host', address: '5b8d7825-a86d-4a3e-a5cb-aabdf9f47caf.local', port: 1 },
+            { type: 'host', address: '192.168.1.5', port: 2 }, { type: 'srflx', address: '203.0.113.5', port: 54012 },
+            { type: 'relay', address: '2001:db8:0:0:0:0:0:1', port: 3478 },
+        ] }), ['this computer on your network (address hidden)', 'local network 192.168.1.5:2', 'public 203.0.113.5:54012', 'relay [2001:db8:0:0:0:0:0:1]:3478']);
+    });
+
+    // ------------------------------------------------------- party webrtc
+
+    console.log('\n# party webrtc — invites, replies, and the channel bound to them');
+    const PartyRtc = require('../src/offscreen/party-rtc.js');
+
+    /**
+     * Peer connections that connect only when two of them hold each other's
+     * descriptions — matched by DTLS fingerprint, as the real handshake is —
+     * and whose negotiated channels then open in pairs by id.
+     */
+    function fakeRtc() {
+        const all = [];
+        const later = (fn) => setTimeout(fn, 1);
+        const fpOf = (description) => PartyCode.parseSdp(description.sdp).fingerprint.join();
+        class Channel {
+            constructor(pc, options) { Object.assign(this, { pc, id: options.id, readyState: 'connecting', sent: [] }); }
+            send(data) {
+                if (this.readyState !== 'open') throw new Error('not open');
+                this.sent.push(JSON.parse(data));
+                const other = this.pc.other.channels.find((c) => c.id === this.id);
+                later(() => other.readyState === 'open' && other.onmessage && other.onmessage({ data }));
+            }
+        }
+        class RTC extends EventTarget {
+            constructor(config) {
+                super();
+                Object.assign(this, { config, fp: new Array(32).fill(all.length + 1), channels: [], iceGatheringState: 'new', connectionState: 'new' });
+                all.push(this);
+            }
+            createDataChannel(label, options) {
+                const channel = new Channel(this, options);
+                this.channels.push(channel);
+                return channel;
+            }
+            async setLocalDescription() {
+                // An answer if a remote offer is waiting for one; otherwise an offer, as after restartIce().
+                const type = this.owed ? 'answer' : 'offer';
+                this.owed = false;
+                const n = this.fp[0];
+                const desc = { ufrag: `u${n}x${this.restarts || 0}`, pwd: 'p'.repeat(22) + n, fingerprint: this.fp, candidates: [{ type: 'host', address: '127.0.0.1', port: 5000 + n }] };
+                this.localDescription = { type, sdp: PartyCode.buildSdp(desc, { type }) };
+                later(() => {
+                    this.iceGatheringState = 'complete';
+                    this.dispatchEvent(new Event('icegatheringstatechange'));
+                });
+                this.meet();
+            }
+            async setRemoteDescription(description) {
+                this.remoteDescription = description;
+                this.owed = description.type === 'offer';
+                this.meet();
+            }
+            restartIce() { this.restarts = (this.restarts || 0) + 1; }
+            /** A connection that has lost its path for now, as Chrome reports one before consent freshness gives up. */
+            stall() {
+                this.connectionState = 'disconnected';
+                this.dispatchEvent(new Event('connectionstatechange'));
+            }
+            meet() {
+                if (!this.localDescription || !this.remoteDescription) return;
+                // Renegotiated (an ICE restart) on a connection already made:
+                // the path comes back, and the channels never went.
+                if (this.other) {
+                    if (this.localDescription.type !== 'answer' && this.remoteDescription.type !== 'answer') return;
+                    for (const pc of [this, this.other]) {
+                        later(() => {
+                            pc.connectionState = 'connected';
+                            pc.dispatchEvent(new Event('connectionstatechange'));
+                        });
+                    }
+                    return;
+                }
+                const other = all.find((pc) => pc !== this && pc.fp.join() === fpOf(this.remoteDescription));
+                if (!other || !other.localDescription || !other.remoteDescription || fpOf(other.remoteDescription) !== this.fp.join()) return;
+                [this.other, other.other] = [other, this];
+                for (const pc of [this, other]) later(() => pc.state('connected', 'open'));
+            }
+            state(connection, channels) {
+                this.connectionState = connection;
+                for (const c of this.channels) {
+                    c.readyState = channels;
+                    const fn = channels === 'open' ? c.onopen : c.onclose;
+                    if (fn) fn();
+                }
+                this.dispatchEvent(new Event('connectionstatechange'));
+            }
+            close() {
+                if (this.connectionState === 'closed') return;
+                this.state('closed', 'closed');
+                if (this.other) later(() => this.other.state('failed', 'closed'));
+            }
+        }
+        return { RTC, all };
+    }
+    /** A host's invite, a guest's reply to it, and the host applying the reply. */
+    async function rtcPair(options = {}) {
+        const { RTC, all } = fakeRtc();
+        const invite = await PartyRtc.createInvite({ room: new Uint8Array(6), RTC, gatherMs: 50, ...options });
+        const guest = await PartyRtc.acceptInvite(invite.code, { RTC, gatherMs: 50 });
+        return { RTC, all, invite, guest, host: invite.answer(PartyCode.readReply(guest.reply)) };
+    }
+
+    await checkAsync('an invite answered by its reply opens a bound channel both ways', async () => {
+        const { invite, guest, host, all } = await rtcPair({ iceServers: [{ urls: 'stun:x' }] });
+        eq(all[0].config, { iceServers: [{ urls: 'stun:x' }] });
+        assert(invite.code.startsWith('bbp1i.') && guest.reply.startsWith('bbp1r.'));
+        const [hostPeer, guestPeer] = await Promise.all([host, guest.bound]);
+        assert(hostPeer && guestPeer, 'both bound');
+        eq(all[0].channels.map((c) => c.sent.map((msg) => msg.t)), [['bind', 'proof'], []], 'binding is on ctl alone');
+        eq(await invite.answer(PartyCode.readReply(guest.reply)), null, 'an invite opens one connection');
+    });
+    await checkAsync('a link sends pings on tick and the rest on ctl, and hears what arrived while it was being made', async () => {
+        const { host, guest } = await rtcPair();
+        const [hostPeer, guestPeer] = await Promise.all([host, guest.bound]);
+        const heard = [];
+        const guestLink = PartyRtc.peerLink(guestPeer, { deliver: () => {} });
+        guestLink.send({ t: 'hello', v: 1, name: 'Ben' });
+        guestLink.send({ t: 'ping', c: 1, seq: 0 });
+        guestLink.send({ t: 'intent', pad: 'x'.repeat(PartyRtc.MAX_FRAME) });
+        await tick();
+        PartyRtc.peerLink(hostPeer, { deliver: (msg) => heard.push(msg.t) });
+        await tick();
+        eq(heard, ['hello', 'ping'], 'the oversized frame never went');
+        eq([guestPeer.ctl.sent.map((msg) => msg.t).slice(2), guestPeer.tick.sent.map((msg) => msg.t)], [['hello'], ['ping']]);
+    });
+    await checkAsync('a reply to another invite, or one signed with another secret, is not answered', async () => {
+        const { RTC } = fakeRtc();
+        const room = new Uint8Array(6);
+        const [one, two] = [await PartyRtc.createInvite({ room, RTC, gatherMs: 50 }), await PartyRtc.createInvite({ room, RTC, gatherMs: 50 })];
+        const guest = await PartyRtc.acceptInvite(one.code, { RTC, gatherMs: 50 });
+        const reply = PartyCode.readReply(guest.reply);
+        eq([two.fits(reply), one.fits(reply)], [false, true]);
+        eq(await two.answer(reply), null);
+        const forged = PartyCode.readReply(await PartyCode.replyCode({ tag: reply.tag, desc: reply.desc }, new Uint8Array(16)));
+        eq(await one.answer(forged), null);
+        eq(await PartyRtc.acceptInvite('bbp1r.nope', { RTC }), null);
+    });
+    await checkAsync('an invite past its expiry is refused before anything is gathered, with a minute for clock skew', async () => {
+        const { RTC } = fakeRtc();
+        const invite = await PartyRtc.createInvite({ room: new Uint8Array(6), RTC, gatherMs: 50, now: () => 1000000 });
+        const at = (ms) => PartyRtc.acceptInvite(invite.code, { RTC, gatherMs: 50, now: () => ms });
+        const late = await at(invite.expires + PartyRtc.SKEW_MS - 500);
+        assert(late && late.reply && late.expires === invite.expires, 'inside the slack');
+        late.close();
+        eq(await at(invite.expires + PartyRtc.SKEW_MS + 500), { expired: true });
+    });
+    await checkAsync('the channel is only bound when both ends hold the same secret', async () => {
+        const { RTC } = fakeRtc();
+        const [a, b] = [PartyRtc.openPeer({ RTC }), PartyRtc.openPeer({ RTC })];
+        await a.pc.setLocalDescription();
+        await b.pc.setRemoteDescription(a.pc.localDescription);
+        await b.pc.setLocalDescription();
+        await a.pc.setRemoteDescription(b.pc.localDescription);
+        const fps = { hostFp: a.pc.fp, guestFp: b.pc.fp, timeoutMs: 500 };
+        eq(await Promise.all([
+            PartyRtc.bind(a, { ...fps, secret: new Uint8Array(16).fill(1) }),
+            PartyRtc.bind(b, { ...fps, secret: new Uint8Array(16).fill(2) }),
+        ]), [false, false]);
+    });
+    check('the ice settings become ice servers, with a turn server\'s credentials taken out of its url', () => {
+        eq(PartyRtc.iceServers({ stun: ' stun:a.example:19302  stun:b.example ', turn: 'turn:ana:s3cr:et@relay.example:3478?transport=udp turns:relay.example:5349 http://x' }), [
+            { urls: ['stun:a.example:19302', 'stun:b.example'] },
+            { urls: 'turn:relay.example:3478?transport=udp', username: 'ana', credential: 's3cr:et' },
+            { urls: 'turns:relay.example:5349' },
+        ]);
+        eq(PartyRtc.iceServers({ stun: 'nonsense', turn: '' }), []);
+    });
+    check('two stun servers seeing two ports on one address is a symmetric nat', () => {
+        const two = [{ urls: ['stun:a', 'stun:b'] }];
+        const nat = (candidates, servers = two) => PartyRtc.natOf({ candidates }, servers);
+        const host = { type: 'host', address: '5b8d7825-a86d-4a3e-a5cb-aabdf9f47caf.local', port: 1 };
+        const srflx = (port, address = '203.0.113.7') => ({ type: 'srflx', address, port });
+        eq(nat([host, srflx(5000)]), 'consistent');
+        eq(nat([host, srflx(5000), srflx(5001)]), 'symmetric');
+        eq(nat([host, srflx(5000), srflx(6000, '2001:db8:0:0:0:0:0:1')]), 'consistent', 'an ipv4 and an ipv6 mapping');
+        eq([nat([host]), nat([host], [])], ['blocked', 'unknown'], 'nobody answered; nobody was asked');
+        eq(nat([srflx(5000)], [{ urls: 'stun:a' }]), 'unknown', 'one server has nothing to compare with');
+    });
+    await checkAsync('a link hears once that its peer has gone', async () => {
+        const { host, guest } = await rtcPair();
+        const [hostPeer, guestPeer] = await Promise.all([host, guest.bound]);
+        let downs = 0;
+        PartyRtc.peerLink(hostPeer, { deliver: () => {}, onDown: () => downs++ });
+        PartyRtc.peerLink(guestPeer, { deliver: () => {} }).close();
+        await tick();
+        eq([downs, hostPeer.pc.connectionState], [1, 'failed']);
+    });
+
+    // --------------------------------------------------- party p2p host
+
+    console.log('\n# party p2p host — the room in this browser, guests on data channels');
+    const PartyHost = require('../src/offscreen/party-host.js');
+
+    /** A guest as the host sees one: its own end of an invite, speaking the wire protocol on it. */
+    async function rawGuest(code, RTC) {
+        const guest = await PartyRtc.acceptInvite(code, { RTC, gatherMs: 50 });
+        const heard = [];
+        const bound = guest.bound.then((peer) => peer && PartyRtc.peerLink(peer, { deliver: (msg) => heard.push(msg) }));
+        return { reply: guest.reply, bound, heard, last: (t) => heard.filter((msg) => msg.t === t).pop() };
+    }
+
+    await checkAsync('a guest answering the host\'s invite joins the room the host is in', async () => {
+        const { RTC } = fakeRtc();
+        const session = PartySession.createSession({ transports: { codes: (o) => PartyHost.createHost({ ...o, RTC, gatherMs: 50 }) }, now: () => Date.now() });
+        const started = await session.control({ op: 'start', mode: 'codes', name: 'Ana' });
+        eq([started.ok, started.status.invites], [true, []]);
+        const { invite } = await session.control({ op: 'invite' });
+        assert(invite.code.startsWith('bbp1i.') && invite.expires > Date.now(), invite.code);
+        eq(invite.addresses, ['local network 127.0.0.1:5001']);
+        eq([invite.nat, session.status().nat], ['blocked', 'blocked'], 'two stun servers asked, and neither answered the fake');
+        eq(session.status().invites.map((one) => one.code), [invite.code]);
+
+        const ben = await rawGuest(invite.code, RTC);
+        eq(await session.control({ op: 'accept', code: ben.reply }), { ok: true });
+        eq(session.status().invites, [], 'used up');
+        const link = await ben.bound;
+        link.send({ t: 'hello', v: 1, name: 'Ben' });
+        await until(() => ben.last('welcome'), 'Ben\'s welcome');
+        eq(ben.last('welcome').room.members.map((m) => [m.name, m.role]), [['Ana', 'host'], ['Ben', 'guest']]);
+        link.send({ t: 'intent', id: 1, base: 0, op: 'play', pos: 2, at: Date.now() });
+        await until(() => session.status().state.paused === false, 'Ben\'s play to reach Ana');
+        await session.control({ op: 'leave' });
+        await until(() => link.state() === 'failed', 'Ben to hear the host go');
+    });
+    await checkAsync('an invite taken back gives its ports back, and cannot be taken back twice', async () => {
+        const { RTC } = fakeRtc();
+        const session = PartySession.createSession({ transports: { codes: (o) => PartyHost.createHost({ ...o, RTC, gatherMs: 50 }) }, now: () => Date.now() });
+        await session.control({ op: 'start', mode: 'codes', name: 'Ana' });
+        const [{ invite: one }, { invite: two }] = [await session.control({ op: 'invite' }), await session.control({ op: 'invite' })];
+        eq(await session.control({ op: 'revoke', code: one.code }), { ok: true });
+        eq(await session.control({ op: 'revoke', code: one.code }), { ok: false });
+        eq(session.status().invites.map((invite) => invite.code), [two.code]);
+        await session.control({ op: 'leave' });
+    });
+    await checkAsync('the host turns away what is not a reply to one of its open invites', async () => {
+        const { RTC } = fakeRtc();
+        const host = PartyHost.createHost({ RTC, gatherMs: 50 });
+        const other = PartyHost.createHost({ RTC, gatherMs: 50 });
+        const theirs = await rawGuest((await other.createInvite()).code, RTC);
+        eq(await host.accept('bbp1i.abc'), { ok: false, error: 'code' });
+        eq(await host.accept(theirs.reply), { ok: false, error: 'unknown' });
+        host.close();
+        other.close();
+    });
+    await checkAsync('two sessions meet through an invite and its reply, and the guest\'s ends with the host\'s', async () => {
+        const { RTC } = fakeRtc();
+        const ended = [];
+        const transports = { codes: (o) => PartyHost.createTransport({ ...o, RTC, gatherMs: 50 }) };
+        const ana = PartySession.createSession({ transports });
+        const ben = PartySession.createSession({ transports, onEnd: (code) => ended.push(code) });
+        await ana.control({ op: 'start', mode: 'codes', name: 'Ana' });
+        const { invite } = await ana.control({ op: 'invite' });
+
+        const waiting = await ben.control({ op: 'start', mode: 'codes', code: invite.code, name: 'Ben' });
+        eq([waiting.ok, waiting.status.you, waiting.status.up], [true, null, false], 'back with the reply, not the welcome');
+        assert(waiting.status.invite.startsWith('bbp1r.'), waiting.status.invite);
+        eq(waiting.status.expires, Math.floor(invite.expires / 1000) * 1000, 'the reply is good for as long as the invite is held open');
+        const tab = tabPort();
+        ben.connect(tab);
+        tab.say({ t: 'ping', c: 1, seq: 0 });
+        eq(tab.heard, [], 'no pong made up before there is a room clock to make it from');
+
+        eq(await ana.control({ op: 'accept', code: waiting.status.invite }), { ok: true });
+        await until(() => ben.status().up && ben.status().rtt !== null, 'Ben to be welcomed and timed');
+        eq(ben.status().members.map((m) => [m.name, m.role]), [['Ana', 'host'], ['Ben', 'guest']]);
+        eq(tab.last('welcome').you, ben.status().you, 'the tab bound while waiting hears the welcome');
+        tab.say({ t: 'intent', id: 1, base: 0, op: 'play', pos: 7, at: Date.now() });
+        await until(() => ana.status().state.paused === false, 'Ben\'s play to reach Ana');
+
+        await ana.control({ op: 'leave' });
+        await until(() => !ben.status().active, 'Ben\'s party to end');
+        eq([ended, tab.last('error')], [['host-left'], { t: 'error', code: 'host-left' }]);
+    });
+    await checkAsync('an invite that cannot be read ends the guest\'s start at once', async () => {
+        const { RTC } = fakeRtc();
+        const guest = (code) => PartySession.createSession({ transports: { codes: (o) => PartyHost.createTransport({ ...o, code, RTC, gatherMs: 50 }) } })
+            .control({ op: 'start', mode: 'codes', code });
+        eq(await guest('bbp1i.nope'), { ok: false, error: 'address' });
+    });
+    await checkAsync('an invite nobody answers gives its ports back', async () => {
+        const { RTC, all } = fakeRtc();
+        const host = PartyHost.createHost({ RTC, gatherMs: 50, inviteMs: 20 });
+        await host.createInvite();
+        eq(host.pending().length, 1);
+        await until(() => host.pending().length === 0, 'the invite to lapse');
+        eq(all[0].connectionState, 'closed');
+        host.close();
+    });
+
+    // ---------------------------------------------------- party tracker
+
+    console.log('\n# party tracker — meeting through a webtorrent tracker, sealed');
+    const PartyTracker = require('../src/offscreen/party-tracker.js');
+
+    /**
+     * A WebTorrent tracker in memory, doing what the real ones do with a
+     * swarm: offers handed one each to other peers on the same hash, answers
+     * handed to `to_peer_id`, and `stopped` leaving. `seen` keeps every frame
+     * it was sent, to check what a tracker gets to read.
+     */
+    function fakeTracker({ down = false } = {}) {
+        const swarms = new Map();
+        const seen = [];
+        class Socket {
+            constructor(url) {
+                Object.assign(this, { url, readyState: 0 });
+                setTimeout(() => {
+                    if (down) return this.onclose && this.onclose();
+                    this.readyState = 1;
+                    if (this.onopen) this.onopen();
+                }, 1);
+            }
+            send(text) {
+                const msg = JSON.parse(text);
+                seen.push(msg);
+                const swarm = swarms.get(msg.info_hash) || new Map();
+                swarms.set(msg.info_hash, swarm);
+                const tell = (socket, out) => setTimeout(() => socket.onmessage && socket.onmessage({ data: JSON.stringify({ action: 'announce', info_hash: msg.info_hash, ...out }) }), 1);
+                if (msg.answer) {
+                    const to = swarm.get(msg.to_peer_id);
+                    if (to) tell(to, { peer_id: msg.peer_id, offer_id: msg.offer_id, answer: msg.answer });
+                    return;
+                }
+                if (msg.event === 'stopped') return swarm.delete(msg.peer_id);
+                swarm.set(msg.peer_id, this);
+                tell(this, { interval: 120, complete: 0, incomplete: swarm.size });
+                const others = [...swarm.entries()].filter(([id]) => id !== msg.peer_id);
+                (msg.offers || []).forEach((one, i) => {
+                    if (others[i]) tell(others[i][1], { peer_id: msg.peer_id, offer_id: one.offer_id, offer: one.offer });
+                });
+            }
+            close() { this.readyState = 3; }
+        }
+        return { Socket, seen, swarms };
+    }
+
+    await checkAsync('a tracker code is the secret, and the swarm and key come from it alone', async () => {
+        const { code, secret } = PartyTracker.newCode();
+        assert(code.startsWith('bbp1t.') && code.length === 28, code);
+        eq([...PartyTracker.readCode(` ${code} `)], [...secret]);
+        eq([PartyTracker.readCode('bbp1t.abc'), PartyTracker.readCode('bbp1i.' + code.slice(6))], [null, null]);
+        const [one, again, other] = await Promise.all([secret, secret, PartyTracker.newCode().secret].map(PartyTracker.keysFor));
+        eq([one.topic.length, one.topic === again.topic, one.topic === other.topic], [20, true, false]);
+        const sealed = await PartyTracker.seal(one.key, Uint8Array.from([1, 2, 3]));
+        eq([...(await PartyTracker.unseal(again.key, sealed))], [1, 2, 3]);
+        eq([await PartyTracker.unseal(other.key, sealed), await PartyTracker.unseal(one.key, 'short')], [null, null], 'a stranger\'s blob');
+        eq(PartyTracker.trackerUrls(' wss://a.example  http://b ws://c:8000 '), ['wss://a.example', 'ws://c:8000']);
+        eq(PartyTracker.trackerUrls(''), [...PartyTracker.DEFAULT_TRACKERS]);
+    });
+    await checkAsync('two sessions meet through a tracker, which reads nothing of what they said', async () => {
+        const { RTC } = fakeRtc();
+        const tracker = fakeTracker();
+        const transports = { tracker: (o) => PartyTracker.createTransport({ ...o, RTC, gatherMs: 50, WebSocket: tracker.Socket }) };
+        const ana = PartySession.createSession({ transports });
+        const ben = PartySession.createSession({ transports });
+        const started = await ana.control({ op: 'start', mode: 'tracker', name: 'Ana', trackers: 'wss://t1 wss://t2' });
+        const code = started.status.invite;
+        await until(() => ana.status().trackers === 2, 'both trackers to answer the host');
+        const joined = await ben.control({ op: 'start', mode: 'tracker', code, name: 'Ben', trackers: 'wss://t1 wss://t2' });
+        eq([joined.ok, joined.status.members.map((m) => [m.name, m.role])], [true, [['Ana', 'host'], ['Ben', 'guest']]]);
+        await until(() => [...tracker.swarms.values()].every((swarm) => swarm.size === 1), 'Ben to leave the swarm');
+
+        const said = JSON.stringify(tracker.seen);
+        assert(!said.includes(code.slice(6)) && !said.includes('a=fingerprint') && !said.includes('127.0.0.1'), 'no secret, sdp or address');
+        eq(tracker.seen.filter((msg) => msg.answer).length, 1, 'answered once though announced to two trackers');
+        await ben.control({ op: 'leave' });
+        await ana.control({ op: 'leave' });
+    });
+
+    /** A tracker party on fakes, with its waits cut to milliseconds, and members to add to it. */
+    async function trackerParty() {
+        const { RTC, all } = fakeRtc();
+        const tracker = fakeTracker();
+        const knobs = { RTC, gatherMs: 20, WebSocket: tracker.Socket, joinMs: 400, renewMs: 40, stallMs: 30 };
+        const transports = { tracker: (o) => PartyTracker.createTransport({ ...o, ...knobs }) };
+        const sessions = [];
+        const add = async (name, code) => {
+            const session = PartySession.createSession({ transports, now: () => Date.now() });
+            sessions.push(session);
+            const started = await session.control({ op: 'start', mode: 'tracker', name, code, trackers: 'wss://t' });
+            assert(started.ok, `${name} started: ${started.error}`);
+            return { session, code: started.status.invite };
+        };
+        const leave = () => Promise.all(sessions.map((one) => one.control({ op: 'leave' })));
+        return { all, tracker, add, leave };
+    }
+    const roles = (session) => session.status().members.map((m) => `${m.name}:${m.role}`);
+
+    await checkAsync('a restart through the tracker is answered on the peer the host already has', async () => {
+        const { RTC } = fakeRtc();
+        const tracker = fakeTracker();
+        const { secret } = PartyTracker.newCode();
+        const net = { secret, urls: ['wss://t'], RTC, gatherMs: 20, WebSocket: tracker.Socket, renewMs: 40 };
+        const admitted = [];
+        const host = PartyTracker.hostSwarm({ ...net, admit: (peer) => admitted.push(peer) });
+        await until(() => host.up() === 1, 'the host in the swarm');
+        const joined = await PartyTracker.joinSwarm({ ...net, timeoutMs: 400 }).done;
+        assert(joined.peer && joined.tag.length === 4, 'joined, with the tag a restart goes by');
+        await until(() => admitted.length === 1, 'the host to admit the joiner');
+        const ok = await PartyTracker.restartSwarm({ ...net, peer: joined.peer, tag: joined.tag, timeoutMs: 400 }).done;
+        eq([ok, admitted.length, joined.peer.pc.restarts], [true, 1, 1], 'no second peer on the host');
+        eq(tracker.seen.filter((msg) => msg.answer).length, 2, 'a restart sent as several offers is answered once');
+        const other = await PartyTracker.restartSwarm({ ...net, secret: PartyTracker.newCode().secret, peer: joined.peer, tag: joined.tag, timeoutMs: 100 }).done;
+        eq(other, false, 'nobody answers a restart sealed under another code');
+        host.close();
+    });
+    await checkAsync('a stalled connection is restarted through the tracker, and the member never leaves', async () => {
+        const party = await trackerParty();
+        try {
+            const ana = await party.add('Ana');
+            await until(() => ana.session.status().trackers === 1, 'the host in the swarm');
+            const ben = await party.add('Ben', ana.code);
+            const you = ben.session.status().you;
+            const benPc = party.all.find((pc) => pc.connectionState === 'connected' && pc.localDescription.type === 'offer');
+            const answers = () => party.tracker.seen.filter((msg) => msg.answer).length;
+            eq(answers(), 1);
+            benPc.stall();
+            await until(() => answers() === 2 && benPc.connectionState === 'connected', 'the host to answer the restart');
+            eq([benPc.restarts, ben.session.status().you, ben.session.status().up], [1, you, true], 'same peer, same member, never down');
+            eq(roles(ana.session), ['Ana:host', 'Ben:guest']);
+        } finally {
+            await party.leave();
+        }
+    });
+    await checkAsync('with the host gone the earliest joiner carries the room on, and the others find them', async () => {
+        const party = await trackerParty();
+        try {
+            const ana = await party.add('Ana');
+            await until(() => ana.session.status().trackers === 1, 'the host in the swarm');
+            const ben = await party.add('Ben', ana.code);
+            const cat = await party.add('Cat', ana.code);
+            const tab = tabPort();
+            ben.session.connect(tab);
+            tab.say({ t: 'intent', id: 1, base: 0, op: 'play', pos: 30, at: Date.now() });
+            tab.say({ t: 'chat', text: 'the cliffs!' });
+            await until(() => cat.session.status().state.paused === false && roles(cat.session).length === 3 && tab.last('chat-line'), 'Ben\'s play to reach Cat');
+            const said = tab.last('chat-line').line;
+            const seq = cat.session.status().state.seq;
+            const before = cat.session.status().you;
+
+            // Ana's bye has the old room promote Ben on its way out, so the
+            // roles alone read right before anyone has moved: wait for Ben
+            // to be hosting and Cat to be welcomed into his room.
+            await ana.session.control({ op: 'leave' });
+            await until(() => ben.session.status().trackers !== undefined && cat.session.status().up && cat.session.status().you !== before,
+                'Ben to host, and Cat to find him');
+            eq([roles(ben.session), roles(cat.session)], [['Ben:host', 'Cat:guest'], ['Ben:host', 'Cat:guest']]);
+            const state = cat.session.status().state;
+            eq([state.paused, state.seq >= seq, state.pos >= 30], [false, true, true], 'still playing, from where it had got to');
+            eq(ben.session.status().invite, ana.code, 'the same code finds the room');
+
+            const dan = await party.add('Dan', ana.code);
+            const danTab = tabPort();
+            dan.session.connect(danTab);
+            const heardBy = () => danTab.heard.flatMap((msg) => (msg.t === 'chat-log' ? msg.lines : msg.t === 'chat-line' ? [msg.line] : []));
+            await until(() => heardBy().some((line) => line.text === 'the cliffs!'), 'Dan, joining after the handover, to see what was said before it');
+            eq(heardBy().find((line) => !line.sys).id, said.id, 'under the id everyone else already has it by');
+        } finally {
+            await party.leave();
+        }
+    });
+    await checkAsync('a joiner says whether the trackers or the host were missing', async () => {
+        const { RTC } = fakeRtc();
+        const { secret } = PartyTracker.newCode();
+        const join = (tracker) => PartyTracker.joinSwarm({ secret, urls: ['wss://t'], RTC, gatherMs: 50, WebSocket: tracker.Socket, timeoutMs: 100 }).done;
+        eq(await join(fakeTracker({ down: true })), { error: 'tracker' });
+        eq(await join(fakeTracker()), { error: 'no-host' });
+    });
+
+    // ------------------------------------------------- party dev server
+
+    console.log('\n# party dev server — the session over a real socket');
+    const PartyDevServer = require('./party-dev-server.js');
+
+    await checkAsync('two sessions meet through an invite, and come back as themselves after an outage', async () => {
+        const server = await PartyDevServer.startServer({ port: 0 });
+        const ana = PartySession.createSession();
+        const ben = PartySession.createSession();
+        try {
+            const made = await ana.control({ op: 'start', mode: 'server', url: server.url, name: 'Ana' });
+            const joined = await ben.control({ op: 'start', mode: 'server', code: made.status.invite, name: 'Ben' });
+            eq(joined.status.members.map((m) => [m.name, m.role]), [['Ana', 'host'], ['Ben', 'guest']]);
+            const tab = tabPort();
+            ben.connect(tab);
+            tab.say({ t: 'intent', id: 1, base: 0, op: 'play', pos: 5, at: Date.now() });
+            await until(() => ana.status().state.paused === false, 'Ben\'s play to reach Ana');
+
+            const [room] = server.rooms.values();
+            const before = [ana.status().you, ben.status().you];
+            server.sever();
+            eq(room.links.size, 0);
+            await until(() => room.links.size === 2 && ana.status().up && ben.status().up, 'both to reconnect');
+            eq([ana.status().you, ben.status().you], before, 'resumed, not joined anew');
+            eq(ana.status().members.length, 2);
+        } finally {
+            await ana.control({ op: 'leave' });
+            await ben.control({ op: 'leave' });
+            await server.close();
+        }
+    });
+    await checkAsync('the dev server refuses a wrong secret and an unknown room', async () => {
+        const server = await PartyDevServer.startServer({ port: 0 });
+        try {
+            const ana = PartySession.createSession();
+            const made = await ana.control({ op: 'start', mode: 'server', url: server.url });
+            const { url, room } = PartyWs.readInvite(made.status.invite);
+            const joinWith = (invite) => PartySession.createSession().control({ op: 'start', mode: 'server', code: PartyWs.inviteCode(invite) });
+            eq(await joinWith({ url, room, secret: 'guess' }), { ok: false, error: 'bad-secret' });
+            eq(await joinWith({ url, room: 'nope', secret: 'guess' }), { ok: false, error: 'no-room' });
+            await ana.control({ op: 'leave' });
+        } finally {
+            await server.close();
+        }
+    });
+
+    // ----------------------------------------------------- party worker
+
+    console.log('\n# party worker — the document a party lives in, open only while it does');
+    const PartyWorker = require('../src/background/party.js');
+
+    check('offscreen.html loads the session after everything it reads', () => {
+        const html = fs.readFileSync(`${__dirname}/../offscreen.html`, 'utf8');
+        const files = [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => one[1]);
+        for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
+        const at = (name) => files.findIndex((file) => file.endsWith(`/${name}.js`));
+        const order = ['party-clock', 'party-state', 'party-chat', 'party-room', 'party-loopback', 'party-ws', 'party-code', 'party-rtc', 'party-host', 'party-tracker', 'party-session'];
+        eq(order.map(at), order.map((_, i) => i));
+    });
+    check('the worker and the session agree on how the worker addresses it', () => {
+        eq(PartyWorker.SESSION, PartySession.TARGET);
+    });
+    check('only chrome asks for an offscreen document', () => {
+        const permissions = (name) => JSON.parse(fs.readFileSync(`${__dirname}/../${name}`, 'utf8')).permissions;
+        assert(permissions('manifest.json').includes('offscreen'));
+        assert(!permissions('manifest.firefox.json').includes('offscreen'), 'firefox has no chrome.offscreen');
+    });
+
+    /** A party over fakes: the document, the loader and the alarm, each writing down what it was asked. */
+    /** `more` is the rest of chrome.* a case needs, laid over the fakes. */
+    function partyWith({ answer = { ok: true }, bound = null, more = {} } = {}) {
+        const calls = [];
+        const alarms = {};
+        let open = false;
+        const host = {
+            exists: async () => open,
+            open: async () => { calls.push('open'); open = true; },
+            close: async () => { calls.push('close'); open = false; },
+            ask: async (msg) => { calls.push(`ask ${msg.op}`); calls.asked = msg; return msg.op === 'start' ? answer : { ok: true }; },
+        };
+        const loader = {
+            bind: async (tabId) => { calls.push(`bind ${tabId}`); return true; },
+            unbind: async () => { calls.push('unbind'); },
+            current: async () => bound,
+        };
+        const session = {};
+        const api = {
+            alarms: { create: (name, info) => { alarms[name] = info; }, clear: async (name) => { delete alarms[name]; } },
+            storage: { session: { set: async (items) => Object.assign(session, items) } },
+            ...more,
+        };
+        return { party: PartyWorker.createParty({ api, loader, host }), calls, alarms, session };
+    }
+    const partyVideo = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+    await checkAsync('a party opens its document, and the tab\'s code goes in only once it is listening', async () => {
+        const { party, calls } = partyWith();
+        eq((await party.start(7, partyVideo)).ok, true);
+        eq(calls, ['open', 'ask start', 'bind 7']);
+        eq([calls.asked.mode, calls.asked.policy], ['loopback', { control: 'everyone', wait: true }], 'the settings\' defaults');
+        eq(calls.asked.ice, { stun: 'stun:stun.l.google.com:19302 stun:stun.cloudflare.com:3478', turn: '' });
+    });
+    await checkAsync('a tab on another site starts nothing', async () => {
+        const { party, calls } = partyWith();
+        eq(await party.start(7, 'https://example.com/'), { ok: false, error: 'site' });
+        eq(calls, []);
+    });
+    await checkAsync('a start the session refuses leaves nothing open', async () => {
+        const { party, calls } = partyWith({ answer: { ok: false, error: 'full' } });
+        eq(await party.start(7, partyVideo), { ok: false, error: 'full' });
+        eq(calls, ['open', 'ask start', 'ask leave', 'close', 'unbind']);
+    });
+    await checkAsync('leaving closes the document and shuts the gate', async () => {
+        const { party, calls } = partyWith();
+        await party.start(7, partyVideo);
+        calls.length = 0;
+        await party.leave();
+        eq(calls, ['ask leave', 'close', 'unbind']);
+        eq(await party.status(), { ok: true, status: { active: false } }, 'asked with no document open, nothing is opened');
+    });
+    await checkAsync('the party\'s tab closing ends it half a minute on, unless it was started again', async () => {
+        for (const bound of [null, { tabId: 9, site: 'youtube' }]) {
+            const { party, calls, alarms } = partyWith({ bound });
+            await party.start(7, partyVideo);
+            party.onTabClosed(7);
+            eq(alarms[PartyWorker.LINGER_ALARM], { delayInMinutes: PartyWorker.LINGER_MIN });
+            eq(await party.onAlarm({ name: PartyWorker.LINGER_ALARM }), !bound);
+            eq(calls.includes('close'), !bound, bound ? 'moved to tab 9: kept' : 'nobody took it up: over');
+        }
+    });
+    await checkAsync('a server party starts on the address given, else the setting\'s, and an invite joins', async () => {
+        const tab = { tab: { id: 7, url: partyVideo } };
+        const asked = async (message) => {
+            const { party, calls } = partyWith();
+            await PartyWorker.handle({}, party, message, tab);
+            const { mode, url, code } = calls.asked;
+            return { mode, url, code };
+        };
+        eq(await asked({ action: 'partyStart' }), { mode: 'loopback', url: '', code: undefined });
+        eq(await asked({ action: 'partyStart', server: 'ws://10.0.0.2:7070' }), { mode: 'server', url: 'ws://10.0.0.2:7070', code: undefined });
+        eq(await asked({ action: 'partyStart', server: '' }), { mode: 'server', url: '', code: undefined }, 'partyServerUrl, blank by default');
+        eq(await asked({ action: 'partyJoin', code: 'bbp1s.x' }), { mode: 'server', url: '', code: 'bbp1s.x' });
+        eq(await asked({ action: 'partyStart', mode: 'codes' }), { mode: 'codes', url: '', code: undefined });
+        eq(await asked({ action: 'partyJoin', code: ' bbp1i.x ' }), { mode: 'codes', url: '', code: 'bbp1i.x' });
+        eq(await asked({ action: 'partyStart', mode: 'tracker' }), { mode: 'tracker', url: '', code: undefined });
+        eq(await asked({ action: 'partyJoin', code: 'bbp1t.x' }), { mode: 'tracker', url: '', code: 'bbp1t.x' });
+    });
+    await checkAsync('a code that is none of ours opens nothing', async () => {
+        const { party, calls } = partyWith();
+        eq(await PartyWorker.handle({}, party, { action: 'partyJoin', code: 'hello' }, { tab: { id: 7, url: partyVideo } }), { ok: false, error: 'code' });
+        eq(calls, []);
+    });
+    await checkAsync('a pasted reply lets a guest into the party on, and an invite is asked of it', async () => {
+        const { party, calls } = partyWith();
+        eq(await PartyWorker.handle({}, party, { action: 'partyInvite' }, {}), { ok: false, error: 'inactive' });
+        await party.start(7, partyVideo);
+        calls.length = 0;
+        await PartyWorker.handle({}, party, { action: 'partyJoin', code: ' bbp1r.abc ' }, {});
+        await PartyWorker.handle({}, party, { action: 'partyInvite' }, {});
+        eq([calls, calls.asked], [['ask accept', 'ask invite'], { op: 'invite' }], 'no new party, no tab bound');
+    });
+    await checkAsync('a party the authority ended is closed down, and why is kept for the popup; a page cannot claim one was', async () => {
+        const { party, calls, session } = partyWith();
+        await party.start(7, partyVideo);
+        calls.length = 0;
+        eq(await PartyWorker.handle({}, party, { action: 'partyEnded' }, { tab: { id: 7 } }), { ok: false });
+        eq(calls, []);
+        await PartyWorker.handle({}, party, { action: 'partyEnded', code: 'kicked' }, { url: 'chrome-extension://x/offscreen.html' });
+        eq(calls, ['ask leave', 'close', 'unbind']);
+        eq(session[PartyWorker.ENDED_KEY].code, 'kicked');
+    });
+    await checkAsync('the popup\'s host controls are passed on as they are, and nothing else is', async () => {
+        const { party, calls } = partyWith();
+        eq(await PartyWorker.handle({}, party, { action: 'partyControl', op: 'kick', member: 'm2' }, {}), { ok: false, error: 'inactive' });
+        await party.start(7, partyVideo);
+        calls.length = 0;
+        await PartyWorker.handle({}, party, { action: 'partyControl', op: 'policy', control: 'host' }, {});
+        eq(calls.asked, { op: 'policy', control: 'host' });
+        eq(await PartyWorker.handle({}, party, { action: 'partyControl', op: 'leave' }, {}), { ok: false, error: 'op' });
+        eq(await PartyWorker.handle({}, party, { action: 'partyControl', op: 'start' }, {}), { ok: false, error: 'op' });
+        eq(calls, ['ask policy']);
+    });
+    await checkAsync('"Open on page" brings the party\'s tab forward, then asks the session to open its chat', async () => {
+        const more = {
+            tabs: { update: async (id, info) => { calls.push(`tab ${id} ${info.active}`); return { id, windowId: 3 }; } },
+            windows: { update: async (id, info) => { calls.push(`window ${id} ${info.focused}`); } },
+        };
+        const none = partyWith({ more });
+        eq(await PartyWorker.handle({}, none.party, { action: 'partyChat' }, {}), { ok: false, error: 'tab' }, 'no party tab');
+        const { party, calls } = partyWith({ bound: { tabId: 9, site: 'youtube' }, more });
+        await party.start(9, partyVideo);
+        calls.length = 0;
+        eq(await PartyWorker.handle({}, party, { action: 'partyChat' }, {}), { ok: true });
+        eq(calls, ['tab 9 true', 'window 3 true', 'ask chat']);
+    });
+    await checkAsync('the session reports a kick, but not a start that failed or a leave', async () => {
+        const ended = [];
+        const loop = PartyLoopback.createLoopback();
+        const session = PartySession.createSession({ transports: { loopback: () => loop }, now: () => 1000, onEnd: (code) => ended.push(code) });
+        await session.control({ op: 'start', name: 'Ana' });
+        const ben = loop.open(() => {});
+        ben.send({ t: 'hello', v: 1, name: 'Ben' });
+        const [ana, benId] = loop.room.members().map((m) => m.id);
+        loop.room.handle(ana, { t: 'role', member: benId, role: 'host' }, 1000);
+        eq(ended, [], 'handing over is not ending');
+        ben.send({ t: 'kick', member: ana });
+        eq([ended, session.status().active], [['kicked'], false]);
+        const left = PartySession.createSession({ now: () => 1000, onEnd: (code) => ended.push(code) });
+        await left.control({ op: 'start' });
+        await left.control({ op: 'leave' });
+        const refused = PartySession.createSession({ transports: { loopback: () => ({ open: (deliver) => ({ send: () => deliver({ t: 'error', code: 'full' }), close() {} }), close() {} }) }, onEnd: (code) => ended.push(code) });
+        eq(await refused.control({ op: 'start' }), { ok: false, error: 'full' });
+        eq(ended, ['kicked']);
+    });
+    await checkAsync('two starts close together open one offscreen document', async () => {
+        let documents = 0;
+        const api = {
+            runtime: {
+                getURL: (path) => `chrome-extension://x/${path}`,
+                getContexts: async () => Array.from({ length: documents }, () => ({})),
+            },
+            offscreen: { createDocument: () => new Promise((resolve) => setTimeout(() => { documents++; resolve(); }, 5)) },
+        };
+        const host = PartyWorker.offscreenHost(api);
+        await Promise.all([host.open(), host.open()]);
+        eq(documents, 1);
+    });
+
+    check('firefox\'s background page does not list the session: it is loaded when a party starts', () => {
+        const scripts = JSON.parse(fs.readFileSync(`${__dirname}/../manifest.firefox.json`, 'utf8')).background.scripts;
+        eq(scripts.filter((file) => /offscreen\//.test(file)), []);
+    });
+    await checkAsync('firefox loads offscreen.html\'s scripts into its page, in order, once, and asks the tab to keep it', async () => {
+        const html = fs.readFileSync(`${__dirname}/../offscreen.html`, 'utf8');
+        const appended = [];
+        const doc = {
+            createElement: () => ({}),
+            head: { appendChild: (script) => { appended.push(script.src); setTimeout(script.onload); } },
+        };
+        const api = {
+            runtime: {
+                getURL: (path) => `moz-extension://x/${path}`,
+                onConnect: { addListener: () => {} },
+                onMessage: { addListener: () => {} },
+            },
+        };
+        const host = PartyWorker.pageHost(api, { doc, fetchText: async () => html });
+        try {
+            await Promise.all([host.open(), host.open()]);
+            eq(appended, [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => `moz-extension://x/${one[1]}`));
+            assert(!(await host.exists()), 'loaded, but no party yet');
+            eq((await host.ask({ op: 'start', name: 'Ana' })).ok, true, 'called directly, not by message');
+            assert(await host.exists());
+            const tab = tabPort();
+            globalThis.__bbPartySession.connect(tab);
+            eq(tab.last('keepalive'), { t: 'keepalive', ms: PartyWorker.KEEPALIVE_MS });
+            await host.ask({ op: 'leave' });
+            assert(!(await host.exists()));
+        } finally {
+            delete globalThis.__bbPartySession;
+        }
+    });
+
+    // ------------------------------------------------------ party panel
+
+    console.log('\n# party panel — the popup\'s views, loaded only when asked for');
+    globalThis.BB.Settings = globalThis.BB.Settings || require('../src/shared/settings.js');
+    globalThis.BB.PartyCode = PartyCode;
+    globalThis.BB.Ui = globalThis.BB.Ui || {};
+    const PartyPanel = require('../src/page/party-panel.js');
+    const StartView = require('../src/page/party-start-view.js');
+    const JoinViews = require('../src/page/party-join-view.js');
+
+    check('the popup lists no party file: they are appended, in order, when a party is wanted', () => {
+        const html = fs.readFileSync(`${__dirname}/../popup.html`, 'utf8');
+        assert(!/<script src="[^"]*party[^"]*"/.test(html) && !/party\.css/.test(html), 'popup.html must not load the party');
+        const popup = fs.readFileSync(`${__dirname}/../popup.js`, 'utf8');
+        const files = JSON.parse(`[${/PARTY_FILES = \[([^\]]+)\]/.exec(popup)[1].replace(/'/g, '"')}]`);
+        eq(files.slice(0, 2), ['src/shared/party-code.js', 'src/page/party-panel.js'], 'the panel after the codes it reads, before the views');
+        for (const file of [...files, 'party.css']) assert(fs.existsSync(`${__dirname}/../${file}`), file);
+    });
+    check('every party setting has its control in the dashboard, bound by its id', () => {
+        const html = fs.readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+        const keys = Object.keys(globalThis.BB.Settings.DEFAULTS).filter((key) => key.startsWith('party'));
+        eq(keys.length, 8);
+        for (const key of keys) assert(html.includes(`id="${key}"`), key);
+    });
+    check('a countdown is m:ss and never goes below nothing', () => {
+        eq([PartyPanel.countdown(61400, 0), PartyPanel.countdown(9000, 0), PartyPanel.countdown(0, 5000)], ['1:01', '0:09', '0:00']);
+    });
+    check('a pasted code is named before it is joined, with an invite\'s address and time left', () => {
+        const { readCode } = JoinViews.join;
+        const invite = PartyCode.inviteCode({ ...inviteFields(), expires: 1000000 + 9 * 60000 });
+        eq(readCode(invite, { now: 1000000 }), { ok: true, kind: 'Invite code', note: ' · from 203.0.113.7:55253 · 9 min left' });
+        eq(readCode(invite, { now: 1000000 + 10 * 60000 }).ok, false, 'expired');
+        eq(readCode(invite.slice(0, -4)).ok, false, 'cut short');
+        eq(readCode(PartyWs.inviteCode({ url: 'wss://party.example/', room: 'r', secret: 's' })), { ok: true, kind: 'Server code', note: ' · on party.example' });
+        eq([readCode('bbp1t.abc').ok, readCode('bbp1r.abc').ok, readCode('hello').kind, readCode('  ')], [true, false, 'Not a party code', null]);
+    });
+    await checkAsync('the tracker probe counts the sockets that open in time, and closes every one', async () => {
+        const made = [];
+        class Socket {
+            constructor(url) {
+                this.url = url;
+                made.push(this);
+                if (url.includes('up')) setTimeout(() => this.onopen());
+                if (url.includes('bad')) setTimeout(() => this.onerror());
+            }
+            close() { this.closed = true; }
+        }
+        const n = await StartView.probeTrackers('wss://up.one wss://bad.two  wss://slow.three https://no.four', { Socket, ms: 30 });
+        eq([n, made.map((one) => one.url), made.every((one) => one.closed)], [1, ['wss://up.one', 'wss://bad.two', 'wss://slow.three'], true]);
+    });
+    check('the room shows chat said while the page\'s panel was shut, and who last said it, and nothing when all is read', () => {
+        const RoomView = require('../src/page/party-room-view.js');
+        const panel = (chat) => ({
+            status: { mode: 'loopback', you: 'm1', up: true, members: [{ id: 'm1', name: 'Nadia', role: 'host', ready: true }], policy: {}, chat },
+            esc: globalThis.BB.Dom.escapeHtml, subhead: () => '',
+        });
+        const strip = RoomView.render(panel({ unread: 3, last: '<b>Ana</b>' }));
+        assert(strip.includes('<strong>3 new</strong> in chat · last from &lt;b&gt;Ana&lt;/b&gt;'), strip);
+        assert(strip.includes('data-act="chat">Open on page</button>'), 'the way there');
+        for (const chat of [{ unread: 0, last: null }, undefined]) assert(!RoomView.render(panel(chat)).includes('party-chat-strip'));
+    });
+    check('every way a party ends that the session can report has words, and each way on is a view', () => {
+        for (const code of ['host-left', 'expired', 'tracker', 'invite', 'no-host', 'kicked']) assert(JoinViews.ended.knows(code), code);
+        for (const one of Object.values(JoinViews.ended.ENDINGS)) assert(['join', 'start', 'codes'].includes(one.go), one.go);
+    });
+
+    console.log('\n' + '='.repeat(52));
+    console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
+    process.exit(failed ? 1 : 0);
+})();

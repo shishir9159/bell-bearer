@@ -5,56 +5,131 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bell Bearer</title>
+    <link rel="stylesheet" href="skin-fonts.css">
+    <link rel="stylesheet" href="skins.css">
     <link rel="stylesheet" href="popup.css">
+
+    <!-- The popup asks the browser for its own width, so this pair has to run
+         before the body is parsed rather than with the scripts at the foot. -->
+    <script src="src/shared/settings.js"></script>
+    <script src="src/page/popup-width.js"></script>
 </head>
 
-<body>
+<body data-skin="default">
     <div class="container">
-        <header>
+        <header class="bb-ruled">
             <div class="brand">
-                <h1><img class="brand-icon" src="icons/icon128.png" alt="">Bell Bearer</h1>
+                <h1 class="bb-wordmark"><img class="brand-icon" src="icons/icon128.png" alt="">Bell Bearer</h1>
+                <span class="brand-count" id="brandCount"></span>
             </div>
             <div class="controls">
-                <button id="dashboardBtn" class="btn-secondary" title="Open Dashboard">Dashboard</button>
-                <button id="exportBtn" class="btn-secondary" title="Export bookmarks">Export</button>
-                <button id="importBtn" class="btn-secondary" title="Import bookmarks">Import</button>
-                <button id="clearAll" class="btn-secondary btn-danger" title="Delete all bookmarks">Clear All</button>
+                <!-- Appears only once a daily limit has actually been reached;
+                     src/page/chess-limit-button.js draws and hides it. -->
+                <button id="limitOverrideBtn" class="limit-override" type="button" hidden></button>
+                <button id="dashboardBtn" class="btn-secondary is-primary" title="Open Dashboard">Dashboard</button>
             </div>
         </header>
 
-        <div id="speedControlBar" class="speed-control-bar" style="display:none;">
+        <div id="speedControlBar" class="speed-control-bar" role="group" aria-label="Playback speed" hidden>
+            <!-- The word "Playback" was here. The icon carries no text of its
+                 own, so the group above is what a screen reader announces. -->
+            <svg class="speed-label" viewBox="0 0 240 240" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M158.83,48.83A71.17,71.17,0,1,0,230,120,71.163,71.163,0,0,0,158.83,48.83Zm45.293,77.632H152.34V74.708h12.952v38.83h38.83ZM35.878,74.708h38.83V87.66H35.878ZM10,113.538H61.755V126.49H10Zm25.878,38.83h38.83V165.32H35.878Z"></path>
+            </svg>
             <div class="speed-buttons">
-                <button id="speedDownBtn" class="btn-speed" title="Slower (−0.5×)">−</button>
-                <span id="speedDisplay" class="speed-display">1×</span>
-                <button id="speedUpBtn" class="btn-speed" title="Faster (+0.5×)">+</button>
+                <button id="speedDownBtn" class="btn-speed" title="Slower (previous step)" aria-label="Slower">−</button>
+                <span id="speedDisplay" class="speed-display" aria-live="polite">1x</span>
+                <button id="speedUpBtn" class="btn-speed" title="Faster (next step)" aria-label="Faster">+</button>
+                <button id="speedResetBtn" class="btn-speed btn-speed-reset" title="Reset to 1x" aria-label="Reset speed">1x</button>
             </div>
         </div>
 
-        <div class="main-content">
-            <div class="video-list" id="videoList">
+        <!-- Checkpoints are a YouTube feature end to end (the store, the
+             shortcut, the transcript they attach to) — shown only when the
+             active tab is on YouTube. See popup.js#applySiteLayout. -->
+        <div id="youtubePanel" hidden>
+            <!-- The first per-site action in the popup rather than a setting:
+                 it does something to the page, so it sits up here with the
+                 speed bar rather than in the dashboard. -->
+            <div class="reader-bar" id="readerBar">
+                <button id="openReaderBtn" class="btn-reader" type="button" disabled>Open the reader</button>
+                <span class="reader-bar-note" id="readerBarNote" aria-live="polite"></span>
+            </div>
+            <!-- A second home for this bar, on Netflix, is #netflixPanel below:
+                 popup.js moves it there, so there is one bar and one set of
+                 listeners. -->
+            <div class="party-bar" id="partyBar" hidden>
+                <button id="partyStartBtn" class="btn-reader" type="button">Start a party</button>
+                <button id="partyJoinBtn" class="btn-party-join" type="button">Join</button>
+                <span class="reader-bar-note">Watch this video in sync</span>
+            </div>
+            <div class="main-content" id="mainContent">
+                <div class="video-list" id="videoList"></div>
+
+                <div class="bookmark-details" id="bookmarkDetails">
+                    <div class="no-selection">
+                        <div class="empty-icon">⏱</div>
+                        <p>Select a video to see its checkpoints</p>
+                    </div>
+                </div>
             </div>
 
-            <div class="bookmark-details" id="bookmarkDetails">
-                <div class="no-selection">
-                    <p>Select a video to view bookmarks</p>
+            <div class="instructions" id="instructions">
+                <h3>How to use</h3>
+                <ul>
+                    <li>Hold <strong>Ctrl + B</strong> while watching to drop a checkpoint. <strong>&gt;</strong> <strong>&lt;</strong> step speed, <strong>+</strong> resets.</li>
+                </ul>
+                <div class="instructions-footer">
+                    <button id="dismissInstructions" class="btn-okay">Okay</button>
                 </div>
             </div>
         </div>
 
-        <div class="instructions" id="instructions">
-            <h3>How to use</h3>
-            <ul>
-                <li>Hold <strong>Ctrl + B</strong> while watching a YouTube video, then release to create a checkpoint
-                </li>
-            </ul>
-            <div class="instructions-footer">
-                <button id="dismissInstructions" class="btn-okay">Okay</button>
-            </div>
+        <!-- chess.com and Lichess: the player's games, from src/page/chess-stats.js. -->
+        <div class="chess-panel" id="chessPanel" hidden>
+            <div class="chess-pop-body" id="chessPopupBody"></div>
         </div>
+
+        <!-- LeetCode: what to do next, and nothing else. Drawn by
+             src/page/leet-popup.js. -->
+        <div class="leet-panel" id="leetPanel" hidden>
+            <div class="leet-pop-body" id="leetPopupBody"></div>
+        </div>
+
+        <!-- Netflix: the watch party's bar, and nothing else. -->
+        <div id="netflixPanel" hidden></div>
+
+        <!-- The watch party, once it is asked for or on: start, join, the
+             code exchange, the room and how it ended. Drawn by
+             src/page/party-panel.js, which is only loaded when needed. -->
+        <div class="party-view" id="partyView" hidden></div>
+
+        <!-- Anywhere else the popup is the header alone (and the speed bar,
+             on a page with a <video>). -->
     </div>
 
-    <input type="file" id="importFile" accept=".json" style="display: none;">
 
+    <!-- Shared modules, in dependency order. Classic scripts sharing a `BB`
+         namespace: the extension has no build step by design. -->
+    <script src="src/shared/time.js"></script>
+    <script src="src/shared/dom.js"></script>
+    <script src="src/shared/speed.js"></script>
+    <script src="src/shared/skin.js"></script>
+    <script src="src/shared/youtube.js"></script>
+    <script src="src/shared/bookmarks.js"></script>
+    <script src="src/shared/site-icons.js"></script>
+    <script src="src/shared/chess.js"></script>
+    <script src="src/shared/lichess.js"></script>
+    <script src="src/shared/chess-sites.js"></script>
+    <script src="src/shared/chess-limits.js"></script>
+    <script src="src/shared/fsrs.js"></script>
+    <script src="src/shared/leetcode.js"></script>
+    <script src="src/content/site.js"></script>
+    <script src="src/page/ui.js"></script>
+    <script src="src/page/leet-popup.js"></script>
+    <script src="src/page/tab-actions.js"></script>
+    <script src="src/page/chess-stats.js"></script>
+    <script src="src/page/chess-limit-button.js"></script>
     <script src="popup.js"></script>
 </body>
 

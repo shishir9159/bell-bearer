@@ -1,119 +1,18 @@
 /* ============================================================
-   Bell Bearer — Dashboard
-   Design tokens + components
-   Light: rose/red brand  •  Night: classic Discord blurple
+   Bell Bearer — dashboard
+   Same class names as before; every value now comes from skins.css.
    ============================================================ */
 
-:root {
-    color-scheme: light;
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
-    --brand-grad: linear-gradient(135deg, #ff5b78 0%, #e11d48 55%, #c80f41 100%);
-    --accent: #e11d48;
-    --accent-2: #ff5b78;
-    --accent-hover: #c40f3f;
-    --accent-grad: linear-gradient(135deg, #ff5b78 0%, #e11d48 100%);
-    --accent-soft: rgba(225, 29, 72, 0.10);
-    --accent-soft-2: rgba(225, 29, 72, 0.16);
-    --accent-ring: rgba(225, 29, 72, 0.30);
-    --accent-shadow: rgba(225, 29, 72, 0.35);
-    --on-accent: #ffffff;
-
-    --bg: #eef0f5;
-    --surface: #ffffff;
-    --surface-2: #f6f7fb;
-    --surface-3: #eceef4;
-    --header-text: #ffffff;
-
-    --text: #14171d;
-    --text-muted: #59626f;
-    --text-faint: #8b94a3;
-
-    --border: #e6e8ef;
-    --border-strong: #d3d8e2;
-
-    /* Aliases consumed by inline styles in dashboard.html */
-    --border-color: var(--border-strong);
-    --bg-secondary: var(--surface-2);
-    --text-color: var(--text);
-
-    --info: #2563eb;
-    --success: #15803d;
-    --success-bg: #effdf3;
-    --success-border: #bbf7d0;
-    --warning: #b45309;
-    --warning-bg: #fffaeb;
-    --warning-border: #fde68a;
-    --danger: #dc2626;
-    --danger-bg: #fef2f2;
-    --danger-border: #fecaca;
-
-    --r-sm: 9px;
-    --r: 13px;
-    --r-lg: 18px;
-    --r-pill: 999px;
-
-    --shadow-sm: 0 1px 2px rgba(20, 24, 40, .05), 0 2px 6px rgba(20, 24, 40, .07);
-    --shadow-md: 0 6px 18px rgba(20, 24, 40, .10), 0 2px 6px rgba(20, 24, 40, .06);
-    --shadow-lg: 0 22px 52px rgba(20, 24, 40, .22);
-    --shadow-accent: 0 6px 18px var(--accent-shadow);
-    --ring: 0 0 0 3px var(--accent-ring);
-
-    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-}
-
-/* ===== Night mode — classic Discord (old blurple) ===== */
-body.dark-theme {
-    color-scheme: dark;
-
-    --brand-grad: linear-gradient(135deg, #8a9bf0 0%, #7289da 52%, #5b6eae 100%);
-    --accent: #7289da;
-    --accent-2: #8a9bf0;
-    --accent-hover: #8a9bf0;
-    --accent-grad: linear-gradient(135deg, #8a9bf0 0%, #7289da 100%);
-    --accent-soft: rgba(114, 137, 218, 0.16);
-    --accent-soft-2: rgba(114, 137, 218, 0.24);
-    --accent-ring: rgba(114, 137, 218, 0.45);
-    --accent-shadow: rgba(73, 86, 145, 0.60);
-    --on-accent: #ffffff;
-
-    --bg: #202225;
-    --surface: #2f3136;
-    --surface-2: #36393f;
-    --surface-3: #40444b;
-    --header-text: #ffffff;
-
-    --text: #e3e5e8;
-    --text-muted: #b5bac1;
-    --text-faint: #80848e;
-
-    --border: #26282c;
-    --border-strong: #1f2023;
-
-    --border-color: #40444b;
-    --bg-secondary: #36393f;
-    --text-color: #e3e5e8;
-
-    --success: #57d68b;
-    --success-bg: #16261d;
-    --success-border: #245238;
-    --warning: #f0b232;
-    --warning-bg: #2a2310;
-    --warning-border: #5a4a19;
-    --danger: #f0626c;
-    --danger-bg: #2c1517;
-    --danger-border: #4d2024;
-
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .35);
-    --shadow-md: 0 8px 22px rgba(0, 0, 0, .50);
-    --shadow-lg: 0 24px 56px rgba(0, 0, 0, .65);
-    --shadow-accent: 0 8px 22px var(--accent-shadow);
-}
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+/* The browser's own `[hidden] { display: none }` is a UA rule, so any class
+   rule here that sets a display beats it on origin alone — and the element
+   stays on screen with the attribute set. Every surface that toggles
+   `hidden` in JS was patching that one selector at a time (and the popup's
+   limit-override button was the one that got missed: it drew an empty box
+   left of Dashboard for anyone with no daily limit). One rule, said once,
+   for all of them. */
+[hidden] { display: none !important; }
 
 body {
     font-family: var(--font);
@@ -124,10 +23,7 @@ body {
     text-rendering: optimizeLegibility;
 }
 
-*::-webkit-scrollbar {
-    width: 12px;
-    height: 12px;
-}
+*::-webkit-scrollbar { width: 12px; height: 12px; }
 
 *::-webkit-scrollbar-thumb {
     background: var(--border-strong);
@@ -136,761 +32,1372 @@ body {
     background-clip: content-box;
 }
 
-*::-webkit-scrollbar-thumb:hover {
-    background: var(--text-faint);
-    background-clip: content-box;
-}
+*::-webkit-scrollbar-thumb:hover { background: var(--text-faint); background-clip: content-box; }
 
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The banner and the views share this width, so a cap that is much narrower
+   than the window leaves the cards looking stranded under a header that reads
+   as full-bleed (--bg and --surface are a few percent apart). 1400 fills an
+   ordinary desktop; past that, card rows get too long to scan. */
 .dashboard-container {
-    max-width: 1100px;
+    max-width: 1400px;
     margin: 0 auto;
     background: var(--bg);
     min-height: 100vh;
 }
 
-/* ---------- Header ---------- */
+/* ---------- header ---------- */
+
 header {
     position: relative;
-    background: var(--brand-grad);
+    background: var(--header-bg);
     color: var(--header-text);
-    padding: 24px 30px 0;
-    box-shadow: var(--shadow-md);
-    overflow: hidden;
-}
-
-header::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-        radial-gradient(80% 140% at 0% 0%, rgba(255, 255, 255, .26), transparent 55%),
-        radial-gradient(90% 160% at 100% 130%, rgba(0, 0, 0, .20), transparent 55%);
-    pointer-events: none;
+    padding: 22px 30px 0;
+    border-bottom: 1px solid var(--border);
 }
 
 .header-top {
-    position: relative;
-    z-index: 1;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
+    gap: 16px;
+    margin-bottom: 18px;
 }
 
 header h1 {
-    font-size: 24px;
-    font-weight: 700;
-    letter-spacing: .2px;
-    margin: 0;
+    font-family: var(--font-head);
+    font-size: 21px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
     display: flex;
     align-items: center;
-    gap: 10px;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+    gap: 12px;
+    color: var(--header-text);
 }
 
 .brand-icon {
     width: 28px;
     height: 28px;
-    border-radius: 7px;
-    border: 1px solid rgba(255, 255, 255, 0.30);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
-    flex-shrink: 0;
+    border-radius: var(--r-sm);
+    display: block;
 }
 
 .btn-theme {
-    background: rgba(255, 255, 255, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.30);
-    color: #fff;
-    border-radius: var(--r-sm);
+    background: transparent;
+    border: 1px solid currentColor;
+    color: var(--header-text);
+    opacity: .7;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--btn-radius);
+    font-size: 15px;
+    line-height: 1;
     cursor: pointer;
-    font-size: 18px;
-    transition: background .18s ease, transform .1s ease;
-    width: 42px;
-    height: 42px;
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(6px);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+    transition: opacity .15s ease, transform .1s ease;
 }
 
-.btn-theme:hover {
-    background: rgba(255, 255, 255, 0.28);
-    transform: translateY(-1px);
+.btn-theme:hover { opacity: 1; }
+.btn-theme:active { transform: scale(.94); }
+
+/* Export / Import, right of the title and left of the theme button. Drawn
+   like the theme button — header ink on the header — so the three read as
+   one group whatever the skin paints the header. */
+.header-actions { display: flex; align-items: center; gap: 8px; }
+
+.btn-header {
+    background: transparent;
+    border: 1px solid currentColor;
+    color: var(--header-text);
+    opacity: .7;
+    height: 34px;
+    padding: 0 14px;
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s ease, transform .1s ease;
 }
 
-.btn-theme:active {
-    transform: scale(0.95);
-}
+.btn-header:hover { opacity: 1; }
+.btn-header:active { transform: scale(.96); }
 
-/* ---------- Nav tabs ---------- */
-.nav-tabs {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    gap: 4px;
-}
+/* ---------- nav tabs ---------- */
+
+.nav-tabs { display: flex; gap: 4px; }
 
 .nav-tab {
     background: transparent;
     border: none;
-    border-bottom: 3px solid transparent;
-    color: rgba(255, 255, 255, 0.85);
-    padding: 13px 20px;
-    cursor: pointer;
-    font-size: 14px;
+    border-bottom: 2px solid transparent;
+    color: var(--header-text);
+    opacity: .62;
+    font-family: var(--font-head);
+    font-size: 13.5px;
     font-weight: 600;
-    transition: all .18s ease;
-    border-radius: var(--r-sm) var(--r-sm) 0 0;
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: opacity .15s ease, border-color .15s ease;
 }
 
-.nav-tab:hover {
-    background: rgba(255, 255, 255, 0.16);
-    color: #fff;
-}
+.nav-tab:hover { opacity: 1; }
 
 .nav-tab.active {
-    background: var(--bg);
-    color: var(--accent);
-    border-bottom-color: var(--bg);
+    opacity: 1;
+    border-bottom-color: var(--accent);
 }
 
-/* ---------- Views ---------- */
-.view {
-    display: none;
-    padding: 32px 30px;
-}
+/* ---------- views ---------- */
 
-.view.active {
-    display: block;
-    animation: bb-rise .22s ease-out;
-}
+.view { display: none; padding: 30px; }
+.view.active { display: block; animation: bb-rise .22s ease-out; }
 
 @keyframes bb-rise {
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* ---------- site launcher ---------- */
+
+/* The dashboard's (and settings') entry point: one large card per site Bell
+   Bearer works with. Large and colored on purpose — this is meant to read as
+   a launcher for many sites, not a single YouTube screen with a label on it. */
+.sites-grid {
+    /* Positioned so it is the cards' offset parent: src/page/site-sort.js
+       hit-tests a drag against their layout boxes, measured from here. */
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+/* No name, no description — just the mark, filling the card. The card's own
+   footprint is unchanged from when it carried a name and a description
+   underneath (fixed min-height rather than shrink-to-fit), so the grid looks
+   the same from across the room; only what is drawn inside it changed. */
+.site-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 156px;
+    padding: 24px;
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    cursor: pointer;
+    font-family: var(--font);
+    transition: border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+
+.site-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--card-shadow-hover); }
+
+/* Each card sits on its own tint, taken in turn from the skin's four, so the
+   launcher reads as a set of distinct places rather than a row of identical
+   blank boxes — and changes color with the skin like everything else. The
+   tint belongs to the site (data-tint, from SiteIcons.tint) rather than to
+   the slot: by :nth-child, reordering the sites repainted every card. */
+.site-card[data-tint="1"] { background: var(--site-tint-1); }
+.site-card[data-tint="2"] { background: var(--site-tint-2); }
+.site-card[data-tint="3"] { background: var(--site-tint-3); }
+.site-card[data-tint="4"] { background: var(--site-tint-4); }
+
+/* ---- Dragging a card into place (src/page/site-sort.js). */
+
+/* The slot the lifted card will land in: its outline, left behind. */
+.site-card.is-drag-origin {
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--border);
+    box-shadow: none;
+    transform: none;
+}
+
+.site-card.is-drag-origin > * { opacity: 0; }
+
+/* The copy that follows the pointer. The outer box only moves; the card
+   inside it lifts and tilts, so the two never fight over one transform. */
+.site-card-ghost {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 10000;
+    pointer-events: none;
+    will-change: transform;
+}
+
+.site-card-ghost .site-card-lifted {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    transform: rotate(var(--tilt, 0deg)) scale(1);
+    transform-origin: 50% 20%;
+    transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.site-card-ghost .site-card-lifted.is-up {
+    transform: rotate(var(--tilt, 0deg)) scale(1.06);
+    border-color: var(--accent);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, .22), 0 4px 10px rgba(0, 0, 0, .12);
+}
+
+/* While a card is held nothing else reacts to the pointer, nothing gets
+   selected, and the hand says so. */
+html.is-dragging-site,
+html.is-dragging-site * { cursor: grabbing !important; user-select: none; }
+html.is-dragging-site .site-card:hover { transform: none; box-shadow: var(--card-shadow); }
+
+@media (prefers-reduced-motion: reduce) {
+    .site-card-ghost .site-card-lifted,
+    .site-card-ghost .site-card-lifted.is-up { transition: none; transform: none; }
+}
+
+.site-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+/* The attribute width/height on the <svg> itself (see site-icons.js) are a
+   fallback for anywhere this glyph is used without this stylesheet; here the
+   card decides the size, as large as the card comfortably holds. */
+.site-card-icon svg { display: block; width: 84px; height: 84px; }
+
+/* ---------- site workspace ---------- */
+
+/* What a card opens into: a small header naming the site, and — on the
+   dashboard only — a pair of subtabs for that site's own views. Settings'
+   workspace reuses the same head without the subtabs, one panel being all
+   there is to show. */
+.site-workspace-head {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+}
+
+.site-workspace-brand { display: flex; align-items: center; gap: 10px; }
+.site-workspace-icon { display: flex; align-items: center; }
+.site-workspace-icon svg { display: block; }
+
+.site-workspace-brand h2 {
+    font-family: var(--font-head);
+    font-size: 19px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text);
+}
+
+.site-subtabs { display: flex; gap: 4px; margin-left: auto; }
+
+.site-subtab {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: var(--font);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: var(--r-pill);
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.site-subtab:hover { border-color: var(--accent-soft-2); }
+
+.site-subtab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+
+.site-panel { display: none; }
+.site-panel.active { display: block; animation: bb-rise .18s ease-out; }
+
 .dashboard-header,
 .subscriptions-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
     gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
 }
 
 .dashboard-header h2,
 .subscriptions-header h2,
 .settings-header h2 {
-    font-size: 21px;
-    font-weight: 700;
+    font-family: var(--font-head);
+    font-size: 20px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
     color: var(--text);
 }
 
 .dashboard-controls,
-.subscriptions-controls {
-    display: flex;
+.subscriptions-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* The sort field sits with the Export/Import row, so it is built to the same
+   height and radius as .btn-secondary rather than to the settings form's. */
+
+.sort-field {
+    display: inline-flex;
+    align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--btn-radius);
+    padding: 0 10px 0 13px;
+    height: 35px;
 }
 
-/* ---------- Buttons ---------- */
+.sort-field:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
+
+.sort-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.select-control {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0 18px 0 0;
+    /* The native arrow cannot be recoloured, so it is drawn here instead and
+       the control's own is removed — otherwise a dark skin gets a light one. */
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-size: 5px 5px, 5px 5px;
+    background-position: right 6px center, right 1px center;
+    background-repeat: no-repeat;
+}
+
+.select-control:focus { outline: none; }
+
+/* ---------- buttons ---------- */
+
 .btn-secondary {
     background: var(--surface);
     border: 1px solid var(--border-strong);
-    color: var(--text);
-    padding: 9px 16px;
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    font-size: 14px;
+    color: var(--text-muted);
+    padding: 8px 15px;
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    font-size: 12.5px;
     font-weight: 600;
-    transition: background .18s ease, border-color .18s ease, transform .1s ease, box-shadow .18s ease;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
 
-.btn-secondary:hover {
-    background: var(--surface-3);
-    border-color: var(--text-faint);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-sm);
-}
+.btn-secondary:hover { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
+.btn-secondary:active { transform: translateY(1px); }
 
-.btn-secondary:active {
-    transform: translateY(0);
-}
-
-.btn-secondary.btn-danger {
-    color: var(--danger);
-    border-color: var(--danger-border);
-    background: var(--danger-bg);
-}
-
-.btn-secondary.btn-danger:hover {
-    background: var(--danger);
-    border-color: var(--danger);
-    color: #fff;
-}
+.btn-secondary.btn-danger { color: var(--danger); border-color: var(--danger-border); }
+.btn-secondary.btn-danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 
 .btn-primary {
-    background: var(--accent-grad);
-    border: none;
+    background: var(--accent);
+    border: 1px solid var(--accent);
     color: var(--on-accent);
-    padding: 9px 17px;
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    font-size: 14px;
+    padding: 8px 17px;
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    font-size: 12.5px;
     font-weight: 700;
-    transition: transform .1s ease, box-shadow .18s ease, filter .18s ease;
-    box-shadow: var(--shadow-accent);
+    cursor: pointer;
+    transition: background .15s ease;
 }
 
-.btn-primary:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.05);
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:active { transform: translateY(1px); }
+
+/* ---------- cards ---------- */
+
+/* A pinned card keeps its place at the top of whatever order is on, and says
+   so with a rule down its leading edge rather than a badge — the badge row on
+   the right is already carrying the checkpoint count and the copy buttons. */
+
+.video-card.is-pinned {
+    border-color: var(--accent);
+    box-shadow: var(--card-shadow-hover);
 }
 
-.btn-primary:active {
-    transform: translateY(0) scale(.99);
+.video-card.is-pinned::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    border-radius: var(--card-radius) 0 0 var(--card-radius);
+    background: var(--accent);
 }
 
-/* ---------- Cards (videos & topics) ---------- */
+.pin-btn {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    margin: -3px 0 0 -4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.pin-btn svg { width: 17px; height: 17px; fill: currentColor; display: block; }
+
+.pin-btn:hover {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+}
+
+/* An unpinned pin lies over; pinning stands it up. It is a small motion, but
+   it is the one that reads as "stuck in" without any colour at all. */
+.pin-btn svg { transform: rotate(-38deg); transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+
+.pin-btn[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+
+.pin-btn[aria-pressed="true"] svg { transform: rotate(0deg); }
+.pin-btn:active { transform: scale(.92); }
+
 .videos-container,
-.topics-container {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-}
+.topics-container { display: flex; flex-direction: column; gap: 14px; }
 
 .video-card,
 .topic-card {
+    position: relative;
+    overflow: hidden;
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    padding: 22px;
-    box-shadow: var(--shadow-sm);
-    transition: box-shadow .2s ease, border-color .2s ease, transform .14s ease;
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    padding: 18px 20px;
+    box-shadow: var(--card-shadow);
+    transition: box-shadow .16s ease, transform .12s ease;
 }
 
 .video-card:hover,
-.topic-card:hover {
-    box-shadow: var(--shadow-md);
-    border-color: var(--accent);
-    transform: translateY(-2px);
-}
+.topic-card:hover { box-shadow: var(--card-shadow-hover); transform: translateY(-1px); }
 
 .video-card-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 16px;
-    gap: 16px;
+    gap: 14px;
+    margin-bottom: 14px;
 }
 
 .video-title {
-    font-size: 17px;
-    font-weight: 700;
+    font-family: var(--font-head);
+    font-size: 16px;
+    font-weight: var(--head-weight);
+    line-height: 1.35;
     color: var(--text);
-    flex: 1;
-    line-height: 1.4;
 }
 
-.video-card-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-}
+.video-card-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
 .bookmark-count-badge {
-    background: var(--accent-grad);
+    background: var(--accent);
     color: var(--on-accent);
-    padding: 5px 13px;
+    padding: 3px 11px;
     border-radius: var(--r-pill);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    box-shadow: var(--shadow-accent);
 }
 
-.video-bookmarks {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
+.video-bookmarks { display: flex; flex-direction: column; gap: 9px; }
 
-/* ---------- Bookmark items ---------- */
+/* ---------- bookmark items ---------- */
+
 .bookmark-item {
     background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: var(--r);
+    border-radius: var(--card-radius);
     padding: 13px 15px;
-    transition: border-color .18s ease, background .18s ease, transform .12s ease;
+    transition: border-color .15s ease, background .15s ease;
 }
 
-.bookmark-item:hover {
-    background: var(--surface-3);
-    border-color: var(--accent);
-    transform: translateX(2px);
-}
+.bookmark-item:hover { background: var(--surface-3); border-color: var(--accent-soft-2); }
 
-.bookmark-time-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 4px;
-}
+.bookmark-time-row { display: flex; align-items: center; gap: 12px; margin-bottom: 7px; }
 
 .bookmark-time {
-    font-size: 14px;
-    font-weight: 800;
-    color: var(--accent);
-    white-space: nowrap;
-    flex-shrink: 0;
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--accent-ink);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .bookmark-time::before {
     content: "";
     width: 7px;
     height: 7px;
-    border-radius: 50%;
-    background: var(--accent-grad);
-    box-shadow: 0 0 0 3px var(--accent-soft);
+    border-radius: var(--r-pill);
+    background: var(--accent);
+    flex-shrink: 0;
 }
 
 .bookmark-title-input {
     flex: 1;
     border: 1px solid transparent;
     background: transparent;
-    font-size: 13px;
-    font-family: inherit;
     color: var(--text);
-    padding: 4px 8px;
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 5px 9px;
     border-radius: var(--r-sm);
-    outline: none;
-    transition: all .18s ease;
-    min-width: 0;
+    transition: background .15s ease, border-color .15s ease;
 }
 
-.bookmark-title-input::placeholder {
-    color: var(--text-faint);
-    font-style: italic;
-}
-
-.bookmark-title-input:hover {
-    border-color: var(--border-strong);
-    background: var(--surface);
-}
+.bookmark-title-input::placeholder { color: var(--text-faint); font-style: italic; font-weight: 400; }
+.bookmark-title-input:hover { border-color: var(--border-strong); background: var(--surface); }
 
 .bookmark-title-input:focus {
+    outline: none;
     border-color: var(--accent);
     background: var(--surface);
     box-shadow: var(--ring);
 }
 
-.bookmark-note {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-    line-height: 1.45;
-}
+.bookmark-note { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; margin-bottom: 9px; }
 
 .bookmark-subtitle {
     font-style: italic;
     color: var(--text-muted);
-    margin-top: 4px;
-    margin-bottom: 8px;
-    font-size: 12px;
-    border-left: 3px solid var(--accent);
-    padding-left: 11px;
+    font-size: 12.5px;
     line-height: 1.5;
+    padding-left: 11px;
+    border-left: 2px solid var(--accent-soft-2);
+    margin-bottom: 9px;
 }
 
-.bookmark-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
+.bookmark-actions { display: flex; gap: 7px; flex-wrap: wrap; }
 
-/* ---------- Small buttons ---------- */
+/* ---------- small buttons ---------- */
+
 .btn-small {
     background: var(--surface-3);
     border: 1px solid var(--border);
-    color: var(--text);
-    padding: 7px 13px;
+    color: var(--text-muted);
+    padding: 5px 12px;
     border-radius: var(--r-sm);
-    font-size: 12px;
-    font-weight: 600;
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 700;
     cursor: pointer;
-    transition: background .18s ease, border-color .18s ease, transform .1s ease, box-shadow .18s ease;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
 
-.btn-small:hover {
-    background: var(--surface);
-    border-color: var(--border-strong);
-    box-shadow: var(--shadow-sm);
-}
+.btn-small:hover { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-soft-2); }
+.btn-small:active { transform: translateY(1px); }
 
-.btn-small:active {
-    transform: translateY(1px);
-}
-
-.btn-small.delete {
-    background: var(--danger-bg);
-    border-color: var(--danger-border);
-    color: var(--danger);
-}
-
-.btn-small.delete:hover {
-    background: var(--danger);
-    border-color: var(--danger);
-    color: #fff;
-}
+.btn-small.delete { background: transparent; color: var(--text-faint); }
+.btn-small.delete:hover { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
 
 .speed-up-btn,
-.speed-down-btn {
-    background: var(--accent-soft);
-    border-color: transparent;
-    color: var(--accent);
-}
-
+.speed-down-btn { background: var(--accent-soft); border-color: transparent; color: var(--accent-ink); }
 .speed-up-btn:hover,
-.speed-down-btn:hover {
-    background: var(--accent-grad);
-    color: var(--on-accent);
-    box-shadow: var(--shadow-accent);
-}
+.speed-down-btn:hover { background: var(--accent); color: var(--on-accent); }
 
-.open-video-btn {
-    background: var(--accent-grad);
-    color: var(--on-accent);
-    border: none;
-    box-shadow: var(--shadow-accent);
-}
+/* ---------- states ---------- */
 
-.open-video-btn:hover {
-    color: var(--on-accent);
-    filter: brightness(1.05);
-    transform: translateY(-1px);
-}
-
-/* ---------- States ---------- */
+/* Centred on both axes, not only horizontally. An empty panel is the whole of
+   the view it is in, so a paragraph pinned under the header with the rest of
+   the page blank below it reads as a page that never finished loading. The
+   min-height is what there is to centre within: a panel is an ordinary block
+   with no height of its own, so justify-content would have nothing to work
+   against without one. */
 .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: min(56vh, 460px);
+    padding: 40px 20px;
     text-align: center;
-    padding: 72px 20px;
     color: var(--text-faint);
 }
 
 .empty-state h3 {
-    margin-bottom: 12px;
-    color: var(--text-muted);
-    font-size: 20px;
-}
-
-.empty-state p {
-    font-size: 14px;
-}
-
-.no-bookmarks,
-.no-channels {
-    color: var(--text-faint);
-    font-size: 13px;
-    font-style: italic;
-    padding: 12px;
-    text-align: center;
-}
-
-/* ---------- Settings ---------- */
-.settings-header {
-    margin-bottom: 24px;
-}
-
-.settings-content {
-    max-width: 820px;
-}
-
-.settings-section {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg);
-    padding: 26px;
-    margin-bottom: 20px;
-    box-shadow: var(--shadow-sm);
-}
-
-.settings-section h3 {
+    font-family: var(--font-head);
     font-size: 17px;
-    font-weight: 700;
-    color: var(--text);
-    margin-bottom: 16px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text-muted);
+    margin-bottom: 10px;
 }
+
+.empty-state p { font-size: 13.5px; line-height: 1.55; }
+.empty-state .empty-icon { font-size: 40px; line-height: 1; margin-bottom: 14px; opacity: .85; }
+
+/* The same mark at list-row size, for an empty group inside a card. */
+.empty-inline {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 0;
+    color: var(--text-faint);
+    font-size: 12.5px;
+}
+
+.empty-inline .empty-icon { font-size: 17px; line-height: 1; opacity: .85; }
+
+.no-bookmarks { color: var(--text-faint); font-size: 12.5px; padding: 10px 0; font-style: italic; }
+
+/* ---------- settings ---------- */
+
+.settings-header { margin-bottom: 22px; }
+/* Full width, like the other two views. Prose inside is capped separately
+   below so the panels can span without the paragraphs running on. */
+/* The design sets the sections a long way apart — far enough that a decorated
+   skin's frame reads as a frame and not as a divider between two halves of one
+   panel. Nothing else on the page needs this much air; the sections do. */
+.settings-content { display: flex; flex-direction: column; gap: 46px; }
+
+/* Every section is a framed plate (src/page/plate.js), which is what paints
+   the card, so the section itself carries no surface of its own. */
+.settings-section { position: relative; }
 
 .settings-section p {
-    font-size: 14px;
+    font-size: 13.5px;
     color: var(--text-muted);
     line-height: 1.6;
     margin-bottom: 6px;
+    max-width: 78ch;
 }
 
-.shortcut-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 22px;
+/* A shortcut row (src/page/shortcut-list.js): keys, what they do, and the
+   row's own controls pinned to the right — reset (only once changed), edit,
+   on/off. The first column is a fixed width so descriptions start on one line
+   down the list, and the reset slot is kept even when empty so the edit
+   buttons and switches line up whether or not a row was changed. */
+.shortcut-heading {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 20px 0 9px;
 }
+
+.shortcut-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 22px; }
 
 .shortcut-item {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr) auto;
     align-items: center;
-    padding: 12px 15px;
+    gap: 16px;
+    min-height: 46px;
+    padding: 7px 10px 7px 13px;
     background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: var(--r);
-    transition: border-color .18s ease, transform .12s ease;
+    border-radius: var(--r-sm);
+    transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
 }
 
-.shortcut-item:hover {
+.shortcut-item:hover { border-color: var(--accent-soft-2); background: var(--surface); }
+
+.shortcut-item.is-editing {
     border-color: var(--accent);
-    transform: translateX(2px);
+    background: var(--surface);
+    box-shadow: var(--ring);
 }
 
-.shortcut-key {
+.shortcut-key { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
+
+.kbd-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
     background: var(--surface);
     border: 1px solid var(--border-strong);
     border-bottom-width: 2px;
-    padding: 6px 12px;
-    border-radius: var(--r-sm);
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 12px;
-    font-weight: 700;
+    border-radius: 5px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1;
     color: var(--text);
-    min-width: 132px;
-    text-align: center;
+    white-space: nowrap;
 }
 
-.shortcut-desc {
-    font-size: 14px;
-    color: var(--text-muted);
-    flex: 1;
-    margin-left: 16px;
-}
+.kbd-plus { font-size: 11px; color: var(--text-faint); }
+.kbd-none { font-size: 12px; font-style: italic; color: var(--text-faint); }
 
-/* ---------- Settings: toggle switches ---------- */
-.settings-option {
-    display: flex;
+.kbd-listening {
+    display: inline-flex;
     align-items: center;
-    gap: 13px;
+    height: 26px;
+    padding: 0 11px;
+    background: var(--accent-soft);
+    border: 1px dashed var(--accent);
+    border-radius: var(--r-pill);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-ink);
 }
 
-.toggle-switch {
-    position: relative;
-    display: inline-block;
-    width: 48px;
-    height: 27px;
+.shortcut-desc { font-size: 13px; color: var(--text-muted); line-height: 1.45; }
+
+.shortcut-item.is-off .shortcut-key,
+.shortcut-item.is-off .shortcut-desc { opacity: .45; }
+
+.shortcut-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+
+.shortcut-icon-btn,
+.shortcut-icon-slot {
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
 }
 
-.toggle-switch input {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
+.shortcut-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
 }
+
+.shortcut-icon-btn svg { display: block; }
+.shortcut-icon-btn:hover { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-soft-2); }
+.shortcut-icon-btn.is-active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+
+.shortcut-actions .toggle-switch { margin-left: 8px; }
+
+/* The knob and its travel follow from these two; see .toggle-switch above. */
+.toggle-switch.toggle-sm { --track-w: 34px; --track-h: 20px; }
+
+/* ---------- the annotated keyboard (src/page/keyboard.js) ----------
+
+   The design draws this as a printed callout diagram: the board in the middle,
+   a label for every shortcut in the margin around it, and a leader line from
+   each label to the keycap it names. The lanes are a three-column grid — side
+   lane, board, side lane — with the top and bottom lanes spanning all three.
+   Below 860px there is no room for the side lanes, so the whole thing stacks
+   and every label moves above or below the board.
+
+   Key widths are flex-grow ratios of the design's pixel widths (a 100px key
+   against a 50px base is grow: 2) so the board scales with the column instead
+   of overflowing a narrow one. The palette is ours — the same tokens as the
+   rest of the page — so the keyboard is never the one thing that ignores the
+   chosen skin. */
+
+.kbd-scopebar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+}
+
+.kbd-scopes { display: flex; align-items: flex-end; gap: 2px; }
+
+/* A tab shows its mark alone until it is the one you are on, which is what
+   keeps four sites in the width one heading would take. */
+.kbd-scope {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px 9px;
+    margin-bottom: -1px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-faint);
+    font-family: var(--font);
+    cursor: pointer;
+}
+
+.kbd-scope.is-active { color: var(--text); border-bottom-color: var(--accent); }
+.kbd-scope:hover { color: var(--text); }
+.kbd-scope-mark { display: block; width: 18px; height: 18px; }
+.kbd-scope-mark svg { display: block; }
+.kbd-scope-name { font-size: 12.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+.kbd-scope:not(.is-active) .kbd-scope-name { display: none; }
+
+.kbd-reset {
+    padding: 8px 2px 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-faint);
+    font-family: var(--font);
+    font-size: 11.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.kbd-reset:hover { color: var(--accent-ink); }
+
+.kbd-hint { font-size: 12.5px; color: var(--text-faint); margin: 10px 0 0; line-height: 1.5; }
+
+.kbd-annot {
+    position: relative;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr) 220px;
+    gap: 34px 26px;
+    margin-top: 22px;
+    align-items: center;
+}
+
+.kbd-annot.is-narrow { display: flex; flex-direction: column; gap: 34px; }
+
+.kbd-lane { display: flex; }
+.kbd-lane.is-top,
+.kbd-lane.is-bottom { grid-column: 1 / 4; flex-wrap: wrap; justify-content: center; gap: 18px; }
+.kbd-lane.is-left,
+.kbd-lane.is-right { flex-direction: column; gap: 14px; justify-content: center; }
+.kbd-lane.is-left { align-items: flex-end; text-align: right; }
+.kbd-lane.is-right { align-items: flex-start; }
+.kbd-annot.is-narrow .kbd-lane.is-left,
+.kbd-annot.is-narrow .kbd-lane.is-right { display: none; }
+.kbd-annot.is-narrow .kbd-lane.is-top,
+.kbd-annot.is-narrow .kbd-lane.is-bottom { gap: 14px; }
+
+.kbd-label {
+    max-width: 230px;
+    padding: 9px 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    cursor: default;
+    transition: opacity .15s ease, border-color .15s ease;
+}
+
+.kbd-label.is-dim { border-color: transparent; color: var(--text-faint); opacity: .4; }
+.kbd-label.is-editing { background: var(--accent-soft); border-color: var(--accent); }
+.kbd-label-title { display: block; font-size: 12.5px; line-height: 1.4; }
+.kbd-label-line { display: block; font-size: 11.5px; line-height: 1.5; opacity: .78; }
+
+/* The leaders paint above the board's stock but below the keycaps, so a line
+   shows in the gutters and disappears under the cap it names. */
+.kbd-leaders {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.kbd-leader { stroke: var(--accent); opacity: .62; }
+.kbd-leader.is-dim { stroke: var(--text-faint); opacity: .2; }
+
+.kbd-board {
+    position: relative;
+    max-width: 780px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 10px;
+    background: var(--kbd-bg);
+    border: none;
+    border-radius: var(--kbd-board-radius, 10px);
+}
+
+.kbd-row { display: flex; gap: 3px; margin-top: 3px; }
+.kbd-row:first-child { margin-top: 0; }
+
+.kbd-key {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 0;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    background: var(--kbd-key-bg);
+    color: var(--kbd-key-color);
+    border: 1px solid transparent;
+    border-radius: var(--kbd-radius, 5px);
+    box-sizing: border-box;
+    cursor: default;
+    font-family: var(--font);
+    font-size: 12px;
+    line-height: 1;
+    user-select: none;
+    transition: opacity .15s ease, background .12s ease,
+                transform .16s cubic-bezier(.2, 1.4, .4, 1), box-shadow .16s ease;
+}
+
+.kbd-key[data-shortcut] { cursor: pointer; }
+.kbd-key:focus-visible { outline: 2px solid var(--kbd-active-bg); outline-offset: 1px; }
+
+/* At rest every key reads normally; only a focused shortcut or a held
+   modifier pushes the rest of the board back. */
+.kbd-key.is-dim { opacity: .42; }
+.kbd-key.is-lit { background: var(--kbd-active-bg); color: var(--kbd-active-color); border-color: var(--accent); }
+
+/* The listening key lifts off the board instead of stretching it: a scale
+   about its own centre, so its neighbours keep their width and the cap simply
+   overlaps them. The legend grows a step further than the cap, so a zoomed key
+   reads as a keycap and not as a stretched thumbnail. */
+.kbd-key.is-editing {
+    z-index: 4;
+    border: 2px solid var(--accent);
+    font-size: 16px;
+    transform: scale(1.55) translateY(-3px);
+    box-shadow: 0 10px 22px -6px rgba(10, 6, 4, .45);
+}
+
+.kbd-key svg { display: block; }
+
+.kbd-sub { font-size: 9px; line-height: 1; color: var(--kbd-sub-color); margin-top: 5px; }
+.kbd-key.is-lit .kbd-sub { color: var(--kbd-active-color); opacity: .8; }
+.kbd-key.is-editing .kbd-sub { font-size: 11px; margin-top: 4px; }
+
+.kbd-key.key__esc { background: var(--kbd-esc-bg); color: var(--kbd-esc-color); }
+.kbd-key.key__arrow { background: var(--kbd-arrow-bg); color: var(--kbd-arrow-color); }
+.kbd-key.key__esc.is-lit,
+.kbd-key.key__arrow.is-lit { background: var(--kbd-active-bg); color: var(--kbd-active-color); }
+
+.kbd-key.key__oneandhalf { flex-grow: 1.5; }
+.kbd-key.key__delete { flex-grow: 2; }
+.kbd-key.key__enter { flex-grow: 2.24; }
+.kbd-key.key__caps { flex-grow: 1.8; }
+.kbd-key.key__shift-left { flex-grow: 2; }
+.kbd-key.key__spacebar { flex-grow: 6; }
+.kbd-key.key__bottom-funct { flex-grow: 1.4; }
+
+/* The list view under the board: the same rows the diagram annotates, for
+   when you want to read them rather than find them. */
+.kbd-listbar { display: flex; align-items: center; gap: 14px; margin-top: 22px; }
+
+.kbd-listtoggle {
+    height: 30px;
+    padding: 0 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.kbd-listtoggle.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.kbd-bound { font-size: 11.5px; color: var(--text-faint); }
+
+.kbd-list { margin-top: 14px; }
+.kbd-list .shortcut-list { margin-bottom: 0; }
+
+/* Lichess borrows the Chess.com bindings until it has its own, and they do
+   not work there yet — shown, but visibly not in play. */
+.kbd-list.is-unavailable { opacity: .5; }
+
+/* ---------- toggles ---------- */
+
+.settings-option { display: flex; align-items: center; gap: 12px; }
+
+/**
+ * The knob's travel is derived from the track rather than typed in. Sizing it
+ * by hand meant every size needed its own translate to match, and the small
+ * variant's did not: the gap it left on the right was not the one it left on
+ * the left. Here the knob is the track's height less a gap at top and bottom,
+ * and it moves by the difference between the track's width and its height —
+ * which lands it exactly the same gap from the right edge. Change --track-w
+ * or --track-h and it stays centred on both ends.
+ */
+.toggle-switch {
+    --track-w: 42px;
+    --track-h: 24px;
+    --track-border: 1px;
+    --knob-gap: 3px;
+    --knob-size: calc(var(--track-h) - var(--knob-gap) * 2);
+
+    position: relative;
+    display: inline-block;
+    width: var(--track-w);
+    height: var(--track-h);
+    flex-shrink: 0;
+}
+
+.toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
 
 .toggle-slider {
     position: absolute;
     inset: 0;
-    cursor: pointer;
-    background: var(--border-strong);
+    background: var(--surface-3);
+    border: var(--track-border) solid var(--border-strong);
     border-radius: var(--r-pill);
-    transition: background .22s ease, box-shadow .22s ease;
+    cursor: pointer;
+    transition: background .18s ease, border-color .18s ease;
 }
 
+/* Offsets are from the slider's padding box, so the border comes off the gap. */
 .toggle-slider::before {
     content: "";
     position: absolute;
-    height: 21px;
-    width: 21px;
-    left: 3px;
-    top: 3px;
-    background: #fff;
-    border-radius: 50%;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, .25);
-    transition: transform .22s cubic-bezier(.2, .8, .2, 1);
+    box-sizing: border-box;
+    width: var(--knob-size);
+    height: var(--knob-size);
+    left: calc(var(--knob-gap) - var(--track-border));
+    top: calc(var(--knob-gap) - var(--track-border));
+    background: var(--surface);
+    border-radius: var(--r-pill);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+    transition: transform .18s cubic-bezier(.2, .8, .2, 1);
 }
 
-.toggle-switch input:checked + .toggle-slider {
-    background: var(--accent-grad);
-    box-shadow: var(--shadow-accent);
-}
-
+.toggle-switch input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
 .toggle-switch input:checked + .toggle-slider::before {
-    transform: translateX(21px);
+    transform: translateX(calc(var(--track-w) - var(--track-h)));
 }
+.toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.toggle-switch input:focus-visible + .toggle-slider {
-    box-shadow: var(--ring);
-}
-
-.setting-label {
-    font-size: 14px;
-    color: var(--text);
-    line-height: 1.4;
+.setting-label { font-size: 13.5px; color: var(--text); line-height: 1.5; }
+.setting-label code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--surface-3);
+    border-radius: 4px;
+    padding: 1px 5px;
 }
 
 .settings-section select {
     cursor: pointer;
-    border-radius: var(--r-sm) !important;
-    transition: border-color .18s ease, box-shadow .18s ease;
+    font-family: var(--font);
+    padding: 7px 12px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 13px;
+    min-width: 200px;
 }
 
-.settings-section select:focus {
-    outline: none;
-    border-color: var(--accent) !important;
-    box-shadow: var(--ring);
+.settings-section select:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+
+.text-control {
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 7px 12px;
+    min-width: 240px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text);
 }
 
-/* ---------- Subscription manager ---------- */
+.text-control::placeholder { color: var(--text-faint); }
+.text-control:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+
+.settings-section p.settings-hint { font-size: 12px; color: var(--text-faint); margin: 8px 0 0; }
+
+.settings-block { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+
+/* ---------- remembered cookie sites (src/page/cookie-sites-panel.js) ---------- */
+
+.cookie-sites { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0 54px; }
+
+.bb-dropdown { position: relative; }
+
+.cookie-sites .bb-dropdown-trigger { height: 34px; }
+
+.bb-dropdown-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 230px;
+    padding: 7px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .15s ease;
+}
+
+.bb-dropdown-trigger:hover,
+.bb-dropdown.is-open .bb-dropdown-trigger { border-color: var(--accent); }
+.bb-dropdown.is-open .bb-dropdown-trigger { box-shadow: var(--ring); }
+
+.bb-dropdown-label { flex: 1; text-align: left; }
+
+.bb-dropdown-count {
+    min-width: 22px;
+    padding: 1px 7px;
+    border-radius: var(--r-pill);
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.bb-dropdown-caret {
+    width: 7px;
+    height: 7px;
+    margin: -3px 2px 0 0;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform .15s ease;
+}
+
+.bb-dropdown.is-open .bb-dropdown-caret { transform: translateY(3px) rotate(-135deg); }
+
+.bb-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 20;
+    min-width: 100%;
+    width: max-content;
+    max-width: min(420px, 90vw);
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 5px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--card-radius);
+    box-shadow: var(--shadow-md);
+    animation: bb-pop .14s cubic-bezier(.2, .8, .2, 1);
+}
+
+.bb-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 6px 6px 10px;
+    border-radius: var(--r-sm);
+}
+
+.bb-dropdown-item:hover { background: var(--surface-2); }
+.bb-dropdown-host { flex: 1; font-family: var(--font-mono); font-size: 12.5px; color: var(--text); }
+.bb-decision {
+    padding: 1px 8px;
+    border-radius: var(--r-pill);
+    border: 1px solid transparent;
+    font-size: 10.5px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.bb-decision.is-accept { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+.bb-decision.is-decline { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
+
+.bb-dropdown-remove {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.bb-dropdown-remove:hover { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+
+.bb-dropdown-empty { padding: 10px 12px; max-width: 300px; font-size: 12.5px; line-height: 1.5; color: var(--text-faint); }
+
+/* ---------- skin picker ---------- */
+
+.skin-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.skin-option {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font);
+    transition: border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+
+.skin-option:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--card-shadow-hover); }
+
+.skin-option[aria-pressed="true"] {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent) inset;
+    background: var(--accent-soft);
+}
+
+.skin-swatches { display: flex; height: 26px; border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
+.skin-swatches span { flex: 1; }
+
+.skin-text { display: block; }
+
+.skin-name {
+    display: block;
+    font-family: var(--font-head);
+    font-size: 13.5px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text);
+}
+
+.skin-note {
+    display: block; font-size: 11.5px; color: var(--text-faint); line-height: 1.4; margin-top: 2px; }
+
+/* ---------- subscriptions ---------- */
+
 .topic-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid var(--border);
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
 }
 
 .topic-name {
-    font-size: 17px;
-    font-weight: 700;
+    font-family: var(--font-head);
+    font-size: 16px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
     color: var(--text);
 }
 
 .topic-actions,
 .channel-actions,
-.new-video-actions {
-    display: flex;
-    gap: 8px;
-}
+.new-video-actions { display: flex; gap: 7px; flex-wrap: wrap; }
 
-.topic-channels {
-    margin-bottom: 16px;
-}
+.topic-channels { margin-bottom: 14px; }
 
-.topic-channels h4 {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-bottom: 12px;
+.topic-channels h4,
+.topic-new-videos h4 {
+    font-size: 10.5px;
     font-weight: 700;
+    letter-spacing: .12em;
     text-transform: uppercase;
-    letter-spacing: .5px;
+    color: var(--text-faint);
+    margin-bottom: 9px;
 }
 
-.channels-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
+.channels-list { display: flex; flex-direction: column; gap: 6px; }
 
 .channel-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 11px 15px;
+    gap: 12px;
+    padding: 9px 13px;
     background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: var(--r);
-    transition: border-color .18s ease;
+    border-radius: var(--r-sm);
+    transition: border-color .15s ease;
 }
 
-.channel-item:hover {
-    border-color: var(--accent);
-}
+.channel-item:hover { border-color: var(--accent-soft-2); }
+.channel-name { font-size: 13px; color: var(--text); font-weight: 500; }
 
-.channel-name {
-    font-size: 14px;
-    color: var(--text);
-    font-weight: 600;
-}
+.topic-new-videos { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.topic-new-videos h4 { color: var(--accent-ink); }
 
-.topic-new-videos {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 2px solid var(--accent);
-}
-
-.topic-new-videos h4 {
-    font-size: 12px;
-    color: var(--accent);
-    margin-bottom: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .5px;
-}
-
-.new-videos-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
+.new-videos-list { display: flex; flex-direction: column; gap: 6px; }
 
 .new-video-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 13px 15px;
-    background: var(--accent-soft);
-    border: 1px solid transparent;
-    border-radius: var(--r);
-    transition: background .18s ease, border-color .18s ease, transform .12s ease;
+    gap: 12px;
+    padding: 10px 13px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    transition: border-color .15s ease, transform .12s ease;
 }
 
-.new-video-item:hover {
-    border-color: var(--accent);
-    transform: translateY(-1px);
-}
+.new-video-item:hover { border-color: var(--accent); transform: translateY(-1px); }
 
-.new-video-info {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
-}
+.new-video-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 
 .new-video-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
     text-decoration: none;
+    line-height: 1.35;
 }
 
-.new-video-title:hover {
-    text-decoration: underline;
-}
+.new-video-title:hover { color: var(--accent-ink); text-decoration: underline; }
+.new-video-channel { font-size: 11.5px; color: var(--text-muted); }
+.new-video-date { font-size: 11px; color: var(--text-faint); }
 
-.new-video-channel {
-    font-size: 12px;
-    color: var(--text-muted);
-}
+/* ---------- modal + toast ---------- */
 
-.new-video-date {
-    font-size: 11px;
-    color: var(--text-faint);
-}
-
-/* ---------- Modal ---------- */
 .import-modal {
     position: fixed;
     inset: 0;
-    background: rgba(8, 10, 14, 0.58);
+    background: rgba(12, 8, 7, .55);
     backdrop-filter: blur(3px);
     display: flex;
     justify-content: center;
     align-items: center;
+    padding: 24px;
     z-index: 10000;
     animation: bb-fade .16s ease-out;
 }
@@ -898,154 +1405,1856 @@ header h1 {
 .import-modal-content {
     background: var(--surface);
     color: var(--text);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--r-lg);
-    padding: 26px;
+    padding: 24px;
     max-width: 500px;
-    width: 90%;
-    max-height: 80vh;
+    width: 100%;
+    max-height: 84vh;
     overflow-y: auto;
     box-shadow: var(--shadow-lg);
     animation: bb-pop .18s cubic-bezier(.2, .8, .2, 1);
 }
 
 .import-modal-content h3 {
-    margin-bottom: 16px;
-    color: var(--text);
+    font-family: var(--font-head);
     font-size: 17px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    margin-bottom: 14px;
 }
 
-.import-modal-content p {
-    color: var(--text-muted);
-}
+.import-modal-content p { color: var(--text-muted); font-size: 13.5px; line-height: 1.55; }
 
-.import-options {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 20px;
-}
+.import-options { display: flex; flex-direction: column; gap: 9px; margin: 18px 0; }
 
 .import-option-btn {
     background: var(--surface-2);
     border: 1px solid var(--border);
-    border-radius: var(--r);
-    padding: 16px;
+    border-radius: var(--card-radius);
+    padding: 15px;
     cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
+    font-family: var(--font);
+    font-size: 13.5px;
+    font-weight: 600;
     text-align: left;
-    transition: all .18s ease;
     color: var(--text);
+    transition: background .15s ease, border-color .15s ease;
 }
 
-.import-option-btn:hover {
-    background: var(--accent-soft);
-    border-color: var(--accent);
-    color: var(--accent);
-    transform: translateY(-1px);
-}
+.import-option-btn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+
+.import-modal-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
 
 .import-modal-close {
     background: var(--surface-3);
     border: 1px solid var(--border);
     color: var(--text-muted);
-    padding: 10px 16px;
-    border-radius: var(--r-sm);
+    padding: 9px 16px;
+    border-radius: var(--btn-radius);
     cursor: pointer;
-    font-size: 14px;
+    font-family: var(--font);
+    font-size: 13px;
     font-weight: 600;
-    transition: background .18s ease;
 }
 
-.import-modal-close:hover {
-    background: var(--border);
-}
+.import-modal-close:hover { background: var(--border); }
 
-.import-modal-buttons {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    margin-top: 16px;
-}
+.modal-message { font-size: 13.5px; line-height: 1.55; margin-bottom: 16px; color: var(--text-muted); }
+.modal-label { display: block; font-size: 12px; margin-bottom: 6px; color: var(--text-faint); }
 
+.modal-input,
+.modal-textarea,
 .import-modal-content textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    margin-bottom: 16px;
     border: 1px solid var(--border-strong);
     border-radius: var(--r-sm);
-    padding: 12px;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    resize: vertical;
-    min-height: 120px;
-    width: 100%;
+    font-size: 13px;
+    font-family: inherit;
     background: var(--surface-2);
     color: var(--text);
 }
 
-.import-modal-content textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: var(--ring);
+.modal-textarea,
+.import-modal-content textarea { font-family: var(--font-mono); resize: vertical; min-height: 120px; }
+
+.modal-input:focus,
+.modal-textarea:focus,
+.import-modal-content textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+
+.bb-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    transform: translate(-50%, 12px);
+    max-width: calc(100% - 32px);
+    padding: 10px 17px;
+    border-radius: var(--r-sm);
+    background: var(--text);
+    color: var(--bg);
+    font-size: 13px;
+    line-height: 1.4;
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+    z-index: 10001;
 }
 
-@keyframes bb-fade {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
+.bb-toast.is-visible { opacity: 1; transform: translate(-50%, 0); }
+.bb-toast-error { background: var(--danger); color: #fff; }
+.bb-toast-warning { background: var(--warning); color: #fff; }
 
+@keyframes bb-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes bb-pop {
     from { opacity: 0; transform: translateY(10px) scale(.97); }
     to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ---------- Responsive ---------- */
-@media (max-width: 768px) {
-    .dashboard-container {
-        width: 100%;
-    }
+/* ---------- responsive ---------- */
 
-    header {
-        padding: 18px 20px 0;
-    }
-
-    .view {
-        padding: 22px 20px;
-    }
-
-    .dashboard-header,
-    .subscriptions-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 16px;
-    }
-
-    .video-card-header {
-        flex-direction: column;
-    }
-
-    .video-card-meta {
-        justify-content: flex-start;
-    }
-
-    .topic-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 12px;
-    }
-
-    .channel-item,
-    .new-video-item {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
-    }
-
-    .shortcut-item {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
-    }
-
-    .shortcut-desc {
-        margin-left: 0;
-    }
+@media (max-width: 720px) {
+    header { padding: 18px 18px 0; }
+    .view { padding: 20px 18px; }
+    .nav-tabs { overflow-x: auto; scrollbar-width: none; }
+    .nav-tabs::-webkit-scrollbar { display: none; }
+    .shortcut-item { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+    .shortcut-desc { grid-column: 1 / -1; grid-row: 2; }
 }
+
+
+/* ============================================================
+   Activity view — the tab is always there; the figures are opt-in.
+   Tokens only; every skin dresses it for free.
+   ============================================================ */
+
+/* The invitation shown in place of the figures. .empty-state sets the type;
+   this is only the space its button needs. */
+#statsBody .empty-state p { max-width: 46ch; margin: 0 auto; }
+#statsBody .empty-state .btn-primary { margin-top: 22px; }
+
+.range-seg {
+    display: flex;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: var(--btn-radius);
+    padding: 3px;
+    gap: 2px;
+}
+
+.range-opt {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: var(--btn-radius);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.range-opt:hover { color: var(--text); }
+
+.range-opt[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
+.stat-figures {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(184px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.stat-figure {
+    transition: box-shadow .16s ease, transform .12s ease, border-color .15s ease;
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stat-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.stat-value {
+    font-family: var(--font-head);
+    font-size: 30px;
+    font-weight: var(--head-weight);
+    line-height: 1.05;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-note { font-size: 12px; color: var(--text-muted); }
+.stat-note.up { color: var(--accent-ink); }
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.stat-panel {
+    transition: box-shadow .16s ease, border-color .15s ease;
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    padding: 18px 20px 20px;
+}
+
+.stat-panel h3 {
+    font-family: var(--font-head);
+    font-size: 14px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text);
+    margin-bottom: 4px;
+}
+
+.stat-panel .stat-sub {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-bottom: 16px;
+    line-height: 1.45;
+}
+
+.site-list { list-style: none; display: flex; flex-direction: column; gap: 11px; }
+
+.site-row {
+    display: grid;
+    /* A floor under the time column keeps the bars one length down the list. */
+    grid-template-columns: minmax(96px, 30%) 1fr minmax(72px, auto);
+    align-items: center;
+    gap: 12px;
+}
+
+.site-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.site-bar {
+    height: 8px;
+    background: var(--surface-3);
+    border-radius: var(--r-pill);
+    overflow: hidden;
+}
+
+.site-bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: var(--r-pill);
+}
+
+.site-row:nth-child(2) .site-bar span { opacity: .8; }
+.site-row:nth-child(3) .site-bar span { opacity: .65; }
+.site-row:nth-child(4) .site-bar span { opacity: .5; }
+.site-row:nth-child(5) .site-bar span { opacity: .38; }
+.site-row:nth-child(n+6) .site-bar span { opacity: .28; }
+
+.site-time {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.stat-figure:hover { box-shadow: var(--card-shadow-hover); transform: translateY(-1px); border-color: var(--accent-soft-2); }
+.stat-panel:hover { box-shadow: var(--card-shadow-hover); border-color: var(--accent-soft-2); }
+
+.site-row { margin: -4px -8px; padding: 4px 8px; border-radius: var(--r-sm); transition: background .12s ease; }
+.site-row:hover { background: var(--surface-2); }
+.site-row:hover .site-bar span { opacity: 1; }
+.site-row:hover .site-name { color: var(--accent-ink); }
+
+.hour-bar { transition: opacity .12s ease; }
+.hour-bar:hover { opacity: 1; filter: brightness(1.12); }
+
+.chess-class-row:hover .chess-class-name { color: var(--accent-ink); }
+.chess-wdl { transition: box-shadow .15s ease; }
+.chess-class-row:hover .chess-wdl { box-shadow: 0 0 0 2px var(--accent-soft-2); }
+
+.stat-table { width: 100%; border-collapse: collapse; }
+.stat-table tbody tr { transition: background .12s ease; }
+.stat-table tbody tr:hover td { background: var(--surface-2); }
+.stat-table tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.stat-table th:first-child,
+.stat-table td:first-child { padding-left: 10px; }
+.stat-table th:last-child,
+.stat-table td:last-child { padding-right: 10px; }
+
+.stat-table th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    padding: 0 0 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.stat-table td {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12.5px;
+    color: var(--text);
+    vertical-align: top;
+}
+
+.stat-table tr:last-child td { border-bottom: none; }
+.stat-table .col-day { width: 78px; color: var(--text-muted); white-space: nowrap; }
+.stat-table .col-time {
+    width: 62px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--accent-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.page-title {
+    display: block;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.page-host { font-size: 11px; color: var(--text-faint); }
+
+/* A day of the last seven with nothing recorded still gets its row, so the
+   table is the week it claims to be. */
+.stat-table tr.is-empty td { color: var(--text-faint); }
+.page-title.is-empty { color: var(--text-faint); font-style: italic; }
+
+.hour-strip {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    align-items: end;
+    gap: 3px;
+    height: 96px;
+    margin-bottom: 8px;
+}
+
+.hour-bar {
+    background: var(--accent);
+    border-radius: 2px 2px 0 0;
+    min-height: 2px;
+    opacity: .82;
+}
+
+.hour-bar.peak { opacity: 1; }
+.hour-bar.empty { background: var(--surface-3); }
+
+.hour-axis {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-faint);
+}
+
+.stats-off {
+    background: var(--surface);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--card-radius);
+    padding: 44px 24px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13.5px;
+    line-height: 1.6;
+}
+
+
+/* ============================================================
+   Chess.com games — src/page/chess-stats.js
+   Built on the Activity view's figures, panels and tables above;
+   these are only the pieces Activity has no use for.
+   ============================================================ */
+
+/* One grid for the whole list, rows as `display: contents`: every bar then
+   starts and ends at the same x whatever the score beside it says —
+   including a "—" for a time control not played. */
+.chess-class-list {
+    list-style: none;
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: 14px 12px;
+}
+
+.chess-class-row { display: contents; }
+
+.chess-class-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+
+.chess-class-score {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.chess-wdl {
+    display: flex;
+    height: 10px;
+    overflow: hidden;
+    background: var(--surface-3);
+    border-radius: var(--r-pill);
+}
+
+.chess-wdl > span { display: block; height: 100%; }
+.chess-wdl-win { background: var(--success); }
+.chess-wdl-draw { background: var(--text-faint); opacity: .55; }
+.chess-wdl-loss { background: var(--danger); }
+
+.chess-legend { display: flex; gap: 14px; margin-top: 16px; font-size: 11px; color: var(--text-faint); }
+.chess-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chess-legend span::before { content: ""; width: 9px; height: 9px; border-radius: 2px; }
+.chess-legend .is-win::before { background: var(--success); }
+.chess-legend .is-draw::before { background: var(--text-faint); opacity: .55; }
+.chess-legend .is-loss::before { background: var(--danger); }
+
+.stat-table .col-num {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    padding-left: 12px;
+}
+
+.stat-table th.col-num { font-family: var(--font); }
+
+.chess-recent-table td { vertical-align: middle; }
+.chess-recent-table .col-day { width: 132px; }
+
+.chess-opponent { color: var(--text); font-weight: 600; text-decoration: none; }
+.chess-opponent:hover { color: var(--accent-ink); text-decoration: underline; }
+
+.chess-result {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: var(--r-pill);
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.chess-result.is-win { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+.chess-result.is-loss { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
+.chess-result.is-draw { background: var(--surface-3); color: var(--text-muted); border-color: var(--border); }
+
+.chess-empty-icon svg { display: inline-block; width: 44px; height: 44px; }
+.chess-empty .btn-primary { margin-top: 18px; }
+
+/* ---------- time management: the Win / loss panel's rows, flags only ----------
+   Won on the opponent's clock grows from the left, lost on yours from the
+   right; the track between is every game that did not end on time. */
+
+.chess-wdl-rest { flex: 1; }
+
+.chess-heat { margin-bottom: 12px; }
+
+/* ---------- heat map (src/page/heat-map.js) ----------
+   One hue, light to dark: each level is the skin's accent mixed into its
+   surface, so every skin, day and night, gets its own ramp for free. */
+
+.hm-scroll { overflow-x: auto; padding-bottom: 4px; }
+.hm-svg { display: block; }
+
+.hm-label { font-family: var(--font); font-size: 9.5px; fill: var(--text-faint); }
+
+.hm-l0 { fill: var(--surface-3); background: var(--surface-3); }
+.hm-l1 { fill: color-mix(in srgb, var(--accent) 28%, var(--surface)); background: color-mix(in srgb, var(--accent) 28%, var(--surface)); }
+.hm-l2 { fill: color-mix(in srgb, var(--accent) 52%, var(--surface)); background: color-mix(in srgb, var(--accent) 52%, var(--surface)); }
+.hm-l3 { fill: color-mix(in srgb, var(--accent) 76%, var(--surface)); background: color-mix(in srgb, var(--accent) 76%, var(--surface)); }
+.hm-l4 { fill: var(--accent); background: var(--accent); }
+
+.hm-cell { stroke: transparent; stroke-width: 1.5; transition: stroke .1s ease; }
+.hm-cell:hover { stroke: var(--text); }
+
+.hm-legend {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+.hm-legend > span:first-child { margin-right: 4px; }
+.hm-legend > span:last-child { margin-left: 4px; }
+.hm-swatch { width: 11px; height: 11px; border-radius: 2px; }
+
+.hm-placeholder { height: 110px; border-radius: var(--r-sm); background: var(--surface-2); }
+
+/* ---------- The line over time (src/page/spark.js) ---------- */
+
+/* Same contract as the heat map above: no colour is baked into the markup,
+   so a skin or a day/night change is followed without redrawing a thing. */
+.spark-svg { display: block; width: 100%; }
+
+.spark-line {
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    /* The viewBox is stretched to the panel's width, which would stretch the
+       stroke with it and leave a two-pixel line drawn at three. */
+    vector-effect: non-scaling-stroke;
+}
+
+/* The run rather than the jitter, so it has to sit behind the line it
+   smooths rather than compete with it. */
+.spark-trend {
+    stroke: var(--text-faint);
+    stroke-width: 1.5;
+    stroke-dasharray: 4 3;
+    vector-effect: non-scaling-stroke;
+}
+
+.spark-band { fill: var(--accent-soft); stroke: none; }
+
+.spark-axis { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+.spark-label { font-family: var(--font); font-size: 9.5px; fill: var(--text-faint); }
+
+.spark-dot {
+    fill: var(--accent);
+    /* Drawn small and lifted on hover: two hundred races is two hundred of
+       these, and at any size that reads as a dotted line rather than a line. */
+    opacity: 0;
+    transition: opacity .1s ease;
+}
+
+.spark-svg:hover .spark-dot { opacity: .5; }
+.spark-dot:hover { opacity: 1; }
+
+/* ---------- Settings → Chess.com / Lichess (src/page/chess-settings.js) ---------- */
+
+.chess-settings-lead { margin: 0 0 12px; }
+
+.chess-warn-list { display: flex; flex-direction: column; gap: 10px; }
+.chess-warn-name { min-width: 48px; }
+.text-control.chess-warn-seconds { min-width: 0; width: 88px; }
+.chess-warn-unit { color: var(--text-muted); }
+
+/* A row with no switch of its own still lines up with the rows that have one. */
+.chess-row-gap { width: var(--track-w, 42px); flex-shrink: 0; }
+
+.chess-volume-row { margin-top: 10px; }
+.chess-volume { flex: 1 1 auto; min-width: 0; max-width: 260px; accent-color: var(--accent); cursor: pointer; }
+.chess-volume-row output { min-width: 42px; }
+
+.chess-speak-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.chess-speak-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px 7px 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.chess-speak-option:hover { border-color: var(--accent-soft-2); }
+.chess-speak-option:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.chess-speak-option input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+
+@media (max-width: 720px) {
+    .chess-class-list { grid-template-columns: 56px minmax(0, 1fr); }
+    .chess-class-score { grid-column: 2; margin-top: -8px; }
+    .cookie-sites { margin-left: 0; }
+}
+
+/* ---------- the framed plate (src/page/plate.js) ----------
+
+   The design carries the frame on custom properties rather than on a class per
+   skin, and so does this: the plate declares the undecorated values, and the
+   three decorated skins redefine them. That is what lets the default skin come
+   out as an ordinary card — its corner set is empty, both inner rules are
+   transparent, and its title is a plain heading in the flow. */
+
+.bb-plate {
+    --plate-rule-2: transparent;
+    --plate-rule-3: transparent;
+    --plate-space: 22px;
+    --plate-title-pos: static;
+    --plate-title-left: auto;
+    --plate-title-shift: 0;
+    --plate-title-pad: 0;
+    --plate-title-bg: transparent;
+    --plate-title-margin: 0 0 12px;
+
+    position: relative;
+    padding: var(--plate-space) 24px 22px;
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+}
+
+/* The decorated skins: gilt second rule, a hairline third, and the title
+   notched into the top rule where the frame wants it. */
+body[data-skin="riso"] .bb-plate,
+body[data-skin="medieval"] .bb-plate,
+body[data-skin="deco"] .bb-plate {
+    --plate-rule-2: var(--gold);
+    --plate-rule-3: var(--border);
+    --plate-space: 34px;
+    --plate-title-pos: absolute;
+    --plate-title-left: 50%;
+    --plate-title-shift: -50%;
+    --plate-title-pad: 0 16px;
+    --plate-title-bg: var(--surface);
+    --plate-title-margin: 0;
+}
+
+.bb-plate-rule {
+    position: absolute;
+    border-radius: var(--card-radius);
+    pointer-events: none;
+}
+
+.bb-plate-rule.is-second {
+    inset: 5px;
+    border: 1px solid var(--plate-rule-2);
+}
+
+/* Only top and bottom: the third rule is a band across the plate, not a box. */
+.bb-plate-rule.is-third {
+    inset: 9px;
+    border-top: 1px solid var(--plate-rule-3);
+    border-bottom: 1px solid var(--plate-rule-3);
+}
+
+.bb-plate-corner { position: absolute; }
+
+.bb-plate-legend {
+    position: var(--plate-title-pos);
+    top: -11px;
+    left: var(--plate-title-left);
+    transform: translateX(var(--plate-title-shift));
+    margin: var(--plate-title-margin);
+    padding: var(--plate-title-pad);
+    background: var(--plate-title-bg);
+    font-family: var(--font-head);
+    font-size: 16px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    line-height: 22px;
+    white-space: nowrap;
+    color: var(--text);
+}
+
+.bb-plate-body { position: relative; }
+
+@media (max-width: 560px) {
+    .bb-plate { padding-left: 16px; padding-right: 16px; }
+    .bb-plate-legend { font-size: 14px; }
+}
+
+/* ---------- trials: the tab-group desk (src/page/trials.js) ----------
+
+   Laid out to the design in "Website extension keyboard settings": the
+   ungrouped tabs down the left, the group slots to the right of them, the
+   parked shelf underneath. Every measurement here is that design's; what were
+   inline styles keyed to a tone table there are the skin variables here, which
+   hold the same values. Fluid rather than breakpointed — the left column asks
+   for 254px and the slots take what is left, wrapping under it when there is
+   not enough room. */
+
+.tg-intro {
+    max-width: 78ch;
+    margin: 0 0 4px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+
+/* The lock running down, across the top of the plate. */
+.tg-lockbar {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: 8px;
+    height: 3px;
+    overflow: hidden;
+    background: var(--surface-3);
+}
+
+.tg-lockfill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 1s linear;
+}
+
+.tg-grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 22px;
+    margin-top: 16px;
+}
+
+.tg-loose { flex: 0 1 254px; min-width: 210px; }
+
+/* A locked group holds the desk; everything else is there but not in play. */
+.tg-loose,
+.tg-standby,
+.tg-slot { transition: opacity .18s ease; }
+
+.tg-loose.is-quiet,
+.tg-standby.is-quiet,
+.tg-slot.is-dimmed {
+    opacity: .4;
+    pointer-events: none;
+}
+
+.tg-slot.is-dimmed { opacity: .35; }
+
+.tg-col-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 9px;
+}
+
+.tg-col-head.is-ruled { align-items: center; margin-bottom: 11px; }
+
+.tg-col-label {
+    flex: 0 0 auto;
+    font-family: var(--font-head);
+    font-size: 11.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.tg-rule { flex: 1; height: 1px; background: var(--border); }
+
+.tg-loose-count,
+.tg-parked-count {
+    flex: 0 0 auto;
+    font-size: 11.5px;
+    color: var(--text-faint);
+}
+
+/* ---- the tabs ---- */
+
+.tg-zone {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-height: 120px;
+    padding: 9px;
+    background: var(--surface-2);
+    border: 1px dashed var(--border);
+    border-radius: var(--r);
+}
+
+.tg-zone.is-dropping { border-style: solid; border-color: var(--accent); }
+
+.tg-empty {
+    margin: 0;
+    padding: 8px 2px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-faint);
+}
+
+.tg-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 6px 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-family: var(--font);
+    cursor: grab;
+    user-select: none;
+}
+
+.tg-tab.is-picked { background: var(--accent-soft); border-color: var(--accent); }
+.tg-tab.is-ghost { opacity: .35; }
+.tg-tab[draggable="false"] { cursor: default; }
+
+/* The one letter standing for a site. min() keeps the square sharp on the
+   skins that have no rounding at all. */
+.tg-mono {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: min(3px, var(--r-sm));
+    font-family: var(--font-head);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.tg-mono.is-small { width: 16px; height: 16px; font-size: 9px; }
+
+.tg-tab-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--text);
+}
+
+/* Where the tab being dragged would land. */
+.tg-landing {
+    height: 31px;
+    background: var(--accent-soft-2);
+    border: 1px dashed var(--accent);
+    border-radius: var(--r-sm);
+}
+
+/* ---- the slots ---- */
+
+.tg-right {
+    flex: 1 1 430px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+}
+
+.tg-slots {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 12px;
+    min-width: 0;
+}
+
+.tg-slot {
+    flex: 1 1 252px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-2);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--r);
+}
+
+.tg-slot.is-locked { border-color: var(--accent); }
+.tg-slot.is-dropping { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+.tg-slot-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 9px;
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--border);
+}
+
+.tg-slot.is-locked .tg-slot-head { background: var(--accent-soft-2); }
+
+.tg-handle {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 16px;
+    background-image: radial-gradient(var(--text-faint) 1px, transparent 1.1px);
+    background-size: 4px 5px;
+    cursor: grab;
+}
+
+.tg-handle[draggable="false"] { cursor: default; }
+
+.tg-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 1px 2px;
+    background: transparent;
+    border: 1px solid transparent;
+    text-overflow: ellipsis;
+    font-family: var(--font-head);
+    font-size: 13px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text);
+    cursor: text;
+}
+
+.tg-name:focus { background: var(--surface); border-color: var(--border-strong); outline: none; }
+.tg-name[readonly] { cursor: default; }
+
+.tg-slot-count {
+    flex: 0 0 auto;
+    min-width: 14px;
+    text-align: right;
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text-faint);
+}
+
+.tg-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--btn-radius);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.tg-icon.is-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.tg-icon:disabled { opacity: .35; cursor: not-allowed; }
+.tg-icon:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-ink); }
+.tg-icon.is-on:hover { color: var(--on-accent); }
+
+.tg-menu {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 9px;
+    border-bottom: 1px solid var(--border);
+}
+
+.tg-menu-label {
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.tg-preset {
+    height: 24px;
+    padding: 0 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.tg-preset:hover { border-color: var(--accent); color: var(--accent-ink); }
+
+.tg-note {
+    padding: 7px 10px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--border);
+}
+
+.tg-slot-tabs { display: flex; flex-direction: column; gap: 5px; padding: 9px; }
+
+.tg-newslot {
+    flex: 1 1 252px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 92px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--r);
+}
+
+.tg-newslot.is-dropping { background: var(--accent-soft); border-color: var(--accent); }
+
+.tg-newslot span {
+    padding: 0 16px;
+    text-align: center;
+    font-family: var(--font-head);
+    font-size: 12.5px;
+    line-height: 1.6;
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text-faint);
+}
+
+/* ---- the parked shelf ---- */
+
+/* Across the top and the full width of the plate: a parked group is a whole
+   group, and the width is what lets the cards run on one line instead of
+   stacking inside a column narrower than a card. */
+.tg-standby {
+    min-width: 0;
+    margin-top: 16px;
+    padding: 14px 16px 15px;
+    background: var(--surface-2);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--r);
+}
+
+.tg-parked { display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
+
+.tg-parked-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 10px 13px 11px;
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-family: var(--font);
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+
+.tg-parked-card:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+.tg-parked-name {
+    font-family: var(--font-head);
+    font-size: 13px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    white-space: nowrap;
+    color: var(--text);
+}
+
+.tg-faces { display: flex; align-items: center; gap: 4px; }
+.tg-more { font-size: 10px; color: var(--text-faint); }
+
+.tg-parked-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text-faint);
+}
+
+.tg-dot {
+    display: block;
+    width: 3px;
+    height: 3px;
+    border-radius: var(--r-pill);
+    background: var(--text-faint);
+}
+
+/* ============================================================
+   Daily time limit — today against it, on the site's card and at
+   the foot of its settings panel (src/page/time-limit-view.js).
+   ============================================================ */
+
+/* ---------- roster: a site's own list, out and back (src/page/roster-view.js) ---------- */
+
+.roster-lead { margin: 0 0 18px; max-width: 78ch; }
+
+/* Two cards side by side on a wide panel, stacked on a narrow one. They are
+   deliberately the same size despite doing very different-sized things: the
+   reading half is one button and the applying half is a file and a paragraph,
+   and giving the second one twice the room would read as the panel's main
+   business. It is not — it is the half that touches your account. */
+.roster-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+}
+
+.roster-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface-2);
+}
+
+.roster-card h3 { margin: 0; font-size: 14px; }
+.roster-note { margin: 0; font-size: 13px; color: var(--text-muted); }
+.roster-small { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-faint); }
+.roster-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; }
+
+/* The file input is the label, so it can be a button like the one beside it.
+   A bare <input type=file> is styled differently by every browser and cannot
+   be made to match anything. */
+.roster-file { cursor: pointer; }
+
+/* The job in flight. It reuses .limit-bar rather than growing a second
+   progress bar — same shape, same meaning, and .is-spent already paints the
+   one state worth a different colour, which here is a job that stopped. */
+.roster-job {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r);
+    background: var(--surface-2);
+}
+
+.roster-job-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.roster-job-what { font-family: var(--font-head); font-size: 13.5px; color: var(--text); }
+.roster-job-count { margin-left: auto; font-size: 11.5px; color: var(--text-faint); }
+.roster-job-note { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+.roster-job .roster-acts { margin-top: 12px; }
+
+/* ---------- the list of sites held to a limit (src/page/limit-sites-panel.js) ---------- */
+
+/* Wider and taller than the cookie list's menu next to it, which is sized for
+   one host per line. This one has a form at its head, and at the shared
+   max-width of 420px that form wrapped onto three lines. */
+#limitSitesPanel .bb-dropdown-menu {
+    width: min(560px, 92vw);
+    max-width: none;
+    max-height: 440px;
+}
+
+/* The form at the head of the dropdown. One row on a wide menu, wrapping to
+   two on a narrow one — the "or" between the budget and the window is what
+   has to stay beside what it separates, so the two halves are a group of
+   their own rather than five siblings that wrap wherever they run out. */
+.limit-add {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.limit-add-either { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.limit-host { flex: 1 1 150px; min-width: 120px; }
+.limit-minutes { width: 66px; }
+.limit-from,
+.limit-to { width: 74px; }
+.limit-unit { font-size: 12px; color: var(--text-faint); }
+.limit-or { font-size: 11px; font-style: italic; color: var(--text-faint); padding: 0 2px; }
+.limit-save { flex: 0 0 auto; padding: 7px 14px; font-size: 12.5px; }
+
+.limit-hint {
+    margin: 0;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-faint);
+}
+
+/* What the row allows, between the host and the remove button. */
+.limit-what { font-size: 11.5px; color: var(--accent-ink); white-space: nowrap; }
+
+/* ---------- a site's own settings panel: x.com ---------- */
+
+/* .settings-option carries no vertical margin of its own, and the General
+   section spaces each of its rows with an inline style. That is fine for a
+   list written once and wrong here, where the rows come in runs of two and
+   three under a hint apiece — four flush rows read as one control with four
+   labels, which is what this panel looked like. Spaced by being in the panel
+   instead, so a row added later is spaced without being told to be. */
+#twitterSettingsPanel .settings-option { margin-top: 14px; }
+#twitterSettingsPanel p.settings-hint { margin-top: 24px; }
+#twitterSettingsPanel p.settings-hint:first-child { margin-top: 0; }
+
+.limit-panel { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+
+.limit-figure { display: flex; align-items: baseline; gap: 10px; }
+
+.limit-value {
+    font-family: var(--font-head);
+    font-size: 30px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    color: var(--text);
+}
+
+.limit-note { font-size: 13px; color: var(--text-muted); }
+
+.limit-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    overflow: hidden;
+}
+
+.limit-bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width .3s ease;
+}
+
+/* Spent reads as spent: the bar stops being a measure of progress and
+   becomes the thing standing in the way. */
+.limit-bar.is-spent span { background: var(--danger, var(--accent)); }
+
+/* ============================================================
+   The X pouch — src/page/x-pouch-view.js
+
+   One panel per side, each a list of topic cards. A card reuses
+   .topic-card so the two pouches read as the same object on the same
+   page; everything below is what a card of PEOPLE or of POSTS has that a
+   card of channels does not — a grip to drag it by, a pen, a trash with
+   a confirmation, and rows carrying an avatar and an editable note.
+
+   The two sides share every rule here. People topics and post topics are
+   independent lists of independent things, but a topic card is a topic
+   card, and the only real difference is what a row looks like.
+   ============================================================ */
+
+.x-pouch-hint {
+    margin: -12px 0 18px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-faint);
+}
+
+.x-topic { padding: 14px 16px; }
+
+/* The card is draggable as a whole rather than by the grip alone: a drag
+   handle that is the only draggable part means a 15px target, and the
+   card has no other drag of its own to conflict with. The grip is there
+   to say so. */
+.x-topic[draggable="true"] { cursor: default; }
+.x-topic[data-x-dragging] { opacity: .45; }
+
+.x-topic-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.x-topic-head h3 {
+    margin: 0;
+    font-family: var(--font-head);
+    font-size: 18px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text);
+}
+
+.x-grip {
+    display: grid;
+    place-items: center;
+    cursor: grab;
+    color: var(--text-faint);
+}
+
+.x-grip svg { width: 15px; height: 15px; }
+.x-grip:active { cursor: grabbing; }
+
+.x-tally { font-size: 11px; color: var(--text-faint); }
+
+.x-rename { flex: 0 1 260px; min-width: 0; font-size: 16px; }
+
+/* The pen, the tick and the two crosses. Quiet until hovered: there are
+   up to three of these per row and a dozen per card, and a list of loud
+   little buttons is unreadable. */
+.icon-act {
+    display: grid;
+    place-items: center;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: background-color .14s, color .14s;
+}
+
+.icon-act svg { width: 14px; height: 14px; }
+.icon-act:hover { background: var(--accent-soft); color: var(--accent-ink); }
+.icon-danger:hover { background: var(--accent-soft); color: var(--danger); }
+
+/* Trash sits at the far right of the header, away from the pen — the two
+   are one keystroke apart in intent and should not be one pixel apart on
+   screen. */
+.x-topic-head .icon-danger { margin-left: auto; }
+
+.x-confirm {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 11px;
+    padding: 9px 11px;
+    border: 1px solid var(--accent);
+    border-radius: var(--r-sm);
+    background: var(--accent-soft);
+    font-size: 13px;
+}
+
+.x-confirm-acts { margin-left: auto; display: flex; gap: 6px; }
+.x-confirm-acts .btn-primary,
+.x-confirm-acts .btn-secondary { padding: 6px 12px; font-size: 12px; }
+
+.x-rows { display: flex; flex-direction: column; gap: 3px; margin-top: 12px; }
+
+.x-row {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 7px 8px;
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+}
+
+/* A post's text is the tall part, so its row aligns to the top and the
+   handle beside it reads as a label rather than as a caption. */
+.x-row-post { align-items: flex-start; }
+
+/* The monogram is always in the markup and the picture is stacked over
+   it, so an avatar URL that has gone stale uncovers initials instead of
+   leaving a broken image. Nothing ever goes back to X to check whether a
+   stored URL still resolves — see src/shared/x-pouch.js for why. */
+.x-avatar {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    overflow: hidden;
+}
+
+.x-avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.x-who { flex: 0 0 168px; min-width: 0; }
+
+.x-name,
+.x-handle {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.x-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.x-handle { font-size: 11px; color: var(--text-faint); }
+
+/* The note reads as text and edits as a field. It is a button so that the
+   whole strip is the target — a note is three to five words and a click
+   target the width of the words would be a click target you miss. */
+.x-note {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 6px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--accent-ink);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: text;
+}
+
+.x-note:hover { background: var(--surface-3); }
+.x-note-blank { color: var(--text-faint); font-style: italic; }
+.x-note-input { flex: 1; min-width: 0; }
+
+/* The whole post is the link. It used to be the age at the end of the row,
+   in 11px grey, which made a saved post look like a record of something
+   rather than a way back to it — the one thing a saved post has to be. */
+.x-post-open {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    gap: 11px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    border-radius: var(--r-sm);
+    color: inherit;
+    text-decoration: none;
+}
+
+.x-post-open:hover { background: var(--surface-3); }
+.x-post-open:hover .x-post-text { color: var(--text); }
+.x-post-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* A record with no status id to rebuild a link from: still a row, just not
+   a target. Nothing in the pouch should look clickable and do nothing. */
+.x-post-open.is-dead { cursor: default; }
+.x-post-open.is-dead:hover { background: transparent; }
+
+.x-post-handle {
+    flex: 0 0 96px;
+    font-family: var(--font-head);
+    font-size: 11px;
+    letter-spacing: var(--head-track);
+    color: var(--accent-ink);
+    /* Aligns with the first line of the post text beside it, which is set
+       at 13px/1.4 — without this the handle rides above it. */
+    line-height: 1.7;
+}
+
+.x-post-text {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.x-post-when {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--text-faint);
+    line-height: 1.7;
+}
+
+.x-empty-row { margin: 2px 0 0; font-size: 12px; color: var(--text-faint); }
+
+/* ======================================================================
+   LeetCode — the review queue, the practice map and the notes.
+   Built on the Activity view's stat-figure / stat-panel / stat-table, so
+   only what those have no use for is here.
+   ====================================================================== */
+
+/* LeetCode's own three colours, kept across every skin: they are the site's
+   vocabulary, and a Medium that is pink on one skin and amber on another
+   stops being readable at a glance. */
+.leet-diff { font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.leet-diff.is-easy { color: #0f9f9f; }
+.leet-diff.is-medium { color: #c98a00; }
+.leet-diff.is-hard { color: #d33a3a; }
+
+/* The pale-on-pale versions go muddy against a dark surface. */
+[data-theme="dark"] .leet-diff.is-easy { color: #2ccccc; }
+[data-theme="dark"] .leet-diff.is-medium { color: #ffc733; }
+[data-theme="dark"] .leet-diff.is-hard { color: #ff5c5c; }
+
+.leet-queue .col-diff { width: 92px; }
+.leet-queue .col-grade { width: 132px; }
+.leet-queue .col-forget { width: 40px; text-align: right; }
+
+/* The remove column's header has no word in it — the icon in each row is
+   labelled instead — but the column still needs a name for anyone reading
+   the table with a screen reader. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Removing a problem sits at the far right, away from the controls that act
+   on it — the one destructive thing in the row should not be adjacent to the
+   four grade buttons it would otherwise be mistaken for. It stays faint
+   until the row is under the cursor. */
+.leet-forget {
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .12s ease, color .12s ease, background .12s ease;
+}
+
+.leet-queue tr:hover .leet-forget,
+.leet-forget:focus-visible { opacity: 1; }
+.leet-forget:hover { background: var(--accent-soft); color: var(--danger); }
+.leet-forget svg { width: 15px; height: 15px; }
+
+/* Touch and keyboard have no hover, so never hide it from them. */
+@media (hover: none) {
+    .leet-forget { opacity: .7; }
+}
+
+/* The note lives in the table rather than behind a menu, because the whole
+   point of a note is to be read while you are deciding what to work on. */
+.leet-note-cell { max-width: 320px; }
+
+.leet-note-btn {
+    max-width: 100%;
+    padding: 4px 9px;
+    border: 1px dashed var(--border);
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.45;
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leet-note-btn:hover { border-color: var(--accent); color: var(--text); }
+.leet-note-btn.is-empty { color: var(--text-faint); font-style: italic; border-style: dotted; }
+
+/* Four initials rather than four words: the row is already carrying a title,
+   a difficulty and a date, and "Again / Hard / Good / Easy" spelled out
+   would be wider than all three. The full word is on each one's title. */
+.leet-grades { display: inline-flex; gap: 4px; }
+
+.leet-grade {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color .12s ease, color .12s ease;
+}
+
+.leet-grade:hover { border-color: var(--accent); color: var(--accent); }
+
+.leet-notes-hint { margin-bottom: 14px; }
+
+.leet-notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.leet-note-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 13px 15px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.leet-note-card:hover { border-color: var(--accent-soft-2); }
+
+.leet-note-head { display: flex; align-items: baseline; gap: 9px; }
+.leet-note-head .page-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leet-note-head .page-host { margin-left: auto; white-space: nowrap; }
+
+.leet-note-del {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.leet-note-del:hover { background: var(--accent-soft); color: var(--danger); }
+
+/* The note itself is the card's body and is editable by clicking it, so it
+   is a button — but it must read as prose, which is what the left rule and
+   the preserved line breaks are for. */
+.leet-note-body {
+    padding: 0 0 0 10px;
+    border: 0;
+    border-left: 2px solid var(--accent-soft-2);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1.5;
+    text-align: left;
+    white-space: pre-wrap;
+    cursor: pointer;
+}
+
+.leet-note-body:hover { border-left-color: var(--accent); color: var(--text); }
+
+/* A note is several lines, so its field is a textarea rather than the
+   single-line input the other modals use. */
+.leet-note-input { resize: vertical; min-height: 96px; line-height: 1.5; }
+
+/* ------------------------------------------------- managing the templates */
+
+.leet-tpl-manage { display: flex; flex-direction: column; gap: 8px; }
+
+.leet-tpl-item {
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    background: var(--surface);
+    overflow: hidden;
+}
+
+.leet-tpl-item.is-open { border-color: var(--accent); }
+.leet-tpl-item.is-open .leet-tpl-bar { border-bottom: 1px solid var(--border); }
+
+.leet-tpl-bar { display: flex; align-items: center; gap: 4px; padding: 4px 10px 4px 4px; }
+
+.leet-tpl-grip { display: grid; place-items: center; width: 24px; color: var(--text-faint); cursor: grab; }
+.leet-tpl-grip svg { width: 16px; height: 16px; }
+
+.leet-tpl-open {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 8px 4px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.leet-tpl-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leet-tpl-sub { font-size: 11px; color: var(--text-faint); }
+
+.leet-tpl-del {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+}
+
+.leet-tpl-del:hover { background: var(--accent-soft); color: var(--danger); }
+.leet-tpl-del svg { width: 15px; height: 15px; }
+
+.leet-tpl-editor { padding: 12px; }
+.leet-tpl-fields { display: flex; gap: 8px; margin-bottom: 8px; }
+.leet-tpl-name-input { flex: 1; min-width: 0; }
+.leet-tpl-lang-input { flex: 0 0 auto; width: auto; }
+
+/* Monospace and no wrapping: a template's indentation is part of it, and a
+   wrapped line of code reads as two. */
+.leet-tpl-body-input {
+    width: 100%;
+    font-family: Consolas, 'SF Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+    resize: vertical;
+}
+
+.leet-tpl-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* A brand-new template has no row to sit under, so its editor is its own
+   card rather than a body hanging off nothing. */
+.leet-tpl-manage > .leet-tpl-editor {
+    border: 1px solid var(--accent);
+    border-radius: var(--card-radius);
+    background: var(--surface);
+}
+
+/* ---------- TypeRacer (src/page/typeracer-stats.js) ---------- */
+
+/* The races table leans on the Activity vocabulary — .stat-table, .col-num —
+   and needs only the date column held on one line, since "24 Sep 2026 14:05"
+   wraps into two rows at the width the panel sits at. */
+.typer-races td:first-child { white-space: nowrap; }
+
+/* The time of day beside the date, in the same quiet ink .page-host uses
+   elsewhere for a thing that qualifies the line rather than being it. */
+.typer-races .page-host { margin-left: 6px; }
+
+/* A gram is a pair of characters shown as themselves, so it wants the fixed
+   pitch the rest of the page does not: "il" and "mw" are the same two
+   characters wide here, and in the body face they are not. */
+.typer-gram {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--r-sm);
+    background: var(--surface-3);
+    white-space: pre;
+}
+
+/* Half the slow pairs are a letter followed by a space, and a pair drawn as
+   "t " reads as a rendering fault rather than as a finding. */
+.typer-space { opacity: .55; }
+
+.typer-ratio-col { width: 190px; white-space: nowrap; }
+
+/* Pairs and rolls side by side where there is room for both, stacked where
+   there is not. */
+.typer-slip-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px 28px; }
+.typer-slip-grid h4 { margin: 4px 0 6px; font-size: 12px; color: var(--text-muted); font-weight: 600; }
+
+/* The .chess-wdl track, with one fill rather than three. No colour of its
+   own beyond the accent, so a skin change is followed without redrawing. */
+.typer-ratio { display: inline-flex; width: 110px; vertical-align: middle; }
+.typer-ratio-fill { display: block; height: 100%; background: var(--accent); }
+
+.typer-ratio-num {
+    margin-left: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* What you hit instead, as a row of small pairs. */
+.typer-sub {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-right: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.typer-sub .typer-gram { font-size: 11px; padding: 1px 4px; }
+
+/* The generated drill, and the button that takes it to the clipboard. */
+.typer-drill {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+}
+
+.typer-drill-text {
+    flex: 1;
+    margin: 0;
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    /* It is a string to type, not prose: the line breaks are wherever the
+       panel is wide enough for them, and a long run has to wrap rather than
+       push the Copy button off the panel. */
+    word-break: break-word;
+    color: var(--text);
+}
+
+.typer-drill .btn-secondary { flex: none; }
+
+/* =====================================================================
+   Chat sites — the Pins, Prompts and Queue panels (src/page/chat-views.js)
+   ===================================================================== */
+
+.chat-view-list { display: flex; flex-direction: column; gap: 8px; }
+
+.chat-view-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 11px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    background: var(--surface);
+}
+
+.chat-view-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.chat-view-title { font-size: 13.5px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.chat-view-sub { font-size: 11.5px; color: var(--text-faint); }
+.chat-view-excerpt { font-size: 12px; color: var(--text-muted, var(--text-faint)); line-height: 1.5; }
+.chat-view-actions { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; }
+
+/* Unpinning has an Undo rather than a confirmation: taking a pin off is
+   quick and common, and putting it back should be as quick. */
+.chat-view-undo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--accent-soft-2, var(--border));
+    border-radius: var(--card-radius);
+    background: var(--accent-soft);
+    font-size: 12.5px;
+}
+
+.chat-view-undo[hidden] { display: none; }
+
+.chat-prompt-body { min-height: 180px; margin-top: 8px; font-family: inherit; line-height: 1.5; resize: vertical; }
+.chat-prompt-sites { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; font-size: 12.5px; }
+.chat-prompt-sites label { display: inline-flex; align-items: center; gap: 5px; }
+.chat-prompt-hint { color: var(--text-faint); font-size: 12px; }
+
+.chat-view-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.chat-view-group > .chat-view-sub { padding: 0 2px; }
+.chat-queue-at { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }

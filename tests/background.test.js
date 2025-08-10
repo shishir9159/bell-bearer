@@ -1,181 +1,9 @@
 /**
- * Specs for background.js: "open new tabs next to current", the sowon
- * reporting path (protobuf/gRPC-Web framing + backoff), and the settings gate.
- *
- * These are the regression tests for the Ctrl+T bug that took several
- * attempts to pin down; each historical failure mode has a test here.
+ * Specs for background.js: the sowon reporting path (protobuf/gRPC-Web
+ * framing + backoff), the copy-as-Markdown menus, and the settings gate.
  */
 
 const M = window.MockChrome;
-
-/** Three tabs in window 100, with tab 2 (index 1) active. */
-function threeTabs() {
-    return [
-        { id: 1, index: 0, windowId: 100, active: false, url: 'https://a.example', pinned: false, title: 'A' },
-        { id: 2, index: 1, windowId: 100, active: true, url: 'https://b.example', pinned: false, title: 'B' },
-        { id: 3, index: 2, windowId: 100, active: false, url: 'https://c.example', pinned: false, title: 'C' },
-    ];
-}
-
-function withTabMoveOn(extra) {
-    return Object.assign({ openTabNextToCurrent: true, bbTabMoveDebug: false }, extra || {});
-}
-
-suite('background: open tabs next to current', () => {
-    test('Ctrl+T lands right after the active tab (onCreated fires first)', async () => {
-        M.reset({ tabs: threeTabs(), localStore: withTabMoveOn() });
-        M.fire.activated(2, 100);
-        await M.settle();
-
-        const n = M.openNewTab(4);
-        M.fire.created(n);           // typical ordering
-        M.fire.activated(4, 100);
-        await M.settle();
-
-        assertEqual(M.indexOf(4), 2, 'new tab should sit directly after tab 2');
-        assertDeepEqual(M.tabOrder(), [1, 2, 4, 3]);
-    });
-
-    test('Ctrl+T still correct when activation wins the race', async () => {
-        // The original bug: the new tab activating first overwrote the record
-        // of which tab the user was on.
-        M.reset({ tabs: threeTabs(), localStore: withTabMoveOn() });
-        M.fire.activated(2, 100);
-        await M.settle();
-
-        const n = M.openNewTab(4);
-        M.fire.activated(4, 100);    // activation beats onCreated
-        M.fire.created(n);
-        await M.settle();
-
-        assertEqual(M.indexOf(4), 2, 'anchor must fall back to the previous tab');
-        assertDeepEqual(M.tabOrder(), [1, 2, 4, 3]);
-    });
-
-    test('survives MV3 service-worker sleep (history lives in storage.session)', async () => {
-        // Second bug: in-memory history was wiped when the worker slept, so
-        // the anchor was lost. storage.session survives, so seed only that.
-        M.reset({
-            tabs: threeTabs(),
-            localStore: withTabMoveOn(),
-            sessionStore: { bbMru_100: [2, 1] },
-        });
-
-        const n = M.openNewTab(4);
-        M.fire.created(n);
-        M.fire.activated(4, 100);
-        await M.settle();
-
-        assertEqual(M.indexOf(4), 2, 'anchor should come from storage.session');
-    });
-
-    test('repositions a custom new-tab URL (no brittle URL gate)', async () => {
-        // Third bug: gating on chrome://newtab meant custom new-tab-page
-        // extensions were skipped entirely.
-        M.reset({ tabs: threeTabs(), localStore: withTabMoveOn() });
-        M.fire.activated(2, 100);
-        await M.settle();
-
-        const n = M.openNewTab(4, {
-            url: 'https://my-custom-newtab.example/start',
-            pendingUrl: undefined,
-        });
-        M.fire.created(n);
-        M.fire.activated(4, 100);
-        await M.settle();
-
-        assertEqual(M.indexOf(4), 2);
-    });
-
-    test('retries when Chrome transiently refuses the move', async () => {
-        // Fourth bug: the "Tabs cannot be edited right now" rejection was
-        // swallowed, leaving the tab at the end.
-        M.reset({
-            tabs: threeTabs(),
-            localStore: withTabMoveOn(),
-            moveErrorsRemaining: 2,
-        });
-        M.fire.activated(2, 100);
-        await M.settle();
-
-        const n = M.openNewTab(4);
-        M.fire.created(n);
-        M.fire.activated(4, 100);
-        await M.settle(600); // allow the 60ms-spaced retries
-
-        assert(M.state.moveCalls.length >= 3, 'should have retried after failures');
-        assertEqual(M.indexOf(4), 2, 'retry should eventually place the tab');
-    });
-
-    test('leaves tabs opened from a link alone', async () => {
-        M.reset({ tabs: threeTabs(), localStore: withTabMoveOn() });
-        M.fire.activated(2, 100);
-        await M.settle();
-
-        const n = M.openNewTab(4, { url: 'https://linked.example', openerTabId: 2 });
-        M.fire.created(n);
-        await M.settle();
-
-        assertEqual(M.state.moveCalls.length, 0, 'opener tabs are positioned by Chrome');
-    });
-
-    test('does nothing when the setting is off', async () => {
-        M.reset({ tabs: threeTabs(), localStore: { openTabNextToCurrent: false } });
-        M.fire.activated(2, 100);
-        await M.settle();
-
-        const n = M.openNewTab(4);
-        M.fire.created(n);
-        M.fire.activated(4, 100);
-        await M.settle();
-
-        assertEqual(M.state.moveCalls.length, 0);
-        assertEqual(M.indexOf(4), 3, 'tab stays where Chrome put it');
-    });
-
-    test('does nothing when the setting was never set', async () => {
-        M.reset({ tabs: threeTabs(), localStore: {} });
-        M.fire.activated(2, 100);
-        await M.settle();
-
-        M.fire.created(M.openNewTab(4));
-        await M.settle();
-
-        assertEqual(M.state.moveCalls.length, 0, 'must be strictly opt-in');
-    });
-
-    test('forgets closed tabs so a stale id is never the anchor', async () => {
-        M.reset({ tabs: threeTabs(), localStore: withTabMoveOn() });
-        M.fire.activated(2, 100);
-        await M.settle();
-
-        // Close tab 2 (the most recent), then land on tab 1.
-        M.fire.removed(2, { windowId: 100, isWindowClosing: false });
-        M.state.tabs = M.state.tabs.filter((t) => t.id !== 2);
-        M.state.tabs.forEach((t, i) => { t.index = i; });
-        M.fire.activated(1, 100);
-        await M.settle();
-
-        M.fire.created(M.openNewTab(4));
-        M.fire.activated(4, 100);
-        await M.settle();
-
-        assertEqual(M.indexOf(4), 1, 'should anchor to tab 1, not the closed tab 2');
-    });
-
-    test('a tab already in the right place is not moved', async () => {
-        M.reset({ tabs: threeTabs(), localStore: withTabMoveOn() });
-        M.fire.activated(3, 100); // last tab is active
-        await M.settle();
-
-        M.fire.created(M.openNewTab(4)); // appended right after tab 3 already
-        M.fire.activated(4, 100);
-        await M.settle();
-
-        assertEqual(M.state.moveCalls.length, 0, 'no redundant move');
-        assertEqual(M.indexOf(4), 3);
-    });
-});
 
 suite('background: sowon focus reporting', () => {
     function chromeTabs() {
@@ -397,5 +225,51 @@ suite('background: protobuf / gRPC-Web encoding', () => {
         const payload = Array.from(frame.slice(5));
         assertEqual(payload[0], 0x0a, 'field 1 present');
         assertEqual(payload[1], 0, 'with zero length');
+    });
+});
+
+suite('background: the prompt queue worker', () => {
+    const Worker = () => window.BB.PromptQueueWorker;
+    const item = (extra) => Object.assign({
+        id: 'q1', site: 'chatgpt', conv: 'abc12345', chain: 'pc_1', text: 'Later', model: '',
+        notBefore: 0, status: 'waiting', note: '', createdAt: 1, sentAt: 0,
+    }, extra);
+
+    test('a queue change keeps one alarm, at the earliest a prompt is due', async () => {
+        M.reset();
+        const soon = Date.now() + 3600000;
+        await chrome.storage.local.set({ bbPromptQueue: { items: [item({ notBefore: soon + 5000 }), item({ id: 'q2', notBefore: soon })] } });
+        await M.settle();
+        assertEqual(M.state.alarms[Worker().ALARM].when, soon);
+        await chrome.storage.local.set({ bbPromptQueue: { items: [] } });
+        await M.settle();
+        assertEqual(M.state.alarms[Worker().ALARM], undefined, 'the alarm outlived the queue');
+    });
+
+    test('a due prompt whose chat is open wakes that tab, and opens nothing', async () => {
+        M.reset({
+            tabs: [{ id: 5, index: 0, windowId: 100, url: 'https://chatgpt.com/c/abc12345' },
+                { id: 6, index: 1, windowId: 100, url: 'https://chatgpt.com/c/other' }],
+            localStore: { bbPromptQueue: { items: [item({ notBefore: Date.now() - 1000 })] } },
+        });
+        await Worker().wake();
+        assertDeepEqual(M.state.messages, [{ tabId: 5, message: { action: 'promptQueueWake' } }]);
+        assertEqual(M.state.created.length, 0);
+    });
+
+    test('with no tab on that chat, one is opened in the background', async () => {
+        M.reset({ localStore: { bbPromptQueue: { items: [item({ notBefore: Date.now() - 1000 }), item({ id: 'q2', notBefore: Date.now() - 500 })] } } });
+        await Worker().wake();
+        assertDeepEqual(M.state.created, [{ url: 'https://chatgpt.com/c/abc12345', active: false }], 'one tab per chat, not per prompt');
+    });
+
+    test('a new chat’s prompt opens the new-chat page with its model, and the setting can say no', async () => {
+        M.reset({ localStore: { bbPromptQueue: { items: [item({ conv: null, model: 'gpt-5', notBefore: Date.now() - 1000 })] } } });
+        await Worker().wake();
+        assertDeepEqual(M.state.created, [{ url: 'https://chatgpt.com/?model=gpt-5', active: false }]);
+
+        M.reset({ localStore: { chatgptQueueOpenTab: false, bbPromptQueue: { items: [item({ notBefore: Date.now() - 1000 })] } } });
+        await Worker().wake();
+        assertEqual(M.state.created.length, 0, 'a tab was opened with the setting off');
     });
 });

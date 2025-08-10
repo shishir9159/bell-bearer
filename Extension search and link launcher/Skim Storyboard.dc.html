@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-d9d8fdb5-7738-4161-97a5-af17018d47db/styles.css">
+<script src="_ds/industry-d9d8fdb5-7738-4161-97a5-af17018d47db/_ds_bundle.js"></script>
+<style>
+a { color: var(--color-accent); }
+a:hover { color: var(--color-accent-700); }
+</style>
+</helmet>
+
+<div style="background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);padding:48px 40px 72px">
+<div style="max-width:1320px;margin:0 auto">
+
+  <div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-end;border-bottom:1px solid var(--color-divider);padding-bottom:26px;margin-bottom:34px">
+    <div style="flex:1;min-width:280px">
+      <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--color-accent-700);margin-bottom:8px">Bell-Bearer &nbsp;/&nbsp; Skim</div>
+      <h1 style="font-size:46px;margin:0 0 8px;max-width:20ch">In-page search and link hints, frame by frame</h1>
+      <div style="font-size:15px;color:var(--color-neutral-700);max-width:62ch">One flow read left to right, then the placements that break the simple rule, then hint mode. Schematics, not screenshots: the working version is in the prototype.</div>
+    </div>
+    <div class="blueprint" style="padding:14px 16px;background:transparent;min-width:250px">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <div style="font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--color-neutral-700);margin-bottom:10px">Legend</div>
+      <div style="display:flex;flex-direction:column;gap:7px;font-size:12px">
+        <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:4px;background:var(--color-neutral-300);flex:none"></span> page text</div>
+        <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:4px;background:var(--color-accent);flex:none"></span> active match</div>
+        <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:12px;border:1px solid var(--color-accent-800);background:var(--color-neutral-100);flex:none"></span> Skim window</div>
+        <div style="display:flex;align-items:center;gap:9px"><span style="width:34px;height:12px;border:1px dashed var(--color-accent-600);flex:none"></span> clear band</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--color-neutral-700);margin-bottom:18px">A &nbsp;·&nbsp; The flow</div>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:46px">
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">01</span><span style="font-family:var(--font-heading);font-size:18px">Page at rest</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:12px;background:transparent;display:flex;flex-direction:column;gap:7px">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="height:7px;width:64%;background:var(--color-neutral-400)"></div>
+        <div style="height:4px;width:94%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:88%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:91%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:72%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:93%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:86%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:90%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:58%;background:var(--color-neutral-300)"></div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">Nothing is drawn on the page until it is asked for. <b style="color:var(--color-text)">Ctrl+Shift+F</b> starts Skim on any site.</div>
+    </div>
+
+    <div style="align-self:flex-start;margin-top:74px;font-size:17px;color:var(--color-neutral-500)">&rarr;</div>
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">02</span><span style="font-family:var(--font-heading);font-size:18px">Launcher opens</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:12px;background:transparent;display:flex;flex-direction:column;gap:7px;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="height:7px;width:64%;background:var(--color-neutral-400)"></div>
+        <div style="height:4px;width:94%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:88%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:91%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:72%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:93%;background:var(--color-neutral-300)"></div>
+        <div style="height:4px;width:86%;background:var(--color-neutral-300)"></div>
+        <div style="position:absolute;left:0;right:0;top:0;bottom:0;background:color-mix(in srgb, #1d2d3d 16%, transparent)"></div>
+        <div style="position:absolute;left:14px;right:14px;top:40px;height:58px;background:var(--color-neutral-100);border:1px solid var(--color-accent-800);box-shadow:var(--shadow-md);padding:8px 9px;display:flex;flex-direction:column;gap:6px">
+          <div style="height:7px;width:44%;background:var(--color-accent)"></div>
+          <div style="height:1px;background:var(--color-divider)"></div>
+          <div style="height:3px;width:78%;background:var(--color-neutral-300)"></div>
+          <div style="height:3px;width:62%;background:var(--color-neutral-300)"></div>
+        </div>
+        <div style="position:absolute;left:8px;right:8px;top:110px;bottom:8px;border:1px dashed var(--color-accent-600)"></div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">720px, centred, page dimmed behind. Everything under it is reserved as the clear band.</div>
+    </div>
+
+    <div style="align-self:flex-start;margin-top:74px;font-size:17px;color:var(--color-neutral-500)">&rarr;</div>
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">03</span><span style="font-family:var(--font-heading);font-size:18px">Two characters in</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:12px;background:transparent;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="position:absolute;inset:0;background:color-mix(in srgb, #1d2d3d 16%, transparent)"></div>
+        <div style="position:absolute;left:10px;right:10px;top:16px;bottom:16px;background:var(--color-neutral-100);border:1px solid var(--color-accent-800);box-shadow:var(--shadow-md);padding:9px 10px;display:flex;flex-direction:column;gap:5px">
+          <div style="height:8px;width:38%;background:var(--color-accent)"></div>
+          <div style="height:1px;background:var(--color-divider);margin:3px 0"></div>
+          <div style="font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:var(--color-neutral-600)">On this page</div>
+          <div style="height:9px;background:var(--color-accent-200);display:flex;align-items:center;padding:0 3px"><span style="height:3px;width:60%;background:var(--color-accent-800)"></span></div>
+          <div style="height:3px;width:74%;background:var(--color-neutral-300)"></div>
+          <div style="height:3px;width:66%;background:var(--color-neutral-300)"></div>
+          <div style="font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:3px">Tabs</div>
+          <div style="height:3px;width:70%;background:var(--color-neutral-300)"></div>
+          <div style="font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:3px">Commands</div>
+          <div style="height:3px;width:52%;background:var(--color-neutral-300)"></div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">Results group by source: page, tabs, history, commands. Each row is one line — match with the query bolded, section on the right.</div>
+    </div>
+
+    <div style="align-self:flex-start;margin-top:74px;font-size:17px;color:var(--color-neutral-500)">&rarr;</div>
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">04</span><span style="font-family:var(--font-heading);font-size:18px">Arrow down</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:12px;background:transparent;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="position:absolute;left:12px;right:12px;top:118px;display:flex;flex-direction:column;gap:7px">
+          <div style="height:4px;width:80%;background:var(--color-neutral-300)"></div>
+          <div style="height:5px;width:58%;background:var(--color-accent);box-shadow:0 0 0 3px color-mix(in srgb, var(--color-accent) 24%, transparent)"></div>
+          <div style="height:4px;width:88%;background:var(--color-neutral-300)"></div>
+        </div>
+        <div style="position:absolute;inset:0;background:color-mix(in srgb, #1d2d3d 16%, transparent)"></div>
+        <div style="position:absolute;left:14px;right:14px;top:14px;height:64px;background:var(--color-neutral-100);border:1px solid var(--color-accent-800);box-shadow:var(--shadow-md);padding:8px 9px;display:flex;flex-direction:column;gap:5px">
+          <div style="height:7px;width:40%;background:var(--color-accent)"></div>
+          <div style="height:1px;background:var(--color-divider)"></div>
+          <div style="height:8px;background:var(--color-accent-200)"></div>
+          <div style="height:3px;width:70%;background:var(--color-neutral-300)"></div>
+        </div>
+        <div style="position:absolute;left:8px;right:8px;top:90px;bottom:8px;border:1px dashed var(--color-accent-600)"></div>
+        <div style="position:absolute;right:12px;top:94px;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">clear band</div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">Every move scrolls. The page stops so the match sits in the middle of the band, with the line above and two below it intact.</div>
+    </div>
+  </div>
+
+  <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--color-neutral-700);margin-bottom:6px">B &nbsp;·&nbsp; Where the simple rule breaks</div>
+  <div style="font-size:14px;color:var(--color-neutral-700);max-width:70ch;margin-bottom:18px">A match is not always somewhere the page can be scrolled to. Five cases, and what each one does instead.</div>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:46px">
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">05</span><span style="font-family:var(--font-heading);font-size:18px">Already in the band</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:12px;background:transparent;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="position:absolute;left:12px;right:12px;top:112px;display:flex;flex-direction:column;gap:7px">
+          <div style="height:4px;width:80%;background:var(--color-neutral-300)"></div>
+          <div style="height:5px;width:52%;background:var(--color-accent)"></div>
+          <div style="height:4px;width:88%;background:var(--color-neutral-300)"></div>
+        </div>
+        <div style="position:absolute;inset:0;background:color-mix(in srgb, #1d2d3d 16%, transparent)"></div>
+        <div style="position:absolute;left:14px;right:14px;top:14px;height:64px;background:var(--color-neutral-100);border:1px solid var(--color-accent-800);box-shadow:var(--shadow-md);padding:8px 9px;display:flex;flex-direction:column;gap:5px">
+          <div style="height:7px;width:40%;background:var(--color-accent)"></div>
+          <div style="height:1px;background:var(--color-divider)"></div>
+          <div style="height:8px;background:var(--color-accent-200)"></div>
+        </div>
+        <div style="position:absolute;left:8px;right:8px;top:90px;bottom:8px;border:1px dashed var(--color-accent-600)"></div>
+        <div style="position:absolute;right:12px;bottom:10px;font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">0px scrolled</div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">The match is already where it belongs, so the page does not move. Only the highlight pulses.</div>
+    </div>
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">06</span><span style="font-family:var(--font-heading);font-size:18px">Nested scroller</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:12px;background:transparent;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="position:absolute;left:12px;width:48%;top:100px;display:flex;flex-direction:column;gap:7px">
+          <div style="height:4px;width:90%;background:var(--color-neutral-300)"></div>
+          <div style="height:4px;width:78%;background:var(--color-neutral-300)"></div>
+        </div>
+        <div style="position:absolute;right:12px;width:36%;top:96px;bottom:12px;border:1px solid var(--color-neutral-400);padding:6px;display:flex;flex-direction:column;gap:6px">
+          <div style="height:3px;width:80%;background:var(--color-neutral-300)"></div>
+          <div style="height:5px;width:66%;background:var(--color-accent)"></div>
+          <div style="height:3px;width:74%;background:var(--color-neutral-300)"></div>
+          <div style="position:absolute;right:2px;top:6px;bottom:6px;width:3px;background:var(--color-neutral-400)"></div>
+        </div>
+        <div style="position:absolute;inset:0;background:color-mix(in srgb, #1d2d3d 16%, transparent)"></div>
+        <div style="position:absolute;left:14px;right:14px;top:14px;height:58px;background:var(--color-neutral-100);border:1px solid var(--color-accent-800);box-shadow:var(--shadow-md);padding:8px 9px;display:flex;flex-direction:column;gap:5px">
+          <div style="height:7px;width:40%;background:var(--color-accent)"></div>
+          <div style="height:1px;background:var(--color-divider)"></div>
+          <div style="height:8px;background:var(--color-accent-200)"></div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">Two scrolls, in order: the inner container brings the match into its own view, then the page positions the container.</div>
+    </div>
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">07</span><span style="font-family:var(--font-heading);font-size:18px">Pinned panel</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:12px;background:transparent;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="position:absolute;right:12px;width:36%;top:12px;height:74px;border:1px solid var(--color-neutral-400);padding:6px;display:flex;flex-direction:column;gap:6px">
+          <div style="height:3px;width:80%;background:var(--color-neutral-300)"></div>
+          <div style="height:5px;width:66%;background:var(--color-accent)"></div>
+          <div style="height:3px;width:74%;background:var(--color-neutral-300)"></div>
+        </div>
+        <div style="position:absolute;left:12px;width:48%;top:14px;display:flex;flex-direction:column;gap:7px">
+          <div style="height:4px;width:90%;background:var(--color-neutral-300)"></div>
+          <div style="height:4px;width:82%;background:var(--color-neutral-300)"></div>
+          <div style="height:4px;width:88%;background:var(--color-neutral-300)"></div>
+        </div>
+        <div style="position:absolute;inset:0;background:color-mix(in srgb, #1d2d3d 16%, transparent)"></div>
+        <div style="position:absolute;left:14px;right:14px;bottom:14px;height:58px;background:var(--color-neutral-100);border:1px solid var(--color-accent-800);box-shadow:var(--shadow-md);padding:8px 9px;display:flex;flex-direction:column;gap:5px">
+          <div style="height:7px;width:40%;background:var(--color-accent)"></div>
+          <div style="height:1px;background:var(--color-divider)"></div>
+          <div style="height:8px;background:var(--color-accent-200)"></div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">A sticky panel cannot be scrolled into the band — it never moves. The launcher drops to the opposite edge instead.</div>
+    </div>
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">08</span><span style="font-family:var(--font-heading);font-size:18px">Collapsed section</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:12px;background:transparent;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="position:absolute;left:12px;right:12px;top:100px;border:1px solid var(--color-neutral-400)">
+          <div style="display:flex;align-items:center;gap:6px;padding:5px 7px;background:var(--color-neutral-200)"><span style="color:var(--color-accent-700);font-size:10px">+</span><span style="height:3px;width:46%;background:var(--color-neutral-400)"></span></div>
+          <div style="padding:7px;display:flex;flex-direction:column;gap:6px">
+            <div style="height:3px;width:84%;background:var(--color-neutral-300)"></div>
+            <div style="height:5px;width:60%;background:var(--color-accent)"></div>
+          </div>
+        </div>
+        <div style="position:absolute;inset:0;background:color-mix(in srgb, #1d2d3d 16%, transparent)"></div>
+        <div style="position:absolute;left:14px;right:14px;top:14px;height:58px;background:var(--color-neutral-100);border:1px solid var(--color-accent-800);box-shadow:var(--shadow-md);padding:8px 9px;display:flex;flex-direction:column;gap:5px">
+          <div style="height:7px;width:40%;background:var(--color-accent)"></div>
+          <div style="height:1px;background:var(--color-divider)"></div>
+          <div style="height:8px;background:var(--color-accent-200)"></div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">Opened before anything is measured. A closed section has no height to aim at, and it stays open after the jump.</div>
+    </div>
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">09</span><span style="font-family:var(--font-heading);font-size:18px">End of the page</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:12px;background:transparent;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="position:absolute;left:12px;right:12px;bottom:14px;display:flex;flex-direction:column;gap:7px">
+          <div style="height:4px;width:88%;background:var(--color-neutral-300)"></div>
+          <div style="height:4px;width:74%;background:var(--color-neutral-300)"></div>
+          <div style="height:5px;width:56%;background:var(--color-accent);box-shadow:0 0 0 3px color-mix(in srgb, var(--color-accent) 24%, transparent)"></div>
+        </div>
+        <div style="position:absolute;inset:0;background:color-mix(in srgb, #1d2d3d 16%, transparent)"></div>
+        <div style="position:absolute;left:14px;right:14px;top:8px;height:58px;background:var(--color-neutral-100);border:1px solid var(--color-accent-800);box-shadow:var(--shadow-md);padding:8px 9px;display:flex;flex-direction:column;gap:5px">
+          <div style="height:7px;width:40%;background:var(--color-accent)"></div>
+          <div style="height:1px;background:var(--color-divider)"></div>
+          <div style="height:8px;background:var(--color-accent-200)"></div>
+        </div>
+        <div style="position:absolute;left:8px;right:8px;top:76px;bottom:8px;border:1px dashed var(--color-accent-600)"></div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">There is no scroll left to spend, so the launcher gives up its position and rises to the top edge. The band becomes everything below it.</div>
+    </div>
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">10</span><span style="font-family:var(--font-heading);font-size:18px">Nothing, and too much</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:12px;background:transparent;overflow:hidden;display:flex;flex-direction:column;gap:10px;justify-content:center">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="background:var(--color-neutral-100);border:1px solid var(--color-accent-800);padding:9px 10px;display:flex;flex-direction:column;gap:6px">
+          <div style="height:6px;width:36%;background:var(--color-accent)"></div>
+          <div style="height:1px;background:var(--color-divider)"></div>
+          <div style="font-size:9px;color:var(--color-neutral-700)">No matches for &ldquo;zzt&rdquo;</div>
+        </div>
+        <div style="background:var(--color-neutral-100);border:1px solid var(--color-accent-800);padding:9px 10px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:6px"><span style="height:6px;width:30%;background:var(--color-accent)"></span><span style="margin-left:auto;font-size:8px;letter-spacing:0.1em;color:var(--color-neutral-600)">1 / 348</span></div>
+          <div style="height:1px;background:var(--color-divider)"></div>
+          <div style="height:7px;background:var(--color-accent-200)"></div>
+          <div style="height:3px;width:76%;background:var(--color-neutral-300)"></div>
+          <div style="height:3px;width:68%;background:var(--color-neutral-300)"></div>
+        </div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">Zero matches says so in one line. Hundreds are counted in the header; the first forty are listed and arrowing walks the rest.</div>
+    </div>
+  </div>
+
+  <div style="font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--color-neutral-700);margin-bottom:18px">C &nbsp;·&nbsp; Link hints</div>
+  <div style="display:flex;flex-wrap:wrap;gap:14px">
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">11</span><span style="font-family:var(--font-heading);font-size:18px">Press F</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:16px 14px;background:transparent;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="position:relative;height:34px;border:1px solid var(--color-neutral-400)"><span style="position:absolute;left:-6px;top:-8px;background:var(--color-accent);color:#f5f5f8;font-family:var(--font-heading);font-size:10px;letter-spacing:0.06em;padding:2px 4px;border:1px solid var(--color-accent-800)">FF</span></div>
+          <div style="position:relative;height:34px;border:1px solid var(--color-neutral-400)"><span style="position:absolute;left:-6px;top:-8px;background:var(--color-accent);color:#f5f5f8;font-family:var(--font-heading);font-size:10px;letter-spacing:0.06em;padding:2px 4px;border:1px solid var(--color-accent-800)">JF</span></div>
+          <div style="position:relative;height:34px;border:1px solid var(--color-neutral-400)"><span style="position:absolute;left:-6px;top:-8px;background:var(--color-accent);color:#f5f5f8;font-family:var(--font-heading);font-size:10px;letter-spacing:0.06em;padding:2px 4px;border:1px solid var(--color-accent-800)">DF</span></div>
+          <div style="position:relative;height:34px;border:1px solid var(--color-neutral-400)"><span style="position:absolute;left:-6px;top:-8px;background:var(--color-accent);color:#f5f5f8;font-family:var(--font-heading);font-size:10px;letter-spacing:0.06em;padding:2px 4px;border:1px solid var(--color-accent-800)">KF</span></div>
+          <div style="position:relative;height:34px;border:1px solid var(--color-neutral-400)"><span style="position:absolute;left:-6px;top:-8px;background:var(--color-accent);color:#f5f5f8;font-family:var(--font-heading);font-size:10px;letter-spacing:0.06em;padding:2px 4px;border:1px solid var(--color-accent-800)">SF</span></div>
+          <div style="position:relative;height:34px;border:1px solid var(--color-neutral-400)"><span style="position:absolute;left:-6px;top:-8px;background:var(--color-accent);color:#f5f5f8;font-family:var(--font-heading);font-size:10px;letter-spacing:0.06em;padding:2px 4px;border:1px solid var(--color-accent-800)">FJ</span></div>
+        </div>
+        <div style="position:absolute;left:14px;right:14px;bottom:12px;display:flex;border:1px solid var(--color-accent-800);background:var(--color-accent-900)">
+          <span style="padding:4px 7px;font-family:var(--font-heading);font-size:9px;letter-spacing:0.12em;text-transform:uppercase;background:var(--color-accent);color:#f5f5f8">Hints</span>
+          <span style="padding:4px 7px;font-size:9px;color:#f5f5f8">17 targets</span>
+          <span style="padding:4px 7px;font-size:9px;color:color-mix(in srgb, #f5f5f8 72%, transparent);margin-left:auto">F current tab</span>
+        </div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">Every link, button, field and card in view takes a label, tagged at its top-left corner so the target stays readable.</div>
+    </div>
+
+    <div style="align-self:flex-start;margin-top:74px;font-size:17px;color:var(--color-neutral-500)">&rarr;</div>
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">12</span><span style="font-family:var(--font-heading);font-size:18px">One key typed</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:16px 14px;background:transparent;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="position:relative;height:34px;border:1px solid var(--color-neutral-400)"><span style="position:absolute;left:-6px;top:-8px;background:var(--color-accent);color:#f5f5f8;font-family:var(--font-heading);font-size:10px;letter-spacing:0.06em;padding:2px 4px;border:1px solid var(--color-accent-800)"><span style="opacity:.45">F</span>F</span></div>
+          <div style="height:34px;border:1px solid var(--color-neutral-300)"></div>
+          <div style="height:34px;border:1px solid var(--color-neutral-300)"></div>
+          <div style="height:34px;border:1px solid var(--color-neutral-300)"></div>
+          <div style="height:34px;border:1px solid var(--color-neutral-300)"></div>
+          <div style="position:relative;height:34px;border:1px solid var(--color-neutral-400)"><span style="position:absolute;left:-6px;top:-8px;background:var(--color-accent);color:#f5f5f8;font-family:var(--font-heading);font-size:10px;letter-spacing:0.06em;padding:2px 4px;border:1px solid var(--color-accent-800)"><span style="opacity:.45">F</span>J</span></div>
+        </div>
+        <div style="position:absolute;left:14px;right:14px;bottom:12px;display:flex;border:1px solid var(--color-accent-800);background:var(--color-accent-900)">
+          <span style="padding:4px 7px;font-family:var(--font-heading);font-size:9px;letter-spacing:0.12em;text-transform:uppercase;background:var(--color-accent);color:#f5f5f8">Hints</span>
+          <span style="padding:4px 7px;font-size:9px;color:#f5f5f8">2 targets &nbsp;·&nbsp; typed &ldquo;f&rdquo;</span>
+        </div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">Labels that cannot match disappear outright. The typed character stays visible, dimmed, on the ones that survive.</div>
+    </div>
+
+    <div style="align-self:flex-start;margin-top:74px;font-size:17px;color:var(--color-neutral-500)">&rarr;</div>
+
+    <div style="width:246px">
+      <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:13px;letter-spacing:0.12em;color:var(--color-accent-700)">13</span><span style="font-family:var(--font-heading);font-size:18px">Second key fires it</span></div>
+      <div class="blueprint" style="position:relative;height:170px;padding:16px 14px;background:transparent;overflow:hidden">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="height:34px;border:1px solid var(--color-neutral-300)"></div>
+          <div style="height:34px;border:1px solid var(--color-neutral-300)"></div>
+          <div style="height:34px;border:1px solid var(--color-neutral-300)"></div>
+          <div style="height:34px;border:1px solid var(--color-neutral-300)"></div>
+          <div style="height:34px;border:1px solid var(--color-neutral-300)"></div>
+          <div style="height:34px;border:1px solid var(--color-accent);background:color-mix(in srgb, var(--color-accent) 45%, transparent)"></div>
+        </div>
+        <div style="position:absolute;left:14px;right:14px;bottom:12px;display:flex;align-items:center;gap:7px;border:1px solid var(--color-divider);background:var(--color-neutral-100);padding:5px 8px;box-shadow:var(--shadow-sm)">
+          <span style="font-size:8px;letter-spacing:0.14em;text-transform:uppercase;color:var(--color-accent-700)">Bell-Bearer</span>
+          <span style="font-size:9px;color:var(--color-text)">Opened in the current tab</span>
+        </div>
+      </div>
+      <div style="font-size:12.5px;line-height:1.5;color:var(--color-neutral-700);margin-top:10px">The target flashes and hint mode ends. <b style="color:var(--color-text)">Shift+F</b> at the start opens the same target in a new tab instead.</div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+</x-dc>
+</body>
+</html>

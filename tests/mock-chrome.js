@@ -1,6 +1,6 @@
 /**
  * A mock of the subset of the `chrome.*` extension API that bell-bearer uses,
- * good enough to load background.js / content.js unmodified and drive real
+ * good enough to load the background and content sources unmodified and drive real
  * event sequences against them.
  *
  * Extension code registers its listeners once at load, so the mock is
@@ -15,7 +15,7 @@
         command: [], actionClicked: [],
         tabsActivated: [], tabsCreated: [], tabsRemoved: [], tabsUpdated: [],
         storageChanged: [], windowsFocusChanged: [], tabGroupsUpdated: [],
-        contextMenuClicked: [],
+        contextMenuClicked: [], alarm: [],
     };
 
     const state = {
@@ -26,6 +26,8 @@
         fetchCalls: [],
         menus: [],
         messages: [],
+        alarms: {},
+        created: [],
         // Set to true to make the mocked fetch reject (simulates sowon being down).
         failFetch: false,
         // Forced error for the next tabs.move call, e.g. Chrome's transient
@@ -33,6 +35,16 @@
         moveErrorsRemaining: 0,
     };
 
+    /**
+     * Defer a mocked callback the way a real chrome.* call does.
+     *
+     * This has to stay a macrotask. A microtask (queueMicrotask) makes the
+     * suite dramatically faster in a throttled background tab, but it also
+     * hoists every mocked callback ahead of any setTimeout the code under test
+     * is waiting on — which silently reorders the back-off path in sowon, and
+     * turns a real regression test green
+     * whatever the code does. Fidelity beats speed here.
+     */
     const soon = (fn) => setTimeout(fn, 0);
     function pick(keys, store) {
         const out = {};
@@ -42,9 +54,59 @@
         });
         return out;
     }
-    const evt = (arr) => ({ addListener: (f) => arr.push(f) });
+    // removeListener too: Settings.watch hands back an unsubscribe that
+    // calls it, and without it every UI a spec builds and tears down stays
+    // subscribed to storage for the rest of the run, answering changes made
+    // for the tests after it.
+    const evt = (arr) => ({
+        addListener: (f) => arr.push(f),
+        removeListener: (f) => {
+            const at = arr.indexOf(f);
+            if (at >= 0) arr.splice(at, 1);
+        },
+    });
+
+    /**
+     * Chrome MV3 (and Firefox) give every callback API a promise form when the
+     * callback is omitted, and the shared modules use it throughout. `dual`
+     * wraps a callback-style implementation so the mock offers both.
+     */
+    function dual(impl) {
+        return function (...args) {
+            const last = args[args.length - 1];
+            if (typeof last === 'function') return impl.apply(this, args);
+            return new Promise((resolve, reject) => {
+                impl.apply(this, [...args, (result) => {
+                    const error = chrome.runtime.lastError;
+                    if (error) reject(new Error(error.message));
+                    else resolve(result);
+                }]);
+            });
+        };
+    }
+
+    /** A match pattern, as tabs.query takes one: `*://chatgpt.com/*`. */
+    function matchesUrl(url, patterns) {
+        return [].concat(patterns).some((pattern) => {
+            const [, scheme, host, path] = /^(\*|[a-z]+):\/\/([^/]*)(\/.*)$/.exec(pattern) || [];
+            if (!scheme) return false;
+            const glob = (text) => text.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+            const re = new RegExp(`^${scheme === '*' ? 'https?' : scheme}://${glob(host)}${glob(path)}$`);
+            return re.test(String(url || ''));
+        });
+    }
 
     const chrome = {
+        alarms: {
+            create: (name, info) => { state.alarms[name] = Object.assign({ name }, info); },
+            clear: dual((name, cb) => {
+                const had = !!state.alarms[name];
+                delete state.alarms[name];
+                soon(() => cb(had));
+            }),
+            get: dual((name, cb) => soon(() => cb(state.alarms[name]))),
+            onAlarm: evt(listeners.alarm),
+        },
         runtime: {
             onInstalled: evt(listeners.runtimeInstalled),
             onStartup: evt(listeners.runtimeStartup),
@@ -66,20 +128,20 @@
         action: { onClicked: evt(listeners.actionClicked) },
         storage: {
             local: {
-                get: (k, cb) => soon(() => cb(pick(k, state.localStore))),
-                set: (o, cb) => {
+                get: dual((k, cb) => soon(() => cb(pick(k, state.localStore)))),
+                set: dual((o, cb) => {
                     const changes = {};
                     Object.keys(o).forEach((k) => {
                         changes[k] = { oldValue: state.localStore[k], newValue: o[k] };
                     });
                     Object.assign(state.localStore, o);
                     listeners.storageChanged.forEach((f) => f(changes, 'local'));
-                    if (cb) soon(cb);
-                },
+                    soon(cb);
+                }),
             },
             session: {
-                get: (k, cb) => soon(() => cb(pick(k, state.sessionStore))),
-                set: (o, cb) => { Object.assign(state.sessionStore, o); if (cb) soon(cb); },
+                get: dual((k, cb) => soon(() => cb(pick(k, state.sessionStore)))),
+                set: dual((o, cb) => { Object.assign(state.sessionStore, o); soon(cb); }),
             },
             onChanged: evt(listeners.storageChanged),
         },
@@ -88,17 +150,18 @@
             onCreated: evt(listeners.tabsCreated),
             onRemoved: evt(listeners.tabsRemoved),
             onUpdated: evt(listeners.tabsUpdated),
-            get: (id, cb) => soon(() => {
+            get: dual((id, cb) => soon(() => {
                 const t = state.tabs.find((x) => x.id === id);
                 chrome.runtime.lastError = t ? undefined : { message: 'No tab with id: ' + id };
                 cb(t);
                 chrome.runtime.lastError = undefined;
-            }),
-            query: (q, cb) => soon(() => cb(state.tabs.filter((t) =>
+            })),
+            query: dual((q, cb) => soon(() => cb(state.tabs.filter((t) =>
+                (q.url === undefined || matchesUrl(t.url, q.url)) &&
                 (q.windowId === undefined || t.windowId === q.windowId) &&
                 (q.active === undefined || t.active === q.active) &&
                 (q.currentWindow === undefined || true) &&
-                (q.lastFocusedWindow === undefined || true)))),
+                (q.lastFocusedWindow === undefined || true))))),
             move: (id, props, cb) => {
                 state.moveCalls.push({ id, index: props.index });
                 if (state.moveErrorsRemaining > 0) {
@@ -117,20 +180,20 @@
                 }
                 soon(() => { chrome.runtime.lastError = undefined; if (cb) cb(); });
             },
-            sendMessage: (id, msg, cb) => {
+            sendMessage: dual((id, msg, cb) => {
                 state.messages.push({ tabId: id, message: msg });
-                if (cb) soon(() => cb({ ok: true }));
-            },
-            create: (props, cb) => { if (cb) soon(() => cb({ id: 999 })); },
-            update: (id, props, cb) => { if (cb) soon(() => cb({})); },
+                soon(() => cb({ ok: true }));
+            }),
+            create: dual((props, cb) => { state.created.push(props); soon(() => cb({ id: 999 })); }),
+            update: dual((id, props, cb) => soon(() => cb({}))),
         },
         windows: {
             onFocusChanged: evt(listeners.windowsFocusChanged),
-            update: (id, props, cb) => { if (cb) soon(() => cb({})); },
+            update: dual((id, props, cb) => soon(() => cb({}))),
         },
         // Left undefined by default; tests that need tab groups set it.
         tabGroups: undefined,
-        scripting: { executeScript: (o, cb) => { if (cb) soon(() => cb([{ result: 1 }])); } },
+        scripting: { executeScript: dual((o, cb) => soon(() => cb([{ result: 1 }]))) },
     };
 
     // Mocked fetch used by the sowon reporting path.
@@ -158,6 +221,8 @@
             state.fetchCalls = [];
             state.menus = [];
             state.messages = [];
+            state.alarms = {};
+            state.created = [];
             state.failFetch = !!opts.failFetch;
             state.moveErrorsRemaining = opts.moveErrorsRemaining || 0;
             chrome.tabGroups = opts.tabGroups;
@@ -172,6 +237,7 @@
             installed: () => listeners.runtimeInstalled.forEach((f) => f({ reason: 'install' })),
             startup: () => listeners.runtimeStartup.forEach((f) => f()),
             menuClicked: (info, tab) => listeners.contextMenuClicked.forEach((f) => f(info, tab)),
+            alarm: (name) => listeners.alarm.forEach((f) => f({ name })),
         },
 
         menuIds: () => state.menus.map((m) => m.id),
@@ -199,7 +265,20 @@
             return t ? t.index : -1;
         },
 
-        /** Lets queued async callbacks (storage, tabs.get, retries) run. */
-        settle: (ms) => new Promise((r) => setTimeout(r, ms === undefined ? 250 : ms)),
+        /**
+         * Lets queued async callbacks (storage, tabs.get, retries) run.
+         *
+         * The default has to move with the tab's visibility. Every mocked
+         * callback is deferred through a setTimeout, and a browser throttles
+         * those hard in a background tab — so a wait that comfortably drains
+         * the queue in a visible tab drains almost none of it in a hidden one,
+         * and tests fail for the environment rather than for the code.
+         *
+         * An explicit argument is never scaled: where a test passes one it is
+         * usually timing something deliberately, such as staying inside the
+         * sowon throttle window.
+         */
+        settle: (ms) => new Promise((r) =>
+            setTimeout(r, ms === undefined ? (document.hidden ? 4000 : 250) : ms)),
     };
 })();

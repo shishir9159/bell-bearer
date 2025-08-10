@@ -5,50 +5,144 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bell Bearer - Dashboard</title>
+    <link rel="stylesheet" href="skin-fonts.css">
+    <link rel="stylesheet" href="skins.css">
     <link rel="stylesheet" href="dashboard.css">
 </head>
 
-<body>
+<body data-skin="default">
     <div class="dashboard-container">
-        <header>
+        <header class="bb-ruled">
             <div class="header-top">
-                <h1><img class="brand-icon" src="icons/icon48.png" alt="">Bell Bearer Dashboard</h1>
-                <button id="themeToggle" class="btn-theme" title="Toggle dark theme">🌙</button>
+                <h1 class="bb-wordmark"><img class="brand-icon" src="icons/icon48.png" alt="">Bell Bearer Dashboard</h1>
+                <div class="header-actions">
+                    <!-- Every setting and all saved data, to and from one file: src/page/backup-buttons.js. -->
+                    <button id="exportSettingsBtn" class="btn-header" type="button" title="Export every Bell Bearer setting and all saved data to one file">Export</button>
+                    <button id="importSettingsBtn" class="btn-header" type="button" title="Import settings and data from a Bell Bearer export">Import</button>
+                    <button id="themeToggle" class="btn-theme" title="Toggle dark theme">🌙</button>
+                </div>
             </div>
             <nav class="nav-tabs">
                 <button id="dashboardTab" class="nav-tab active">Dashboard</button>
-                <button id="subscriptionsTab" class="nav-tab">Subscriptions</button>
+                <button id="trialsTab" class="nav-tab">Trials</button>
+                <button id="statsTab" class="nav-tab">Activity</button>
                 <button id="settingsTab" class="nav-tab">Settings</button>
             </nav>
         </header>
 
         <div id="dashboardView" class="view active">
-            <div class="dashboard-header">
-                <h2>Your Saved Videos</h2>
-                <div class="dashboard-controls">
-                    <button id="exportBtn" class="btn-secondary">📤 Export</button>
-                    <button id="importBtn" class="btn-secondary">📥 Import</button>
-                    <button id="clearAll" class="btn-secondary btn-danger">🗑 Clear All</button>
-                </div>
-            </div>
+            <!-- The launcher: one large card per site Bell Bearer works with.
+                 A site gets a card here and a workspace of its own below —
+                 its subtabs come from SITE_TABS in dashboard.js and its
+                 panels are the .site-panel blocks carrying its data-site. -->
+            <div class="sites-grid" id="sitesGrid"></div>
 
-            <div class="videos-container" id="videosContainer">
-                <!-- Videos will be rendered here -->
+            <div class="site-workspace" id="siteWorkspace" hidden>
+                <div class="site-workspace-head">
+                    <button id="siteBackBtn" class="btn-secondary" type="button">&larr; Sites</button>
+                    <div class="site-workspace-brand">
+                        <span class="site-workspace-icon" id="siteWorkspaceIcon"></span>
+                        <h2 id="siteWorkspaceName" class="bb-proper"></h2>
+                    </div>
+                    <nav class="site-subtabs" id="siteSubtabs"></nav>
+                </div>
+
+                <div id="siteCheckpointsPanel" class="site-panel" data-site="youtube">
+                    <div class="dashboard-header">
+                        <h2>Your Saved Videos</h2>
+                        <div class="dashboard-controls">
+                            <label class="sort-field">
+                                <span class="sort-label">Sort</span>
+                                <!-- Options come from Bookmarks.SORTS so the popup and
+                                     this list can never disagree about what they mean. -->
+                                <select id="sortVideos" class="select-control" aria-label="Sort saved videos"></select>
+                            </label>
+                            <button id="clearAll" class="btn-secondary btn-danger">Clear All</button>
+                        </div>
+                    </div>
+
+                    <div class="videos-container" id="videosContainer">
+                        <!-- Videos will be rendered here -->
+                    </div>
+                </div>
+
+                <div id="siteSubscriptionsPanel" class="site-panel" data-site="youtube">
+                    <div class="subscriptions-header">
+                        <h2>Subscription Manager</h2>
+                        <div class="subscriptions-controls">
+                            <button id="addTopicBtn" class="btn-primary">+ Add Topic</button>
+                            <button id="refreshVideosBtn" class="btn-secondary">Refresh</button>
+                        </div>
+                    </div>
+
+                    <div class="topics-container" id="topicsContainer">
+                        <!-- Topics will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- Chess sites' Games panels, drawn by ChessStats.mountPanel
+                     (src/page/chess-stats.js) — one view for both sites. -->
+                <div id="chessGamesPanel" class="site-panel" data-site="chess" data-chess-games="chess"></div>
+                <div id="lichessGamesPanel" class="site-panel" data-site="lichess" data-chess-games="lichess"></div>
+
+                <!-- The X pouch: two independent topic lists, one panel each.
+                     Drawn by src/page/x-pouch-view.js, which is also the only
+                     place a topic is made, renamed, reordered or deleted. -->
+                <div id="twitterPeoplePanel" class="site-panel" data-site="twitter" data-x-pouch="people"></div>
+                <div id="twitterPostsPanel" class="site-panel" data-site="twitter" data-x-pouch="posts"></div>
+
+                <!-- Today against the daily limit, for the two sites that have
+                     a workspace. What the limit is lives in one list under
+                     Settings → General. Drawn by src/page/time-limit-view.js. -->
+                <div id="twitterTimePanel" class="site-panel" data-site="twitter" data-time-limit-view="twitter"></div>
+                <div id="redditTimePanel" class="site-panel" data-site="reddit" data-time-limit-view="reddit"></div>
+
+                <!-- Your own list on the site — accounts followed, subreddits
+                     joined — out to a text file and back in again. Drawn by
+                     src/page/roster-view.js; the work happens on the site's
+                     own pages, in src/content/roster.js. -->
+                <div id="twitterRosterPanel" class="site-panel" data-site="twitter" data-roster="twitter"></div>
+                <div id="redditRosterPanel" class="site-panel" data-site="reddit" data-roster="reddit"></div>
+
+                <!-- LeetCode, drawn by src/page/leet-stats.js. Review is
+                     first because the question the log exists to answer is
+                     "what should I do today". -->
+                <div id="leetReviewPanel" class="site-panel" data-site="leetcode" data-leet-review></div>
+                <div id="leetHeatPanel" class="site-panel" data-site="leetcode" data-leet-stats></div>
+                <div id="leetNotesPanel" class="site-panel" data-site="leetcode" data-leet-notes></div>
+                <div id="leetTemplatesPanel" class="site-panel" data-site="leetcode" data-leet-templates></div>
+
+                <!-- TypeRacer, drawn by src/page/typeracer-stats.js. Races
+                     first, because "am I getting faster" is the question
+                     anyone opens a typing log to ask. -->
+                <div id="typerRacesPanel" class="site-panel" data-site="typeracer" data-typer-races></div>
+                <div id="typerWeakPanel" class="site-panel" data-site="typeracer" data-typer-weak></div>
+                <div id="typerPracticePanel" class="site-panel" data-site="typeracer" data-typer-practice></div>
+
+                <!-- The chat sites, drawn by src/page/chat-views.js. -->
+                <div id="chatgptPinsPanel" class="site-panel" data-site="chatgpt" data-chat-pins="chatgpt"></div>
+                <div id="chatgptPromptsPanel" class="site-panel" data-site="chatgpt" data-chat-prompts></div>
+                <div id="chatgptQueuePanel" class="site-panel" data-site="chatgpt" data-chat-queue="chatgpt"></div>
+                <div id="claudePinsPanel" class="site-panel" data-site="claude" data-chat-pins="claude"></div>
+                <div id="claudePromptsPanel" class="site-panel" data-site="claude" data-chat-prompts></div>
+                <div id="claudeQueuePanel" class="site-panel" data-site="claude" data-chat-queue="claude"></div>
             </div>
         </div>
 
-        <div id="subscriptionsView" class="view">
-            <div class="subscriptions-header">
-                <h2>Subscription Manager</h2>
-                <div class="subscriptions-controls">
-                    <button id="addTopicBtn" class="btn-primary">+ Add Topic</button>
-                    <button id="refreshVideosBtn" class="btn-secondary">🔄 Refresh</button>
+        <!-- Trials: the desk of tab groups and the ungrouped tabs beside it.
+             Drawn by src/page/trials.js; the group work is in the worker. -->
+        <div id="trialsView" class="view"></div>
+
+        <div id="statsView" class="view">
+            <div class="dashboard-header">
+                <h2>Activity</h2>
+                <div class="range-seg" id="statsRange" role="group" aria-label="Range">
+                    <button class="range-opt" type="button" data-range="today" aria-pressed="true">Today</button>
+                    <button class="range-opt" type="button" data-range="week" aria-pressed="false">Last 7 days</button>
+                    <button class="range-opt" type="button" data-range="month" aria-pressed="false">Last 30 days</button>
                 </div>
             </div>
-
-            <div class="topics-container" id="topicsContainer">
-                <!-- Topics will be rendered here -->
-            </div>
+            <div id="statsBody"></div>
         </div>
 
         <div id="settingsView" class="view">
@@ -56,184 +150,95 @@
                 <h2>Settings</h2>
             </div>
 
+            <div id="settingsCommon">
             <div class="settings-content">
-                <div class="settings-section">
-                    <h3>Keyboard Shortcuts</h3>
-                    <div class="shortcut-list">
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">Ctrl + B</span>
-                            <span class="shortcut-desc">Create checkpoint (hold and release)</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">Alt + 1-9</span>
-                            <span class="shortcut-desc">Skip forward by that many seconds</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">Shift + 1-9</span>
-                            <span class="shortcut-desc">Skip backward by that many seconds</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">Ctrl + Shift + 1-9</span>
-                            <span class="shortcut-desc">Temporary 3x speed boost for that many seconds</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">&gt;</span>
-                            <span class="shortcut-desc">Increase playback speed</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">&lt;</span>
-                            <span class="shortcut-desc">Decrease playback speed</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">+</span>
-                            <span class="shortcut-desc">Reset playback speed to 1x</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">Ctrl + Shift + L</span>
-                            <span class="shortcut-desc">Copy this page as a Markdown link (rebindable at chrome://extensions/shortcuts)</span>
-                        </div>
-                    </div>
+                <div class="settings-section" data-plate="Appearance">
+                    <p>Skins restyle the popup and this dashboard. Each one carries its own day and night, so the moon button switches within the skin you picked.</p>
 
-                    <div class="settings-option">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="enableSkipShortcuts">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="setting-label">Enable Numeric Skip Shortcuts (Alt+1-9 forward / Shift+1-9 back)</span>
-                    </div>
-
-                    <div class="settings-option" style="margin-top: 16px;">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="showSpeedButtonsInPopup">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="setting-label">Show speed buttons in popup (Default: Off) — speed also works on any site via the &gt; &lt; + keys</span>
+                    <div class="skin-picker" id="skinPicker">
+                        <button class="skin-option" type="button" data-skin-id="default" aria-pressed="true">
+                            <span class="skin-swatches"><span style="background:#b81808"></span><span style="background:#ffffff"></span><span style="background:#191515"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Default</span>
+                                <span class="skin-note">The house red, sampled from the icon</span>
+                            </span>
+                        </button>
+                        <button class="skin-option" type="button" data-skin-id="riso" aria-pressed="false">
+                            <span class="skin-swatches"><span style="background:#ff48b0"></span><span style="background:#1f5fd0"></span><span style="background:#ffc60b"></span><span style="background:#efece0"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Riso Paint</span>
+                                <span class="skin-note">Three spot inks on newsprint</span>
+                            </span>
+                        </button>
+                        <button class="skin-option" type="button" data-skin-id="medieval" aria-pressed="false">
+                            <span class="skin-swatches"><span style="background:#9c2b16"></span><span style="background:#ecdcb8"></span><span style="background:#a8791f"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Medieval</span>
+                                <span class="skin-note">Parchment, iron-gall ink, rubricated red</span>
+                            </span>
+                        </button>
+                        <button class="skin-option" type="button" data-skin-id="deco" aria-pressed="false">
+                            <span class="skin-swatches"><span style="background:#b99447"></span><span style="background:#f7f3e8"></span><span style="background:#14110d"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Art Deco</span>
+                                <span class="skin-note">Ivory and gilt, everything letter-spaced</span>
+                            </span>
+                        </button>
                     </div>
 
                     <div class="settings-option" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
-                        <span class="setting-label">Preferred Subtitles</span>
-                        <select id="preferredSubtitleLanguage" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color, #ddd); background: var(--bg-secondary, #fff); color: var(--text-color, #333); font-size: 14px; min-width: 200px;">
-                            <option value="en">English</option>
-                            <option value="af">Afrikaans</option>
-                            <option value="sq">Albanian</option>
-                            <option value="am">Amharic</option>
-                            <option value="ar">Arabic</option>
-                            <option value="hy">Armenian</option>
-                            <option value="az">Azerbaijani</option>
-                            <option value="bn">Bangla</option>
-                            <option value="eu">Basque</option>
-                            <option value="be">Belarusian</option>
-                            <option value="bs">Bosnian</option>
-                            <option value="bg">Bulgarian</option>
-                            <option value="my">Burmese</option>
-                            <option value="ca">Catalan</option>
-                            <option value="zh-Hans">Chinese (Simplified)</option>
-                            <option value="zh-Hant">Chinese (Traditional)</option>
-                            <option value="hr">Croatian</option>
-                            <option value="cs">Czech</option>
-                            <option value="da">Danish</option>
-                            <option value="nl">Dutch</option>
-                            <option value="eo">Esperanto</option>
-                            <option value="et">Estonian</option>
-                            <option value="fil">Filipino</option>
-                            <option value="fi">Finnish</option>
-                            <option value="fr">French</option>
-                            <option value="gl">Galician</option>
-                            <option value="ka">Georgian</option>
-                            <option value="de">German</option>
-                            <option value="el">Greek</option>
-                            <option value="gu">Gujarati</option>
-                            <option value="iw">Hebrew</option>
-                            <option value="hi">Hindi</option>
-                            <option value="hu">Hungarian</option>
-                            <option value="is">Icelandic</option>
-                            <option value="id">Indonesian</option>
-                            <option value="ga">Irish</option>
-                            <option value="it">Italian</option>
-                            <option value="ja">Japanese</option>
-                            <option value="jv">Javanese</option>
-                            <option value="kn">Kannada</option>
-                            <option value="kk">Kazakh</option>
-                            <option value="km">Khmer</option>
-                            <option value="ko">Korean</option>
-                            <option value="ku">Kurdish</option>
-                            <option value="ky">Kyrgyz</option>
-                            <option value="lo">Lao</option>
-                            <option value="lv">Latvian</option>
-                            <option value="lt">Lithuanian</option>
-                            <option value="lb">Luxembourgish</option>
-                            <option value="mk">Macedonian</option>
-                            <option value="mg">Malagasy</option>
-                            <option value="ms">Malay</option>
-                            <option value="ml">Malayalam</option>
-                            <option value="mt">Maltese</option>
-                            <option value="mi">Maori</option>
-                            <option value="mr">Marathi</option>
-                            <option value="mn">Mongolian</option>
-                            <option value="ne">Nepali</option>
-                            <option value="no">Norwegian</option>
-                            <option value="ps">Pashto</option>
-                            <option value="fa">Persian</option>
-                            <option value="pl">Polish</option>
-                            <option value="pt">Portuguese</option>
-                            <option value="pa">Punjabi</option>
-                            <option value="ro">Romanian</option>
-                            <option value="ru">Russian</option>
-                            <option value="sr">Serbian</option>
-                            <option value="sd">Sindhi</option>
-                            <option value="si">Sinhala</option>
-                            <option value="sk">Slovak</option>
-                            <option value="sl">Slovenian</option>
-                            <option value="so">Somali</option>
-                            <option value="es">Spanish</option>
-                            <option value="su">Sundanese</option>
-                            <option value="sw">Swahili</option>
-                            <option value="sv">Swedish</option>
-                            <option value="tg">Tajik</option>
-                            <option value="ta">Tamil</option>
-                            <option value="te">Telugu</option>
-                            <option value="th">Thai</option>
-                            <option value="tr">Turkish</option>
-                            <option value="uk">Ukrainian</option>
-                            <option value="ur">Urdu</option>
-                            <option value="uz">Uzbek</option>
-                            <option value="vi">Vietnamese</option>
-                            <option value="cy">Welsh</option>
-                            <option value="xh">Xhosa</option>
-                            <option value="yi">Yiddish</option>
-                            <option value="yo">Yoruba</option>
-                            <option value="zu">Zulu</option>
-                        </select>
-                    </div>
-
-                    <div class="settings-option" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
-                        <span class="setting-label">Add-to-pouch button</span>
-                        <select id="pouchButtonStyle" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color, #ddd); background: var(--bg-secondary, #fff); color: var(--text-color, #333); font-size: 14px; min-width: 200px;">
-                            <option value="auto">Icon beside Subscribe (matches YouTube)</option>
-                            <option value="accent">Icon beside Subscribe (accent color)</option>
-                            <option value="hidden">Hidden</option>
+                        <span class="setting-label">Popup size</span>
+                        <select id="popupWidth">
+                            <option value="wide">Wide — video list and checkpoints side by side</option>
+                            <option value="compact">Compact — one column, pick a video to see its checkpoints</option>
                         </select>
                     </div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>General</h3>
+                <!-- Every scope's shortcuts in one place, on one keyboard with
+                     a tab per site. They used to sit inside each site's own
+                     panel, which meant looking in four places to answer "what
+                     is bound to what". Drawn by src/page/keyboard.js. -->
+                <div class="settings-section" data-plate="Keyboard Shortcuts">
+                    <div id="shortcutsKeyboard"></div>
+                </div>
 
+                <div class="settings-section" data-plate="General">
+                    <!-- Skim and the link hints claim bare-Shift letters on
+                         every site, so both are off until they are asked for;
+                         the keys they take then appear on the keyboard above. -->
                     <div class="settings-option">
                         <label class="toggle-switch">
-                            <input type="checkbox" id="openTabNextToCurrent">
+                            <input type="checkbox" id="skimMode">
                             <span class="toggle-slider"></span>
                         </label>
-                        <span class="setting-label">Open new tabs next to the current tab (including Ctrl+T)</span>
+                        <span class="setting-label">Skim — one launcher over the page for finding things. <kbd class="kbd-chip">Shift</kbd> <kbd class="kbd-chip">F</kbd> searches the page itself and scrolls each match to just under the window, <kbd class="kbd-chip">Shift</kbd> <kbd class="kbd-chip">H</kbd> opens on your history and <kbd class="kbd-chip">Shift</kbd> <kbd class="kbd-chip">A</kbd> on the browser actions it can run for you</span>
                     </div>
 
                     <div class="settings-option" style="margin-top: 16px;">
                         <label class="toggle-switch">
-                            <input type="checkbox" id="syncThemeWithYouTube">
+                            <input type="checkbox" id="linkHints">
                             <span class="toggle-slider"></span>
                         </label>
-                        <span class="setting-label">Match YouTube theme — switch Bell Bearer to dark mode when YouTube is dark</span>
+                        <span class="setting-label">Link hints — <kbd class="kbd-chip">Shift</kbd> <kbd class="kbd-chip">L</kbd> labels every link and button in view; type a label to open it in a tab next to this one. Scrolling or <kbd class="kbd-chip">Esc</kbd> clears the labels</span>
                     </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="pouchShortcut">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Pouch shortcut — <kbd class="kbd-chip">Shift</kbd> <kbd class="kbd-chip">P</kbd> opens the pouch on YouTube, x.com and leetcode.com, and the chat panel on chatgpt.com. It does nothing anywhere else, so the key stays a plain capital P on every other site</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="trackActivity">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Track my activity — adds an Activity tab with time per site, per hour and per day. Recorded on this machine only, never sent anywhere; time totals kept for 60 days and page titles for 7</span>
+                    </div>
+
 
                     <div class="settings-option" style="margin-top: 16px;">
                         <label class="toggle-switch">
@@ -250,19 +255,550 @@
                         </label>
                         <span class="setting-label">Show "Copy as Markdown" in the right-click menu — converts a link or the page to <code>[title](url)</code> only when you explicitly pick it; ordinary copying is never affected</span>
                     </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cookieAcceptButton">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Show "Always accept" on cookie popups — accepts, and answers that site's popup for you from then on</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cookieRejectButton">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Show "Always reject" on cookie popups — rejects, and answers that site's popup for you from then on</span>
+                    </div>
+
+                    <!-- Remembered sites: src/page/cookie-sites-panel.js. -->
+                    <div class="cookie-sites" id="cookieSitesPanel"></div>
+
+                    <!-- Sites held to a daily limit, and what each limit is.
+                         Drawn by src/page/limit-sites-panel.js. This used to
+                         be two settings inside x.com's and reddit.com's own
+                         panels, which is why only those two could have one. -->
+                    <div class="cookie-sites" id="limitSitesPanel"></div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>About</h3>
-                    <p>Bell Bearer helps you organize and manage your YouTube video bookmarks.</p>
+                <!-- The watch party's settings. The popup sets the first
+                     three as a party starts; these are the same keys, bound
+                     by id like everything else here. -->
+                <div class="settings-section" data-plate="Watch party">
+                    <p>Watch a YouTube video or a Netflix episode in sync with other people, each on their own account. Start or join one from the popup on the video.</p>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="partyName">Your name in the room</label>
+                        <input type="text" class="text-control" id="partyName" maxlength="40" placeholder="How the room sees you" autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="partyControl">Who controls playback</label>
+                        <select id="partyControl">
+                            <option value="everyone">Everyone</option>
+                            <option value="host">Host and co-hosts</option>
+                        </select>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="partyWaitForAll">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Wait for anyone buffering — the room holds until they catch up. Off, they catch up on their own and nobody waits</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="partyFollowMedia">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Follow the party to its next video — off, the page says the party is elsewhere and offers the way there</span>
+                    </div>
+
+                    <p class="settings-hint">A party server, for the Server way to connect: a hosted one (<code>wss://</code>), or one you run yourself (<code>ws://ip:port</code>).</p>
+                    <div class="settings-option" style="margin-top: 8px;">
+                        <label class="setting-label" for="partyServerUrl">Party server</label>
+                        <input type="text" class="text-control" style="flex: 1;" id="partyServerUrl" placeholder="wss://party.example" autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <p class="settings-hint">Peer-to-peer parties, by codes or through trackers, find each other with STUN. When a direct connection cannot be made — a symmetric NAT on either side — a TURN server relays it: <code>turn:user:pass@host:port</code>. Several of any of these go separated by spaces.</p>
+                    <div class="settings-option" style="margin-top: 8px;">
+                        <label class="setting-label" for="partyIceServers">STUN servers</label>
+                        <input type="text" class="text-control" style="flex: 1;" id="partyIceServers" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="partyTurn">TURN server</label>
+                        <input type="text" class="text-control" style="flex: 1;" id="partyTurn" placeholder="turn:user:pass@host:port" autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <p class="settings-hint">The WebTorrent trackers a Tracker party meets through. They see which addresses connect and when, never what is said.</p>
+                    <div class="settings-option" style="margin-top: 8px;">
+                        <label class="setting-label" for="partyTrackers">Trackers</label>
+                        <input type="text" class="text-control" style="flex: 1;" id="partyTrackers" autocomplete="off" spellcheck="false">
+                    </div>
+                </div>
+
+                <div class="settings-section" data-plate="Site-specific">
+                    <p>Settings that only make sense for one particular site — pick it to see them.</p>
+                    <div class="sites-grid" id="settingsSitesGrid"></div>
+                </div>
+
+                <div class="settings-section" data-plate="About">
+                    <p>Bell Bearer helps you organize and manage your <span class="bb-proper">YouTube</span> video bookmarks and your <span class="bb-proper">Chess.com</span> and <span class="bb-proper">Lichess</span> games.</p>
                     <p>Version: 1.0</p>
                 </div>
             </div>
-        </div>
+            </div>
 
-        <input type="file" id="importFile" accept=".json" style="display: none;">
+            <div class="site-workspace" id="siteSettingsWorkspace" hidden>
+                <div class="site-workspace-head">
+                    <button id="siteSettingsBackBtn" class="btn-secondary" type="button">&larr; Settings</button>
+                    <div class="site-workspace-brand">
+                        <span class="site-workspace-icon" id="siteSettingsIcon"></span>
+                        <h2 id="siteSettingsName" class="bb-proper"></h2>
+                    </div>
+                </div>
+
+                <div class="settings-content">
+                    <!-- Chess sites' settings, drawn by src/page/chess-settings.js. -->
+                    <div class="settings-section" id="chatgptSettingsPanel" data-site-settings="chatgpt" data-chat-settings="chatgpt" hidden></div>
+                    <div class="settings-section" id="claudeSettingsPanel" data-site-settings="claude" data-chat-settings="claude" hidden></div>
+                    <div class="settings-section" id="chessSettingsPanel" data-site-settings="chess" data-chess-settings="chess" hidden></div>
+                    <div class="settings-section" id="lichessSettingsPanel" data-site-settings="lichess" data-chess-settings="lichess" hidden></div>
+
+
+                    <div class="settings-section" id="twitterSettingsPanel" data-site-settings="twitter"
+                         data-plate="Twitter" data-plate-proper hidden>
+                        <p class="settings-hint">How long you mean to spend on x.com in a day is set in the one list that covers every site — Settings &rarr; General, "Hold me to a daily limit on". Time counts only while a tab of the site is on screen and this window has focus. The tally is today's and nothing older than today is stored — at midnight it is gone, not archived.</p>
+                        <div data-time-limit-view="twitter"></div>
+
+                        <p class="settings-hint">Promoted posts are found by the tracking wrapper Twitter puts around a paid placement, not by the word "Promoted", so this works whatever language the site is in. Nothing is deleted — hidden entries keep their place in the site's own bookkeeping, which is what stops the timeline jumping as you scroll.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="twitterHideAds">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="twitterHideAds">Hide promoted posts and Premium upsells</label>
+                        </div>
+
+                        <p class="settings-hint">What Bell Bearer adds to Twitter's own rows, each off until you ask for it. The pouch itself is always there — the Pouch row in Twitter's left navigation, the panel it opens, and the People and Posts tabs here.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="twitterHideBookmark">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="twitterHideBookmark">Remove Twitter's bookmark button from posts</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="twitterPouchPeople">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="twitterPouchPeople">Add to pouch from a profile, to capture people</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="twitterPouchPosts">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="twitterPouchPosts">Add to pouch from a post, to capture posts</label>
+                        </div>
+                        <p class="settings-hint">The bookmark is hidden rather than deleted, so nothing you have already bookmarked on Twitter is touched and turning this back off puts the button where it was. The pouch button stands in the bookmark's place when both are on.</p>
+                    </div>
+
+                    <div class="settings-section" id="redditSettingsPanel" data-site-settings="reddit"
+                         data-plate="Reddit" data-plate-proper hidden>
+                        <p class="settings-hint">How long you mean to spend on reddit.com in a day is set in the one list that covers every site — Settings &rarr; General, "Hold me to a daily limit on". Time counts only while a tab of the site is on screen and this window has focus. The tally is today's and nothing older than today is stored — at midnight it is gone, not archived.</p>
+                        <div data-time-limit-view="reddit"></div>
+                    </div>
+
+                    <!-- Every control here binds by carrying the same id as
+                         its setting key — see src/page/settings-form.js. There
+                         is no load/save pair to write. -->
+                    <div class="settings-section" id="leetcodeSettingsPanel" data-site-settings="leetcode"
+                         data-plate="LeetCode" data-plate-proper hidden>
+                        <p class="settings-hint">Your LeetCode username, used to draw the practice heat map from LeetCode's own record rather than only from what Bell Bearer watched — which starts the day you installed it. The request is public and carries no cookies: it tells LeetCode nothing about who is asking, and works signed out. Leave it empty to keep the map local.</p>
+                        <div class="settings-option">
+                            <label class="setting-label" for="leetUsername">LeetCode username</label>
+                            <input type="text" id="leetUsername" placeholder="e.g. your profile name" autocomplete="off" spellcheck="false">
+                        </div>
+
+                        <p class="settings-hint">Bell Bearer times each problem with LeetCode's own stopwatch rather than a clock of its own, so the number on the page and the number recorded against the attempt are the same number. Whether a submission passed is read from LeetCode's own network calls, not from the result banner — and pressing Run is not a submission, so it never counts against you.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="leetStartTimer">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="leetStartTimer">Start LeetCode's timer when a problem opens</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="leetGradePrompt">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="leetGradePrompt">Ask how it went after an accepted submission</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="leetNoteButton">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="leetNoteButton">Show your note beside the problem title</label>
+                        </div>
+
+                        <p class="settings-hint">Scheduling is FSRS-5, the algorithm Anki's newer scheduler uses, with its published weights. Target retention is the chance of remembering a problem at the moment it comes back around: raise it and problems return sooner and more often, lower it and you see each one less but forget more of them. Ninety percent is the value the algorithm is tuned for; below seventy or above ninety-seven it stops behaving sensibly, so the field will not go there.</p>
+                        <div class="settings-option">
+                            <label class="setting-label" for="leetRetention">Target retention (percent)</label>
+                            <input type="number" id="leetRetention" min="70" max="97" step="1">
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="leetMaxInterval">Longest gap it may schedule (days)</label>
+                            <input type="number" id="leetMaxInterval" min="1" max="3650" step="1">
+                        </div>
+
+                        <p class="settings-hint">Mock interview mode hides what an interview would not give you — the difficulty, the topic tags, the hints, the similar questions and the solutions tab — and runs a countdown. Nothing is deleted; leaving the mode puts the page back exactly as it was. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd> starts one on the problem you are reading, whether or not this is on.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="leetMockMode">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="leetMockMode">Open every problem in mock interview mode</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="leetMockMinutes">Countdown (minutes)</label>
+                            <input type="number" id="leetMockMinutes" min="1" max="180" step="1">
+                        </div>
+
+                        <p class="settings-hint">Code templates are written by you — nothing ships with the extension. Select working code in LeetCode's editor and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> to save it as one, and the same keys offer them back, filtered to the language the editor is in. That shortcut has its own key handling so that it works with the caret inside the editor, where every other shortcut deliberately stays out of the way.</p>
+                    </div>
+
+                    <!-- Every control here binds by carrying the same id as
+                         its setting key — see src/page/settings-form.js. The
+                         one exception is the voice list, whose <option>s are
+                         built from Sfx.VOICE_IDS by typeracer-stats.js so
+                         that adding a voice is one edit rather than two. -->
+                    <div class="settings-section" id="typeracerSettingsPanel" data-site-settings="typeracer"
+                         data-plate="TypeRacer" data-plate-proper hidden>
+                        <p class="settings-hint">Bell Bearer measures a race from the keystrokes themselves rather than from TypeRacer's scoreboard — which is what makes the weak-spot tables possible at all, since the site publishes none of it. Nothing is sent anywhere and no raw keystrokes are kept: each race is folded into a table of letter pairs at the end and the stream is thrown away. Speed and accuracy are read off the result panel as a cross-check only.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="typerTrack">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="typerTrack">Record races and keystroke timing</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="typerMinSamples">Hide a letter pair under this many readings</label>
+                            <input type="number" id="typerMinSamples" min="3" max="200" step="1">
+                        </div>
+
+                        <p class="settings-hint">The typing caret is the marker showing where you are in the quote, not the mouse pointer. Leaving it on <em>TypeRacer's own</em> draws nothing and changes nothing on the page. Any other shape hides the site's own marking while ours is up and puts it straight back the moment you switch away — and if the quote's markup cannot be read, no caret is drawn rather than one in the wrong place. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> cycles the shapes from the page itself.</p>
+                        <div class="settings-option">
+                            <label class="setting-label" for="typerCaret">Caret</label>
+                            <select id="typerCaret">
+                                <option value="site">TypeRacer's own</option>
+                                <option value="bar">Bar</option>
+                                <option value="block">Block</option>
+                                <option value="underline">Underline</option>
+                                <option value="outline">Outline</option>
+                            </select>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="typerCaretSmooth">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="typerCaretSmooth">Glide between characters</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="typerCaretBlink">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="typerCaretBlink">Blink</label>
+                        </div>
+
+                        <p class="settings-hint">The sounds are synthesised rather than played from a file, so there is nothing to load before the first keystroke can click and no audio ships with the extension. The volume is a percent and above 100 it really is louder — Web Audio gain is not capped the way an audio element's volume is. At 0 nothing is played at all rather than played silently.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="typerSound">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="typerSound">Play a sound as you type</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="typerSoundVoice">Key sound</label>
+                            <select id="typerSoundVoice"></select>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="typerSoundVolume">Volume (percent)</label>
+                            <input type="range" id="typerSoundVolume" min="0" max="150" step="5">
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="typerErrorSound">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="typerErrorSound">A different sound on a wrong character</label>
+                        </div>
+                    </div>
+
+                    <div class="settings-section" id="youtubeSettingsPanel" data-site-settings="youtube"
+                         data-plate="YouTube" data-plate-proper hidden>
+                        <div class="settings-option" style="display: flex; align-items: center; gap: 12px;">
+                            <span class="setting-label">Add-to-pouch button</span>
+                            <select id="pouchButtonStyle">
+                                <option value="auto">Icon beside Subscribe (matches YouTube)</option>
+                                <option value="accent">Icon beside Subscribe (accent color)</option>
+                                <option value="hidden">Hidden</option>
+                            </select>
+                        </div>
+
+                        <div class="settings-option" style="margin-top: 16px;">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="syncThemeWithYouTube">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="setting-label">Match YouTube theme — switch Bell Bearer to dark mode when YouTube is dark</span>
+                        </div>
+
+                        <div class="settings-option" style="margin-top: 16px;">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="showSpeedButtonsInPopup">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="setting-label">Show speed buttons in popup (Default: Off) — speed also works on any site via the &gt; &lt; + keys</span>
+                        </div>
+
+                        <div class="settings-option" style="margin-top: 16px;">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="rememberPlaybackSpeed">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="setting-label">Keep my playback speed — re-apply the speed you chose when a site resets it (new video, ad break)</span>
+                        </div>
+
+                        <div class="settings-option" style="display: flex; align-items: center; gap: 12px;">
+                            <span class="setting-label">Preferred Subtitles</span>
+                            <select id="preferredSubtitleLanguage">
+                                <option value="en">English</option>
+                                <option value="af">Afrikaans</option>
+                                <option value="sq">Albanian</option>
+                                <option value="am">Amharic</option>
+                                <option value="ar">Arabic</option>
+                                <option value="hy">Armenian</option>
+                                <option value="az">Azerbaijani</option>
+                                <option value="bn">Bangla</option>
+                                <option value="eu">Basque</option>
+                                <option value="be">Belarusian</option>
+                                <option value="bs">Bosnian</option>
+                                <option value="bg">Bulgarian</option>
+                                <option value="my">Burmese</option>
+                                <option value="ca">Catalan</option>
+                                <option value="zh-Hans">Chinese (Simplified)</option>
+                                <option value="zh-Hant">Chinese (Traditional)</option>
+                                <option value="hr">Croatian</option>
+                                <option value="cs">Czech</option>
+                                <option value="da">Danish</option>
+                                <option value="nl">Dutch</option>
+                                <option value="eo">Esperanto</option>
+                                <option value="et">Estonian</option>
+                                <option value="fil">Filipino</option>
+                                <option value="fi">Finnish</option>
+                                <option value="fr">French</option>
+                                <option value="gl">Galician</option>
+                                <option value="ka">Georgian</option>
+                                <option value="de">German</option>
+                                <option value="el">Greek</option>
+                                <option value="gu">Gujarati</option>
+                                <option value="iw">Hebrew</option>
+                                <option value="hi">Hindi</option>
+                                <option value="hu">Hungarian</option>
+                                <option value="is">Icelandic</option>
+                                <option value="id">Indonesian</option>
+                                <option value="ga">Irish</option>
+                                <option value="it">Italian</option>
+                                <option value="ja">Japanese</option>
+                                <option value="jv">Javanese</option>
+                                <option value="kn">Kannada</option>
+                                <option value="kk">Kazakh</option>
+                                <option value="km">Khmer</option>
+                                <option value="ko">Korean</option>
+                                <option value="ku">Kurdish</option>
+                                <option value="ky">Kyrgyz</option>
+                                <option value="lo">Lao</option>
+                                <option value="lv">Latvian</option>
+                                <option value="lt">Lithuanian</option>
+                                <option value="lb">Luxembourgish</option>
+                                <option value="mk">Macedonian</option>
+                                <option value="mg">Malagasy</option>
+                                <option value="ms">Malay</option>
+                                <option value="ml">Malayalam</option>
+                                <option value="mt">Maltese</option>
+                                <option value="mi">Maori</option>
+                                <option value="mr">Marathi</option>
+                                <option value="mn">Mongolian</option>
+                                <option value="ne">Nepali</option>
+                                <option value="no">Norwegian</option>
+                                <option value="ps">Pashto</option>
+                                <option value="fa">Persian</option>
+                                <option value="pl">Polish</option>
+                                <option value="pt">Portuguese</option>
+                                <option value="pa">Punjabi</option>
+                                <option value="ro">Romanian</option>
+                                <option value="ru">Russian</option>
+                                <option value="sr">Serbian</option>
+                                <option value="sd">Sindhi</option>
+                                <option value="si">Sinhala</option>
+                                <option value="sk">Slovak</option>
+                                <option value="sl">Slovenian</option>
+                                <option value="so">Somali</option>
+                                <option value="es">Spanish</option>
+                                <option value="su">Sundanese</option>
+                                <option value="sw">Swahili</option>
+                                <option value="sv">Swedish</option>
+                                <option value="tg">Tajik</option>
+                                <option value="ta">Tamil</option>
+                                <option value="te">Telugu</option>
+                                <option value="th">Thai</option>
+                                <option value="tr">Turkish</option>
+                                <option value="uk">Ukrainian</option>
+                                <option value="ur">Urdu</option>
+                                <option value="uz">Uzbek</option>
+                                <option value="vi">Vietnamese</option>
+                                <option value="cy">Welsh</option>
+                                <option value="xh">Xhosa</option>
+                                <option value="yi">Yiddish</option>
+                                <option value="yo">Yoruba</option>
+                                <option value="zu">Zulu</option>
+                            </select>
+                        </div>
+
+                        <p class="settings-hint">Shorts has no way to skip within a short — <kbd>↑</kbd> and <kbd>↓</kbd> change short, and nothing seeks. With this on, <kbd>←</kbd> and <kbd>→</kbd> skip back and forward while a Shorts page is open; everywhere else the arrow keys are left alone. Both keys can be rebound under Shortcuts.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="shortsSeek">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="shortsSeek">Skip back and forward in Shorts with the arrow keys</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="shortsSeekSeconds">Seconds per skip</label>
+                            <input type="number" id="shortsSeekSeconds" min="1" max="30" step="1">
+                        </div>
+
+                        <p class="settings-hint">The reader puts YouTube's own player beside the video's transcript, with your checkpoints under it — the same player, moved rather than copied, so it keeps playing, at the speed and with the captions it had. Open it from the popup or with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>.</p>
+                        <div class="settings-option">
+                            <label class="setting-label" for="readerLayout">Open the reader in</label>
+                            <select id="readerLayout">
+                                <option value="split">Split — video beside the transcript</option>
+                                <option value="stacked">Stacked — video above the transcript</option>
+                                <option value="theatre">Theatre — video first, transcript in a drawer</option>
+                                <option value="focus">Focus — transcript first, video in the corner</option>
+                            </select>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="readerFollow">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="readerFollow">Scroll the transcript along with the video</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="readerAutoCheckpoint">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="readerAutoCheckpoint">Highlighting transcript text saves it as a checkpoint, with an Undo — off, it offers a Save button instead</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="readerHideChrome">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="readerHideChrome">Cover YouTube's header too — off, the reader starts under it so search stays in reach</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="readerFontSize">Transcript text size (px)</label>
+                            <input type="number" id="readerFontSize" min="12" max="24" step="1">
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="readerLineHeight">Line spacing</label>
+                            <input type="range" id="readerLineHeight" min="1.2" max="2" step="0.1">
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="readerLineWidth">Line length (em)</label>
+                            <input type="number" id="readerLineWidth" min="30" max="60" step="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
+    <!-- Shared modules, in dependency order. Classic scripts sharing a `BB`
+         namespace: the extension has no build step by design. -->
+    <script src="src/shared/time.js"></script>
+    <script src="src/shared/dom.js"></script>
+    <script src="src/shared/speed.js"></script>
+    <script src="src/shared/settings.js"></script>
+    <script src="src/shared/keybindings.js"></script>
+    <script src="src/shared/backup.js"></script>
+    <script src="src/shared/skin.js"></script>
+    <script src="src/shared/activity.js"></script>
+    <script src="src/shared/youtube.js"></script>
+    <script src="src/shared/bookmarks.js"></script>
+    <script src="src/shared/pins.js"></script>
+    <script src="src/shared/subscriptions.js"></script>
+    <script src="src/shared/feed.js"></script>
+    <script src="src/shared/site-icons.js"></script>
+    <script src="src/shared/feather-icons.js"></script>
+    <script src="src/shared/cookie-sites.js"></script>
+    <script src="src/shared/limit-sites.js"></script>
+    <script src="src/shared/chess.js"></script>
+    <script src="src/shared/lichess.js"></script>
+    <script src="src/shared/chess-sites.js"></script>
+    <script src="src/page/ui.js"></script>
+    <script src="src/page/settings-form.js"></script>
+    <script src="src/page/skin-picker.js"></script>
+    <script src="src/page/cookie-sites-panel.js"></script>
+    <script src="src/page/limit-sites-panel.js"></script>
+    <script src="src/page/shortcut-list.js"></script>
+    <script src="src/page/plate.js"></script>
+    <script src="src/page/site-sort.js"></script>
+    <script src="src/shared/trials.js"></script>
+    <script src="src/page/trials.js"></script>
+    <script src="src/page/keyboard.js"></script>
+    <script src="src/page/stats.js"></script>
+    <script src="src/page/heat-map.js"></script>
+    <script src="src/page/spark.js"></script>
+    <script src="src/shared/sfx.js"></script>
+    <script src="src/shared/typeracer.js"></script>
+    <script src="src/page/typeracer-stats.js"></script>
+    <script src="src/shared/time-limits.js"></script>
+    <script src="src/page/time-limit-view.js"></script>
+    <script src="src/shared/x-pouch.js"></script>
+    <script src="src/page/x-pouch-view.js"></script>
+    <script src="src/shared/roster.js"></script>
+    <script src="src/page/roster-view.js"></script>
+    <script src="src/shared/fsrs.js"></script>
+    <script src="src/shared/leetcode.js"></script>
+    <script src="src/shared/leet-templates.js"></script>
+    <script src="src/shared/leet-api.js"></script>
+    <script src="src/page/leet-stats.js"></script>
+    <script src="src/page/leet-templates-view.js"></script>
+    <script src="src/page/chess-stats.js"></script>
+    <script src="src/page/chess-settings.js"></script>
+    <script src="src/page/backup-buttons.js"></script>
+    <script src="src/page/tab-actions.js"></script>
+    <script src="src/shared/chat-sites.js"></script>
+    <script src="src/shared/chat-pins.js"></script>
+    <script src="src/shared/prompt-templates.js"></script>
+    <script src="src/shared/prompt-queue.js"></script>
+    <script src="src/page/chat-views.js"></script>
+    <script src="src/page/chat-settings.js"></script>
     <script src="dashboard.js"></script>
 </body>
 

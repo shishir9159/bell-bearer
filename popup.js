@@ -1,892 +1,509 @@
-class BookmarkManager {
-    constructor() {
-        this.videos = [];
-        this.selectedVideoId = null;
-        this.init();
-    }
+/**
+ * The toolbar popup: recent checkpoints, and an optional speed bar.
+ *
+ * Modals, toasts, theme and tab control live in the shared modules; this file
+ * is the popup's own wiring and rendering only. Import, export and "clear all"
+ * belong to the dashboard now, so the popup header is Dashboard alone.
+ *
+ * Layout note: the popup is fluid between 340 and 800px, and which end of that
+ * range it asks for is the `popupWidth` setting — src/page/popup-width.js puts
+ * the answer on <html> before this file runs. Under 560px it is a single column
+ * and selecting a video replaces the list with the detail pane (`.is-detail` on
+ * .main-content, unwound by the back button); at 560px and up both panes are on
+ * screen and the class is inert.
+ */
+(function () {
+    'use strict';
 
-    async init() {
-        await this.loadBookmarks();
-        this.setupEventListeners();
-        this.setupTheme();
-        this.setupSpeedBar();
-        this.setupInstructions();
-        this.renderVideoList();
-        this.renderBookmarkDetails();
-    }
+    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site,
+        ChessSites, ChessStats, ChessLimitButton, Leet, LeetPopup } = window.BB;
 
-    setupInstructions() {
-        const box = document.getElementById('instructions');
-        if (!box) return;
-
-        // Permanently hide the "How to use" box once dismissed.
-        chrome.storage.local.get(['hideInstructions'], (res) => {
-            if (res.hideInstructions) box.style.display = 'none';
-        });
-
-        const dismiss = document.getElementById('dismissInstructions');
-        if (dismiss) {
-            dismiss.addEventListener('click', () => {
-                box.style.display = 'none';
-                chrome.storage.local.set({ hideInstructions: true });
-            });
-        }
-    }
-
-    async loadBookmarks() {
-        try {
-            const result = await chrome.storage.local.get(['youtubeBookmarks', 'showSpeedButtonsInPopup']);
-            this.videos = result.youtubeBookmarks || [];
-            // Speed buttons are hidden in the popup unless turned on in Settings.
-            this.showSpeedButtonsInPopup = result.showSpeedButtonsInPopup === true;
-        } catch (error) {
-            console.error('Error loading bookmarks:', error);
+    class Popup {
+        constructor() {
             this.videos = [];
-            this.showSpeedButtonsInPopup = false;
-        }
-    }
-
-    setupEventListeners() {
-        document.getElementById('dashboardBtn').addEventListener('click', () => {
-            this.openDashboard();
-        });
-        
-        document.getElementById('clearAll').addEventListener('click', () => {
-            this.clearAllBookmarks();
-        });
-        
-        document.getElementById('exportBtn').addEventListener('click', () => {
-            this.exportBookmarks();
-        });
-        
-        document.getElementById('importBtn').addEventListener('click', () => {
-            this.showImportOptions();
-        });
-        
-        document.getElementById('importFile').addEventListener('change', (e) => {
-            this.handleFileImport(e.target.files[0]);
-        });
-
-        // event delegation for bookmark actions
-        const bookmarkDetails = document.getElementById('bookmarkDetails');
-        bookmarkDetails.addEventListener('click', (e) => {
-            if (e.target.classList.contains('seek-btn')) {
-                const bookmarkItem = e.target.closest('.bookmark-item');
-                if (bookmarkItem) {
-                    const videoId = bookmarkItem.dataset.videoId;
-                    const time = parseFloat(e.target.dataset.time);
-                    this.seekToTime(videoId, time);
-                }
-            } else if (e.target.classList.contains('delete-btn')) {
-                const bookmarkItem = e.target.closest('.bookmark-item');
-                if (bookmarkItem) {
-                    const videoId = bookmarkItem.dataset.videoId;
-                    const bookmarkIndex = parseInt(bookmarkItem.dataset.bookmarkIndex);
-                    this.deleteBookmark(videoId, bookmarkIndex);
-                }
-            }
-        });
-    }
-
-    async setupSpeedBar() {
-        const bar = document.getElementById('speedControlBar');
-        if (!bar) return;
-
-        if (!this.showSpeedButtonsInPopup) {
-            bar.style.display = 'none';
-            return;
+            this.selectedVideoId = null;
+            this.showSpeedBar = false;
+            this.speedTab = null;
+            this.site = 'other';
+            this.isWebPage = false;
+            /** The LeetCode problem in the active tab, if it is one. */
+            this.leetSlug = '';
+            this.leetTitle = '';
         }
 
-        bar.style.display = 'flex';
+        async init() {
+            Ui.installTheme({});
+            if (Skin) await Skin.install();
+            this.wireControls();
+            await this.applySiteLayout();
 
-        // Read current speed from active tab
-        try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (tab) {
-                const results = await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    func: () => {
-                        const v = document.querySelector('video');
-                        return v ? v.playbackRate : 1;
-                    }
+            const [videos, settings] = await Promise.all([
+                Bookmarks.load(),
+                Settings.get(['showSpeedButtonsInPopup', 'hideInstructions']),
+            ]);
+            this.videos = videos;
+            this.showSpeedBar = settings.showSpeedButtonsInPopup;
+
+            this.setupInstructions(settings.hideInstructions);
+            this.render();
+            this.setupSpeedBar();
+
+            // The popup is a separate document from the pages that write
+            // checkpoints, so without this it shows a stale list whenever a
+            // checkpoint is saved while it is open.
+            Settings.watch([Bookmarks.KEY], () => {
+                Bookmarks.load().then((next) => {
+                    this.videos = next;
+                    this.render();
                 });
-                const rate = results?.[0]?.result ?? 1;
-                document.getElementById('speedDisplay').textContent = `${rate}×`;
-            }
-        } catch (_) {
-            // Tab may not support scripting — ignore
-        }
-
-        document.getElementById('speedUpBtn').addEventListener('click', () => {
-            this.changeSpeedActiveTab(0.5);
-        });
-        document.getElementById('speedDownBtn').addEventListener('click', () => {
-            this.changeSpeedActiveTab(-0.5);
-        });
-    }
-
-    async changeSpeedActiveTab(delta) {
-        try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab) return;
-
-            const results = await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                func: (d) => {
-                    const v = document.querySelector('video');
-                    if (!v) return null;
-                    v.playbackRate = Math.max(0.25, Math.min(16, v.playbackRate + d));
-                    return v.playbackRate;
-                },
-                args: [delta]
             });
-
-            const newRate = results?.[0]?.result;
-            if (newRate != null) {
-                document.getElementById('speedDisplay').textContent = `${newRate}×`;
-            }
-        } catch (error) {
-            console.error('Error changing active tab speed:', error);
-        }
-    }
-
-    renderVideoList() {
-        const videoList = document.getElementById('videoList');
-        
-        if (this.videos.length === 0) {
-            videoList.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">🔖</div>
-                    <h3>No checkpoints yet</h3>
-                    <p>Hold <strong>Ctrl + B</strong> on any YouTube video to drop your first checkpoint.</p>
-                </div>
-            `;
-            return;
         }
 
-        videoList.innerHTML = this.videos.map(video => `
-            <div class="video-item ${video.id === this.selectedVideoId ? 'selected' : ''}" 
-                 data-video-id="${video.id}">
-                <div class="video-title">${this.escapeHtml(video.title)}</div>
-                <div class="video-meta">
-                    <span class="bookmark-count">${video.bookmarks.length}</span>
-                    checkpoint${video.bookmarks.length !== 1 ? 's' : ''}
-                </div>
-            </div>
-        `).join('');
+        // ------------------------------------------------------- controls
 
-        videoList.querySelectorAll('.video-item').forEach(item => {
-            item.addEventListener('click', () => {
+        wireControls() {
+            const on = (id, event, handler) => {
+                const element = document.getElementById(id);
+                if (element) element.addEventListener(event, handler);
+            };
+
+            on('dashboardBtn', 'click', () => openDashboard(ChessSites.get(this.site) ? `#site/${this.site}` : ''));
+            on('openReaderBtn', 'click', () => this.openReader());
+            on('partyStartBtn', 'click', () => this.openParty('start'));
+            on('partyJoinBtn', 'click', () => this.openParty('join'));
+
+            // The daily-limit override. It draws itself or stays hidden, and
+            // is not a chess-panel control: the limit can bite while you are
+            // on any page, and this is the one place to lift it.
+            ChessLimitButton.mount(document.getElementById('limitOverrideBtn')).refresh();
+
+            // Delegation: the list is re-rendered wholesale, so per-row
+            // listeners would have to be re-attached (and were leaking).
+            const list = document.getElementById('videoList');
+            list.addEventListener('click', (event) => {
+                const item = event.target.closest('.video-item');
+                if (item) this.selectVideo(item.dataset.videoId);
+            });
+            list.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                const item = event.target.closest('.video-item');
+                if (!item) return;
+                event.preventDefault();
                 this.selectVideo(item.dataset.videoId);
             });
-        });
-    }
 
-    renderBookmarkDetails() {
-        const bookmarkDetails = document.getElementById('bookmarkDetails');
-        
-        if (!this.selectedVideoId) {
-            bookmarkDetails.innerHTML = `
-                <div class="no-selection">
-                    <div class="empty-icon">⏱️</div>
-                    <p>Select a video to see its checkpoints</p>
-                </div>
-            `;
-            return;
-        }
+            const details = document.getElementById('bookmarkDetails');
+            details.addEventListener('click', (event) => {
+                if (event.target.closest('.bd-back')) {
+                    this.closeDetail();
+                    return;
+                }
 
-        const video = this.videos.find(v => v.id === this.selectedVideoId);
-        if (!video) return;
+                const button = event.target.closest('button');
+                if (!button) return;
+                const item = button.closest('.bookmark-item');
+                if (!item) return;
 
-        bookmarkDetails.innerHTML = `
-            <div class="bd-header">
-                <h3>${this.escapeHtml(video.title)}</h3>
-                <span class="bd-count">${video.bookmarks.length} checkpoint${video.bookmarks.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div class="checkpoint-timeline">
-                ${video.bookmarks.map((bookmark, index) => {
-                    const isSegment = 'start' in bookmark && 'end' in bookmark;
-                    const time = isSegment ? bookmark.start : bookmark.time;
-                    const timeDisplay = isSegment
-                        ? `${this.formatTime(bookmark.start)} - ${this.formatTime(bookmark.end)}`
-                        : this.formatTime(bookmark.time);
-
-                    return `
-                    <div class="bookmark-item" data-bookmark-index="${index}" data-video-id="${video.id}">
-                        <div class="bookmark-time">${timeDisplay}</div>
-                        ${bookmark.note ? `<div class="bookmark-note">${this.escapeHtml(bookmark.note)}</div>` : ''}
-                        <div class="bookmark-actions">
-                            <button class="btn-small seek-btn" data-time="${time}">▶ Go to</button>
-                            <button class="btn-small delete delete-btn" data-bookmark-index="${index}">Delete</button>
-                        </div>
-                    </div>
-                `;
-                }).join('')}
-            </div>
-        `;
-    }
-
-    selectVideo(videoId) {
-        this.selectedVideoId = videoId;
-        this.renderVideoList();
-        this.renderBookmarkDetails();
-    }
-    async changeSpeed(videoId, delta) {
-        try {
-            const tabs = await chrome.tabs.query({});
-            const youtubeTab = tabs.find(tab => {
-                const url = tab.url || '';
-                const currentVideoId = this.extractVideoIdFromUrl(url);
-                return (url.includes('youtube.com') || url.includes('youtu.be')) && currentVideoId === videoId;
+                if (button.classList.contains('seek-btn')) {
+                    this.seek(item.dataset.videoId, Number(button.dataset.time));
+                } else if (button.classList.contains('delete-btn')) {
+                    this.deleteBookmark(item.dataset.videoId, Number(item.dataset.bookmarkIndex));
+                }
             });
 
-            if (youtubeTab) {
-                // Switch to existing tab
-                await chrome.tabs.update(youtubeTab.id, { active: true });
-                await chrome.windows.update(youtubeTab.windowId, { focused: true });
-
-                try {
-                    await chrome.tabs.sendMessage(youtubeTab.id, {
-                        action: 'changeSpeed',
-                        delta: delta
-                    });
-                } catch (messageError) {
-                    await chrome.scripting.executeScript({
-                        target: { tabId: youtubeTab.id },
-                        func: (speedDelta) => {
-                            const video = document.querySelector('video');
-                            if (video) {
-                                video.playbackRate = Math.max(0.25, Math.min(16, video.playbackRate + speedDelta));
-                                
-                                // show a visual indicator
-                                let indicator = document.getElementById('speed-indicator');
-                                if (!indicator) {
-                                    indicator = document.createElement('div');
-                                    indicator.id = 'speed-indicator';
-                                    indicator.style.cssText = 'position:fixed;top:10%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:white;padding:10px 20px;border-radius:10px;font-size:24px;z-index:9999;transition:opacity 0.5s;pointer-events:none;';
-                                    document.body.appendChild(indicator);
-                                }
-                                indicator.textContent = `Speed: ${video.playbackRate}x`;
-                                indicator.style.opacity = '1';
-                                
-                                clearTimeout(window.speedIndicatorTimeout);
-                                window.speedIndicatorTimeout = setTimeout(() => {
-                                    indicator.style.opacity = '0';
-                                }, 1500);
-                            }
-                        },
-                        args: [delta]
-                    });
+            // Escape backs out of the detail pane before it closes the popup.
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && this.selectedVideoId) {
+                    event.preventDefault();
+                    this.closeDetail();
                 }
-            } else {
-                alert('Video not currently open. Please open the video first.');
-            }
-        } catch (error) {
-            console.error('Error changing speed:', error);
+            });
         }
-    }
 
-    async seekToTime(videoId, time) {
-        try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab) {
-                console.error('No active tab found');
-                return;
+        setupInstructions(hidden) {
+            const box = document.getElementById('instructions');
+            if (!box) return;
+            if (hidden) box.style.display = 'none';
+
+            const dismiss = document.getElementById('dismissInstructions');
+            if (dismiss) {
+                dismiss.addEventListener('click', () => {
+                    box.style.display = 'none';
+                    Settings.set({ hideInstructions: true });
+                });
             }
+        }
 
-            // Check if current tab is YouTube and if video ID matches
-            const currentVideoId = this.extractVideoIdFromUrl(tab.url);
-            const isYouTube = tab.url && (tab.url.includes('youtube.com') || tab.url.includes('youtu.be'));
-            
-            if (!isYouTube || currentVideoId !== videoId) {
-                // Show popup asking if user wants to open the video
-                const shouldOpen = await this.showOpenVideoPrompt(videoId, time);
-                if (shouldOpen) {
-                    const videoUrl = `https://www.youtube.com/watch?v=${videoId}${time > 0 ? `&t=${Math.floor(time)}s` : ''}`;
-                    await chrome.tabs.create({
-                        url: videoUrl,
-                        index: tab.index + 1 //open in next tab
-                    });
-                }
-                return;
-            }
-
+        /**
+         * The popup is a different tool per site: on YouTube it is the
+         * checkpoint list this file was written for, on chess.com the
+         * player's games, and anywhere else just the header. Decided once,
+         * up front, off the one thing that tells them apart — the site.
+         *
+         * The speed bar is not part of this split: src/page/tab-actions.js
+         * already drives it through a generic "find a <video> on this page"
+         * fallback when the content script has no site-specific reader for
+         * it, so it is offered on both panels precisely because it is not
+         * site-specific.
+         */
+        async applySiteLayout() {
             try {
-                await chrome.tabs.sendMessage(tab.id, {
-                    action: 'seekToTime',
-                    time: time
+                const tab = await TabActions.activeTab();
+                const url = tab && tab.url ? new URL(tab.url) : null;
+                // The speed bar only makes sense where a <video> could live —
+                // an ordinary web page. On the dashboard, on chrome:// /
+                // about: pages, and on the extension's own pages there is no
+                // video (and no content script), so the popup is the header
+                // alone: just "Dashboard", no playback controls.
+                this.isWebPage = !!url && (url.protocol === 'http:' || url.protocol === 'https:');
+                this.site = url && Site ? Site.detectSite(url.hostname) : 'other';
+
+                // Read straight off the tab rather than asked of the content
+                // script. The popup must be able to say "add this one" even on
+                // a page where the content script never loaded — which is
+                // exactly the case someone is most likely to be looking at the
+                // popup to find out about.
+                const match = url && /^\/problems\/([A-Za-z0-9-]+)(?:[/?#]|$)/.exec(url.pathname);
+                this.leetSlug = (this.site === 'leetcode' && match) ? match[1] : '';
+                // LeetCode titles its tabs "Two Sum - LeetCode".
+                this.leetTitle = String((tab && tab.title) || '')
+                    .replace(/\s*[-–|]\s*LeetCode.*$/i, '')
+                    .replace(/^\d+\.\s*/, '')
+                    .trim();
+            } catch (_) {
+                this.isWebPage = false;
+                this.leetSlug = '';
+                this.site = 'other';
+            }
+            document.body.dataset.bbSite = this.site;
+
+            document.getElementById('youtubePanel').hidden = this.site !== 'youtube';
+            if (this.site === 'youtube') this.setupReaderBar();
+            // The party plays on YouTube and Netflix. On Netflix its bar is
+            // the popup's only content, so it moves out of the YouTube panel.
+            const partyBar = document.getElementById('partyBar');
+            partyBar.hidden = this.site !== 'youtube' && this.site !== 'netflix';
+            if (this.site === 'netflix') {
+                const netflix = document.getElementById('netflixPanel');
+                netflix.appendChild(partyBar);
+                netflix.hidden = false;
+            }
+            this.resumeParty();
+            const chessSite = ChessSites.get(this.site);
+            document.getElementById('chessPanel').hidden = !chessSite;
+
+            if (chessSite) {
+                ChessStats.createView({
+                    site: chessSite.id,
+                    body: document.getElementById('chessPopupBody'),
+                    compact: true,
+                    onSetUsername: () => openDashboard(`#settings/${chessSite.id}`),
+                }).render();
+            }
+
+            const leetPanel = document.getElementById('leetPanel');
+            if (leetPanel) leetPanel.hidden = this.site !== 'leetcode';
+            if (this.site === 'leetcode' && LeetPopup) {
+                const view = LeetPopup.createView({
+                    body: document.getElementById('leetPopupBody'),
+                    currentSlug: () => this.leetSlug,
+                    currentTitle: () => this.leetTitle,
+                    onOpen: (url) => openTab(url),
+                    onDashboard: () => openDashboard('#site/leetcode'),
                 });
-            } catch (messageError) {
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    func: (seekTime) => {
-                        const video = document.querySelector('video');
-                        if (video) {
-                            video.currentTime = seekTime;
-                            video.play();
-                        }
-                    },
-                    args: [time]
+                view.render();
+                // The queue changes from the page itself — a verdict lands, a
+                // grade is picked — and the popup is a separate document, so
+                // without this it shows a list that is already out of date.
+                Settings.watch(Leet.KEYS, () => view.render());
+            }
+        }
+
+        // ----------------------------------------------------- reader bar
+
+        /**
+         * The reader needs a video to read, so the button is only live on a
+         * watch page — and says why when it is not, rather than sitting there
+         * greyed out with no explanation.
+         */
+        async setupReaderBar() {
+            const button = document.getElementById('openReaderBtn');
+            const note = document.getElementById('readerBarNote');
+            const tab = await TabActions.activeTab();
+            let onVideo = false;
+            try {
+                onVideo = !!window.BB.YouTube.extractVideoId(tab.url) && /^\/(watch|live)\b/.test(new URL(tab.url).pathname);
+            } catch (_) { /* no tab, or not a URL */ }
+            button.disabled = !onVideo;
+            note.textContent = onVideo
+                ? 'The player, its transcript and your notes, side by side'
+                : 'Open a video to read it beside its transcript';
+        }
+
+        async openReader() {
+            const note = document.getElementById('readerBarNote');
+            const tab = await TabActions.activeTab();
+            if (await TabActions.openReader(tab)) {
+                window.close();
+                return;
+            }
+            // A tab opened before the extension was installed or reloaded
+            // has no content script to answer.
+            note.textContent = 'Reload the YouTube tab first — Bell Bearer is not running in it yet';
+        }
+
+        // ----------------------------------------------------- watch party
+
+        /**
+         * A party on, or one that just ended, is what the popup opens on.
+         * Asked of storage rather than of the worker, so a popup with no
+         * party in sight loads none of the party's code.
+         */
+        async resumeParty() {
+            let found = {};
+            try { found = await chrome.storage.session.get(['bbPartyTab', 'bbPartyEnded']); } catch (_) { /* no party to find */ }
+            if (found.bbPartyTab || found.bbPartyEnded) this.openParty(null);
+        }
+
+        /** The party's views over the rest of the popup; `view` is what was asked for, null to land where the party is. */
+        async openParty(view) {
+            await loadParty();
+            document.body.classList.add('is-party');
+            if (!this.party) {
+                this.party = window.BB.PartyPanel.createPanel({
+                    body: document.getElementById('partyView'),
+                    site: this.site,
+                    openDashboard,
+                    onClose: () => document.body.classList.remove('is-party'),
                 });
             }
-        } catch (error) {
-            console.error('Error seeking to time:', error);
+            await this.party.open(view);
         }
-    }
 
-    extractVideoIdFromUrl(url) {
-        if (!url) return null;
-        try {
-            const urlObj = new URL(url);
-            if (urlObj.hostname.includes('youtu.be')) {
-                return urlObj.pathname.slice(1);
-            } else if (urlObj.hostname.includes('youtube.com')) {
-                return urlObj.searchParams.get('v');
+        // ------------------------------------------------------ speed bar
+
+        async setupSpeedBar() {
+            const bar = document.getElementById('speedControlBar');
+            if (!bar) return;
+
+            if (!this.showSpeedBar || !this.isWebPage) {
+                bar.hidden = true;
+                return;
             }
-        } catch (error) {
-            return null;
-        }
-        return null;
-    }
+            bar.hidden = false;
 
-    showOpenVideoPrompt(videoId, time) {
-        return new Promise((resolve) => {
-            const modal = document.createElement('div');
-            modal.className = 'import-modal';
-            modal.style.zIndex = '10000';
-            modal.innerHTML = `
-                <div class="import-modal-content">
-                    <h3>Open Video in New Tab?</h3>
-                    <p style="font-size: 14px; color: #666; margin-bottom: 16px;">
-                        The current page is not the video for this bookmark. Would you like to open it in a new tab?
-                    </p>
-                    <div class="import-modal-buttons">
-                        <button id="openVideoConfirm" class="btn-primary">Open Video</button>
-                        <button id="openVideoCancel" class="import-modal-close">Cancel</button>
-                    </div>
-                </div>
-            `;
+            document.getElementById('speedUpBtn').addEventListener('click', () => this.step(1));
+            document.getElementById('speedDownBtn').addEventListener('click', () => this.step(-1));
+            document.getElementById('speedResetBtn').addEventListener('click', () => this.step(0));
 
-            document.body.appendChild(modal);
-
-            modal.querySelector('#openVideoConfirm').addEventListener('click', () => {
-                modal.remove();
-                resolve(true);
-            });
-
-            modal.querySelector('#openVideoCancel').addEventListener('click', () => {
-                modal.remove();
-                resolve(false);
-            });
-
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    modal.remove();
-                    resolve(false);
-                }
-            });
-        });
-    }
-
-    async deleteBookmark(videoId, bookmarkIndex) {
-        const videoIndex = this.videos.findIndex(v => v.id === videoId);
-        if (videoIndex === -1) return;
-
-        const video = this.videos[videoIndex];
-        if (bookmarkIndex < 0 || bookmarkIndex >= video.bookmarks.length) return;
-
-        video.bookmarks.splice(bookmarkIndex, 1);
-
-        if (video.bookmarks.length === 0) {
-            this.videos.splice(videoIndex, 1);
-            this.selectedVideoId = null;
+            this.speedTab = await TabActions.activeTab();
+            this.showRate(await TabActions.getRate(this.speedTab));
         }
 
-        await this.saveBookmarks();
-        this.renderVideoList();
-        this.renderBookmarkDetails();
-    }
+        /**
+         * Step the ladder in the active tab. The buttons used to add a flat
+         * +/-0.5, which is what put the rate between the rungs the keyboard
+         * shortcuts step through.
+         */
+        async step(direction) {
+            if (!this.speedTab) this.speedTab = await TabActions.activeTab();
+            this.showRate(await TabActions.stepRate(this.speedTab, direction));
+        }
 
-    async clearAllBookmarks() {
-        if (confirm('Are you sure you want to delete all bookmarks?')) {
-            this.videos = [];
+        showRate(rate) {
+            const display = document.getElementById('speedDisplay');
+            if (!display) return;
+            display.textContent = rate == null ? '—' : Speed.format(rate);
+            display.title = rate == null ? 'No video on this page' : '';
+        }
+
+        // -------------------------------------------------------- actions
+
+        selectVideo(videoId) {
+            this.selectedVideoId = videoId;
+            this.render();
+            const main = document.getElementById('mainContent');
+            if (main) main.classList.add('is-detail');
+        }
+
+        closeDetail() {
+            const main = document.getElementById('mainContent');
+            if (main) main.classList.remove('is-detail');
             this.selectedVideoId = null;
-            await this.saveBookmarks();
+            this.render();
+        }
+
+        /**
+         * Jump to a checkpoint. When the current tab is not that video, offer to
+         * open it rather than silently seeking whatever happens to be playing.
+         */
+        async seek(videoId, time) {
+            const tab = await TabActions.activeTab();
+            const onThisVideo = tab && window.BB.YouTube.extractVideoId(tab.url || '') === videoId;
+
+            if (onThisVideo && await TabActions.seek(tab, time)) return;
+
+            const open = await Ui.confirmDialog({
+                title: 'Open this video?',
+                message: 'This tab is not playing that video. Open it in a new tab at the checkpoint?',
+                confirmLabel: 'Open video',
+            });
+            if (!open) return;
+
+            await chrome.tabs.create({
+                url: window.BB.YouTube.watchUrl(videoId, time),
+                index: tab ? tab.index + 1 : undefined,
+            });
+        }
+
+        async deleteBookmark(videoId, bookmarkIndex) {
+            this.videos = Bookmarks.removeBookmark(this.videos, videoId, bookmarkIndex);
+            if (!this.videos.some((video) => video.id === this.selectedVideoId)) {
+                this.selectedVideoId = null;
+            }
+            await Bookmarks.save(this.videos);
+            this.render();
+        }
+
+        // ------------------------------------------------------ rendering
+
+        render() {
+            this.renderCount();
             this.renderVideoList();
-            this.renderBookmarkDetails();
-        }
-    }
-
-    exportBookmarks() {
-        if (this.videos.length === 0) {
-            this.showImportExportMessage('No bookmarks to export', 'warning');
-            return;
+            this.renderDetails();
         }
 
-        const exportData = {
-            version: '1.0',
-            exportDate: new Date().toISOString(),
-            totalVideos: this.videos.length,
-            totalBookmarks: this.videos.reduce((sum, video) => sum + video.bookmarks.length, 0),
-            videos: this.videos
-        };
-
-        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-            type: 'application/json'
-        });
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `youtube-bookmarks-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        this.showImportExportMessage(`Exported ${this.videos.length} videos with ${exportData.totalBookmarks} bookmarks`, 'info');
-    }
-
-    showImportOptions() {
-        const options = [
-            { label: 'Import from JSON file', action: () => this.importBookmarks() },
-            { label: 'Import from YouTube timestamp links', action: () => this.importFromTimestampLinks() }
-        ];
-
-        const modal = document.createElement('div');
-        modal.className = 'import-modal';
-        modal.innerHTML = `
-            <div class="import-modal-content">
-                <h3>Choose Import Method</h3>
-                <div class="import-options">
-                    ${options.map((option, index) => `
-                        <button class="import-option-btn" data-index="${index}">
-                            ${option.label}
-                        </button>
-                    `).join('')}
-                </div>
-                <button class="import-modal-close">Cancel</button>
-            </div>
-        `;
-
-        document.body.appendChild(modal);
-
-        modal.querySelectorAll('.import-option-btn').forEach((btn, index) => {
-            btn.addEventListener('click', () => {
-                options[index].action();
-                modal.remove();
-            });
-        });
-
-        modal.querySelector('.import-modal-close').addEventListener('click', () => {
-            modal.remove();
-        });
-
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-            }
-        });
-    }
-
-    importBookmarks() {
-        document.getElementById('importFile').click();
-    }
-
-    importFromTimestampLinks() {
-        const modal = document.createElement('div');
-        modal.className = 'import-modal';
-        modal.innerHTML = `
-            <div class="import-modal-content">
-                <h3>Import from YouTube Timestamp Links</h3>
-                <p style="font-size: 12px; color: #666; margin-bottom: 16px;">
-                    Paste YouTube URLs with timestamps (one per line).<br>
-                    Example: https://www.youtube.com/watch?v=VIDEO_ID&t=120s
-                </p>
-                <textarea id="timestampLinks" placeholder="https://www.youtube.com/watch?v=VIDEO_ID&t=120s&#10;https://www.youtube.com/watch?v=VIDEO_ID&t=300s" rows="8" style="width: 100%; margin-bottom: 16px; font-family: monospace; font-size: 12px;"></textarea>
-                <div class="import-modal-buttons">
-                    <button id="processTimestampLinks" class="btn-primary">Import</button>
-                    <button class="import-modal-close">Cancel</button>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(modal);
-
-        modal.querySelector('#processTimestampLinks').addEventListener('click', () => {
-            const links = modal.querySelector('#timestampLinks').value;
-            this.processTimestampLinks(links);
-            modal.remove();
-        });
-
-        modal.querySelector('.import-modal-close').addEventListener('click', () => {
-            modal.remove();
-        });
-
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-            }
-        });
-    }
-
-    async processTimestampLinks(linksText) {
-        const lines = linksText.trim().split('\n').filter(line => line.trim());
-        
-        if (lines.length === 0) {
-            this.showImportExportMessage('No links provided', 'warning');
-            return;
+        renderCount() {
+            const label = document.getElementById('brandCount');
+            if (!label) return;
+            const total = this.videos.reduce((sum, video) => sum + video.bookmarks.length, 0);
+            label.textContent = total ? `${total} checkpoint${total === 1 ? '' : 's'}` : '';
         }
 
-        const videoMap = new Map();
-        let processedLinks = 0;
+        /**
+         * The list, most recently checkpointed first.
+         *
+         * The store is in append order, so rendering it as it comes put the
+         * first video ever saved at the top and pushed the one just
+         * checkpointed to the bottom of a scroll — in a popup that exists to
+         * get you back to where you were a minute ago.
+         */
+        renderVideoList() {
+            const list = document.getElementById('videoList');
 
-        for (const line of lines) {
-            const result = this.parseYouTubeTimestampLink(line);
-            if (result) {
-                const { videoId, time, title } = result;
-                
-                if (!videoMap.has(videoId)) {
-                    videoMap.set(videoId, {
-                        id: videoId,
-                        title: title || `Video ${videoId}`,
-                        url: `https://www.youtube.com/watch?v=${videoId}`,
-                        bookmarks: []
-                    });
-                }
-                
-                const video = videoMap.get(videoId);
-                if (!video.bookmarks.some(b => b.time === time)) {
-                    video.bookmarks.push({
-                        time: time,
-                        timestamp: Date.now(),
-                        note: `Imported from timestamp link`
-                    });
-                }
-                
-                processedLinks++;
-            }
-        }
-
-        if (videoMap.size === 0) {
-            this.showImportExportMessage('No valid YouTube timestamp links found', 'error');
-            return;
-        }
-
-        const importedVideos = Array.from(videoMap.values());
-        const result = await this.mergeImportedBookmarks(importedVideos);
-        this.showImportExportMessage(result.message, result.type);
-        
-        await this.loadBookmarks();
-        this.renderVideoList();
-        this.renderBookmarkDetails();
-    }
-
-    parseYouTubeTimestampLink(url) {
-        try {
-            const urlObj = new URL(url);
-            
-            // Check if it's a YouTube URL
-            if (!urlObj.hostname.includes('youtube.com') && !urlObj.hostname.includes('youtu.be')) {
-                return null;
-            }
-
-            let videoId = '';
-            
-            if (urlObj.hostname.includes('youtu.be')) {
-                videoId = urlObj.pathname.slice(1);
-            } else {
-                videoId = urlObj.searchParams.get('v');
-            }
-
-            if (!videoId) {
-                return null;
-            }
-
-            let time = 0;
-            const tParam = urlObj.searchParams.get('t');
-            
-            if (tParam) {
-                if (tParam.includes('h') || tParam.includes('m') || tParam.includes('s')) {
-                    time = this.parseTimestampString(tParam);
-                } else {
-                    time = parseInt(tParam) || 0;
-                }
-            }
-
-            return {
-                videoId: videoId,
-                time: time,
-                title: null
-            };
-        } catch (error) {
-            console.error('Error parsing YouTube URL:', error);
-            return null;
-        }
-    }
-
-    parseTimestampString(timestamp) {
-        let totalSeconds = 0;
-        
-        const hourMatch = timestamp.match(/(\d+)h/);
-        const minuteMatch = timestamp.match(/(\d+)m/);
-        const secondMatch = timestamp.match(/(\d+)s/);
-        
-        if (hourMatch) {
-            totalSeconds += parseInt(hourMatch[1]) * 3600;
-        }
-        if (minuteMatch) {
-            totalSeconds += parseInt(minuteMatch[1]) * 60;
-        }
-        if (secondMatch) {
-            totalSeconds += parseInt(secondMatch[1]);
-        }
-        
-        return totalSeconds;
-    }
-
-    async handleFileImport(file) {
-        if (!file) return;
-
-        try {
-            const text = await this.readFileAsText(file);
-            const importData = JSON.parse(text);
-            
-            if (!this.validateImportData(importData)) {
-                this.showImportExportMessage('Invalid file format. Please use a valid bookmark export file.', 'error');
+            if (this.videos.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">🔖</div>
+                        <h3>No checkpoints yet</h3>
+                        <p>Hold <strong>Ctrl + B</strong> on any YouTube video to drop your first checkpoint.</p>
+                    </div>`;
                 return;
             }
 
-            const result = await this.mergeImportedBookmarks(importData.videos);
-            this.showImportExportMessage(result.message, result.type);
-            
-            await this.loadBookmarks();
-            this.renderVideoList();
-            this.renderBookmarkDetails();
-            
-        } catch (error) {
-            console.error('Import error:', error);
-            this.showImportExportMessage('Error reading file. Please check the file format.', 'error');
+            list.innerHTML = Bookmarks.sortVideos(this.videos, 'recent').map((video) => {
+                const count = video.bookmarks.length;
+                return `
+                    <div class="video-item${video.id === this.selectedVideoId ? ' selected' : ''}"
+                         data-video-id="${Dom.escapeAttr(video.id)}" role="button" tabindex="0">
+                        <div class="video-title">${Dom.escapeHtml(video.title)}</div>
+                        <div class="video-meta">
+                            <span class="bookmark-count">${count}</span>
+                            <span class="video-channel">checkpoint${count === 1 ? '' : 's'}</span>
+                        </div>
+                    </div>`;
+            }).join('');
         }
 
-        document.getElementById('importFile').value = '';
-    }
+        renderDetails() {
+            const details = document.getElementById('bookmarkDetails');
+            const video = this.videos.find((v) => v.id === this.selectedVideoId);
 
-    readFileAsText(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = (e) => reject(e);
-            reader.readAsText(file);
-        });
-    }
-
-    validateImportData(data) {
-        return data && 
-               typeof data === 'object' && 
-               Array.isArray(data.videos) &&
-               data.version &&
-               data.exportDate;
-    }
-
-    async mergeImportedBookmarks(importedVideos) {
-
-        if (!Array.isArray(importedVideos) || importedVideos.length === 0) {
-            return { message: 'No valid videos found in import file', type: 'error' };
-        }
-
-        let addedVideos = 0;
-        let addedBookmarks = 0;
-        let updatedVideos = 0;
-
-        for (const importedVideo of importedVideos) {
-            if (!importedVideo.id || !importedVideo.title || !Array.isArray(importedVideo.bookmarks)) {
-                continue;
+            if (!video) {
+                details.innerHTML = `
+                    <div class="no-selection">
+                        <div class="empty-icon">⏱</div>
+                        <p>Select a video to see its checkpoints</p>
+                    </div>`;
+                return;
             }
 
-            const existingVideoIndex = this.videos.findIndex(v => v.id === importedVideo.id);
-            
-            if (existingVideoIndex === -1) {
-                this.videos.push({
-                    id: importedVideo.id,
-                    title: importedVideo.title,
-                    url: importedVideo.url || `https://www.youtube.com/watch?v=${importedVideo.id}`,
-                    bookmarks: importedVideo.bookmarks.filter(b => b && typeof b.time === 'number')
+            const count = video.bookmarks.length;
+            details.innerHTML = `
+                <div class="bd-header">
+                    <button class="bd-back" type="button" aria-label="Back to videos">‹</button>
+                    <div class="bd-heading">
+                        <h3>${Dom.escapeHtml(video.title)}</h3>
+                        <div class="bd-sub">${count} checkpoint${count === 1 ? '' : 's'}</div>
+                    </div>
+                    <span class="bd-count">${count}</span>
+                </div>
+                <div class="checkpoint-timeline">
+                    ${video.bookmarks.map((bookmark, index) => renderBookmark(video, bookmark, index)).join('')}
+                </div>`;
+        }
+    }
+
+    /** The party's styles and scripts, in order, the first time they are wanted. */
+    const PARTY_FILES = ['src/shared/party-code.js', 'src/page/party-panel.js', 'src/page/party-start-view.js',
+        'src/page/party-join-view.js', 'src/page/party-room-view.js', 'src/page/party-invite-view.js'];
+    let partyLoading = null;
+    function loadParty() {
+        partyLoading = partyLoading || (async () => {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'party.css';
+            document.head.appendChild(link);
+            for (const src of PARTY_FILES) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.onload = resolve;
+                    script.onerror = () => reject(new Error(`${src} did not load`));
+                    document.body.appendChild(script);
                 });
-                addedVideos++;
-                addedBookmarks += importedVideo.bookmarks.length;
-            } else {
-                const existingVideo = this.videos[existingVideoIndex];
-                const existingTimes = new Set(existingVideo.bookmarks.map(b => b.time));
-                
-                const newBookmarks = importedVideo.bookmarks.filter(b => 
-                    b && typeof b.time === 'number' && !existingTimes.has(b.time)
-                );
-                
-                if (newBookmarks.length > 0) {
-                    existingVideo.bookmarks.push(...newBookmarks);
-                    existingVideo.bookmarks.sort((a, b) => a.time - b.time);
-                    updatedVideos++;
-                    addedBookmarks += newBookmarks.length;
-                }
             }
-        }
-
-        await this.saveBookmarks();
-
-        if (addedVideos === 0 && updatedVideos === 0) {
-            return { message: 'No new bookmarks found to import', type: 'warning' };
-        }
-
-        const message = `Import completed: ${addedVideos} new videos, ${updatedVideos} updated videos, ${addedBookmarks} new bookmarks`;
-        return { message, type: 'info' };
+        })();
+        return partyLoading;
     }
 
-    showImportExportMessage(message, type = 'info') {
-
-        const existingMessages = document.querySelectorAll('.import-export-info, .import-export-error, .import-export-warning');
-        existingMessages.forEach(msg => msg.remove());
-
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `import-export-${type}`;
-        messageDiv.textContent = message;
-
-        const bookmarkDetails = document.getElementById('bookmarkDetails');
-        bookmarkDetails.insertBefore(messageDiv, bookmarkDetails.firstChild);
-
-        setTimeout(() => {
-            if (messageDiv.parentNode) {
-                messageDiv.remove();
-            }
-        }, 5000);
+    function openDashboard(hash) {
+        chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard.html${hash || ''}`) });
+        window.close();
     }
 
-    async saveBookmarks() {
-        try {
-            await chrome.storage.local.set({ youtubeBookmarks: this.videos });
-        } catch (error) {
-            console.error('Error saving bookmarks:', error);
-        }
+    /**
+     * Open a problem in the tab that is already there rather than a new one:
+     * picking the next thing to work on replaces what you were looking at.
+     * Only ever an https URL built from a slug, but checked anyway, since
+     * what is stored came off a page.
+     */
+    function openTab(url) {
+        if (!/^https:\/\/([a-z0-9-]+\.)*leetcode\.com\//i.test(String(url || ''))) return;
+        chrome.tabs.update({ url });
+        window.close();
     }
 
-    formatTime(seconds) {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const secs = Math.floor(seconds % 60);
-        
-        if (hours > 0) {
-            return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        } else {
-            return `${minutes}:${secs.toString().padStart(2, '0')}`;
-        }
+    function renderBookmark(video, bookmark, index) {
+        const isSpan = typeof bookmark.start === 'number' && typeof bookmark.end === 'number';
+        const time = Bookmarks.bookmarkTime(bookmark);
+        const label = isSpan
+            ? `${Time.formatTime(bookmark.start)} – ${Time.formatTime(bookmark.end)}`
+            : Time.formatTime(time);
+
+        return `
+            <div class="bookmark-item" data-bookmark-index="${index}" data-video-id="${Dom.escapeAttr(video.id)}">
+                <div class="bookmark-time">${label}</div>
+                ${bookmark.title ? `<div class="bookmark-name">${Dom.escapeHtml(bookmark.title)}</div>` : ''}
+                ${bookmark.note ? `<div class="bookmark-note">${Dom.escapeHtml(bookmark.note)}</div>` : ''}
+                <div class="bookmark-actions">
+                    <button class="btn-small seek-btn" data-time="${time}">Go to</button>
+                    <button class="btn-small delete delete-btn">Delete</button>
+                </div>
+            </div>`;
     }
 
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    copySubtitles(video, includeTimestamp) {
-        const bookmarksWithSubtitles = video.bookmarks.filter(bookmark => bookmark.subtitle);
-        
-        if (bookmarksWithSubtitles.length === 0) {
-            alert('No subtitles found in bookmarks');
-            return;
-        }
-        
-        let text = '';
-        bookmarksWithSubtitles.forEach(bookmark => {
-            if (includeTimestamp) {
-                const timeDisplay = this.formatTime(bookmark.time);
-                text += `[${timeDisplay}] ${bookmark.subtitle}\n`;
-            } else {
-                text += `${bookmark.subtitle}\n`;
-            }
-        });
-        
-        // Copy to clipboard
-        navigator.clipboard.writeText(text.trim()).then(() => {
-            this.showCopyNotification(includeTimestamp);
-        }).catch(err => {
-            console.error('Failed to copy:', err);
-            // Fallback: create textarea and copy
-            const textarea = document.createElement('textarea');
-            textarea.value = text.trim();
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-            this.showCopyNotification(includeTimestamp);
-        });
-    }
-
-    showCopyNotification(includeTimestamp) {
-        const notification = document.createElement('div');
-        notification.textContent = `Subtitles copied ${includeTimestamp ? 'with timestamps' : 'without timestamps'}!`;
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #4caf50;
-            color: white;
-            padding: 12px 16px;
-            border-radius: 6px;
-            z-index: 10000;
-            font-size: 14px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        `;
-        document.body.appendChild(notification);
-        setTimeout(() => {
-            notification.remove();
-        }, 2000);
-    }
-
-    openDashboard() {
-        chrome.tabs.create({
-            url: chrome.runtime.getURL('dashboard.html')
-        });
-    }
-
-    setupTheme() {
-        // Apply the saved theme. The theme toggle now lives on the dashboard,
-        // so the popup just reflects whatever theme is saved (incl. YouTube sync).
-        this.loadTheme();
-
-        chrome.storage.onChanged.addListener((changes, area) => {
-            if (area === 'local' && changes.theme) {
-                this.loadTheme();
-            }
-        });
-    }
-
-    loadTheme() {
-        chrome.storage.local.get(['theme'], (result) => {
-            const isDark = result.theme === 'dark';
-            if (isDark) {
-                document.body.classList.add('dark-theme');
-                const themeToggle = document.getElementById('themeToggle');
-                if (themeToggle) {
-                    themeToggle.textContent = '☀️';
-                }
-            } else {
-                document.body.classList.remove('dark-theme');
-                const themeToggle = document.getElementById('themeToggle');
-                if (themeToggle) {
-                    themeToggle.textContent = '🌙';
-                }
-            }
-        });
-    }
-
-    toggleTheme() {
-        const isDark = document.body.classList.toggle('dark-theme');
-        const themeToggle = document.getElementById('themeToggle');
-        if (themeToggle) {
-            themeToggle.textContent = isDark ? '☀️' : '🌙';
-        }
-        chrome.storage.local.set({ theme: isDark ? 'dark' : 'light' });
-    }
-}
-
-const bookmarkManager = new BookmarkManager(); 
+    new Popup().init().catch((error) => {
+        console.error('Bell Bearer: popup failed to start', error);
+    });
+})();
