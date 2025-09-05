@@ -11,6 +11,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Quick Navigation**: Jump to the bookmarked timestamp with a single click
 - **Persistent Storage**: Persist Bookmarks across browser sessions
 - **Import/Export**: Backup and restore bookmarks, import from YouTube timestamp links
+- **Reward System**: Track watch credits to spend them on popcorn for later
 
 ## Offline Installation
 

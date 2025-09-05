@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bell Bearer</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Bell Bearer</h1>
+            <div class="controls">
+                <button id="exportBtn" class="btn-secondary" title="Export bookmarks">📤 Export</button>
+                <button id="importBtn" class="btn-secondary" title="Import bookmarks">📥 Import</button>
+                <button id="clearAll" class="btn-secondary">Clear All</button>
+            </div>
+        </header>
+        
+        <div class="main-content">
+            <div class="video-list" id="videoList">
+            </div>
+            
+            <div class="bookmark-details" id="bookmarkDetails">
+                <div class="no-selection">
+                    <p>Select a video to view bookmarks</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <h3>How to use:</h3>
+            <ul>
+                <li>Hold <strong>Ctrl + B</strong> while watching a YouTube video to create checkpoints</li>
+                <li>Release the keys to stop creating checkpoints</li>
+                <li>Click on a video in the list to view all bookmarks</li>
+                <li>Use <strong>Export</strong> to backup your bookmarks</li>
+                <li>Use <strong>Import</strong> to restore bookmarks from a file</li>
+            </ul>
+        </div>
+    </div>
+    
+    <input type="file" id="importFile" accept=".json" style="display: none;">
+    
+    <script src="popup.js"></script>
+</body>
+</html> 
