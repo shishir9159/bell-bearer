@@ -5,7 +5,7 @@ chrome.runtime.onInstalled.addListener(() => {
 // icon click from the toolbar
 chrome.action.onClicked.addListener((tab) => {
 
-    // default_popup manifest
+    // default_popup action
     console.log('Extension icon clicked');
 });
 
