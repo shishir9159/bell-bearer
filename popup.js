@@ -38,6 +38,26 @@ class BookmarkManager {
         document.getElementById('importFile').addEventListener('change', (e) => {
             this.handleFileImport(e.target.files[0]);
         });
+
+        // Event delegation for bookmark actions
+        const bookmarkDetails = document.getElementById('bookmarkDetails');
+        bookmarkDetails.addEventListener('click', (e) => {
+            if (e.target.classList.contains('seek-btn')) {
+                const bookmarkItem = e.target.closest('.bookmark-item');
+                if (bookmarkItem) {
+                    const videoId = bookmarkItem.dataset.videoId;
+                    const time = parseFloat(e.target.dataset.time);
+                    this.seekToTime(videoId, time);
+                }
+            } else if (e.target.classList.contains('delete-btn')) {
+                const bookmarkItem = e.target.closest('.bookmark-item');
+                if (bookmarkItem) {
+                    const videoId = bookmarkItem.dataset.videoId;
+                    const bookmarkIndex = parseInt(bookmarkItem.dataset.bookmarkIndex);
+                    this.deleteBookmark(videoId, bookmarkIndex);
+                }
+            }
+        });
     }
 
     renderVideoList() {
@@ -91,20 +111,28 @@ class BookmarkManager {
             <p style="color: #666; margin-bottom: 16px; font-size: 12px;">
                 ${video.bookmarks.length} bookmark${video.bookmarks.length !== 1 ? 's' : ''}
             </p>
-            ${video.bookmarks.map(bookmark => `
-                <div class="bookmark-item" data-time="${bookmark.time}">
-                    <div class="bookmark-time">${this.formatTime(bookmark.time)}</div>
+            ${video.bookmarks.map((bookmark, index) => {
+                const isSegment = 'start' in bookmark && 'end' in bookmark;
+                const time = isSegment ? bookmark.start : bookmark.time;
+                const timeDisplay = isSegment 
+                    ? `${this.formatTime(bookmark.start)} - ${this.formatTime(bookmark.end)}`
+                    : this.formatTime(bookmark.time);
+                
+                return `
+                <div class="bookmark-item" data-bookmark-index="${index}" data-video-id="${video.id}">
+                    <div class="bookmark-time">${timeDisplay}</div>
                     ${bookmark.note ? `<div class="bookmark-note">${this.escapeHtml(bookmark.note)}</div>` : ''}
                     <div class="bookmark-actions">
-                        <button class="btn-small" onclick="bookmarkManager.seekToTime('${video.id}', ${'start' in bookmark ? bookmark.start : 'time' in bookmark ? bookmark.time : 0})">
+                        <button class="btn-small seek-btn" data-time="${time}">
                             Go to Time
                         </button>
-                        <button class="btn-small delete" onclick="bookmarkManager.deleteBookmark('${video.id}', ${bookmark.time})">
+                        <button class="btn-small delete delete-btn" data-bookmark-index="${index}">
                             Delete
                         </button>
                     </div>
                 </div>
-            `).join('')}
+            `;
+            }).join('')}
         `;
     }
 
@@ -117,26 +145,47 @@ class BookmarkManager {
     async seekToTime(videoId, time) {
         try {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            console.log('tab', tab);
-            await chrome.tabs.sendMessage(tab.id, {
-                action: 'seekToTime',
-                videoId: videoId,
-                time: time
-            });
+            if (!tab) {
+                console.error('No active tab found');
+                return;
+            }
+
+            // Try to send message first (if content script is loaded)
+            try {
+                await chrome.tabs.sendMessage(tab.id, {
+                    action: 'seekToTime',
+                    time: time
+                });
+            } catch (messageError) {
+                // If message fails, fall back to executeScript
+                await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: (seekTime) => {
+                        const video = document.querySelector('video');
+                        if (video) {
+                            video.currentTime = seekTime;
+                            video.play();
+                        }
+                    },
+                    args: [time]
+                });
+            }
         } catch (error) {
             console.error('Error seeking to time:', error);
         }
     }
 
-    async deleteBookmark(videoId, time) {
+    async deleteBookmark(videoId, bookmarkIndex) {
         const videoIndex = this.videos.findIndex(v => v.id === videoId);
         if (videoIndex === -1) return;
 
-        this.videos[videoIndex].bookmarks = this.videos[videoIndex].bookmarks.filter(
-            b => b.time !== time
-        );
+        const video = this.videos[videoIndex];
+        if (bookmarkIndex < 0 || bookmarkIndex >= video.bookmarks.length) return;
 
-        if (this.videos[videoIndex].bookmarks.length === 0) {
+        // Remove the bookmark at the specified index
+        video.bookmarks.splice(bookmarkIndex, 1);
+
+        if (video.bookmarks.length === 0) {
             this.videos.splice(videoIndex, 1);
             this.selectedVideoId = null;
         }

@@ -1,7 +1,6 @@
 class YouTubeBookmarker {
     constructor() {
         this.isRecording = false; // recording checkpoints is still running
-        this.recordingInterval = null; // interval ID of a recording
         this.videoID = null;
         this.videoTitle = null;
         this.bookmarks = [];
@@ -93,36 +92,28 @@ class YouTubeBookmarker {
         }
 
         this.isRecording = true;
-        this.bookmarks = []; // ---
-        this.showNotification('Recording checkpoints... Press Ctrl+B again to stop', 'info');
-
-        this.recordingInterval = setInterval(() => {
-            const currentTime = this.getCurrentTime(); // seekTime???
-             // additional condiiton so bookmark will be created only if video is playing
-            if (currentTime > 0) {
-                this.bookmarks.push({
-                    time: Math.floor(currentTime),
-                    timestamp: Date.now(),
-                    note: `Checkpoint at ${this.formatTime(currentTime)}`
-                });
-            }
-        }, 2000);
-
+        this.showNotification('Hold Ctrl+B to create a checkpoint...', 'info');
         this.addRecordingIndicator();
     }
 
     stopRecording() {
         if (!this.isRecording) return;
         this.isRecording = false;
-        clearInterval(this.recordingInterval);
-        this.recordingInterval = null;        
         this.removeRecordingIndicator();
         
-        if (this.bookmarks.length > 0) {
+        const currentTime = this.getCurrentTime();
+        if (currentTime > 0) {
+            const bookmark = {
+                time: Math.floor(currentTime),
+                timestamp: Date.now(),
+                note: `Checkpoint at ${this.formatTime(currentTime)}`
+            };
+            
+            this.bookmarks = [bookmark];
             this.saveBookmarks();
-            this.showNotification(`Created ${this.bookmarks.length} checkpoints!`, 'success');
+            this.showNotification(`Checkpoint created at ${this.formatTime(currentTime)}!`, 'success');
         } else {
-            this.showNotification('No checkpoints created', 'warning');
+            this.showNotification('No checkpoint created - video not playing', 'warning');
         }
     }
 
