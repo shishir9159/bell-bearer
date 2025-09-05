@@ -1,0 +1,261 @@
+class YouTubeBookmarker {
+    constructor() {
+        this.isRecording = false; // recording checkpoints is still running
+        this.recordingInterval = null; // interval ID of a recording
+        this.videoID = null;
+        this.videoTitle = null;
+        this.bookmarks = [];
+        this.segmentStart = null;
+        this.init();
+    }
+
+    init() {
+        this.setupKeyboardListeners();
+        this.setupMessageListener();
+        this.detectVideoChange();
+        setInterval(() => {
+            this.detectVideoChange();
+        }, 2000);
+    }
+
+    setupKeyboardListeners() {
+        document.addEventListener('keydown', (e) => {
+            // bug: b
+            if (e.ctrlKey && e.key === 'b' && !this.isRecording) {
+                // overriding default browser behavior for keypress
+                e.preventDefault();
+                this.startRecording();
+            }
+            // segment start
+            if (e.key === 'S' && e.ctrlKey && e.shiftKey && this.segmentStart === null) {
+                e.preventDefault();
+                this.handleSegmentStart();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            // todo: e.ctrlKey should not 
+            // stop recording after Ctrl + B is released
+            if (e.key === 'b' && this.isRecording) {
+                this.stopRecording();
+            }
+            // segment ends
+            if (e.key === 'S' && e.ctrlKey && e.shiftKey && this.segmentStart !== null) {
+                e.preventDefault();
+                this.handleSegmentEnd();
+            }
+        });
+    }
+
+    setupMessageListener() {
+        // popup or background script messages
+        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            // TODO: FIRST PRIORITY
+            if (message.action === 'seekToTime') {
+                this.seekToTime(message.time);
+            }
+        });
+    }
+
+    detectVideoChange() {
+        const videoId = this.getCurrentVideoId();
+        const videoTitle = this.getCurrentVideoTitle();
+
+        if (videoId && videoId !== this.videoID) {
+            this.videoID = videoId;
+            this.videoTitle = videoTitle;
+            this.bookmarks = [];
+        }
+    }
+
+    getCurrentVideoId() {
+        const url = window.location.href;
+        const match = url.match(/[?&]v=([^&]+)/);
+        return match ? match[1] : null;
+    }
+
+    getCurrentVideoTitle() {
+        const titleElement = document.querySelector('h1.ytd-video-primary-info-renderer') || // YouTube title
+                             document.querySelector('h1.title') || // alternative title selector
+                             document.querySelector('title'); // fallback strategy to page title
+        return titleElement ? titleElement.textContent.trim() : 'Unknown Title';
+    }
+
+    getCurrentTime() {
+        const video = document.querySelector('video') // todo: website specific?
+        return video ? video.currentTime : 0;
+    }
+
+    startRecording() {
+        if (!this.videoID) {
+            this.showNotification('No video detected', 'error')
+            return;
+        }
+
+        this.isRecording = true;
+        this.bookmarks = []; // ---
+        this.showNotification('Recording checkpoints... Press Ctrl+B again to stop', 'info');
+
+        this.recordingInterval = setInterval(() => {
+            const currentTime = this.getCurrentTime(); // seekTime???
+             // additional condiiton so bookmark will be created only if video is playing
+            if (currentTime > 0) {
+                this.bookmarks.push({
+                    time: Math.floor(currentTime),
+                    timestamp: Date.now(),
+                    note: `Checkpoint at ${this.formatTime(currentTime)}`
+                });
+            }
+        }, 2000);
+
+        this.addRecordingIndicator();
+    }
+
+    stopRecording() {
+        if (!this.isRecording) return;
+        this.isRecording = false;
+        clearInterval(this.recordingInterval);
+        this.recordingInterval = null;        
+        this.removeRecordingIndicator();
+        
+        if (this.bookmarks.length > 0) {
+            this.saveBookmarks();
+            this.showNotification(`Created ${this.bookmarks.length} checkpoints!`, 'success');
+        } else {
+            this.showNotification('No checkpoints created', 'warning');
+        }
+    }
+
+    async saveBookmarks() {
+        try {
+
+            const result = await chrome.storage.local.get(['youtubeBookmarks']);
+            let videos = result.youtubeBookmarks || [];
+            
+            let videoIndex = videos.findIndex(v => v.id === this.videoID);
+            
+            // add to a map rather than array
+            if (videoIndex === -1) {
+                videos.push({
+                    id: this.videoID,
+                    title: this.videoTitle,
+                    url: window.location.href,
+                    bookmarks: []
+                });
+                videoIndex = videos.length - 1;
+            }
+            
+            videos[videoIndex].bookmarks.push(...this.bookmarks);
+            videos[videoIndex].bookmarks.sort((a, b) => a.time - b.time);
+            
+            // todo: look for overlap
+            videos[videoIndex].bookmarks = videos[videoIndex].bookmarks.filter(
+                (bookmark, index, self) => 
+                    index === 0 || bookmark.time !== self[index - 1].time
+            );
+            
+            await chrome.storage.local.set({ youtubeBookmarks: videos });
+        } catch (error) {
+            console.error('Error saving bookmarks:', error);
+            this.showNotification('Error saving bookmarks', 'error');
+        }
+    }
+
+    seekToTime(time) {
+        // BUGFIX
+        const video = document.querySelector('video');
+        if (video) {
+            video.currentTime = time; 
+            video.play();
+        }
+    }
+
+    formatTime(seconds) {
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+        
+        if (hours > 0) {
+            return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        } else {
+            return `${minutes}:${secs.toString().padStart(2, '0')}`;
+        }
+    }
+
+    showNotification(message, type = 'info') {
+
+        const existing = document.getElementById('yt-bookmarker-notification');
+        if (existing) {
+            existing.remove();
+        }
+
+        const notification = document.createElement('div');
+        notification.id = 'yt-bookmarker-notification';
+        notification.textContent = message;
+        notification.className = `yt-bookmarker-notification yt-bookmarker-${type}`; // css class variables
+        
+        document.body.appendChild(notification);
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 3000);
+    }
+
+    addRecordingIndicator() {
+        const indicator = document.createElement('div');
+        indicator.id = 'yt-bookmarker-recording-indicator';
+        indicator.innerHTML = `
+            <div class="recording-dot"></div> <!-- Animated dot -->
+            <span>Recording checkpoints...</span> <!-- Text message -->
+        `;
+        document.body.appendChild(indicator);
+    }
+
+    removeRecordingIndicator() {
+        const indicator = document.getElementById('yt-bookmarker-recording-indicator');
+        if (indicator) {
+            indicator.remove();
+        }
+    }
+
+    // merge recording strategy
+    handleSegmentStart() {
+        if (!this.videoID) { // Check if we're on a video page
+            this.showNotification('No video detected', 'error');
+            return;
+        }
+        const currentTime = Math.floor(this.getCurrentTime());
+        this.segmentStart = currentTime;
+        this.showNotification(`Segment start set at ${this.formatTime(currentTime)}`, 'info');
+    }
+
+    // merge recording strategy
+    handleSegmentEnd() {
+        // Handle the end of a segment bookmark
+        const segmentEnd = Math.floor(this.getCurrentTime());
+        if (segmentEnd <= this.segmentStart) {
+            this.showNotification('End time must be after start time', 'error');
+            this.segmentStart = null;
+            return;
+        }
+
+        this.bookmarks.push({
+            start: this.segmentStart,
+            end: segmentEnd,
+            timestamp: Date.now(),
+            note: `Segment: ${this.formatTime(this.segmentStart)} - ${this.formatTime(segmentEnd)}`
+        });
+        this.saveBookmarks();
+        this.showNotification(`Segment saved: ${this.formatTime(this.segmentStart)} - ${this.formatTime(segmentEnd)}`, 'success');
+        this.segmentStart = null;
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        new YouTubeBookmarker();
+    });
+} else {
+    new YouTubeBookmarker();
+} 
