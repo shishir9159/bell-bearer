@@ -150,6 +150,24 @@ class BookmarkManager {
                 return;
             }
 
+            // Check if current tab is YouTube and if video ID matches
+            const currentVideoId = this.extractVideoIdFromUrl(tab.url);
+            const isYouTube = tab.url && (tab.url.includes('youtube.com') || tab.url.includes('youtu.be'));
+            
+            if (!isYouTube || currentVideoId !== videoId) {
+                // Show popup asking if user wants to open the video
+                const shouldOpen = await this.showOpenVideoPrompt(videoId, time);
+                if (shouldOpen) {
+                    const videoUrl = `https://www.youtube.com/watch?v=${videoId}${time > 0 ? `&t=${Math.floor(time)}s` : ''}`;
+                    await chrome.tabs.create({
+                        url: videoUrl,
+                        index: tab.index + 1 // Open in next tab
+                    });
+                }
+                return;
+            }
+
+            // Video matches, proceed with seeking
             // Try to send message first (if content script is loaded)
             try {
                 await chrome.tabs.sendMessage(tab.id, {
@@ -173,6 +191,60 @@ class BookmarkManager {
         } catch (error) {
             console.error('Error seeking to time:', error);
         }
+    }
+
+    extractVideoIdFromUrl(url) {
+        if (!url) return null;
+        try {
+            const urlObj = new URL(url);
+            if (urlObj.hostname.includes('youtu.be')) {
+                return urlObj.pathname.slice(1);
+            } else if (urlObj.hostname.includes('youtube.com')) {
+                return urlObj.searchParams.get('v');
+            }
+        } catch (error) {
+            return null;
+        }
+        return null;
+    }
+
+    showOpenVideoPrompt(videoId, time) {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'import-modal';
+            modal.style.zIndex = '10000';
+            modal.innerHTML = `
+                <div class="import-modal-content">
+                    <h3>Open Video in New Tab?</h3>
+                    <p style="font-size: 14px; color: #666; margin-bottom: 16px;">
+                        The current page is not the video for this bookmark. Would you like to open it in a new tab?
+                    </p>
+                    <div class="import-modal-buttons">
+                        <button id="openVideoConfirm" class="btn-primary">Open Video</button>
+                        <button id="openVideoCancel" class="import-modal-close">Cancel</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            modal.querySelector('#openVideoConfirm').addEventListener('click', () => {
+                modal.remove();
+                resolve(true);
+            });
+
+            modal.querySelector('#openVideoCancel').addEventListener('click', () => {
+                modal.remove();
+                resolve(false);
+            });
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                    resolve(false);
+                }
+            });
+        });
     }
 
     async deleteBookmark(videoId, bookmarkIndex) {
