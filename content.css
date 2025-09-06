@@ -92,4 +92,12 @@
 #yt-bookmarker-notification,
 #yt-bookmarker-recording-indicator {
     z-index: 999999 !important; /* to keep indicator element above YouTube's UI */
+}
+
+#bb-add-to-subscriptions-btn {
+    z-index: 1000 !important;
+}
+
+.bb-modal-overlay {
+    z-index: 100000 !important;
 } 

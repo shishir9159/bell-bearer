@@ -19,4 +19,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // message channel is kept open for async response
         return true;
     }
+    
+    if (message.action === 'openDashboard') {
+        chrome.tabs.create({
+            url: chrome.runtime.getURL('dashboard.html')
+        });
+        sendResponse({ success: true });
+    }
 });

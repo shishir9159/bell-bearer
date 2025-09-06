@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bell Bearer - Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <header>
+            <h1>Bell Bearer Dashboard</h1>
+            <nav class="nav-tabs">
+                <button id="dashboardTab" class="nav-tab active">Dashboard</button>
+                <button id="subscriptionsTab" class="nav-tab">Subscriptions</button>
+                <button id="settingsTab" class="nav-tab">Settings</button>
+            </nav>
+        </header>
+        
+        <div id="dashboardView" class="view active">
+            <div class="dashboard-header">
+                <h2>Your Saved Videos</h2>
+                <div class="dashboard-controls">
+                    <button id="exportBtn" class="btn-secondary">📤 Export</button>
+                    <button id="importBtn" class="btn-secondary">📥 Import</button>
+                    <button id="clearAll" class="btn-secondary">Clear All</button>
+                </div>
+            </div>
+            
+            <div class="videos-container" id="videosContainer">
+                <!-- Videos will be rendered here -->
+            </div>
+        </div>
+        
+        <div id="subscriptionsView" class="view">
+            <div class="subscriptions-header">
+                <h2>Subscription Manager</h2>
+                <div class="subscriptions-controls">
+                    <button id="addChannelBtn" class="btn-primary">+ Add Channel</button>
+                    <button id="addTopicBtn" class="btn-secondary">+ Add Topic</button>
+                    <button id="refreshVideosBtn" class="btn-secondary">🔄 Refresh</button>
+                </div>
+            </div>
+            
+            <div class="topics-container" id="topicsContainer">
+                <!-- Topics will be rendered here -->
+            </div>
+        </div>
+        
+        <div id="settingsView" class="view">
+            <div class="settings-header">
+                <h2>Settings</h2>
+            </div>
+            
+            <div class="settings-content">
+                <div class="settings-section">
+                    <h3>Keyboard Shortcuts</h3>
+                    <div class="shortcut-list">
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">Alt + 1-9</span>
+                            <span class="shortcut-desc">Skip forward by number of seconds</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">Shift + 1-9</span>
+                            <span class="shortcut-desc">Skip backward by number of seconds</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">Ctrl + B</span>
+                            <span class="shortcut-desc">Create checkpoint (hold and release)</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">></span>
+                            <span class="shortcut-desc">Increase playback speed</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key"><</span>
+                            <span class="shortcut-desc">Decrease playback speed</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">Ctrl + Shift + S</span>
+                            <span class="shortcut-desc">Start/End segment bookmark</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>About</h3>
+                    <p>Bell Bearer helps you organize and manage your YouTube video bookmarks.</p>
+                    <p>Version: 1.0</p>
+                </div>
+            </div>
+        </div>
+        
+        <input type="file" id="importFile" accept=".json" style="display: none;">
+    </div>
+    
+    <script src="dashboard.js"></script>
+</body>
+</html>
+
+

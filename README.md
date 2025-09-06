@@ -84,3 +84,6 @@ Chrome's storage API is used with the following data structure format:
 - **Format Validation**: Imported files are validated to ensure they contain valid bookmark data
 - **Error Handling**: Comprehensive error handling with user-friendly messages
 - **Multiple URL Formats**: Supports both youtube.com and youtu.be URLs with various timestamp formats
+
+inspired by:
+https://github.com/NabokD/pockettube

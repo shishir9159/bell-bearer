@@ -647,6 +647,61 @@ class BookmarkManager {
         return div.innerHTML;
     }
 
+    copySubtitles(video, includeTimestamp) {
+        const bookmarksWithSubtitles = video.bookmarks.filter(bookmark => bookmark.subtitle);
+        
+        if (bookmarksWithSubtitles.length === 0) {
+            alert('No subtitles found in bookmarks');
+            return;
+        }
+        
+        let text = '';
+        bookmarksWithSubtitles.forEach(bookmark => {
+            if (includeTimestamp) {
+                const timeDisplay = this.formatTime(bookmark.time);
+                text += `[${timeDisplay}] ${bookmark.subtitle}\n`;
+            } else {
+                text += `${bookmark.subtitle}\n`;
+            }
+        });
+        
+        // Copy to clipboard
+        navigator.clipboard.writeText(text.trim()).then(() => {
+            this.showCopyNotification(includeTimestamp);
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+            // Fallback: create textarea and copy
+            const textarea = document.createElement('textarea');
+            textarea.value = text.trim();
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            this.showCopyNotification(includeTimestamp);
+        });
+    }
+
+    showCopyNotification(includeTimestamp) {
+        const notification = document.createElement('div');
+        notification.textContent = `Subtitles copied ${includeTimestamp ? 'with timestamps' : 'without timestamps'}!`;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4caf50;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 6px;
+            z-index: 10000;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        `;
+        document.body.appendChild(notification);
+        setTimeout(() => {
+            notification.remove();
+        }, 2000);
+    }
+
     openDashboard() {
         chrome.tabs.create({
             url: chrome.runtime.getURL('dashboard.html')
