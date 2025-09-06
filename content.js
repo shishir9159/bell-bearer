@@ -19,7 +19,6 @@ class YouTubeBookmarker {
 
     setupKeyboardListeners() {
         document.addEventListener('keydown', (e) => {
-            // bug: b
             if (e.ctrlKey && e.key === 'b' && !this.isRecording) {
                 // overriding default browser behavior for keypress
                 e.preventDefault();
@@ -29,6 +28,32 @@ class YouTubeBookmarker {
             if (e.key === 'S' && e.ctrlKey && e.shiftKey && this.segmentStart === null) {
                 e.preventDefault();
                 this.handleSegmentStart();
+            }
+            
+            // Alt + 1-9: skip forward by number of seconds
+            if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key >= '1' && e.key <= '9') {
+                e.preventDefault();
+                const seconds = parseInt(e.key);
+                this.skipForward(seconds);
+            }
+            
+            // Shift + 1-9: skip backward by number of seconds
+            if (e.shiftKey && !e.ctrlKey && !e.altKey && e.key >= '1' && e.key <= '9') {
+                e.preventDefault();
+                const seconds = parseInt(e.key);
+                this.skipBackward(seconds);
+            }
+            
+            // > key: increase playback speed (Shift + .)
+            if ((e.key === '>' || (e.key === '.' && e.shiftKey)) && !e.ctrlKey && !e.altKey) {
+                e.preventDefault();
+                this.increasePlaybackSpeed();
+            }
+            
+            // < key: decrease playback speed (Shift + ,)
+            if ((e.key === '<' || (e.key === ',' && e.shiftKey)) && !e.ctrlKey && !e.altKey) {
+                e.preventDefault();
+                this.decreasePlaybackSpeed();
             }
         });
 
@@ -158,6 +183,48 @@ class YouTubeBookmarker {
         if (video) {
             video.currentTime = time; 
             video.play();
+        }
+    }
+
+    skipForward(seconds) {
+        const video = document.querySelector('video');
+        if (video) {
+            const newTime = Math.min(video.currentTime + seconds, video.duration);
+            video.currentTime = newTime;
+            this.showNotification(`Skipped forward ${seconds}s`, 'info');
+        }
+    }
+
+    skipBackward(seconds) {
+        const video = document.querySelector('video');
+        if (video) {
+            const newTime = Math.max(video.currentTime - seconds, 0);
+            video.currentTime = newTime;
+            this.showNotification(`Skipped backward ${seconds}s`, 'info');
+        }
+    }
+
+    increasePlaybackSpeed() {
+        const video = document.querySelector('video');
+        if (video) {
+            const currentSpeed = video.playbackRate;
+            const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
+            const currentIndex = speeds.findIndex(s => s >= currentSpeed) || speeds.length - 1;
+            const nextIndex = Math.min(currentIndex + 1, speeds.length - 1);
+            video.playbackRate = speeds[nextIndex];
+            this.showNotification(`Playback speed: ${speeds[nextIndex]}x`, 'info');
+        }
+    }
+
+    decreasePlaybackSpeed() {
+        const video = document.querySelector('video');
+        if (video) {
+            const currentSpeed = video.playbackRate;
+            const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
+            const currentIndex = speeds.findIndex(s => s >= currentSpeed) || 0;
+            const prevIndex = Math.max(currentIndex - 1, 0);
+            video.playbackRate = speeds[prevIndex];
+            this.showNotification(`Playback speed: ${speeds[prevIndex]}x`, 'info');
         }
     }
 

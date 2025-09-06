@@ -23,6 +23,10 @@ class BookmarkManager {
     }
 
     setupEventListeners() {
+        document.getElementById('dashboardBtn').addEventListener('click', () => {
+            this.openDashboard();
+        });
+        
         document.getElementById('clearAll').addEventListener('click', () => {
             this.clearAllBookmarks();
         });
@@ -39,7 +43,7 @@ class BookmarkManager {
             this.handleFileImport(e.target.files[0]);
         });
 
-        // Event delegation for bookmark actions
+        // event delegation for bookmark actions
         const bookmarkDetails = document.getElementById('bookmarkDetails');
         bookmarkDetails.addEventListener('click', (e) => {
             if (e.target.classList.contains('seek-btn')) {
@@ -161,21 +165,18 @@ class BookmarkManager {
                     const videoUrl = `https://www.youtube.com/watch?v=${videoId}${time > 0 ? `&t=${Math.floor(time)}s` : ''}`;
                     await chrome.tabs.create({
                         url: videoUrl,
-                        index: tab.index + 1 // Open in next tab
+                        index: tab.index + 1 //open in next tab
                     });
                 }
                 return;
             }
 
-            // Video matches, proceed with seeking
-            // Try to send message first (if content script is loaded)
             try {
                 await chrome.tabs.sendMessage(tab.id, {
                     action: 'seekToTime',
                     time: time
                 });
             } catch (messageError) {
-                // If message fails, fall back to executeScript
                 await chrome.scripting.executeScript({
                     target: { tabId: tab.id },
                     func: (seekTime) => {
@@ -254,7 +255,6 @@ class BookmarkManager {
         const video = this.videos[videoIndex];
         if (bookmarkIndex < 0 || bookmarkIndex >= video.bookmarks.length) return;
 
-        // Remove the bookmark at the specified index
         video.bookmarks.splice(bookmarkIndex, 1);
 
         if (video.bookmarks.length === 0) {
@@ -645,6 +645,12 @@ class BookmarkManager {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    openDashboard() {
+        chrome.tabs.create({
+            url: chrome.runtime.getURL('dashboard.html')
+        });
     }
 }
 
