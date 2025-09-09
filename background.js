@@ -5,7 +5,8 @@ chrome.runtime.onInstalled.addListener(() => {
 // icon click from the toolbar
 chrome.action.onClicked.addListener((tab) => {
 
-    // default_popup action
+    // todo:
+    // debug mode only
     console.log('Extension icon clicked');
 });
 
@@ -15,11 +16,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.storage.local.get(['youtubeBookmarks'], (result) => {
             sendResponse({ bookmarks: result.youtubeBookmarks || [] });
         });
-        
+
         // message channel is kept open for async response
         return true;
     }
-    
+
     if (message.action === 'openDashboard') {
         chrome.tabs.create({
             url: chrome.runtime.getURL('dashboard.html')
