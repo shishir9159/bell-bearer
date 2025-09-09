@@ -59,6 +59,31 @@ header h1 {
     background: rgba(255, 255, 255, 0.4);
 }
 
+.btn-theme {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-theme:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+}
+
+.btn-theme:active {
+    transform: scale(0.95);
+}
+
 .main-content {
     display: flex;
     height: 350px;
@@ -396,4 +421,209 @@ header h1 {
     .import-modal-buttons button {
         width: 100%;
     }
+}
+
+/* Dark Theme Styles */
+body.dark-theme {
+    background: #1e1e1e;
+    color: #e0e0e0;
+}
+
+body.dark-theme header {
+    background: linear-gradient(135deg, #7289da, #5865F2);
+    color: white;
+    padding: 20px 30px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+body.dark-theme header h1 {
+    color: white;
+}
+
+header h1 {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+body.dark-theme .container {
+    background: #2d2d2d;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+body.dark-theme .main-content {
+    background: #2d2d2d;
+}
+
+body.dark-theme .video-list {
+    background: #252525;
+    border-right-color: #444;
+}
+
+body.dark-theme .video-item {
+    border-bottom-color: #444;
+    color: #e0e0e0;
+}
+
+body.dark-theme .video-item:hover {
+    background: #363636;
+}
+
+body.dark-theme .video-item.selected {
+    background: #1a3a4a;
+    border-left-color: #7289da;
+}
+
+body.dark-theme .video-meta {
+    color: #aaa;
+}
+
+body.dark-theme .bookmark-count {
+    background: #7289da;
+    color: white;
+}
+
+body.dark-theme .bookmark-details {
+    background: #2d2d2d;
+    color: #e0e0e0;
+}
+
+body.dark-theme .no-selection {
+    color: #888;
+}
+
+body.dark-theme .bookmark-item {
+    background: #363636;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.dark-theme .bookmark-item:hover {
+    background: #1a3a4a;
+    border-color: #7289da;
+}
+
+body.dark-theme .bookmark-time {
+    color: #7289da;
+}
+
+body.dark-theme .bookmark-note {
+    color: #bbb;
+}
+
+body.dark-theme .btn-small {
+    background: #444;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.dark-theme .btn-small:hover {
+    background: #555;
+}
+
+body.dark-theme .btn-small.delete {
+    background: #2a1f3d;
+    border-color: #3d2a5a;
+    color: #7289da;
+}
+
+body.dark-theme .btn-small.delete:hover {
+    background: #3d2a5a;
+}
+
+body.dark-theme .instructions {
+    background: #252525;
+    border-top-color: #444;
+}
+
+body.dark-theme .instructions h3 {
+    color: #e0e0e0;
+}
+
+body.dark-theme .instructions ul {
+    color: #bbb;
+}
+
+body.dark-theme .instructions strong {
+    color: #e0e0e0;
+}
+
+body.dark-theme .empty-state {
+    color: #888;
+}
+
+body.dark-theme .empty-state h3 {
+    color: #aaa;
+}
+
+body.dark-theme .import-export-info {
+    background: #1f3d1f;
+    border-color: #2d5a2d;
+    color: #66bb6a;
+}
+
+body.dark-theme .import-export-error {
+    background: #2a1f3d;
+    border-color: #3d2a5a;
+    color: #7289da;
+}
+
+body.dark-theme .import-export-warning {
+    background: #3d2f1f;
+    border-color: #5a4a2a;
+    color: #ffb74d;
+}
+
+body.dark-theme .import-modal {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+body.dark-theme .import-modal-content {
+    background: #2d2d2d;
+    color: #e0e0e0;
+}
+
+body.dark-theme .import-modal-content h3 {
+    color: #e0e0e0;
+}
+
+body.dark-theme .import-option-btn {
+    background: #363636;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.dark-theme .import-option-btn:hover {
+    background: #1a3a4a;
+    border-color: #7289da;
+    color: #7289da;
+}
+
+body.dark-theme .import-modal-close {
+    background: #444;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.dark-theme .import-modal-close:hover {
+    background: #555;
+}
+
+body.dark-theme .btn-primary {
+    background: #7289da;
+    border-color: #5b6eae;
+}
+
+body.dark-theme .btn-primary:hover {
+    background: #5b6eae;
+}
+
+body.dark-theme .import-modal-content textarea {
+    background: #252525;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.dark-theme .import-modal-content textarea:focus {
+    border-color: #7289da;
+    box-shadow: 0 0 0 2px rgba(114, 137, 218, 0.3);
 }

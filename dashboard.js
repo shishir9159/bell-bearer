@@ -12,6 +12,7 @@ class Dashboard {
         await this.loadBookmarks();
         await this.loadSubscriptions();
         this.setupEventListeners();
+        this.setupTheme();
         this.renderDashboard();
     }
 
@@ -1081,6 +1082,49 @@ class Dashboard {
         setTimeout(() => {
             notification.remove();
         }, 2000);
+    }
+
+    setupTheme() {
+        const themeToggle = document.getElementById('themeToggle');
+        if (!themeToggle) return;
+
+        // Load saved theme preference
+        this.loadTheme();
+
+        // Toggle theme on button click
+        themeToggle.addEventListener('click', () => {
+            this.toggleTheme();
+        });
+    }
+
+    loadTheme() {
+        chrome.storage.local.get(['theme'], (result) => {
+            const isDark = result.theme === 'dark';
+            if (isDark) {
+                document.body.classList.add('dark-theme');
+                document.querySelector('header').classList.add('dark-theme');
+                const themeToggle = document.getElementById('themeToggle');
+                if (themeToggle) {
+                    themeToggle.textContent = '☀️';
+                }
+            } else {
+                document.body.classList.remove('dark-theme');
+                document.querySelector('header').classList.remove('dark-theme');
+                const themeToggle = document.getElementById('themeToggle');
+                if (themeToggle) {
+                    themeToggle.textContent = '🌙';
+                }
+            }
+        });
+    }
+
+    toggleTheme() {
+        const isDark = document.body.classList.toggle('dark-theme');
+        const themeToggle = document.getElementById('themeToggle');
+        if (themeToggle) {
+            themeToggle.textContent = isDark ? '☀️' : '🌙';
+        }
+        chrome.storage.local.set({ theme: isDark ? 'dark' : 'light' });
     }
 }
 

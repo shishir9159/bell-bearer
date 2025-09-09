@@ -8,6 +8,7 @@ class BookmarkManager {
     async init() {
         await this.loadBookmarks();
         this.setupEventListeners();
+        this.setupTheme();
         this.renderVideoList();
         this.renderBookmarkDetails();
     }
@@ -706,6 +707,47 @@ class BookmarkManager {
         chrome.tabs.create({
             url: chrome.runtime.getURL('dashboard.html')
         });
+    }
+
+    setupTheme() {
+        const themeToggle = document.getElementById('themeToggle');
+        if (!themeToggle) return;
+
+        // Load saved theme preference
+        this.loadTheme();
+
+        // Toggle theme on button click
+        themeToggle.addEventListener('click', () => {
+            this.toggleTheme();
+        });
+    }
+
+    loadTheme() {
+        chrome.storage.local.get(['theme'], (result) => {
+            const isDark = result.theme === 'dark';
+            if (isDark) {
+                document.body.classList.add('dark-theme');
+                const themeToggle = document.getElementById('themeToggle');
+                if (themeToggle) {
+                    themeToggle.textContent = '☀️';
+                }
+            } else {
+                document.body.classList.remove('dark-theme');
+                const themeToggle = document.getElementById('themeToggle');
+                if (themeToggle) {
+                    themeToggle.textContent = '🌙';
+                }
+            }
+        });
+    }
+
+    toggleTheme() {
+        const isDark = document.body.classList.toggle('dark-theme');
+        const themeToggle = document.getElementById('themeToggle');
+        if (themeToggle) {
+            themeToggle.textContent = isDark ? '☀️' : '🌙';
+        }
+        chrome.storage.local.set({ theme: isDark ? 'dark' : 'light' });
     }
 }
 
