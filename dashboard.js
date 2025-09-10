@@ -56,40 +56,40 @@ class Dashboard {
         document.getElementById('dashboardTab').addEventListener('click', () => {
             this.switchView('dashboard');
         });
-        
+
         document.getElementById('subscriptionsTab').addEventListener('click', () => {
             this.switchView('subscriptions');
         });
-        
+
         document.getElementById('settingsTab').addEventListener('click', () => {
             this.switchView('settings');
         });
-        
+
         // Subscription manager controls
         document.getElementById('addChannelBtn').addEventListener('click', () => {
             this.showAddChannelModal();
         });
-        
+
         document.getElementById('addTopicBtn').addEventListener('click', () => {
             this.showAddTopicModal();
         });
-        
+
         document.getElementById('refreshVideosBtn').addEventListener('click', () => {
             this.refreshNewVideos();
         });
-        
+
         document.getElementById('exportBtn').addEventListener('click', () => {
             this.exportBookmarks();
         });
-        
+
         document.getElementById('importBtn').addEventListener('click', () => {
             this.showImportOptions();
         });
-        
+
         document.getElementById('clearAll').addEventListener('click', () => {
             this.clearAllBookmarks();
         });
-        
+
         document.getElementById('importFile').addEventListener('change', (e) => {
             this.handleFileImport(e.target.files[0]);
         });
@@ -142,17 +142,17 @@ class Dashboard {
 
     switchView(view) {
         this.currentView = view;
-        
+
         // Update tab states
         document.getElementById('dashboardTab').classList.toggle('active', view === 'dashboard');
         document.getElementById('subscriptionsTab').classList.toggle('active', view === 'subscriptions');
         document.getElementById('settingsTab').classList.toggle('active', view === 'settings');
-        
+
         // Update view visibility
         document.getElementById('dashboardView').classList.toggle('active', view === 'dashboard');
         document.getElementById('subscriptionsView').classList.toggle('active', view === 'subscriptions');
         document.getElementById('settingsView').classList.toggle('active', view === 'settings');
-        
+
         if (view === 'dashboard') {
             this.renderDashboard();
         } else if (view === 'subscriptions') {
@@ -162,7 +162,7 @@ class Dashboard {
 
     renderDashboard() {
         const videosContainer = document.getElementById('videosContainer');
-        
+
         if (this.videos.length === 0) {
             videosContainer.innerHTML = `
                 <div class="empty-state">
@@ -190,17 +190,17 @@ class Dashboard {
                 </div>
                 <div class="video-bookmarks">
                     ${video.bookmarks.length > 0 ? video.bookmarks.map((bookmark, index) => {
-                        const isSegment = 'start' in bookmark && 'end' in bookmark;
-                        const time = isSegment ? bookmark.start : bookmark.time;
-                        const timeDisplay = isSegment 
-                            ? `${this.formatTime(bookmark.start)} - ${this.formatTime(bookmark.end)}`
-                            : this.formatTime(bookmark.time);
-                        
-                        return `
+                const isSegment = 'start' in bookmark && 'end' in bookmark;
+                const time = isSegment ? bookmark.start : bookmark.time;
+                const timeDisplay = isSegment
+                    ? `${this.formatTime(bookmark.start)} - ${this.formatTime(bookmark.end)}`
+                    : this.formatTime(bookmark.time);
+
+                return `
                             <div class="bookmark-item" data-bookmark-index="${index}" data-video-id="${video.id}">
                                 <div class="bookmark-time">${timeDisplay}</div>
                                 ${bookmark.note ? `<div class="bookmark-note">${this.escapeHtml(bookmark.note)}</div>` : ''}
-                                ${bookmark.subtitle ? `<div class="bookmark-subtitle" style="font-style: italic; color: #666; margin-top: 4px; font-size: 12px;">"${this.escapeHtml(bookmark.subtitle)}"</div>` : ''}
+                                ${bookmark.subtitle && bookmark.subtitle !== 'null' ? `<div class="bookmark-subtitle">"${this.escapeHtml(bookmark.subtitle)}"</div>` : ''}
                                 <div class="bookmark-actions">
                                     ${bookmark.subtitle ? `
                                         <button class="btn-small copy-bookmark-subtitle" data-video-id="${video.id}" data-bookmark-index="${index}" data-time="${time}" title="Copy subtitle">
@@ -216,7 +216,7 @@ class Dashboard {
                                 </div>
                             </div>
                         `;
-                    }).join('') : '<p class="no-bookmarks">No bookmarks for this video</p>'}
+            }).join('') : '<p class="no-bookmarks">No bookmarks for this video</p>'}
                 </div>
             </div>
         `;
@@ -236,7 +236,7 @@ class Dashboard {
                 // Switch to existing tab and seek
                 await chrome.tabs.update(youtubeTab.id, { active: true });
                 await chrome.windows.update(youtubeTab.windowId, { focused: true });
-                
+
                 try {
                     await chrome.tabs.sendMessage(youtubeTab.id, {
                         action: 'seekToTime',
@@ -427,7 +427,7 @@ class Dashboard {
 
     async processTimestampLinks(linksText) {
         const lines = linksText.trim().split('\n').filter(line => line.trim());
-        
+
         if (lines.length === 0) {
             alert('No links provided');
             return;
@@ -440,7 +440,7 @@ class Dashboard {
             const result = this.parseYouTubeTimestampLink(line);
             if (result) {
                 const { videoId, time, title } = result;
-                
+
                 if (!videoMap.has(videoId)) {
                     videoMap.set(videoId, {
                         id: videoId,
@@ -449,7 +449,7 @@ class Dashboard {
                         bookmarks: []
                     });
                 }
-                
+
                 const video = videoMap.get(videoId);
                 if (!video.bookmarks.some(b => b.time === time)) {
                     video.bookmarks.push({
@@ -458,7 +458,7 @@ class Dashboard {
                         note: `Imported from timestamp link`
                     });
                 }
-                
+
                 processedLinks++;
             }
         }
@@ -470,7 +470,7 @@ class Dashboard {
 
         const importedVideos = Array.from(videoMap.values());
         await this.mergeImportedBookmarks(importedVideos);
-        
+
         await this.loadBookmarks();
         this.renderDashboard();
     }
@@ -478,13 +478,13 @@ class Dashboard {
     parseYouTubeTimestampLink(url) {
         try {
             const urlObj = new URL(url);
-            
+
             if (!urlObj.hostname.includes('youtube.com') && !urlObj.hostname.includes('youtu.be')) {
                 return null;
             }
 
             let videoId = '';
-            
+
             if (urlObj.hostname.includes('youtu.be')) {
                 videoId = urlObj.pathname.slice(1);
             } else {
@@ -497,7 +497,7 @@ class Dashboard {
 
             let time = 0;
             const tParam = urlObj.searchParams.get('t');
-            
+
             if (tParam) {
                 if (tParam.includes('h') || tParam.includes('m') || tParam.includes('s')) {
                     time = this.parseTimestampString(tParam);
@@ -519,11 +519,11 @@ class Dashboard {
 
     parseTimestampString(timestamp) {
         let totalSeconds = 0;
-        
+
         const hourMatch = timestamp.match(/(\d+)h/);
         const minuteMatch = timestamp.match(/(\d+)m/);
         const secondMatch = timestamp.match(/(\d+)s/);
-        
+
         if (hourMatch) {
             totalSeconds += parseInt(hourMatch[1]) * 3600;
         }
@@ -533,7 +533,7 @@ class Dashboard {
         if (secondMatch) {
             totalSeconds += parseInt(secondMatch[1]);
         }
-        
+
         return totalSeconds;
     }
 
@@ -543,17 +543,17 @@ class Dashboard {
         try {
             const text = await this.readFileAsText(file);
             const importData = JSON.parse(text);
-            
+
             if (!this.validateImportData(importData)) {
                 alert('Invalid file format. Please use a valid bookmark export file.');
                 return;
             }
 
             await this.mergeImportedBookmarks(importData.videos);
-            
+
             await this.loadBookmarks();
             this.renderDashboard();
-            
+
         } catch (error) {
             console.error('Import error:', error);
             alert('Error reading file. Please check the file format.');
@@ -572,11 +572,11 @@ class Dashboard {
     }
 
     validateImportData(data) {
-        return data && 
-               typeof data === 'object' && 
-               Array.isArray(data.videos) &&
-               data.version &&
-               data.exportDate;
+        return data &&
+            typeof data === 'object' &&
+            Array.isArray(data.videos) &&
+            data.version &&
+            data.exportDate;
     }
 
     async mergeImportedBookmarks(importedVideos) {
@@ -595,7 +595,7 @@ class Dashboard {
             }
 
             const existingVideoIndex = this.videos.findIndex(v => v.id === importedVideo.id);
-            
+
             if (existingVideoIndex === -1) {
                 this.videos.push({
                     id: importedVideo.id,
@@ -608,11 +608,11 @@ class Dashboard {
             } else {
                 const existingVideo = this.videos[existingVideoIndex];
                 const existingTimes = new Set(existingVideo.bookmarks.map(b => b.time));
-                
-                const newBookmarks = importedVideo.bookmarks.filter(b => 
+
+                const newBookmarks = importedVideo.bookmarks.filter(b =>
                     b && typeof b.time === 'number' && !existingTimes.has(b.time)
                 );
-                
+
                 if (newBookmarks.length > 0) {
                     existingVideo.bookmarks.push(...newBookmarks);
                     existingVideo.bookmarks.sort((a, b) => a.time - b.time);
@@ -644,7 +644,7 @@ class Dashboard {
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
-        
+
         if (hours > 0) {
             return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         } else {
@@ -660,7 +660,7 @@ class Dashboard {
 
     renderSubscriptions() {
         const topicsContainer = document.getElementById('topicsContainer');
-        
+
         if (this.topics.length === 0) {
             topicsContainer.innerHTML = `
                 <div class="empty-state">
@@ -810,7 +810,7 @@ class Dashboard {
             const channelName = modal.querySelector('#channelNameInput').value.trim();
             const channelUrl = modal.querySelector('#channelUrlInput').value.trim();
             const topicId = modal.querySelector('#topicSelect').value;
-            
+
             if (channelName && channelUrl) {
                 this.addChannel(channelName, channelUrl, topicId);
                 modal.remove();
@@ -906,7 +906,7 @@ class Dashboard {
             topicId: topicId,
             addedAt: Date.now()
         };
-        
+
         // Check if channel already exists
         const existingIndex = this.channels.findIndex(c => c.id === channelId);
         if (existingIndex !== -1) {
@@ -914,7 +914,7 @@ class Dashboard {
         } else {
             this.channels.push(channel);
         }
-        
+
         this.saveSubscriptions();
         this.renderSubscriptions();
     }
@@ -955,7 +955,7 @@ class Dashboard {
         // This would ideally fetch from YouTube API or notifications
         // For now, we'll show a message and allow manual addition
         alert('To refresh new videos, visit YouTube and check your subscriptions. You can manually mark videos as new from the YouTube page.');
-        
+
         // In a real implementation, this would:
         // 1. Check YouTube notifications API
         // 2. Or scrape YouTube subscription feed
@@ -998,12 +998,12 @@ class Dashboard {
 
     copySubtitles(video, includeTimestamp) {
         const bookmarksWithSubtitles = video.bookmarks.filter(bookmark => bookmark.subtitle);
-        
+
         if (bookmarksWithSubtitles.length === 0) {
             alert('No subtitles found in bookmarks');
             return;
         }
-        
+
         let text = '';
         bookmarksWithSubtitles.forEach(bookmark => {
             if (includeTimestamp) {
@@ -1013,7 +1013,7 @@ class Dashboard {
                 text += `${bookmark.subtitle}\n`;
             }
         });
-        
+
         // Copy to clipboard
         navigator.clipboard.writeText(text.trim()).then(() => {
             this.showCopyNotification(includeTimestamp);
@@ -1035,10 +1035,10 @@ class Dashboard {
             alert('No subtitle found for this bookmark');
             return;
         }
-        
+
         // Show a prompt to ask if user wants timestamp
         const includeTimestamp = confirm('Copy subtitle with timestamp?');
-        
+
         let text = '';
         if (includeTimestamp) {
             const timeDisplay = this.formatTime(parseFloat(timeStr));
@@ -1046,7 +1046,7 @@ class Dashboard {
         } else {
             text = bookmark.subtitle;
         }
-        
+
         // Copy to clipboard
         navigator.clipboard.writeText(text).then(() => {
             this.showCopyNotification(includeTimestamp, 'Subtitle copied!');
@@ -1129,5 +1129,3 @@ class Dashboard {
 }
 
 const dashboard = new Dashboard();
-
-

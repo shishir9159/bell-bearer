@@ -958,3 +958,18 @@ body.dark-theme .new-video-date {
 }
 
 
+
+.bookmark-subtitle {
+    font-style: italic;
+    color: #666;
+    margin-top: 4px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    border-left: 2px solid #ddd;
+    padding-left: 8px;
+}
+
+body.dark-theme .bookmark-subtitle {
+    color: #aaa;
+    border-left-color: #555;
+}

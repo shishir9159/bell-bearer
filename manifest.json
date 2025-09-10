@@ -19,7 +19,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["content.js"],
+      "js": ["transcript.js", "content.js"],
       "css": ["content.css"]
     }
   ],
@@ -31,4 +31,4 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   }
-} 
+}
