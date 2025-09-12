@@ -5,13 +5,18 @@ class YouTubeBookmarker {
         this.videoTitle = null;
         this.bookmarks = [];
         this.segmentStart = null;
+        this.checkpointStartTime = null; // Start time when Ctrl+B is pressed
         this.speedSyncSetup = false;
         this.transcriptApi = typeof YouTubeTranscriptApi !== 'undefined' ? new YouTubeTranscriptApi() : null;
         this.currentTranscript = null;
+        this.enableSkipShortcuts = true;
+        this.speedBoostTimeout = null; // Timeout for temporary speed boost
+        this.originalSpeed = null; // Store original speed before boost
         this.init();
     }
 
     init() {
+        this.loadSettings();
         this.setupKeyboardListeners();
         this.setupMessageListener();
         this.detectVideoChange();
@@ -22,35 +27,70 @@ class YouTubeBookmarker {
         }, 2000);
     }
 
+    loadSettings() {
+        chrome.storage.local.get(['enableSkipShortcuts'], (result) => {
+            this.enableSkipShortcuts = result.enableSkipShortcuts !== false;
+        });
+
+        chrome.storage.onChanged.addListener((changes, namespace) => {
+            if (namespace === 'local' && changes.enableSkipShortcuts) {
+                this.enableSkipShortcuts = changes.enableSkipShortcuts.newValue;
+            }
+        });
+    }
+
     setupKeyboardListeners() {
+        // Use capture phase to ensure we catch events before YouTube
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey && e.key === 'b' && !this.isRecording) {
                 // overriding default browser behavior for keypress
                 e.preventDefault();
                 this.startRecording();
             }
-            // segment start
-            if (e.key === 'S' && e.ctrlKey && e.shiftKey && this.segmentStart === null) {
-                e.preventDefault();
-                this.handleSegmentStart();
-            }
 
-            // Alt + 1-9: skip forward by number of seconds
-            if (e.altKey && !e.ctrlKey && !e.shiftKey && e.key >= '1' && e.key <= '9') {
-                e.preventDefault();
-                const seconds = parseInt(e.key);
-                this.skipForward(seconds);
-            }
+            // // segment start
+            // // Allow Numpad keys for numbers if applicable (though S is a letter)
+            // if (e.key === 'S' && e.ctrlKey && e.shiftKey && this.segmentStart === null) {
+            //     e.preventDefault();
+            //     this.handleSegmentStart();
+            // }
 
-            // Shift + 1-9: skip backward by number of seconds
-            // Use code property to detect number keys regardless of shift state
-            if (e.shiftKey && !e.ctrlKey && !e.altKey) {
-                const numMatch = e.code.match(/^Digit(\d)$/);
+            // Ctrl + Alt + 1-9: skip forward by number of seconds
+            // Support both Digit (top row) and Numpad keys
+            if (this.enableSkipShortcuts && !e.ctrlKey && e.altKey) {
+                const numMatch = e.code.match(/^(?:Digit|Numpad)(\d)$/);
                 if (numMatch) {
                     const num = parseInt(numMatch[1]);
                     if (num >= 1 && num <= 9) {
                         e.preventDefault();
+                        e.stopPropagation();
+                        this.skipForward(num);
+                    }
+                }
+            }
+
+            // Ctrl + Shift + 1-9: skip backward by number of seconds
+            if (this.enableSkipShortcuts && !e.ctrlKey && e.shiftKey && !e.altKey) {
+                const numMatch = e.code.match(/^(?:Digit|Numpad)(\d)$/);
+                if (numMatch) {
+                    const num = parseInt(numMatch[1]);
+                    if (num >= 1 && num <= 9) {
+                        e.preventDefault();
+                        e.stopPropagation();
                         this.skipBackward(num);
+                    }
+                }
+            }
+
+            // Ctrl + Shift + 1-9: temporary speed boost to 3x for number of seconds
+            if (e.ctrlKey && e.shiftKey && !e.altKey) {
+                const numMatch = e.code.match(/^(?:Digit|Numpad)(\d)$/);
+                if (numMatch) {
+                    const num = parseInt(numMatch[1]);
+                    if (num >= 1 && num <= 9) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.temporarySpeedBoost(num);
                     }
                 }
             }
@@ -66,10 +106,9 @@ class YouTubeBookmarker {
                 e.preventDefault();
                 this.decreasePlaybackSpeed();
             }
-        });
+        }, true); // Use capture
 
         document.addEventListener('keyup', (e) => {
-            // todo: e.ctrlKey should not 
             // stop recording after Ctrl + B is released
             if (e.key === 'b' && this.isRecording) {
                 this.stopRecording();
@@ -79,7 +118,7 @@ class YouTubeBookmarker {
                 e.preventDefault();
                 this.handleSegmentEnd();
             }
-        });
+        }, true); // Use capture
     }
 
     setupMessageListener() {
@@ -111,41 +150,17 @@ class YouTubeBookmarker {
         return match ? match[1] : null;
     }
 
-    async fetchTranscript(videoId, options = {}) {
+    async fetchTranscript(videoId) {
         if (!this.transcriptApi) return;
 
         try {
-            console.log(`Fetching transcript for ${videoId} with options:`, options);
-            this.currentTranscript = await this.transcriptApi.fetch(videoId, options);
-            console.log('Transcript fetched successfully:', {
-                language: this.currentTranscript.language,
-                snippets: this.currentTranscript.snippets.length
-            });
+            // Always fetch English (auto-generated preferred)
+            this.currentTranscript = await this.transcriptApi.fetch(videoId, { languages: ['en'] });
+            console.log('Transcript fetched:', this.currentTranscript.language, this.currentTranscript.snippets.length, 'snippets');
         } catch (error) {
-            console.warn('Failed to fetch transcript:', error);
-            if (options.language) {
-                console.warn('Could not fetch requested language');
-            } else {
-                this.currentTranscript = null;
-            }
+            console.warn('Failed to fetch transcript:', error.message);
+            this.currentTranscript = null;
         }
-    }
-
-    /**
-     * Get the currently active (showing) text track from the video element
-     * @returns {{language: string, mode: string, kind: string}|null}
-     */
-    getActiveTrack() {
-        const video = document.querySelector('video');
-        if (!video) return null;
-
-        for (let i = 0; i < video.textTracks.length; i++) {
-            const track = video.textTracks[i];
-            if (track.mode === 'showing') {
-                return track;
-            }
-        }
-        return null;
     }
 
     getCurrentVideoTitle() {
@@ -155,8 +170,12 @@ class YouTubeBookmarker {
         return titleElement ? titleElement.textContent.trim() : 'Unknown Title';
     }
 
+    getVideoElement() {
+        return document.querySelector('video.html5-main-video') || document.querySelector('video');
+    }
+
     getCurrentTime() {
-        const video = document.querySelector('video') // todo: website specific?
+        const video = this.getVideoElement();
         return video ? video.currentTime : 0;
     }
 
@@ -167,6 +186,7 @@ class YouTubeBookmarker {
         }
 
         this.isRecording = true;
+        this.checkpointStartTime = this.getCurrentTime(); // Capture start time
         this.showNotification('Hold Ctrl+B to create a checkpoint...', 'info');
         this.addRecordingIndicator();
     }
@@ -176,185 +196,100 @@ class YouTubeBookmarker {
         this.isRecording = false;
         this.removeRecordingIndicator();
 
-        const currentTime = this.getCurrentTime();
-        if (currentTime > 0) {
-            // Check active track and re-fetch if necessary
-            const activeTrack = this.getActiveTrack();
+        const startTime = this.checkpointStartTime;
+        const endTime = this.getCurrentTime();
+        this.checkpointStartTime = null; // Reset
 
-            // Logic to determine if we need to fetch a new transcript
-            let shouldRefetch = false;
-            let fetchOptions = {};
-
-            if (activeTrack && activeTrack.language) {
-                // If we have no transcript, or the language is different
-                if (!this.currentTranscript) {
-                    shouldRefetch = true;
-                    fetchOptions = { language: activeTrack.language };
-                } else {
-                    // Check for language mismatch
-                    // currentTranscript.languageCode might be 'en-GB' while activeTrack.language is 'en'
-                    // or vice versa.
-                    const transLang = this.currentTranscript.languageCode;
-                    const trackLang = activeTrack.language;
-
-                    if (transLang !== trackLang && !transLang.startsWith(trackLang) && !trackLang.startsWith(transLang)) {
-                        shouldRefetch = true;
-                        fetchOptions = { language: trackLang };
-                    }
-                }
-            } else if (!this.currentTranscript) {
-                // No active track, try default fetch
-                shouldRefetch = true;
-            }
-
-            if (shouldRefetch) {
-                if (fetchOptions.language) {
-                    this.showNotification(`Fetching ${activeTrack.label || fetchOptions.language} transcript...`, 'info');
-                }
-                await this.fetchTranscript(this.videoID, fetchOptions);
-            }
-
-            // Try to get subtitle text at current time
-            const subtitle = await this.getSubtitleAtTime(currentTime);
-
-            const bookmark = {
-                time: Math.floor(currentTime),
-                timestamp: Date.now(),
-                note: `Checkpoint at ${this.formatTime(currentTime)}`,
-                subtitle: subtitle || null
-            };
-
-            this.bookmarks = [bookmark];
-            this.saveBookmarks();
-            this.showNotification(`Checkpoint created at ${this.formatTime(currentTime)}!`, 'success');
-        } else {
+        if (startTime <= 0 || endTime <= 0) {
             this.showNotification('No checkpoint created - video not playing', 'warning');
+            return;
         }
+
+        // Ensure transcript is loaded
+        if (!this.currentTranscript) {
+            await this.fetchTranscript(this.videoID);
+        }
+
+        // Get subtitles from start to end time range
+        const subtitle = this.getSubtitlesInRange(startTime, endTime);
+
+        const bookmark = {
+            time: Math.floor(startTime), // For popup display - shows start time
+            start: Math.floor(startTime), // Start time for dashboard range display
+            end: Math.floor(endTime), // End time for dashboard range display
+            timestamp: Date.now(),
+            note: `Checkpoint ${this.formatTime(startTime)} - ${this.formatTime(endTime)}`,
+            subtitle: subtitle
+        };
+
+        this.bookmarks = [bookmark];
+        this.saveBookmarks();
+
+        const subtitlePreview = subtitle ? ` - "${subtitle.substring(0, 40)}${subtitle.length > 40 ? '...' : ''}"` : '';
+        this.showNotification(`Checkpoint created at ${this.formatTime(startTime)}!${subtitlePreview}`, 'success');
     }
 
-    async getSubtitleAtTime(time) {
-        try {
-            // Priority 1: Use fetched transcript if available
-            if (this.currentTranscript) {
-                // Try precise match/preceding logic
-                let snippet = this.currentTranscript.getSnippetAtOrBefore(time);
-
-                if (snippet) {
-                    const endTime = snippet.start + snippet.duration;
-                    // If time is within snippet duration (plus small buffer)
-                    if (time >= snippet.start && time <= endTime + 0.5) {
-                        console.log('Subtitle found in transcript:', snippet.text);
-                        return snippet.text;
-                    } else {
-                        console.log('Snippet found but time mismatch:', { time, start: snippet.start, end: endTime, text: snippet.text });
-                        // Fallback: check range explicitly for close match
-                        const rangeSnippets = this.currentTranscript.getSnippetsInRange(time - 1, time + 1);
-                        if (rangeSnippets.length > 0) {
-                            const best = rangeSnippets.find(s => time >= s.start && time <= s.start + s.duration + 0.5);
-                            if (best) return best.text;
-                        }
-                    }
-                }
-            }
-
-            console.log('No transcript match, checking active video tracks...');
-            // First, try to get from video textTracks API - this is the most reliable
-            const video = document.querySelector('video');
-            if (!video) return null;
-
-            // Try to find active text track (captions)
-            let activeTrack = null;
-            for (let i = 0; i < video.textTracks.length; i++) {
-                const track = video.textTracks[i];
-                if (track.kind === 'subtitles' || track.kind === 'captions') {
-                    // Prefer English track
-                    if (track.language && track.language.startsWith('en')) {
-                        activeTrack = track;
-                        break;
-                    } else if (!activeTrack) {
-                        activeTrack = track;
-                    }
-                }
-            }
-
-            if (!activeTrack || activeTrack.mode === 'disabled') {
-                // Try to enable captions and find English track
-                for (let i = 0; i < video.textTracks.length; i++) {
-                    const track = video.textTracks[i];
-                    if (track.kind === 'subtitles' || track.kind === 'captions') {
-                        if (track.language && track.language.startsWith('en')) {
-                            track.mode = 'showing';
-                            activeTrack = track;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!activeTrack || activeTrack.mode === 'disabled') {
-                return null;
-            }
-
-            // Find the cue at the current time
-            if (activeTrack.cues) {
-                for (let i = 0; i < activeTrack.cues.length; i++) {
-                    const cue = activeTrack.cues[i];
-                    if (time >= cue.startTime && time <= cue.endTime) {
-                        // Clean the text - remove HTML tags and normalize whitespace
-                        let text = cue.text;
-                        // Remove HTML tags if present
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = text;
-                        text = tempDiv.textContent || tempDiv.innerText || text;
-                        return text.trim();
-                    }
-                }
-            }
-
-            // Fallback: Try to get from DOM captions, but only from the video player container
-            // Be very specific to avoid getting video titles or other page content
-            const videoContainer = document.querySelector('#movie_player, .html5-video-player, ytd-player');
-            if (videoContainer) {
-                // Only look for caption elements inside the video player
-                const captionSelectors = [
-                    '.ytp-caption-window-container .ytp-caption-segment',
-                    '.ytp-caption-segment[class*="ytp-caption"]',
-                    '.ytp-caption-window-container span',
-                    '.ytp-caption-window-container div'
-                ];
-
-                for (const selector of captionSelectors) {
-                    const elements = videoContainer.querySelectorAll(selector);
-                    for (const element of elements) {
-                        // Check if element is visible and inside the video player
-                        const style = window.getComputedStyle(element);
-                        const rect = element.getBoundingClientRect();
-                        const videoRect = video.getBoundingClientRect();
-
-                        // Make sure it's actually overlaid on the video (within video bounds)
-                        if (style.display !== 'none' &&
-                            style.visibility !== 'hidden' &&
-                            style.opacity !== '0' &&
-                            rect.width > 0 &&
-                            rect.height > 0 &&
-                            // Check if it's positioned over the video area
-                            (rect.top >= videoRect.top && rect.top <= videoRect.bottom)) {
-
-                            const text = element.textContent.trim();
-                            // Filter out very long text (likely not a caption) and check it's not a video title
-                            if (text && text.length < 200 && !text.includes('•') && !text.match(/^\d+:\d+/)) {
-                                return text;
-                            }
-                        }
-                    }
-                }
-            }
-
-            return null;
-        } catch (error) {
-            console.error('Error getting subtitle:', error);
+    /**
+     * Get subtitle text at the specified time from the prefetched transcript
+     */
+    getSubtitleAtTime(time) {
+        if (!this.currentTranscript) {
+            console.log('No transcript available');
             return null;
         }
+
+        // Try exact match first
+        const snippet = this.currentTranscript.getSnippetAtTime(time);
+        if (snippet) {
+            console.log('Subtitle found:', snippet.text);
+            return snippet.text;
+        }
+
+        // Fallback: get snippet at or before time (for gaps between subtitles)
+        const nearSnippet = this.currentTranscript.getSnippetAtOrBefore(time);
+        if (nearSnippet) {
+            const endTime = nearSnippet.start + nearSnippet.duration;
+            if (time <= endTime + 1) { // Within 1 second buffer
+                console.log('Nearby subtitle found:', nearSnippet.text);
+                return nearSnippet.text;
+            }
+        }
+
+        console.log('No subtitle at time:', time);
+        return null;
+    }
+
+    /**
+     * Get all subtitle text within a time range from the prefetched transcript
+     * @param {number} startTime - Start time in seconds
+     * @param {number} endTime - End time in seconds
+     * @returns {string|null} Combined subtitle text or null if no transcript
+     */
+    getSubtitlesInRange(startTime, endTime) {
+        if (!this.currentTranscript) {
+            console.log('No transcript available');
+            return null;
+        }
+
+        // Use the transcript's getSnippetsInRange method
+        const snippets = this.currentTranscript.getSnippetsInRange(startTime, endTime);
+
+        if (snippets && snippets.length > 0) {
+            // Join all snippet texts with space
+            const combinedText = snippets.map(s => s.text).join(' ');
+            console.log(`Found ${snippets.length} subtitles in range ${startTime}-${endTime}:`, combinedText);
+            return combinedText;
+        }
+
+        // Fallback: try to get at least one subtitle near the range
+        const nearSnippet = this.currentTranscript.getSnippetAtOrBefore(startTime);
+        if (nearSnippet) {
+            console.log('Nearby subtitle found for range:', nearSnippet.text);
+            return nearSnippet.text;
+        }
+
+        console.log('No subtitles in range:', startTime, '-', endTime);
+        return null;
     }
 
     async saveBookmarks() {
@@ -394,7 +329,7 @@ class YouTubeBookmarker {
 
     seekToTime(time) {
         // BUGFIX
-        const video = document.querySelector('video');
+        const video = this.getVideoElement();
         if (video) {
             video.currentTime = time;
             video.play();
@@ -402,7 +337,7 @@ class YouTubeBookmarker {
     }
 
     skipForward(seconds) {
-        const video = document.querySelector('video');
+        const video = this.getVideoElement();
         if (video) {
             const newTime = Math.min(video.currentTime + seconds, video.duration);
             video.currentTime = newTime;
@@ -411,7 +346,7 @@ class YouTubeBookmarker {
     }
 
     skipBackward(seconds) {
-        const video = document.querySelector('video');
+        const video = this.getVideoElement();
         if (video) {
             const newTime = Math.max(video.currentTime - seconds, 0);
             video.currentTime = newTime;
@@ -419,10 +354,40 @@ class YouTubeBookmarker {
         }
     }
 
+    temporarySpeedBoost(seconds) {
+        const video = this.getVideoElement();
+        if (!video) return;
+
+        // Clear any existing speed boost timeout
+        if (this.speedBoostTimeout) {
+            clearTimeout(this.speedBoostTimeout);
+            this.speedBoostTimeout = null;
+        }
+
+        // Store the current speed if not already boosting
+        if (this.originalSpeed === null) {
+            this.originalSpeed = video.playbackRate;
+        }
+
+        // Set speed to 3x
+        video.playbackRate = 3;
+        this.showNotification(`Speed boost: 3x for ${seconds}s`, 'info');
+
+        // Set timeout to restore original speed
+        this.speedBoostTimeout = setTimeout(() => {
+            if (video && this.originalSpeed !== null) {
+                video.playbackRate = this.originalSpeed;
+                this.showNotification(`Speed restored to ${this.originalSpeed}x`, 'info');
+                this.originalSpeed = null;
+                this.speedBoostTimeout = null;
+            }
+        }, seconds * 1000);
+    }
+
     setupPlaybackSpeedSync() {
         // Monitor video element and sync playback speed
         const checkVideo = () => {
-            const video = document.querySelector('video');
+            const video = this.getVideoElement();
             if (video && !this.speedSyncSetup) {
                 this.speedSyncSetup = true;
 
@@ -440,7 +405,7 @@ class YouTubeBookmarker {
     }
 
     getCurrentPlaybackSpeed() {
-        const video = document.querySelector('video');
+        const video = this.getVideoElement();
         if (!video) return 1;
 
         // Always read directly from video element - this is the source of truth
@@ -448,10 +413,10 @@ class YouTubeBookmarker {
     }
 
     increasePlaybackSpeed() {
-        const video = document.querySelector('video');
+        const video = this.getVideoElement();
         if (video) {
-            // Use YouTube's exact speed options
-            const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+            // Extended speed options up to 5x
+            const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4, 4.5, 5];
 
             // Get current speed directly from video element
             const currentSpeed = this.getCurrentPlaybackSpeed();
@@ -494,10 +459,10 @@ class YouTubeBookmarker {
     }
 
     decreasePlaybackSpeed() {
-        const video = document.querySelector('video');
+        const video = this.getVideoElement();
         if (video) {
-            // Use YouTube's exact speed options
-            const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+            // Extended speed options up to 5x
+            const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4, 4.5, 5];
 
             // Get current speed directly from video element
             const currentSpeed = this.getCurrentPlaybackSpeed();
@@ -687,17 +652,30 @@ class YouTubeBookmarker {
         const addButton = document.createElement('button');
         addButton.id = 'bb-add-to-subscriptions-btn';
         addButton.className = 'bb-subscription-btn';
-        addButton.innerHTML = '📋';
-        addButton.title = 'Add channel to Bell Bearer Subscription Manager';
+
+        // pouch
+        addButton.innerHTML = '<svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" style="width: 24px; height: 24px; fill: currentColor;"><g><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"></path></g></svg>';
+        addButton.title = 'Add channel to Bell Bearer pouch';
+
+        // Detect YouTube theme (dark mode has dark attribute on html element)
+        const isDarkTheme = document.documentElement.hasAttribute('dark') ||
+            document.documentElement.getAttribute('dark') !== null ||
+            getComputedStyle(document.documentElement).getPropertyValue('--yt-spec-base-background').trim() === '#0f0f0f';
+
+        // Set colors based on theme
+        const bgColor = isDarkTheme ? '#272727' : '#f0f0f0';
+        const bgHoverColor = isDarkTheme ? '#3f3f3f' : '#e0e0e0';
+        const textColor = isDarkTheme ? '#ffffff' : '#0f0f0f';
+        const borderColor = isDarkTheme ? '#3f3f3f' : '#d0d0d0';
 
         // Style the button to match YouTube's style - icon only, positioned to the right
         addButton.style.cssText = `
             margin-left: 8px;
             padding: 8px 12px;
-            background: #f0f0f0;
-            border: 1px solid #d0d0d0;
+            background: ${bgColor};
+            border: 1px solid ${borderColor};
             border-radius: 18px;
-            color: #0f0f0f;
+            color: ${textColor};
             font-size: 18px;
             cursor: pointer;
             font-family: 'Roboto', 'Arial', sans-serif;
@@ -708,14 +686,16 @@ class YouTubeBookmarker {
             justify-content: center;
             min-width: 36px;
             height: 36px;
+            vertical-align: middle;
+            flex-shrink: 0;
         `;
 
         addButton.addEventListener('mouseenter', () => {
-            addButton.style.background = '#e0e0e0';
+            addButton.style.background = bgHoverColor;
         });
 
         addButton.addEventListener('mouseleave', () => {
-            addButton.style.background = '#f0f0f0';
+            addButton.style.background = bgColor;
         });
 
         addButton.addEventListener('click', (e) => {
@@ -727,38 +707,61 @@ class YouTubeBookmarker {
         // Try multiple insertion strategies - insert AFTER subscribe button (to the right)
         let inserted = false;
 
-        // Strategy 1: Insert after subscribe button container
-        if (subscribeContainer && subscribeContainer.parentElement) {
-            const parent = subscribeContainer.parentElement;
-            if (parent) {
-                // Insert after the container
-                if (subscribeContainer.nextSibling) {
-                    parent.insertBefore(addButton, subscribeContainer.nextSibling);
-                } else {
-                    parent.appendChild(addButton);
-                }
-                inserted = true;
+        // Strategy 1: Find yt-smartimation and insert as sibling (keeps them on same row)
+        const smartimation = subscribeContainer?.querySelector('yt-smartimation') ||
+            subscribeContainer?.closest('ytd-subscribe-button-renderer')?.querySelector('yt-smartimation');
+
+        if (smartimation && smartimation.parentElement) {
+            const parent = smartimation.parentElement;
+            // Ensure parent uses flex layout for horizontal alignment
+            parent.style.display = 'flex';
+            parent.style.alignItems = 'center';
+            parent.style.flexWrap = 'nowrap';
+
+            if (smartimation.nextSibling) {
+                parent.insertBefore(addButton, smartimation.nextSibling);
+            } else {
+                parent.appendChild(addButton);
             }
+            inserted = true;
         }
 
-        // Strategy 2: Insert after subscribe button itself
+        // Strategy 2: Insert after subscribe button container with flex wrapper
+        if (!inserted && subscribeContainer && subscribeContainer.parentElement) {
+            const parent = subscribeContainer.parentElement;
+            // Ensure horizontal layout
+            parent.style.display = 'flex';
+            parent.style.alignItems = 'center';
+            parent.style.flexWrap = 'nowrap';
+
+            if (subscribeContainer.nextSibling) {
+                parent.insertBefore(addButton, subscribeContainer.nextSibling);
+            } else {
+                parent.appendChild(addButton);
+            }
+            inserted = true;
+        }
+
+        // Strategy 3: Insert after subscribe button itself
         if (!inserted && subscribeButton && subscribeButton.parentElement) {
             const parent = subscribeButton.parentElement;
-            if (parent) {
-                // Insert after the button
-                if (subscribeButton.nextSibling) {
-                    parent.insertBefore(addButton, subscribeButton.nextSibling);
-                } else {
-                    parent.appendChild(addButton);
-                }
-                inserted = true;
+            parent.style.display = 'flex';
+            parent.style.alignItems = 'center';
+
+            if (subscribeButton.nextSibling) {
+                parent.insertBefore(addButton, subscribeButton.nextSibling);
+            } else {
+                parent.appendChild(addButton);
             }
+            inserted = true;
         }
 
-        // Strategy 3: Find the owner renderer and append after subscribe container
+        // Strategy 4: Find the owner renderer and append after subscribe container
         if (!inserted) {
             const ownerRenderer = document.querySelector('ytd-video-owner-renderer');
             if (ownerRenderer && subscribeContainer) {
+                ownerRenderer.style.display = 'flex';
+                ownerRenderer.style.alignItems = 'center';
                 if (subscribeContainer.nextSibling) {
                     ownerRenderer.insertBefore(addButton, subscribeContainer.nextSibling);
                 } else {
@@ -775,7 +778,7 @@ class YouTubeBookmarker {
             }
         }
 
-        // Strategy 4: Find watch metadata section and append
+        // Strategy 5: Find watch metadata section and append
         if (!inserted) {
             const watchMetadata = document.querySelector('ytd-watch-metadata');
             if (watchMetadata) {
@@ -1023,4 +1026,4 @@ if (document.readyState === 'loading') {
     });
 } else {
     new YouTubeBookmarker();
-}
+} 
