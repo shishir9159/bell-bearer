@@ -11,7 +11,10 @@ class Dashboard {
     async init() {
         await this.loadBookmarks();
         await this.loadSubscriptions();
+        await this.loadBookmarks();
+        await this.loadSubscriptions();
         this.setupEventListeners();
+        this.setupSettings();
         this.setupTheme();
         this.renderDashboard();
     }
@@ -1126,6 +1129,28 @@ class Dashboard {
         }
         chrome.storage.local.set({ theme: isDark ? 'dark' : 'light' });
     }
+
+    setupSettings() {
+        // Load skip shortcuts setting
+        chrome.storage.local.get(['enableSkipShortcuts'], (result) => {
+            const isEnabled = result.enableSkipShortcuts !== false; // Default to true if not set
+            const toggle = document.getElementById('enableSkipShortcuts');
+            if (toggle) {
+                toggle.checked = isEnabled;
+            }
+        });
+
+        // Save setting on change
+        const toggle = document.getElementById('enableSkipShortcuts');
+        if (toggle) {
+            toggle.addEventListener('change', (e) => {
+                const isEnabled = e.target.checked;
+                chrome.storage.local.set({ enableSkipShortcuts: isEnabled });
+            });
+        }
+    }
 }
 
 const dashboard = new Dashboard();
+
+
