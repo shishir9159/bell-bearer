@@ -1,7 +1,23 @@
+/**
+ * const api = new YouTubeTranscriptApi();
+ * 
+ * // Fetch transcript
+ * const transcript = await api.fetch('dQw4w9WgXcQ');
+ * 
+ * // Fetch translated transcript
+ * const translated = await api.fetch('dQw4w9WgXcQ', { translateTo: 'es' });
+ * 
+ * // List available transcripts
+ * const tracks = await api.listTranscripts('dQw4w9WgXcQ');
+ */
+
 const INNERTUBE_CONTEXT = {
     client: { clientName: 'ANDROID', clientVersion: '20.10.38' }
 };
 
+/**
+ * Represents a single transcript snippet with text and timing
+ */
 class FetchedTranscriptSnippet {
     constructor(text, start, duration) {
         this.text = text;
@@ -10,6 +26,9 @@ class FetchedTranscriptSnippet {
     }
 }
 
+/**
+ * Represents information about an available transcript track
+ */
 class TranscriptInfo {
     constructor(data) {
         this.language = data.language;
@@ -21,6 +40,140 @@ class TranscriptInfo {
     }
 }
 
+/**
+ * Time-based index for efficient snippet lookups using binary search.
+ * Creates an in-memory index from FetchedTranscript snippets with start and duration values.
+ */
+class TimeIndex {
+    /**
+     * Build an index from transcript snippets
+     * @param {FetchedTranscriptSnippet[]} snippets - Array of transcript snippets
+     */
+    constructor(snippets) {
+        // Create indexed entries sorted by start time
+        this.entries = snippets.map((snippet, index) => ({
+            start: snippet.start,
+            end: snippet.start + snippet.duration,
+            duration: snippet.duration,
+            index: index,
+            snippet: snippet
+        }));
+
+        // Sort by start time (should already be sorted, but ensure consistency)
+        this.entries.sort((a, b) => a.start - b.start);
+    }
+
+    /**
+     * Binary search to find the index of the entry at or before the given time
+     * @param {number} time - Time in seconds
+     * @returns {number} Index in entries array, or -1 if time is before all entries
+     */
+    _binarySearchFloor(time) {
+        let left = 0;
+        let right = this.entries.length - 1;
+        let result = -1;
+
+        while (left <= right) {
+            const mid = Math.floor((left + right) / 2);
+            if (this.entries[mid].start <= time) {
+                result = mid;
+                left = mid + 1;
+            } else {
+                right = mid - 1;
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Get snippet at exact time (where time falls within start to start+duration)
+     * Uses binary search for O(log n) performance
+     * @param {number} time - Time in seconds
+     * @returns {FetchedTranscriptSnippet|null}
+     */
+    getSnippetAtTime(time) {
+        const idx = this._binarySearchFloor(time);
+        if (idx === -1) return null;
+
+        const entry = this.entries[idx];
+        if (time >= entry.start && time < entry.end) {
+            return entry.snippet;
+        }
+        return null;
+    }
+
+    /**
+     * Get the snippet that starts at or before the given time.
+     * Useful for checkpoint scenarios where you want to start from an earlier position.
+     * @param {number} time - Time in seconds
+     * @returns {FetchedTranscriptSnippet|null}
+     */
+    getSnippetAtOrBefore(time) {
+        const idx = this._binarySearchFloor(time);
+        if (idx === -1) return null;
+        return this.entries[idx].snippet;
+    }
+
+    /**
+     * Get the start time for a checkpoint at or before the given time
+     * @param {number} time - Time in seconds
+     * @returns {number|null} Start time in seconds, or null if no snippet found
+     */
+    getCheckpointStart(time) {
+        const idx = this._binarySearchFloor(time);
+        if (idx === -1) return null;
+        return this.entries[idx].start;
+    }
+
+    /**
+     * Get all snippets within a time range
+     * @param {number} startTime - Start time in seconds (inclusive)
+     * @param {number} endTime - End time in seconds (exclusive)
+     * @returns {FetchedTranscriptSnippet[]}
+     */
+    getSnippetsInRange(startTime, endTime) {
+        const startIdx = this._binarySearchFloor(startTime);
+        const results = [];
+
+        // Start from the found index (or 0 if before all entries)
+        const searchStart = startIdx === -1 ? 0 : startIdx;
+
+        for (let i = searchStart; i < this.entries.length; i++) {
+            const entry = this.entries[i];
+            // Stop if we've passed the end time
+            if (entry.start >= endTime) break;
+            // Include if snippet overlaps with the range
+            if (entry.end > startTime) {
+                results.push(entry.snippet);
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * Get all indexed entries (for debugging or iteration)
+     * @returns {Array<{start: number, end: number, duration: number, index: number, snippet: FetchedTranscriptSnippet}>}
+     */
+    getEntries() {
+        return this.entries;
+    }
+
+    /**
+     * Get the total duration covered by the transcript
+     * @returns {number} Duration in seconds
+     */
+    getTotalDuration() {
+        if (this.entries.length === 0) return 0;
+        const lastEntry = this.entries[this.entries.length - 1];
+        return lastEntry.end;
+    }
+}
+
+/**
+ * Represents a fetched transcript with snippets and helper methods
+ */
 class FetchedTranscript {
     constructor(data) {
         this.snippets = data.snippets;
@@ -28,22 +181,34 @@ class FetchedTranscript {
         this.language = data.language;
         this.languageCode = data.languageCode;
         this.isGenerated = data.isGenerated;
+
+        // Build time index for efficient lookups
+        this.timeIndex = new TimeIndex(this.snippets);
     }
 
     get length() {
         return this.snippets.length;
     }
 
+    /**
+     * Get all text joined as a single string
+     */
     getText() {
         return this.snippets.map(s => s.text).join(' ');
     }
 
+    /**
+     * Get formatted text with timestamps
+     */
     getFormattedText() {
         return this.snippets.map(s =>
             `[${this.formatTime(s.start)}] ${s.text}`
         ).join('\n');
     }
 
+    /**
+     * Format seconds to MM:SS or HH:MM:SS
+     */
     formatTime(seconds) {
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
@@ -55,15 +220,45 @@ class FetchedTranscript {
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 
+    /**
+     * Find the snippet at a given time (uses binary search via TimeIndex)
+     */
     getSnippetAtTime(time) {
-        for (const snippet of this.snippets) {
-            if (time >= snippet.start && time < snippet.start + snippet.duration) {
-                return snippet;
-            }
-        }
-        return null;
+        return this.timeIndex.getSnippetAtTime(time);
     }
 
+    /**
+     * Get the snippet that starts at or before the given time.
+     * Useful for starting playback from an earlier checkpoint.
+     * @param {number} time - Time in seconds
+     * @returns {FetchedTranscriptSnippet|null}
+     */
+    getSnippetAtOrBefore(time) {
+        return this.timeIndex.getSnippetAtOrBefore(time);
+    }
+
+    /**
+     * Get the start time for playback checkpoint at or before the given time
+     * @param {number} time - Time in seconds
+     * @returns {number|null} Start time in seconds
+     */
+    getCheckpointStart(time) {
+        return this.timeIndex.getCheckpointStart(time);
+    }
+
+    /**
+     * Get all snippets within a time range
+     * @param {number} startTime - Start of range in seconds
+     * @param {number} endTime - End of range in seconds
+     * @returns {FetchedTranscriptSnippet[]}
+     */
+    getSnippetsInRange(startTime, endTime) {
+        return this.timeIndex.getSnippetsInRange(startTime, endTime);
+    }
+
+    /**
+     * Iterator support
+     */
     [Symbol.iterator]() {
         return this.snippets[Symbol.iterator]();
     }
@@ -72,38 +267,40 @@ class FetchedTranscript {
 class YouTubeTranscriptApi {
     /**
      * Fetch transcript for a video, optionally translated
-     * @param {string} videoId
-     * @param {Object} options
-     * @param {string} [options.language='en'] - deprecate it
-     * TODO:
-     *   set from dashboard
+     * @param {string} videoId - YouTube video ID
+     * @param {Object} options - Options
+     * @param {string} [options.language='en'] - Preferred transcript language (deprecated, use languages)
      * @param {string[]} [options.languages=['en']] - Preferred transcript languages in order of preference
-     * @param {string} [options.translateTo]
+     * @param {string} [options.translateTo] - Target language code for translation
      * @returns {Promise<FetchedTranscript>}
      */
     async fetch(videoId, options = {}) {
         const { language, languages = ['en'], translateTo } = options;
+        // Support both language (string) and languages (array)
         const preferredLanguages = language ? [language] : languages;
 
         const tracks = await this.listTranscripts(videoId);
 
+        // Find matching track based on language preferences
         let track = null;
         for (const lang of preferredLanguages) {
             track = tracks.find(t => t.languageCode === lang || t.languageCode.startsWith(lang));
             if (track) break;
         }
         if (!track && tracks.length > 0) {
-            track = tracks[0];
+            track = tracks[0]; // Fallback to first available
         }
         if (!track) {
             throw new Error(`No transcript found for video ${videoId}`);
         }
 
+        // Build URL with optional translation
         let url = track.baseUrl;
         if (translateTo && track.isTranslatable) {
             url += `&tlang=${translateTo}`;
         }
 
+        // Fetch and parse transcript XML
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`Failed to fetch transcript: ${response.status}`);
@@ -121,6 +318,11 @@ class YouTubeTranscriptApi {
         });
     }
 
+    /**
+     * List all available transcript tracks for a video
+     * @param {string} videoId - YouTube video ID  
+     * @returns {Promise<Array<{language: string, languageCode: string, baseUrl: string, isGenerated: boolean, isTranslatable: boolean, translationLanguages: Array}>>}
+     */
     async listTranscripts(videoId) {
         const apiKey = await this._getInnertubeApiKey(videoId);
         const captionData = await this._getCaptionTracks(videoId, apiKey);
@@ -138,6 +340,9 @@ class YouTubeTranscriptApi {
         }));
     }
 
+    /**
+     * Extract Innertube API key from video page
+     */
     async _getInnertubeApiKey(videoId) {
         const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
             headers: { 'Accept-Language': 'en-US' }
@@ -160,6 +365,9 @@ class YouTubeTranscriptApi {
         return match[1];
     }
 
+    /**
+     * Fetch caption tracks via Innertube API
+     */
     async _getCaptionTracks(videoId, apiKey) {
         const response = await fetch(
             `https://www.youtube.com/youtubei/v1/player?key=${apiKey}`,
@@ -193,8 +401,13 @@ class YouTubeTranscriptApi {
         return captions;
     }
 
+    /**
+     * Parse transcript XML into snippets
+     */
     _parseXML(xml) {
         const snippets = [];
+
+        // Check if we're in a browser environment with DOMParser
         if (typeof DOMParser !== 'undefined') {
             const parser = new DOMParser();
             const doc = parser.parseFromString(xml, 'text/xml');
@@ -209,6 +422,7 @@ class YouTubeTranscriptApi {
                 ));
             }
         } else {
+            // Node.js environment - use regex-based parsing
             const textRegex = /<text\s+start="([^"]*)"(?:\s+dur="([^"]*)")?[^>]*>([\s\S]*?)<\/text>/g;
             let match;
             while ((match = textRegex.exec(xml)) !== null) {
@@ -222,12 +436,17 @@ class YouTubeTranscriptApi {
         return snippets;
     }
 
+    /**
+     * Decode HTML entities
+     */
     _decodeHTML(text) {
+        // Check if we're in a browser environment
         if (typeof document !== 'undefined') {
             const textarea = document.createElement('textarea');
             textarea.innerHTML = text;
             return textarea.value;
         } else {
+            // Node.js environment - manual HTML entity decoding
             return text
                 .replace(/&amp;/g, '&')
                 .replace(/&lt;/g, '<')
@@ -240,6 +459,9 @@ class YouTubeTranscriptApi {
         }
     }
 
+    /**
+     * Format seconds to MM:SS or HH:MM:SS
+     */
     _formatTime(seconds) {
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
@@ -252,12 +474,14 @@ class YouTubeTranscriptApi {
     }
 }
 
+// Export for various environments
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { YouTubeTranscriptApi, FetchedTranscriptSnippet, TranscriptInfo, FetchedTranscript };
+    module.exports = { YouTubeTranscriptApi, FetchedTranscriptSnippet, TranscriptInfo, FetchedTranscript, TimeIndex };
 }
 if (typeof window !== 'undefined') {
     window.YouTubeTranscriptApi = YouTubeTranscriptApi;
     window.FetchedTranscriptSnippet = FetchedTranscriptSnippet;
     window.TranscriptInfo = TranscriptInfo;
     window.FetchedTranscript = FetchedTranscript;
+    window.TimeIndex = TimeIndex;
 }

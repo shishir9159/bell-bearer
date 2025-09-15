@@ -87,3 +87,4 @@ Chrome's storage API is used with the following data structure format:
 
 inspired by:
 https://github.com/NabokD/pockettube
+https://github.com/jdepoix/youtube-transcript-api.git
