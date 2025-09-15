@@ -12,19 +12,44 @@ class YouTubeBookmarker {
         this.enableSkipShortcuts = true;
         this.speedBoostTimeout = null; // Timeout for temporary speed boost
         this.originalSpeed = null; // Store original speed before boost
+        this.currentSite = this.detectSite(); // Detect which site we're on
+        this.userSetSpeed = null; // Track user-intended speed for enforcement
+        this.speedEnforcementInterval = null;
         this.init();
+    }
+
+    /**
+     * Detect which supported site we're currently on
+     * @returns {'youtube'|'netflix'|'reddit'|'twitter'|'other'}
+     */
+    detectSite() {
+        const hostname = window.location.hostname;
+        if (hostname.includes('youtube.com')) return 'youtube';
+        if (hostname.includes('netflix.com')) return 'netflix';
+        if (hostname.includes('reddit.com')) return 'reddit';
+        if (hostname.includes('twitter.com') || hostname.includes('x.com')) return 'twitter';
+        return 'other';
     }
 
     init() {
         this.loadSettings();
         this.setupKeyboardListeners();
         this.setupMessageListener();
-        this.detectVideoChange();
-        this.setupPlaybackSpeedSync();
-        this.setupSubscribeButton();
-        setInterval(() => {
+
+        // YouTube-specific features
+        if (this.currentSite === 'youtube') {
             this.detectVideoChange();
-        }, 2000);
+            this.setupPlaybackSpeedSync();
+            this.setupSubscribeButton();
+            setInterval(() => {
+                this.detectVideoChange();
+            }, 2000);
+        }
+
+        // Speed enforcement for sites that may reset playbackRate
+        if (this.currentSite === 'netflix' || this.currentSite === 'reddit') {
+            this.setupSpeedEnforcement();
+        }
     }
 
     loadSettings() {
@@ -106,6 +131,12 @@ class YouTubeBookmarker {
                 e.preventDefault();
                 this.decreasePlaybackSpeed();
             }
+
+            // Shift + + key: reset playback speed to 1
+            if (e.key === '+' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+                e.preventDefault();
+                this.resetPlaybackSpeed();
+            }
         }, true); // Use capture
 
         document.addEventListener('keyup', (e) => {
@@ -171,7 +202,28 @@ class YouTubeBookmarker {
     }
 
     getVideoElement() {
-        return document.querySelector('video.html5-main-video') || document.querySelector('video');
+        switch (this.currentSite) {
+            case 'youtube':
+                return document.querySelector('video.html5-main-video') || document.querySelector('video');
+            case 'netflix':
+                return document.querySelector('video');
+            case 'reddit': {
+                // Reddit uses shreddit-player or media-element containers
+                const redditVideo = document.querySelector('shreddit-player video') ||
+                    document.querySelector('.media-element video') ||
+                    document.querySelector('[data-testid="shreddit-player"] video') ||
+                    document.querySelector('video');
+                return redditVideo;
+            }
+            case 'twitter': {
+                // Twitter/X wraps videos in a testid container
+                const twitterVideo = document.querySelector('[data-testid="videoPlayer"] video') ||
+                    document.querySelector('video');
+                return twitterVideo;
+            }
+            default:
+                return document.querySelector('video');
+        }
     }
 
     getCurrentTime() {
@@ -371,12 +423,14 @@ class YouTubeBookmarker {
 
         // Set speed to 3x
         video.playbackRate = 3;
+        this.userSetSpeed = 3; // Track for enforcement
         this.showNotification(`Speed boost: 3x for ${seconds}s`, 'info');
 
         // Set timeout to restore original speed
         this.speedBoostTimeout = setTimeout(() => {
             if (video && this.originalSpeed !== null) {
                 video.playbackRate = this.originalSpeed;
+                this.userSetSpeed = this.originalSpeed; // Track restored speed
                 this.showNotification(`Speed restored to ${this.originalSpeed}x`, 'info');
                 this.originalSpeed = null;
                 this.speedBoostTimeout = null;
@@ -444,6 +498,7 @@ class YouTubeBookmarker {
 
             // Set the speed directly on the video element
             video.playbackRate = newSpeed;
+            this.userSetSpeed = newSpeed; // Track user intent for enforcement
 
             // Force a ratechange event if needed
             if (video.playbackRate !== newSpeed) {
@@ -490,6 +545,7 @@ class YouTubeBookmarker {
 
             // Set the speed directly on the video element
             video.playbackRate = newSpeed;
+            this.userSetSpeed = newSpeed; // Track user intent for enforcement
 
             // Force a ratechange event if needed
             if (video.playbackRate !== newSpeed) {
@@ -501,6 +557,25 @@ class YouTubeBookmarker {
             }
 
             this.showNotification(`Playback speed: ${newSpeed}x`, 'info');
+        }
+    }
+
+    resetPlaybackSpeed() {
+        const video = this.getVideoElement();
+        if (video) {
+            video.playbackRate = 1;
+            this.userSetSpeed = 1; // Track user intent for enforcement
+
+            // Force a ratechange event if needed
+            if (video.playbackRate !== 1) {
+                Object.defineProperty(video, 'playbackRate', {
+                    value: 1,
+                    writable: true,
+                    configurable: true
+                });
+            }
+
+            this.showNotification(`Playback speed: 1x`, 'info');
         }
     }
 
@@ -1017,6 +1092,21 @@ class YouTubeBookmarker {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    /**
+     * Enforce playback speed on sites that may reset it (Netflix, Reddit).
+     * Periodically checks and re-applies the user's intended speed.
+     */
+    setupSpeedEnforcement() {
+        this.speedEnforcementInterval = setInterval(() => {
+            if (this.userSetSpeed !== null) {
+                const video = this.getVideoElement();
+                if (video && Math.abs(video.playbackRate - this.userSetSpeed) > 0.01) {
+                    video.playbackRate = this.userSetSpeed;
+                }
+            }
+        }, 500);
     }
 }
 
