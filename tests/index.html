@@ -29,18 +29,20 @@
         background.js itself is only an importScripts() shim for the service
         worker, so the parts are listed here the same way manifest.firefox.json
         lists them. Keep the three lists in step. -->
+<script src="../src/shared/settings.js"></script>
+<script src="../src/shared/activity.js"></script>
 <script src="../src/background/proto.js"></script>
 <script src="../src/background/sowon.js"></script>
 <script src="../src/background/context-menus.js"></script>
 <script src="../src/background/tab-placement.js"></script>
 <script src="../src/background/commands.js"></script>
+<script src="../src/background/activity-heartbeat.js"></script>
 <script src="../transcript.js"></script>
 
 <!-- Shared modules, loaded in dependency order (as the manifest loads them). -->
 <script src="../src/shared/time.js"></script>
 <script src="../src/shared/dom.js"></script>
 <script src="../src/shared/speed.js"></script>
-<script src="../src/shared/settings.js"></script>
 <script src="../src/shared/youtube.js"></script>
 <script src="../src/shared/bookmarks.js"></script>
 <script src="../src/content/site.js"></script>
@@ -48,13 +50,24 @@
 <script src="../src/content/player.js"></script>
 <script src="../src/content/shortcuts.js"></script>
 
+<!-- The injected YouTube UI and the modules it leans on. -->
+<script src="../src/shared/subscriptions.js"></script>
+<script src="../src/shared/feed.js"></script>
+<script src="../src/content/overlay.js"></script>
+<script src="../src/content/dom-watch.js"></script>
+<script src="../src/content/theme.js"></script>
+<script src="../src/content/page-info.js"></script>
+<script src="../src/content/youtube-ui.js"></script>
+
 <!-- 4. Specs -->
 <script src="background.test.js"></script>
 <script src="transcript.test.js"></script>
 <script src="speed.test.js"></script>
 <script src="player.test.js"></script>
 <script src="bookmarks.test.js"></script>
+<script src="activity.test.js"></script>
 <script src="shortcuts.test.js"></script>
+<script src="youtube-ui.test.js"></script>
 
 <script>
     (async () => {

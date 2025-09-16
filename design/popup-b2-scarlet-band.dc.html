@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-ff592e68-72d3-41a8-a7b8-d50b96745048/styles.css">
+<style>
+  body { margin: 0; }
+  .mk { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+</style>
+</helmet>
+<div style="min-height:100vh; background:var(--color-bg,#f2f2f3); padding:44px 48px 80px; font-family:var(--font-body,Barlow,sans-serif); color:var(--color-text,#1d1f20)">
+  <div style="display:flex; align-items:baseline; gap:16px; marginBottom:6px">
+    <div style="font-family:var(--font-heading,'Barlow Condensed',sans-serif); font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:var(--color-accent-700,#3f5d7d)">Option B2</div>
+    <h1 style="font-family:var(--font-heading,'Barlow Condensed',sans-serif); font-size:34px; font-weight:600; margin:0; letter-spacing:-.01em">Scarlet throughout</h1>
+  </div>
+  <p style="max-width:640px; margin:0 0 40px; font-size:15px; line-height:1.5; color:var(--color-neutral-700,#4a4f55)">The icon's dark ground becomes a header band, and the warm neutrals underneath are tinted off it. Night mode drops the blurple and stays scarlet, so day and night read as one product.</p>
+
+  <div style="display:flex; gap:44px; align-items:flex-start; flex-wrap:wrap">
+
+    <div>
+      <div class="blueprint" style="width:380px; background:#f6f4f3; border:1px solid #e5dfde; position:relative">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="mk">
+          <div style="background:#1a0d0b; padding:12px 14px">
+            <div style="display:flex; align-items:center; gap:9px">
+              <img src="icon128.png" alt="" style="width:24px; height:24px; border-radius:6px; display:block">
+              <div style="font-size:14px; font-weight:700; letter-spacing:.24px; color:#f7f2f1">Bell Bearer</div>
+              <div style="margin-left:auto; font-size:10.5px; font-weight:600; color:#a3908c; letter-spacing:.04em">18 CHECKPOINTS</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:6px; padding:10px 14px; background:#fff; border-bottom:1px solid #e5dfde">
+            <div style="font-size:11.5px; font-weight:600; color:#fff; background:#c1170a; padding:5px 12px; border-radius:999px; white-space:nowrap">Dashboard</div>
+            <div style="font-size:11.5px; font-weight:600; color:#5b4f4d; background:#f2eeed; padding:5px 12px; border-radius:999px; white-space:nowrap">Export</div>
+            <div style="font-size:11.5px; font-weight:600; color:#5b4f4d; background:#f2eeed; padding:5px 12px; border-radius:999px; white-space:nowrap">Import</div>
+            <div style="font-size:11.5px; font-weight:600; color:#c1170a; background:#fcefed; padding:5px 12px; border-radius:999px; white-space:nowrap">Clear</div>
+          </div>
+          <div style="padding:10px; display:flex; flex-direction:column; gap:8px">
+            <sc-for list="{{ videos }}" as="v" hint-placeholder-count="4">
+              <div style="background:#fff; border:1px solid #e5dfde; border-left:3px solid #c1170a; border-radius:12px; padding:11px 13px">
+                <div style="font-size:13px; font-weight:600; line-height:1.35; color:#1a0d0b; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden">{{ v.title }}</div>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:7px">
+                  <div style="font-size:10px; font-weight:700; color:#a3130a; background:rgba(193,23,10,.09); border:1px solid rgba(193,23,10,.18); border-radius:999px; padding:1px 8px">{{ v.count }}</div>
+                  <div style="font-size:11px; color:#8c7d7a">{{ v.channel }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:11px 14px; background:#fff; border-top:1px solid #e5dfde; display:flex; align-items:center; justify-content:space-between; gap:10px">
+            <div style="font-size:11px; color:#5b4f4d">Hold <span style="font-family:ui-monospace,Menlo,monospace; font-size:10px; background:#f2eeed; border:1px solid #e5dfde; border-radius:4px; padding:1px 5px">Ctrl B</span> to drop a checkpoint</div>
+            <div style="font-size:11px; font-weight:600; color:#fff; background:#c1170a; border-radius:999px; padding:4px 14px">Okay</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">Day</div>
+    </div>
+
+    <div>
+      <div class="blueprint" style="width:380px; background:#1b1616; border:1px solid #100c0c; position:relative">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="mk">
+          <div style="background:#100807; padding:12px 14px">
+            <div style="display:flex; align-items:center; gap:9px">
+              <img src="icon128.png" alt="" style="width:24px; height:24px; border-radius:6px; display:block">
+              <div style="font-size:14px; font-weight:700; letter-spacing:.24px; color:#f0e9e8">Bell Bearer</div>
+              <div style="margin-left:auto; font-size:10.5px; font-weight:600; color:#8c7370; letter-spacing:.04em">18 CHECKPOINTS</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:6px; padding:10px 14px; background:#241d1d; border-bottom:1px solid #100c0c">
+            <div style="font-size:11.5px; font-weight:600; color:#fff; background:#d9280f; padding:5px 12px; border-radius:999px">Dashboard</div>
+            <div style="font-size:11.5px; font-weight:600; color:#bdb0ae; background:#332a29; padding:5px 12px; border-radius:999px">Export</div>
+            <div style="font-size:11.5px; font-weight:600; color:#bdb0ae; background:#332a29; padding:5px 12px; border-radius:999px">Import</div>
+            <div style="font-size:11.5px; font-weight:600; color:#ff7a63; background:#341614; padding:5px 12px; border-radius:999px">Clear</div>
+          </div>
+          <div style="padding:10px; display:flex; flex-direction:column; gap:8px">
+            <sc-for list="{{ videos }}" as="v" hint-placeholder-count="4">
+              <div style="background:#241d1d; border:1px solid #100c0c; border-left:3px solid #d9280f; border-radius:12px; padding:11px 13px">
+                <div style="font-size:13px; font-weight:600; line-height:1.35; color:#ece5e4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden">{{ v.title }}</div>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:7px">
+                  <div style="font-size:10px; font-weight:700; color:#ff8a72; background:rgba(217,40,15,.18); border:1px solid rgba(217,40,15,.28); border-radius:999px; padding:1px 8px">{{ v.count }}</div>
+                  <div style="font-size:11px; color:#9b8b88">{{ v.channel }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:11px 14px; background:#241d1d; border-top:1px solid #100c0c; display:flex; align-items:center; justify-content:space-between; gap:10px">
+            <div style="font-size:11px; color:#bdb0ae">Hold <span style="font-family:ui-monospace,Menlo,monospace; font-size:10px; background:#332a29; border:1px solid #100c0c; border-radius:4px; padding:1px 5px">Ctrl B</span> to drop a checkpoint</div>
+            <div style="font-size:11px; font-weight:600; color:#fff; background:#d9280f; border-radius:999px; padding:4px 14px">Okay</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">Night — scarlet, warm greys</div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      videos: [
+        { title: 'Bell tolling in the fog', count: 4, channel: 'Ashen Vale' },
+        { title: 'How medieval scribes ruled a page before printing', count: 7, channel: 'Codex' },
+        { title: 'Risograph duplicators, explained end to end', count: 2, channel: 'Ink & Drum' },
+        { title: 'Art deco lettering: the geometry underneath', count: 5, channel: 'Type Foundry' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

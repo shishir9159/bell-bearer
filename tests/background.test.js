@@ -101,7 +101,7 @@ suite('background: open tabs next to current', () => {
         const n = M.openNewTab(4);
         M.fire.created(n);
         M.fire.activated(4, 100);
-        await M.settle(600); // allow the 60ms-spaced retries
+        await M.settle(); // allow the 60ms-spaced retries
 
         assert(M.state.moveCalls.length >= 3, 'should have retried after failures');
         assertEqual(M.indexOf(4), 2, 'retry should eventually place the tab');

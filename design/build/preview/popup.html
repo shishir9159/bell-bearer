@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Bell Bearer — popup preview</title>
+    <link rel="stylesheet" href="../skin-fonts.css">
+    <link rel="stylesheet" href="../skins.css">
+    <link rel="stylesheet" href="../popup.css">
+    <style>
+        /* Preview shell only — not part of the extension. The real popup asks
+           for 760px; here the frame's own width decides, so the responsive
+           behaviour can be reviewed at any size. */
+        html { width: auto !important; }
+        body { overflow: hidden; }
+        .container { max-height: none; }
+    </style>
+</head>
+
+<body data-skin="default">
+    <div class="container">
+        <header class="bb-ruled">
+            <div class="brand">
+                <h1 class="bb-wordmark"><img class="brand-icon" src="../icons/icon128.png" alt="">Bell Bearer</h1>
+                <span class="brand-count">18 checkpoints</span>
+            </div>
+            <div class="controls">
+                <button class="btn-secondary is-primary">Dashboard</button>
+                <button class="btn-secondary">Export</button>
+                <button class="btn-secondary">Import</button>
+                <button class="btn-secondary btn-danger">Clear All</button>
+            </div>
+        </header>
+
+        <div class="speed-control-bar">
+            <span class="speed-label">Playback</span>
+            <div class="speed-buttons">
+                <button class="btn-speed">−</button>
+                <span class="speed-display">1.5x</span>
+                <button class="btn-speed">+</button>
+                <button class="btn-speed btn-speed-reset">1x</button>
+            </div>
+        </div>
+
+        <div class="main-content" id="mainContent">
+            <div class="video-list">
+                <div class="video-item selected" role="button" tabindex="0">
+                    <div class="video-title">Bell tolling in the fog — a full peal from the tower</div>
+                    <div class="video-meta"><span class="bookmark-count">4</span><span class="video-channel">checkpoints</span></div>
+                </div>
+                <div class="video-item" role="button" tabindex="0">
+                    <div class="video-title">How medieval scribes ruled a page before printing</div>
+                    <div class="video-meta"><span class="bookmark-count">7</span><span class="video-channel">checkpoints</span></div>
+                </div>
+                <div class="video-item" role="button" tabindex="0">
+                    <div class="video-title">Risograph duplicators, explained end to end</div>
+                    <div class="video-meta"><span class="bookmark-count">2</span><span class="video-channel">checkpoints</span></div>
+                </div>
+                <div class="video-item" role="button" tabindex="0">
+                    <div class="video-title">Art deco lettering: the geometry underneath</div>
+                    <div class="video-meta"><span class="bookmark-count">5</span><span class="video-channel">checkpoints</span></div>
+                </div>
+            </div>
+
+            <div class="bookmark-details">
+                <div class="bd-header">
+                    <button class="bd-back" type="button" aria-label="Back to videos">‹</button>
+                    <div class="bd-heading">
+                        <h3>Bell tolling in the fog</h3>
+                        <div class="bd-sub">Ashen Vale · 4 checkpoints</div>
+                    </div>
+                    <span class="bd-count">4</span>
+                </div>
+                <div class="checkpoint-timeline">
+                    <div class="bookmark-item">
+                        <div class="bookmark-time">02:14</div>
+                        <div class="bookmark-name">The opening peal</div>
+                        <div class="bookmark-note">Three strikes, then the long decay</div>
+                        <div class="bookmark-actions">
+                            <button class="btn-small seek-btn">Go to</button>
+                            <button class="btn-small delete">Delete</button>
+                        </div>
+                    </div>
+                    <div class="bookmark-item">
+                        <div class="bookmark-time">11:48</div>
+                        <div class="bookmark-name">Rope technique</div>
+                        <div class="bookmark-note">Hands high, let the wheel carry it</div>
+                        <div class="bookmark-actions">
+                            <button class="btn-small seek-btn">Go to</button>
+                            <button class="btn-small delete">Delete</button>
+                        </div>
+                    </div>
+                    <div class="bookmark-item">
+                        <div class="bookmark-time">24:03 – 26:40</div>
+                        <div class="bookmark-note">Change ringing pattern starts here</div>
+                        <div class="bookmark-actions">
+                            <button class="btn-small seek-btn">Go to</button>
+                            <button class="btn-small delete">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>How to use</h3>
+            <ul>
+                <li>Hold <strong>Ctrl + B</strong> while watching to drop a checkpoint. <strong>&gt;</strong> <strong>&lt;</strong> step speed, <strong>+</strong> resets.</li>
+            </ul>
+            <div class="instructions-footer"><button class="btn-okay">Okay</button></div>
+        </div>
+    </div>
+
+    <script>
+        const q = new URLSearchParams(location.search);
+        document.body.dataset.skin = q.get('skin') || 'default';
+        if (q.get('theme') === 'dark') document.body.classList.add('dark-theme');
+        if (q.get('view') === 'detail') document.getElementById('mainContent').classList.add('is-detail');
+
+        // Live drill-in, same behaviour as the real popup.
+        const main = document.getElementById('mainContent');
+        document.querySelectorAll('.video-item').forEach((item) => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.video-item').forEach((v) => v.classList.remove('selected'));
+                item.classList.add('selected');
+                main.classList.add('is-detail');
+            });
+        });
+        document.querySelector('.bd-back').addEventListener('click', () => main.classList.remove('is-detail'));
+    </script>
+</body>
+
+</html>

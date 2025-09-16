@@ -21,8 +21,14 @@
 
         // Appearance
         theme: 'light',
+        skin: 'default', // 'default' | 'riso' | 'medieval' | 'deco' — see src/shared/skin.js
         syncThemeWithYouTube: false,
         pouchButtonStyle: 'auto', // 'auto' | 'accent' | 'hidden'
+
+        // How wide the toolbar popup asks to be. 'wide' is the two-pane
+        // layout at the largest size a browser action popup is allowed;
+        // 'compact' is one column with a drill-in. See popup.css.
+        popupWidth: 'wide', // 'wide' | 'compact'
         hideInstructions: false,
 
         // Browser integration
@@ -30,6 +36,10 @@
         markdownContextMenu: true,
         connectToSowon: false,
         bbTabMoveDebug: false,
+
+        // Activity tracking. Off by default and nothing is recorded while it
+        // is off; turning it on reveals the dashboard's Activity tab.
+        trackActivity: false,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
@@ -40,7 +50,10 @@
         topics: 'subscriptionTopics',
         channels: 'subscriptionChannels',
         newVideos: 'newVideos',
-        channelIdCache: 'bbChannelIdCache',
+        // v2: the entries the first version wrote are not merely stale, they
+        // point at the wrong channels — see resolveChannelId in shared/feed.js.
+        // A new key is how they are discarded rather than trusted.
+        channelIdCache: 'bbChannelIdCache2',
     });
 
     function withDefaults(stored, keys) {

@@ -12,7 +12,10 @@
 
     const { Bookmarks, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, Transfer, TabActions, SettingsForm } = window.BB;
 
-    const VIEWS = ['dashboard', 'subscriptions', 'settings'];
+    // Tab id / view id stems. 'stats' is the Activity view: its tab stays
+    // hidden until the trackActivity setting is on, but the switching wiring
+    // is unconditional so it works the moment the tab appears.
+    const VIEWS = ['dashboard', 'subscriptions', 'stats', 'settings'];
 
     class Dashboard {
         constructor() {
@@ -47,9 +50,23 @@
             await this.reload();
             this.render();
 
-            // Follow changes made from a YouTube page or the popup.
-            Settings.watch([Bookmarks.KEY, Settings.DATA.topics, Settings.DATA.channels, Settings.DATA.newVideos], () => {
-                this.reload().then(() => this.render());
+            // Follow changes made from a YouTube page or the popup, reloading
+            // only the store that moved. Saving one checkpoint used to re-read
+            // the bookmarks, the topics, the channels and the new-video list.
+            const subscriptionKeys = [Settings.DATA.topics, Settings.DATA.channels, Settings.DATA.newVideos];
+            Settings.watch([Bookmarks.KEY, ...subscriptionKeys], (changed) => {
+                const jobs = [];
+                if (Bookmarks.KEY in changed) {
+                    jobs.push(Bookmarks.load().then((videos) => { this.videos = videos; }));
+                }
+                if (subscriptionKeys.some((key) => key in changed)) {
+                    jobs.push(Subscriptions.load().then((subscriptions) => {
+                        this.topics = subscriptions.topics;
+                        this.channels = subscriptions.channels;
+                        this.newVideos = subscriptions.newVideos;
+                    }));
+                }
+                Promise.all(jobs).then(() => this.render());
             });
         }
 
@@ -95,7 +112,6 @@
 
                 if (button.classList.contains('seek-btn')) this.seek(videoId, Number(button.dataset.time));
                 else if (button.classList.contains('delete-btn')) this.deleteBookmark(videoId, index);
-                else if (button.classList.contains('open-video-btn')) this.openVideo(videoId);
                 else if (button.classList.contains('copy-bookmark-subtitle')) this.copyOne(videoId, index);
                 else if (button.classList.contains('copy-subtitles-with-time')) this.copyAll(videoId, true);
                 else if (button.classList.contains('copy-subtitles-no-time')) this.copyAll(videoId, false);
@@ -131,8 +147,10 @@
         switchView(view) {
             this.view = view;
             VIEWS.forEach((name) => {
-                document.getElementById(`${name}Tab`).classList.toggle('active', name === view);
-                document.getElementById(`${name}View`).classList.toggle('active', name === view);
+                const tab = document.getElementById(`${name}Tab`);
+                const panel = document.getElementById(`${name}View`);
+                if (tab) tab.classList.toggle('active', name === view);
+                if (panel) panel.classList.toggle('active', name === view);
             });
             this.render();
         }
@@ -140,6 +158,9 @@
         render() {
             if (this.view === 'dashboard') this.renderBookmarks();
             else if (this.view === 'subscriptions') this.renderSubscriptions();
+            // 'stats' renders itself — src/page/stats.js owns that view and
+            // reads the activity store, never the bookmark store.
+            else if (this.view === 'stats' && window.BB.Stats) window.BB.Stats.render();
         }
 
         // ------------------------------------------------- checkpoint view
@@ -173,7 +194,6 @@
                                 <button class="btn-small copy-subtitles-with-time" title="Copy all subtitles with timestamps">📋 Copy all (time)</button>
                                 <button class="btn-small copy-subtitles-no-time" title="Copy all subtitles">📋 Copy all</button>
                             ` : ''}
-                            <button class="open-video-btn btn-small">Open video</button>
                         </div>
                     </div>
                     <div class="video-bookmarks">
@@ -237,11 +257,6 @@
                 if (await TabActions.seek(tab, time)) return;
             }
             await chrome.tabs.create({ url: YouTube.watchUrl(videoId, time) });
-        }
-
-        openVideo(videoId) {
-            const video = this.videos.find((v) => v.id === videoId);
-            chrome.tabs.create({ url: Dom.safeUrl(video ? video.url : YouTube.watchUrl(videoId, 0)) });
         }
 
         async deleteBookmark(videoId, index) {
@@ -386,7 +401,8 @@
             button.textContent = 'Refreshing…';
 
             try {
-                const videos = await Feed.fetchLatestForChannels(this.channels, 3);
+                // Refresh means refresh: skip the feed cache the pouch reads from.
+                const videos = await Feed.fetchLatestForChannels(this.channels, 3, { fresh: true });
                 if (videos.length === 0) {
                     Ui.toast('Could not read any channel feeds', 'error');
                     return;

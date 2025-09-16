@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bell Bearer</title>
+    <link rel="stylesheet" href="skin-fonts.css">
+    <link rel="stylesheet" href="skins.css">
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body data-skin="default">
+    <div class="container">
+        <header class="bb-ruled">
+            <div class="brand">
+                <h1 class="bb-wordmark"><img class="brand-icon" src="icons/icon128.png" alt="">Bell Bearer</h1>
+                <span class="brand-count" id="brandCount"></span>
+            </div>
+            <div class="controls">
+                <button id="dashboardBtn" class="btn-secondary is-primary" title="Open Dashboard">Dashboard</button>
+                <button id="exportBtn" class="btn-secondary" title="Export checkpoints">Export</button>
+                <button id="importBtn" class="btn-secondary" title="Import checkpoints">Import</button>
+                <button id="clearAll" class="btn-secondary btn-danger" title="Delete all checkpoints">Clear All</button>
+            </div>
+        </header>
+
+        <div id="speedControlBar" class="speed-control-bar" hidden>
+            <span class="speed-label">Playback</span>
+            <div class="speed-buttons">
+                <button id="speedDownBtn" class="btn-speed" title="Slower (previous step)" aria-label="Slower">−</button>
+                <span id="speedDisplay" class="speed-display" aria-live="polite">1x</span>
+                <button id="speedUpBtn" class="btn-speed" title="Faster (next step)" aria-label="Faster">+</button>
+                <button id="speedResetBtn" class="btn-speed btn-speed-reset" title="Reset to 1x" aria-label="Reset speed">1x</button>
+            </div>
+        </div>
+
+        <div class="main-content" id="mainContent">
+            <div class="video-list" id="videoList"></div>
+
+            <div class="bookmark-details" id="bookmarkDetails">
+                <div class="no-selection">
+                    <div class="empty-icon">⏱</div>
+                    <p>Select a video to see its checkpoints</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions" id="instructions">
+            <h3>How to use</h3>
+            <ul>
+                <li>Hold <strong>Ctrl + B</strong> while watching to drop a checkpoint. <strong>&gt;</strong> <strong>&lt;</strong> step speed, <strong>+</strong> resets.</li>
+            </ul>
+            <div class="instructions-footer">
+                <button id="dismissInstructions" class="btn-okay">Okay</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="importFile" accept=".json" hidden>
+
+    <!-- Shared modules, in dependency order. Classic scripts sharing a `BB`
+         namespace: the extension has no build step by design. -->
+    <script src="src/shared/time.js"></script>
+    <script src="src/shared/dom.js"></script>
+    <script src="src/shared/speed.js"></script>
+    <script src="src/shared/settings.js"></script>
+    <script src="src/shared/skin.js"></script>
+    <script src="src/shared/youtube.js"></script>
+    <script src="src/shared/bookmarks.js"></script>
+    <script src="src/page/ui.js"></script>
+    <script src="src/page/transfer.js"></script>
+    <script src="src/page/tab-actions.js"></script>
+    <script src="popup.js"></script>
+</body>
+
+</html>

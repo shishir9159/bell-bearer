@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-ff592e68-72d3-41a8-a7b8-d50b96745048/styles.css">
+<script src="_ds/industry-ff592e68-72d3-41a8-a7b8-d50b96745048/_ds_bundle.js"></script>
+<style>
+  body { margin: 0; }
+</style>
+</helmet>
+<div style="min-height:100vh; background:var(--color-bg,#f2f2f3); font-family:var(--font-body,Barlow,sans-serif); color:var(--color-text,#1d1f20); padding-bottom:80px">
+
+  <div style="position:sticky; top:0; z-index:20; background:var(--color-bg,#f2f2f3); border-bottom:1px solid var(--color-neutral-300,#d5d7d9); padding:18px 44px 16px">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:14px">
+      <h1 style="font-family:var(--font-heading,'Barlow Condensed',sans-serif); font-size:30px; font-weight:600; margin:0; letter-spacing:-.01em">Bell Bearer</h1>
+      <div style="font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--color-accent-700,#3f5d7d)">Popup · Dashboard · Injected UI</div>
+      <div style="margin-left:auto; font-size:13px; color:var(--color-neutral-600,#6b7178)">Every frame below is the real CSS from <span style="font-family:ui-monospace,Menlo,monospace; font-size:12px">build/</span></div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+      <div style="font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178); margin-right:4px">Skin</div>
+      <div class="seg">
+        <sc-for list="{{ skins }}" as="s" hint-placeholder-count="4">
+          <label class="seg-opt"><input type="radio" name="bb-skin" checked="{{ s.on }}" onChange="{{ s.pick }}">{{ s.label }}</label>
+        </sc-for>
+      </div>
+      <div style="width:1px; height:26px; background:var(--color-neutral-300,#d5d7d9); margin:0 8px"></div>
+      <button type="button" class="{{ darkCls }}" onClick="{{ toggleDark }}">{{ darkLabel }}</button>
+    </div>
+  </div>
+
+  <div style="padding:36px 44px 0">
+
+    <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:4px">
+      <div style="font-family:var(--font-heading,'Barlow Condensed',sans-serif); font-size:22px; font-weight:600">Popup</div>
+      <div style="font-size:14px; color:var(--color-neutral-600,#6b7178)">Fluid 340–800px. One column with a drill-in; both panes from 560px up.</div>
+    </div>
+    <div style="display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; margin-top:20px">
+      <div>
+        <div class="blueprint" style="position:relative; border:1px solid var(--color-neutral-400,#b9bcbf); background:#fff">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <iframe src="{{ popupList }}" width="380" height="600" style="display:block; border:0"></iframe>
+        </div>
+        <div style="margin-top:10px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">380 — list</div>
+      </div>
+      <div>
+        <div class="blueprint" style="position:relative; border:1px solid var(--color-neutral-400,#b9bcbf); background:#fff">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <iframe src="{{ popupDetail }}" width="380" height="600" style="display:block; border:0"></iframe>
+        </div>
+        <div style="margin-top:10px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">380 — drilled in</div>
+      </div>
+      <div>
+        <div class="blueprint" style="position:relative; border:1px solid var(--color-neutral-400,#b9bcbf); background:#fff">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <iframe src="{{ popupWide }}" width="720" height="600" style="display:block; border:0"></iframe>
+        </div>
+        <div style="margin-top:10px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">720 — two panes</div>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:baseline; gap:12px; margin:52px 0 4px">
+      <div style="font-family:var(--font-heading,'Barlow Condensed',sans-serif); font-size:22px; font-weight:600">Dashboard</div>
+      <div style="font-size:14px; color:var(--color-neutral-600,#6b7178)">Tabs are live in the frame. The skin picker sits at the top of Settings.</div>
+    </div>
+    <div style="display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; margin-top:20px">
+      <div>
+        <div class="blueprint" style="position:relative; border:1px solid var(--color-neutral-400,#b9bcbf); background:#fff">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <iframe src="{{ dashboard }}" width="1080" height="700" style="display:block; border:0"></iframe>
+        </div>
+        <div style="margin-top:10px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">Saved videos</div>
+      </div>
+      <div>
+        <div class="blueprint" style="position:relative; border:1px solid var(--color-neutral-400,#b9bcbf); background:#fff">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <iframe src="{{ dashboardSettings }}" width="1080" height="700" style="display:block; border:0"></iframe>
+        </div>
+        <div style="margin-top:10px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">Settings — skin picker</div>
+      </div>
+      <div>
+        <div class="blueprint" style="position:relative; border:1px solid var(--color-neutral-400,#b9bcbf); background:#fff">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <iframe src="{{ dashboardStats }}" width="1080" height="700" style="display:block; border:0"></iframe>
+        </div>
+        <div style="margin-top:10px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">Activity — opt-in, hidden until enabled</div>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:baseline; gap:12px; margin:52px 0 4px">
+      <div style="font-family:var(--font-heading,'Barlow Condensed',sans-serif); font-size:22px; font-weight:600">On the page</div>
+      <div style="font-size:14px; color:var(--color-neutral-600,#6b7178)">Skinned too. The palette and type come from the skin; light/dark still follows the host page, so the sheet never fights the site under it.</div>
+    </div>
+    <div style="display:flex; gap:32px; align-items:flex-start; flex-wrap:wrap; margin-top:20px">
+      <div>
+        <div class="blueprint" style="position:relative; border:1px solid var(--color-neutral-400,#b9bcbf); background:#fff">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <iframe src="{{ youtubeSheet }}" width="1240" height="740" style="display:block; border:0"></iframe>
+        </div>
+        <div style="margin-top:10px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">Topics overlay — frosted sheet, 40px inset</div>
+      </div>
+      <div>
+        <div class="blueprint" style="position:relative; border:1px solid var(--color-neutral-400,#b9bcbf); background:#fff">
+          <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          <iframe src="{{ youtubePouch }}" width="1240" height="740" style="display:block; border:0"></iframe>
+        </div>
+        <div style="margin-top:10px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">Pouch — save a channel to a topic</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1400,&quot;height&quot;:900},&quot;skin&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;default&quot;,&quot;riso&quot;,&quot;medieval&quot;,&quot;deco&quot;],&quot;default&quot;:&quot;default&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Skin&quot;},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Skin&quot;}}">
+class Component extends DCLogic {
+  state = { skin: null, dark: null };
+
+  get skin() { return this.state.skin ?? this.props.skin ?? 'default'; }
+  get dark() { return this.state.dark ?? this.props.dark ?? false; }
+
+  frame(page, extra) {
+    const parts = [`skin=${this.skin}`];
+    if (this.dark) parts.push('theme=dark');
+    if (extra) parts.push(extra);
+    return `build/preview/${page}?${parts.join('&')}`;
+  }
+
+  renderVals() {
+    const defs = [
+      ['default', 'Default'],
+      ['riso', 'Riso Paint'],
+      ['medieval', 'Medieval'],
+      ['deco', 'Art Deco'],
+    ];
+
+    return {
+      skins: defs.map(([id, label]) => ({
+        id,
+        label,
+        on: id === this.skin,
+        pick: () => this.setState({ skin: id }),
+      })),
+      darkLabel: this.dark ? 'Night' : 'Day',
+      darkCls: this.dark ? 'btn btn-primary' : 'btn btn-secondary',
+      toggleDark: () => this.setState({ dark: !this.dark }),
+      popupList: this.frame('popup.html'),
+      popupDetail: this.frame('popup.html', 'view=detail'),
+      popupWide: this.frame('popup.html'),
+      dashboard: this.frame('dashboard.html'),
+      dashboardSettings: this.frame('dashboard.html', 'view=settingsView'),
+      dashboardStats: this.frame('dashboard.html', 'view=statsView'),
+      youtubeSheet: this.frame('youtube.html'),
+      youtubePouch: this.frame('youtube.html', 'view=pouch'),
+    };
+  }
+}
+</script>
+</body>
+</html>

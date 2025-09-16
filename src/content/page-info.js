@@ -29,6 +29,22 @@
         '#channel-name a',
     ];
 
+    /** The channel's avatar and subscriber line, for the pouch panel's header. */
+    const AVATAR_SELECTORS = [
+        'ytd-video-owner-renderer #avatar img',
+        'ytd-watch-metadata #owner img#img',
+        '#owner yt-img-shadow img',
+        'yt-page-header-renderer img.yt-spec-avatar-shape__image',
+        '#channel-header-container #avatar img',
+    ];
+
+    const SUBSCRIBER_SELECTORS = [
+        'ytd-video-owner-renderer #owner-sub-count',
+        '#owner #owner-sub-count',
+        'yt-content-metadata-view-model .yt-content-metadata-view-model__metadata-row span',
+        '#subscriber-count',
+    ];
+
     function firstText(selectors) {
         for (const selector of selectors) {
             const element = document.querySelector(selector);
@@ -56,11 +72,33 @@
         return title || 'Unknown Title';
     }
 
+    /**
+     * The avatar image URL, or ''. Only http(s) is returned — the caller puts
+     * this straight into a src attribute, and YouTube sometimes leaves a
+     * data-placeholder in the img until the real one loads.
+     */
+    function getChannelAvatar() {
+        for (const selector of AVATAR_SELECTORS) {
+            const img = document.querySelector(selector);
+            const src = img && (img.src || img.getAttribute('src') || '');
+            if (src && /^https?:/.test(src)) return src;
+        }
+        return '';
+    }
+
+    /** "148K subscribers", or '' when the page does not show it. */
+    function getSubscriberText() {
+        const found = firstText(SUBSCRIBER_SELECTORS);
+        return found && /subscrib/i.test(found.text) ? found.text : '';
+    }
+
     function getChannelInfo() {
+        const extra = { avatar: getChannelAvatar(), subscribers: getSubscriberText() };
         const found = firstText(CHANNEL_SELECTORS);
         if (found) {
             const href = found.element.getAttribute('href') || found.element.href || '';
             return {
+                ...extra,
                 channelName: found.text,
                 channelUrl: href ? new URL(href, 'https://www.youtube.com').href : window.location.href,
             };
@@ -71,6 +109,7 @@
         const meta = document.querySelector('meta[itemprop="name"], meta[property="og:title"]');
 
         return {
+            ...extra,
             channelName: (meta && meta.getAttribute('content')) ||
                 (document.title || '').replace(/\s*-\s*YouTube$/, '').trim() ||
                 'Unknown Channel',
@@ -80,7 +119,10 @@
         };
     }
 
-    const PageInfo = { getVideoId, getVideoTitle, getChannelInfo, TITLE_SELECTORS, CHANNEL_SELECTORS };
+    const PageInfo = {
+        getVideoId, getVideoTitle, getChannelInfo, getChannelAvatar, getSubscriberText,
+        TITLE_SELECTORS, CHANNEL_SELECTORS, AVATAR_SELECTORS, SUBSCRIBER_SELECTORS,
+    };
 
     root.BB = root.BB || {};
     root.BB.PageInfo = PageInfo;

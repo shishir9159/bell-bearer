@@ -1,0 +1,100 @@
+/* ============================================================
+   Bell Bearer — skin fonts
+
+   All five families are SIL Open Font License, so they can ship inside
+   the extension. Download the woff2 from fonts.google.com (or
+   github.com/google/fonts) and drop them in fonts/ under these exact
+   names. Anything missing falls back to the stack in skins.css — no
+   skin breaks, it just loses its voice.
+
+     fonts/SpaceGrotesk-Regular.woff2        Riso — UI
+     fonts/SpaceGrotesk-Bold.woff2           Riso — headings
+     fonts/DMMono-Regular.woff2              Riso — timestamps
+     fonts/Cardo-Regular.woff2               Medieval — body
+     fonts/Cardo-Bold.woff2                  Medieval — body bold
+     fonts/Grenze-Regular.woff2              Medieval — headings
+     fonts/Grenze-SemiBold.woff2             Medieval — headings bold
+     fonts/UnifrakturMaguntia-Regular.woff2  Medieval — wordmark + drop caps
+     fonts/PoiretOne-Regular.woff2           Deco — headings
+     fonts/JosefinSans-Regular.woff2         Deco — UI
+     fonts/JosefinSans-SemiBold.woff2        Deco — UI bold
+
+   Default skin bundles nothing; it uses the system stack.
+   ============================================================ */
+
+@font-face {
+    font-family: 'Space Grotesk';
+    src: url('fonts/SpaceGrotesk-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Space Grotesk';
+    src: url('fonts/SpaceGrotesk-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'DM Mono';
+    src: url('fonts/DMMono-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Cardo';
+    src: url('fonts/Cardo-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Cardo';
+    src: url('fonts/Cardo-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Grenze';
+    src: url('fonts/Grenze-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Grenze';
+    src: url('fonts/Grenze-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'UnifrakturMaguntia';
+    src: url('fonts/UnifrakturMaguntia-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Poiret One';
+    src: url('fonts/PoiretOne-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Josefin Sans';
+    src: url('fonts/JosefinSans-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Josefin Sans';
+    src: url('fonts/JosefinSans-SemiBold.woff2') format('woff2');
+    font-weight: 600;
+    font-display: swap;
+}

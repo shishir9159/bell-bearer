@@ -1,15 +1,21 @@
 /**
  * The toolbar popup: recent checkpoints, and an optional speed bar.
  *
- * Import/export, modals, toasts, theme and tab control all live in the shared
- * modules now — this file is the popup's own wiring and rendering only. It used
- * to carry its own copy of each, plus two dead methods (a changeSpeed() nothing
- * called and a copySubtitles() with no button).
+ * Modals, toasts, theme and tab control live in the shared modules; this file
+ * is the popup's own wiring and rendering only. Import, export and "clear all"
+ * belong to the dashboard now, so the popup header is Dashboard alone.
+ *
+ * Layout note: the popup is fluid between 340 and 800px, and which end of that
+ * range it asks for is the `popupWidth` setting — src/page/popup-width.js puts
+ * the answer on <html> before this file runs. Under 560px it is a single column
+ * and selecting a video replaces the list with the detail pane (`.is-detail` on
+ * .main-content, unwound by the back button); at 560px and up both panes are on
+ * screen and the class is inert.
  */
 (function () {
     'use strict';
 
-    const { Bookmarks, Settings, Speed, Time, Dom, Ui, Transfer, TabActions } = window.BB;
+    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin } = window.BB;
 
     class Popup {
         constructor() {
@@ -17,23 +23,12 @@
             this.selectedVideoId = null;
             this.showSpeedBar = false;
             this.speedTab = null;
-
-            this.transfer = Transfer.createTransfer({
-                getVideos: () => this.videos,
-                setVideos: async (videos) => {
-                    this.videos = videos;
-                    await Bookmarks.save(videos);
-                    this.render();
-                },
-                notify: (message, type) => Ui.toast(message, type),
-                fileInputId: 'importFile',
-            });
         }
 
         async init() {
             Ui.installTheme({});
+            if (Skin) await Skin.install();
             this.wireControls();
-            this.transfer.install();
 
             const [videos, settings] = await Promise.all([
                 Bookmarks.load(),
@@ -69,9 +64,6 @@
                 chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
                 window.close();
             });
-            on('exportBtn', 'click', () => this.transfer.exportBookmarks());
-            on('importBtn', 'click', () => this.transfer.showImportOptions());
-            on('clearAll', 'click', () => this.clearAll());
 
             // Delegation: the list is re-rendered wholesale, so per-row
             // listeners would have to be re-attached (and were leaking).
@@ -80,9 +72,21 @@
                 const item = event.target.closest('.video-item');
                 if (item) this.selectVideo(item.dataset.videoId);
             });
+            list.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                const item = event.target.closest('.video-item');
+                if (!item) return;
+                event.preventDefault();
+                this.selectVideo(item.dataset.videoId);
+            });
 
             const details = document.getElementById('bookmarkDetails');
             details.addEventListener('click', (event) => {
+                if (event.target.closest('.bd-back')) {
+                    this.closeDetail();
+                    return;
+                }
+
                 const button = event.target.closest('button');
                 if (!button) return;
                 const item = button.closest('.bookmark-item');
@@ -92,6 +96,14 @@
                     this.seek(item.dataset.videoId, Number(button.dataset.time));
                 } else if (button.classList.contains('delete-btn')) {
                     this.deleteBookmark(item.dataset.videoId, Number(item.dataset.bookmarkIndex));
+                }
+            });
+
+            // Escape backs out of the detail pane before it closes the popup.
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && this.selectedVideoId) {
+                    event.preventDefault();
+                    this.closeDetail();
                 }
             });
         }
@@ -152,6 +164,15 @@
         selectVideo(videoId) {
             this.selectedVideoId = videoId;
             this.render();
+            const main = document.getElementById('mainContent');
+            if (main) main.classList.add('is-detail');
+        }
+
+        closeDetail() {
+            const main = document.getElementById('mainContent');
+            if (main) main.classList.remove('is-detail');
+            this.selectedVideoId = null;
+            this.render();
         }
 
         /**
@@ -186,27 +207,19 @@
             this.render();
         }
 
-        async clearAll() {
-            const confirmed = await Ui.confirmDialog({
-                title: 'Delete every checkpoint?',
-                message: 'This removes all saved checkpoints for every video. It cannot be undone.',
-                confirmLabel: 'Delete all',
-                danger: true,
-            });
-            if (!confirmed) return;
-
-            this.videos = [];
-            this.selectedVideoId = null;
-            await Bookmarks.save(this.videos);
-            this.render();
-            Ui.toast('All checkpoints deleted', 'info');
-        }
-
         // ------------------------------------------------------ rendering
 
         render() {
+            this.renderCount();
             this.renderVideoList();
             this.renderDetails();
+        }
+
+        renderCount() {
+            const label = document.getElementById('brandCount');
+            if (!label) return;
+            const total = this.videos.reduce((sum, video) => sum + video.bookmarks.length, 0);
+            label.textContent = total ? `${total} checkpoint${total === 1 ? '' : 's'}` : '';
         }
 
         renderVideoList() {
@@ -230,7 +243,7 @@
                         <div class="video-title">${Dom.escapeHtml(video.title)}</div>
                         <div class="video-meta">
                             <span class="bookmark-count">${count}</span>
-                            checkpoint${count === 1 ? '' : 's'}
+                            <span class="video-channel">checkpoint${count === 1 ? '' : 's'}</span>
                         </div>
                     </div>`;
             }).join('');
@@ -243,7 +256,7 @@
             if (!video) {
                 details.innerHTML = `
                     <div class="no-selection">
-                        <div class="empty-icon">⏱️</div>
+                        <div class="empty-icon">⏱</div>
                         <p>Select a video to see its checkpoints</p>
                     </div>`;
                 return;
@@ -252,8 +265,12 @@
             const count = video.bookmarks.length;
             details.innerHTML = `
                 <div class="bd-header">
-                    <h3>${Dom.escapeHtml(video.title)}</h3>
-                    <span class="bd-count">${count} checkpoint${count === 1 ? '' : 's'}</span>
+                    <button class="bd-back" type="button" aria-label="Back to videos">‹</button>
+                    <div class="bd-heading">
+                        <h3>${Dom.escapeHtml(video.title)}</h3>
+                        <div class="bd-sub">${count} checkpoint${count === 1 ? '' : 's'}</div>
+                    </div>
+                    <span class="bd-count">${count}</span>
                 </div>
                 <div class="checkpoint-timeline">
                     ${video.bookmarks.map((bookmark, index) => renderBookmark(video, bookmark, index)).join('')}
@@ -274,7 +291,7 @@
                 ${bookmark.title ? `<div class="bookmark-name">${Dom.escapeHtml(bookmark.title)}</div>` : ''}
                 ${bookmark.note ? `<div class="bookmark-note">${Dom.escapeHtml(bookmark.note)}</div>` : ''}
                 <div class="bookmark-actions">
-                    <button class="btn-small seek-btn" data-time="${time}">▶ Go to</button>
+                    <button class="btn-small seek-btn" data-time="${time}">Go to</button>
                     <button class="btn-small delete delete-btn">Delete</button>
                 </div>
             </div>`;

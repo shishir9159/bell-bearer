@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bell Bearer - Dashboard</title>
+    <link rel="stylesheet" href="skin-fonts.css">
+    <link rel="stylesheet" href="skins.css">
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+
+<body data-skin="default">
+    <div class="dashboard-container">
+        <header class="bb-ruled">
+            <div class="header-top">
+                <h1 class="bb-wordmark"><img class="brand-icon" src="icons/icon48.png" alt="">Bell Bearer Dashboard</h1>
+                <button id="themeToggle" class="btn-theme" title="Toggle dark theme">🌙</button>
+            </div>
+            <nav class="nav-tabs">
+                <button id="dashboardTab" class="nav-tab active">Dashboard</button>
+                <button id="subscriptionsTab" class="nav-tab">Subscriptions</button>
+                <button id="statsTab" class="nav-tab" hidden>Activity</button>
+                <button id="settingsTab" class="nav-tab">Settings</button>
+            </nav>
+        </header>
+
+        <div id="dashboardView" class="view active">
+            <div class="dashboard-header">
+                <h2>Your Saved Videos</h2>
+                <div class="dashboard-controls">
+                    <button id="exportBtn" class="btn-secondary">Export</button>
+                    <button id="importBtn" class="btn-secondary">Import</button>
+                    <button id="clearAll" class="btn-secondary btn-danger">Clear All</button>
+                </div>
+            </div>
+
+            <div class="videos-container" id="videosContainer">
+                <!-- Videos will be rendered here -->
+            </div>
+        </div>
+
+        <div id="subscriptionsView" class="view">
+            <div class="subscriptions-header">
+                <h2>Subscription Manager</h2>
+                <div class="subscriptions-controls">
+                    <button id="addTopicBtn" class="btn-primary">+ Add Topic</button>
+                    <button id="refreshVideosBtn" class="btn-secondary">Refresh</button>
+                </div>
+            </div>
+
+            <div class="topics-container" id="topicsContainer">
+                <!-- Topics will be rendered here -->
+            </div>
+        </div>
+
+        <div id="statsView" class="view">
+            <div class="dashboard-header">
+                <h2>Activity</h2>
+                <div class="range-seg" id="statsRange" role="group" aria-label="Range">
+                    <button class="range-opt" type="button" data-range="today" aria-pressed="true">Today</button>
+                    <button class="range-opt" type="button" data-range="week" aria-pressed="false">Last 7 days</button>
+                    <button class="range-opt" type="button" data-range="month" aria-pressed="false">Last 30 days</button>
+                </div>
+            </div>
+            <div id="statsBody"></div>
+        </div>
+
+        <div id="settingsView" class="view">
+            <div class="settings-header">
+                <h2>Settings</h2>
+            </div>
+
+            <div class="settings-content">
+                <div class="settings-section">
+                    <h3>Appearance</h3>
+                    <p>Skins restyle the popup and this dashboard. Each one carries its own day and night, so the moon button switches within the skin you picked.</p>
+
+                    <div class="skin-picker" id="skinPicker">
+                        <button class="skin-option" type="button" data-skin-id="default" aria-pressed="true">
+                            <span class="skin-swatches"><span style="background:#b81808"></span><span style="background:#ffffff"></span><span style="background:#191515"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Default</span>
+                                <span class="skin-note">The house red, sampled from the icon</span>
+                            </span>
+                        </button>
+                        <button class="skin-option" type="button" data-skin-id="riso" aria-pressed="false">
+                            <span class="skin-swatches"><span style="background:#ff48b0"></span><span style="background:#1f5fd0"></span><span style="background:#ffc60b"></span><span style="background:#efece0"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Riso Paint</span>
+                                <span class="skin-note">Three spot inks on newsprint</span>
+                            </span>
+                        </button>
+                        <button class="skin-option" type="button" data-skin-id="medieval" aria-pressed="false">
+                            <span class="skin-swatches"><span style="background:#9c2b16"></span><span style="background:#ecdcb8"></span><span style="background:#a8791f"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Medieval</span>
+                                <span class="skin-note">Parchment, iron-gall ink, rubricated red</span>
+                            </span>
+                        </button>
+                        <button class="skin-option" type="button" data-skin-id="deco" aria-pressed="false">
+                            <span class="skin-swatches"><span style="background:#b99447"></span><span style="background:#f7f3e8"></span><span style="background:#14110d"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Art Deco</span>
+                                <span class="skin-note">Ivory and gilt, everything letter-spaced</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Keyboard Shortcuts</h3>
+                    <div class="shortcut-list">
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">Ctrl + B</span>
+                            <span class="shortcut-desc">Create checkpoint (hold and release)</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">Alt + 1-9</span>
+                            <span class="shortcut-desc">Skip forward by that many seconds</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">Shift + 1-9</span>
+                            <span class="shortcut-desc">Skip backward by that many seconds</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">Ctrl + Shift + 1-9</span>
+                            <span class="shortcut-desc">Temporary 3x speed boost for that many seconds</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">&gt;</span>
+                            <span class="shortcut-desc">Increase playback speed</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">&lt;</span>
+                            <span class="shortcut-desc">Decrease playback speed</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">+</span>
+                            <span class="shortcut-desc">Reset playback speed to 1x</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="shortcut-key">Ctrl + Shift + L</span>
+                            <span class="shortcut-desc">Copy this page as a Markdown link (rebindable at chrome://extensions/shortcuts)</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-option">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="enableSkipShortcuts">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Enable Numeric Skip Shortcuts (Alt+1-9 forward / Shift+1-9 back)</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="showSpeedButtonsInPopup">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Show speed buttons in popup (Default: Off) — speed also works on any site via the &gt; &lt; + keys</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="rememberPlaybackSpeed">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Keep my playback speed — re-apply the speed you chose when a site resets it (new video, ad break)</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+                        <span class="setting-label">Preferred Subtitles</span>
+                        <select id="preferredSubtitleLanguage">
+                            <option value="en">English</option>
+                            <option value="af">Afrikaans</option>
+                            <option value="sq">Albanian</option>
+                            <option value="am">Amharic</option>
+                            <option value="ar">Arabic</option>
+                            <option value="hy">Armenian</option>
+                            <option value="az">Azerbaijani</option>
+                            <option value="bn">Bangla</option>
+                            <option value="eu">Basque</option>
+                            <option value="be">Belarusian</option>
+                            <option value="bs">Bosnian</option>
+                            <option value="bg">Bulgarian</option>
+                            <option value="my">Burmese</option>
+                            <option value="ca">Catalan</option>
+                            <option value="zh-Hans">Chinese (Simplified)</option>
+                            <option value="zh-Hant">Chinese (Traditional)</option>
+                            <option value="hr">Croatian</option>
+                            <option value="cs">Czech</option>
+                            <option value="da">Danish</option>
+                            <option value="nl">Dutch</option>
+                            <option value="eo">Esperanto</option>
+                            <option value="et">Estonian</option>
+                            <option value="fil">Filipino</option>
+                            <option value="fi">Finnish</option>
+                            <option value="fr">French</option>
+                            <option value="gl">Galician</option>
+                            <option value="ka">Georgian</option>
+                            <option value="de">German</option>
+                            <option value="el">Greek</option>
+                            <option value="gu">Gujarati</option>
+                            <option value="iw">Hebrew</option>
+                            <option value="hi">Hindi</option>
+                            <option value="hu">Hungarian</option>
+                            <option value="is">Icelandic</option>
+                            <option value="id">Indonesian</option>
+                            <option value="ga">Irish</option>
+                            <option value="it">Italian</option>
+                            <option value="ja">Japanese</option>
+                            <option value="jv">Javanese</option>
+                            <option value="kn">Kannada</option>
+                            <option value="kk">Kazakh</option>
+                            <option value="km">Khmer</option>
+                            <option value="ko">Korean</option>
+                            <option value="ku">Kurdish</option>
+                            <option value="ky">Kyrgyz</option>
+                            <option value="lo">Lao</option>
+                            <option value="lv">Latvian</option>
+                            <option value="lt">Lithuanian</option>
+                            <option value="lb">Luxembourgish</option>
+                            <option value="mk">Macedonian</option>
+                            <option value="mg">Malagasy</option>
+                            <option value="ms">Malay</option>
+                            <option value="ml">Malayalam</option>
+                            <option value="mt">Maltese</option>
+                            <option value="mi">Maori</option>
+                            <option value="mr">Marathi</option>
+                            <option value="mn">Mongolian</option>
+                            <option value="ne">Nepali</option>
+                            <option value="no">Norwegian</option>
+                            <option value="ps">Pashto</option>
+                            <option value="fa">Persian</option>
+                            <option value="pl">Polish</option>
+                            <option value="pt">Portuguese</option>
+                            <option value="pa">Punjabi</option>
+                            <option value="ro">Romanian</option>
+                            <option value="ru">Russian</option>
+                            <option value="sr">Serbian</option>
+                            <option value="sd">Sindhi</option>
+                            <option value="si">Sinhala</option>
+                            <option value="sk">Slovak</option>
+                            <option value="sl">Slovenian</option>
+                            <option value="so">Somali</option>
+                            <option value="es">Spanish</option>
+                            <option value="su">Sundanese</option>
+                            <option value="sw">Swahili</option>
+                            <option value="sv">Swedish</option>
+                            <option value="tg">Tajik</option>
+                            <option value="ta">Tamil</option>
+                            <option value="te">Telugu</option>
+                            <option value="th">Thai</option>
+                            <option value="tr">Turkish</option>
+                            <option value="uk">Ukrainian</option>
+                            <option value="ur">Urdu</option>
+                            <option value="uz">Uzbek</option>
+                            <option value="vi">Vietnamese</option>
+                            <option value="cy">Welsh</option>
+                            <option value="xh">Xhosa</option>
+                            <option value="yi">Yiddish</option>
+                            <option value="yo">Yoruba</option>
+                            <option value="zu">Zulu</option>
+                        </select>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+                        <span class="setting-label">Add-to-pouch button</span>
+                        <select id="pouchButtonStyle">
+                            <option value="auto">Icon beside Subscribe (matches YouTube)</option>
+                            <option value="accent">Icon beside Subscribe (accent color)</option>
+                            <option value="hidden">Hidden</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>General</h3>
+
+                    <div class="settings-option">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="trackActivity">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Track my activity — adds an Activity tab with time per site, per hour and per day. Recorded on this machine only, never sent anywhere, and kept for 60 days</span>
+                    </div>
+
+
+                    <div class="settings-option">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="openTabNextToCurrent">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Open new tabs next to the current tab (including Ctrl+T)</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="syncThemeWithYouTube">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Match YouTube theme — switch Bell Bearer to dark mode when YouTube is dark</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="connectToSowon">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Connect to sowon — report the focused tab's title and tab group to the sowon timer (localhost only) so its focus report can break down Chrome usage</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="markdownContextMenu">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Show "Copy as Markdown" in the right-click menu — converts a link or the page to <code>[title](url)</code> only when you explicitly pick it; ordinary copying is never affected</span>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>About</h3>
+                    <p>Bell Bearer helps you organize and manage your YouTube video bookmarks.</p>
+                    <p>Version: 1.0</p>
+                </div>
+            </div>
+        </div>
+
+        <input type="file" id="importFile" accept=".json" hidden>
+    </div>
+
+    <!-- Shared modules, in dependency order. Classic scripts sharing a `BB`
+         namespace: the extension has no build step by design. -->
+    <script src="src/shared/time.js"></script>
+    <script src="src/shared/dom.js"></script>
+    <script src="src/shared/speed.js"></script>
+    <script src="src/shared/settings.js"></script>
+    <script src="src/shared/skin.js"></script>
+    <script src="src/shared/activity.js"></script>
+    <script src="src/shared/youtube.js"></script>
+    <script src="src/shared/bookmarks.js"></script>
+    <script src="src/shared/subscriptions.js"></script>
+    <script src="src/shared/feed.js"></script>
+    <script src="src/page/ui.js"></script>
+    <script src="src/page/settings-form.js"></script>
+    <script src="src/page/skin-picker.js"></script>
+    <script src="src/page/stats.js"></script>
+    <script src="src/page/transfer.js"></script>
+    <script src="src/page/tab-actions.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+
+</html>

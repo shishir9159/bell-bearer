@@ -10,9 +10,12 @@
  * Keep this list in step with manifest.firefox.json and tests/index.html.
  */
 importScripts(
+    'src/shared/settings.js',
+    'src/shared/activity.js',
     'src/background/proto.js',
     'src/background/sowon.js',
     'src/background/context-menus.js',
     'src/background/tab-placement.js',
     'src/background/commands.js',
+    'src/background/activity-heartbeat.js',
 );

@@ -1,10 +1,18 @@
 /**
- * Theme resolution for the on-page UI, and the optional "match YouTube's theme"
+ * Light or dark for the on-page UI, and the optional "match YouTube's theme"
  * sync.
  *
- * The palette used to be re-derived inline in each of the three overlays, with
- * slightly different colours and a different dark-mode test in each. One
- * resolver now serves all of them.
+ * This file used to carry two hard-coded colour tables that each overlay read
+ * and pasted into inline styles. The palette lives in content.css now, keyed
+ * off `data-bb-theme` and `data-bb-skin`, so all that is left to decide is
+ * which of the two states to ask for.
+ *
+ * The two directions here are easy to confuse, so: the injected UI reads
+ * light/dark *from* the page (pageTheme), while installYouTubeSync writes it
+ * the other way, mirroring YouTube's setting *into* our saved theme so the
+ * popup and dashboard can follow it. Only the second is a user setting; a
+ * sheet drawn over YouTube always matches YouTube, so it never glares against
+ * the page underneath.
  */
 (function (root) {
     'use strict';
@@ -12,19 +20,6 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('../shared/settings.js');
-
-    const PALETTES = {
-        light: {
-            panel: '#ffffff', surface: '#ffffff', text: '#14171d', sub: '#59626f',
-            border: '#e6e8ef', chip: '#f6f7fb', card: '#f6f7fb', inputBg: '#ffffff',
-            cancelBg: '#f0f0f0', accent: '#e11d48', accentHover: '#c40f3f', onAccent: '#ffffff',
-        },
-        dark: {
-            panel: '#2f3136', surface: '#212121', text: '#e3e5e8', sub: '#b5bac1',
-            border: '#26282c', chip: '#36393f', card: '#36393f', inputBg: '#121212',
-            cancelBg: '#2b2b2b', accent: '#7289da', accentHover: '#5b6eae', onAccent: '#ffffff',
-        },
-    };
 
     /** True when YouTube itself is in dark mode. */
     function isYouTubeDark() {
@@ -35,17 +30,16 @@
     }
 
     /**
-     * The palette to draw with: the saved Bell Bearer theme when there is one,
-     * otherwise whatever YouTube is currently showing.
+     * 'dark' or 'light' for anything drawn on top of the page.
+     *
+     * Deliberately not the extension's own saved theme. The skin decides the
+     * palette and the type; this decides only which of the skin's two states
+     * to use, and it takes that from the site underneath so a sheet over a
+     * dark YouTube is never a white slab. The saved theme belongs to the popup
+     * and the dashboard, which are documents of our own.
      */
-    function palette(savedTheme) {
-        const dark = savedTheme ? savedTheme === 'dark' : isYouTubeDark();
-        return { ...PALETTES[dark ? 'dark' : 'light'], dark };
-    }
-
-    async function currentPalette() {
-        const { theme } = await Settings.get(['theme', 'syncThemeWithYouTube']);
-        return palette(theme);
+    function pageTheme() {
+        return isYouTubeDark() ? 'dark' : 'light';
     }
 
     /**
@@ -70,7 +64,7 @@
         return { apply, stop: () => observer.disconnect() };
     }
 
-    const Theme = { PALETTES, palette, currentPalette, isYouTubeDark, installYouTubeSync };
+    const Theme = { pageTheme, isYouTubeDark, installYouTubeSync };
 
     root.BB = root.BB || {};
     root.BB.Theme = Theme;

@@ -30,7 +30,44 @@
             parseInt(match[3] || 0, 10);
     }
 
-    const Time = { formatTime, parseTimestamp };
+    /** Milliseconds in each unit, largest first, for relativeTime below. */
+    const AGES = [
+        ['year', 31536e6],
+        ['month', 2592e6],
+        ['week', 6048e5],
+        ['day', 864e5],
+        ['hour', 36e5],
+        ['minute', 6e4],
+    ];
+
+    /**
+     * A publish timestamp as "3 days ago", the way the video cards label them.
+     *
+     * Rounds down, so something posted 13 days ago reads "1 week ago" rather
+     * than "2 weeks ago" — a card should never claim a video is older than it
+     * is. Anything under a minute, and anything dated in the future (clock skew
+     * between a feed and this machine is ordinary), reads "just now".
+     *
+     * A missing date returns '' rather than a duration. Feed.parseFeed stores
+     * 0 when an entry carries no published date, and treating that as a real
+     * instant dated every such video to the epoch — "56 years ago" on a card
+     * for a video posted last week.
+     */
+    function relativeTime(timestamp, now = Date.now()) {
+        const at = Number(timestamp);
+        if (!at || !Number.isFinite(at)) return '';
+
+        const elapsed = now - at;
+        if (!Number.isFinite(elapsed) || elapsed < 6e4) return 'just now';
+
+        for (const [unit, size] of AGES) {
+            const count = Math.floor(elapsed / size);
+            if (count >= 1) return `${count} ${unit}${count === 1 ? '' : 's'} ago`;
+        }
+        return 'just now';
+    }
+
+    const Time = { formatTime, parseTimestamp, relativeTime };
 
     root.BB = root.BB || {};
     root.BB.Time = Time;

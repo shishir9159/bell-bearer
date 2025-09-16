@@ -23,6 +23,23 @@ node tests/serve.js
 
 Then open <http://localhost:5601/tests/>. Any other static server works too.
 
+**Keep the tab visible while it runs.** Browsers throttle timers hard in a
+background tab — a 100ms `setTimeout` can take a full second, and longer the
+longer the page stays hidden — and the mock defers every `chrome.*` callback
+through one. Visible, the suite is done in seconds; hidden, the same tests
+legitimately take minutes. The per-test timeout moves with `document.hidden`
+for exactly that reason, so a hidden run is slow rather than falsely red.
+
+**Without a browser**, for the parts that are pure logic:
+
+```bash
+node tests/node-check.js
+```
+
+The speed ladder, escaping and URL safety, checkpoint merging, timestamps and
+the activity store, in about a second. It is a fast gate while you are changing
+that code, not a replacement — it cannot press a key or play a video.
+
 ## Layout
 
 | File | Purpose |
@@ -37,6 +54,9 @@ Then open <http://localhost:5601/tests/>. Any other static server works too.
 | `player.test.js` | Speed shortcuts, holding the rate against the page, boost, skipping |
 | `shortcuts.test.js` | Which binding claims which keystroke, and the typing guard |
 | `bookmarks.test.js` | De-duplication, merging, import parsing, URL parsing, escaping |
+| `activity.test.js` | The activity store, and the relative-time labels on video cards |
+| `youtube-ui.test.js` | Where the "Open Pouch" row lands in YouTube's left drawer |
+| `node-check.js` | The Node gate — pure logic only, no DOM, no timers |
 
 ## How it works
 
@@ -50,6 +70,44 @@ Because the mock reorders `state.tabs` on `tabs.move`, assertions can check the
 *resulting tab order*, not just that a move was requested. The mock offers both
 the callback and the promise form of every API, the way Chrome and Firefox do —
 the shared modules use promises throughout.
+
+`soon()`, which defers every mocked callback, has to stay a **macrotask**.
+Switching it to `queueMicrotask` makes a hidden-tab run dramatically faster,
+and is tempting for that reason — but it hoists every mocked callback ahead of
+any `setTimeout` the code under test is waiting on. That silently reorders the
+retry path in `tab-placement` and the back-off in `sowon`, and turns three
+real regression tests green no matter what those files do.
+
+`MockChrome.settle()`'s default moves with `document.hidden` for the same
+reason — a wait that comfortably drains the callback queue in a visible tab
+drains almost none of it in a hidden one. An **explicit** argument is never
+scaled, because a test that passes one is usually timing something on purpose,
+like staying inside the sowon throttle window.
+
+That is also the limit of what adapting can buy. A hidden tab clamps *every*
+timer to roughly one a second, so the ordering between a 20ms wait and a 150ms
+throttle simply cannot be reproduced — both land at ~1s. The tab-placement
+tests, which turn on retries spaced 60ms apart, are the ones that notice. If
+they fail while everything else passes, check the tab was visible before
+reading it as a regression.
+
+The activity tests drive `Activity.tick`'s clock through its optional `now`
+argument instead of sleeping. The store's whole job is arithmetic on two
+timestamps; sleeping through the elapsed time would make those tests both slow
+and dependent on timer resolution.
+
+They also pin the thing that made the feature look dead: the marker each tick
+measures from has to be kept in `chrome.storage.session`, because in MV3 the
+worker holding it is gone well before the next alarm. `node-check.js` reproduces
+that restart exactly — it drops the module from `require.cache` and evaluates it
+again, leaving only storage to carry the marker across.
+
+The feed checks are about identity rather than parsing. A YouTube channel page
+mentions a dozen channels and only three of those mentions are its own, so the
+fixtures put a stranger's id where the old resolver looked — first `"channelId"`
+in the document — and the page's real id only where the canonical link and the
+channel metadata put it. A resolver that reads the recommendation rail passes
+nothing here.
 
 `background.js` itself is only an `importScripts()` shim for the service worker,
 so `index.html` lists the parts from `src/background/` directly, exactly as

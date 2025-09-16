@@ -5,19 +5,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bell Bearer - Dashboard</title>
+    <link rel="stylesheet" href="skin-fonts.css">
+    <link rel="stylesheet" href="skins.css">
     <link rel="stylesheet" href="dashboard.css">
 </head>
 
-<body>
+<body data-skin="default">
     <div class="dashboard-container">
-        <header>
+        <header class="bb-ruled">
             <div class="header-top">
-                <h1><img class="brand-icon" src="icons/icon48.png" alt="">Bell Bearer Dashboard</h1>
+                <h1 class="bb-wordmark"><img class="brand-icon" src="icons/icon48.png" alt="">Bell Bearer Dashboard</h1>
                 <button id="themeToggle" class="btn-theme" title="Toggle dark theme">🌙</button>
             </div>
             <nav class="nav-tabs">
                 <button id="dashboardTab" class="nav-tab active">Dashboard</button>
                 <button id="subscriptionsTab" class="nav-tab">Subscriptions</button>
+                <button id="statsTab" class="nav-tab">Activity</button>
                 <button id="settingsTab" class="nav-tab">Settings</button>
             </nav>
         </header>
@@ -26,9 +29,9 @@
             <div class="dashboard-header">
                 <h2>Your Saved Videos</h2>
                 <div class="dashboard-controls">
-                    <button id="exportBtn" class="btn-secondary">📤 Export</button>
-                    <button id="importBtn" class="btn-secondary">📥 Import</button>
-                    <button id="clearAll" class="btn-secondary btn-danger">🗑 Clear All</button>
+                    <button id="exportBtn" class="btn-secondary">Export</button>
+                    <button id="importBtn" class="btn-secondary">Import</button>
+                    <button id="clearAll" class="btn-secondary btn-danger">Clear All</button>
                 </div>
             </div>
 
@@ -42,7 +45,7 @@
                 <h2>Subscription Manager</h2>
                 <div class="subscriptions-controls">
                     <button id="addTopicBtn" class="btn-primary">+ Add Topic</button>
-                    <button id="refreshVideosBtn" class="btn-secondary">🔄 Refresh</button>
+                    <button id="refreshVideosBtn" class="btn-secondary">Refresh</button>
                 </div>
             </div>
 
@@ -51,12 +54,77 @@
             </div>
         </div>
 
+        <div id="statsView" class="view">
+            <div class="dashboard-header">
+                <h2>Activity</h2>
+                <div class="range-seg" id="statsRange" role="group" aria-label="Range">
+                    <button class="range-opt" type="button" data-range="today" aria-pressed="true">Today</button>
+                    <button class="range-opt" type="button" data-range="week" aria-pressed="false">Last 7 days</button>
+                    <button class="range-opt" type="button" data-range="month" aria-pressed="false">Last 30 days</button>
+                </div>
+            </div>
+            <div id="statsBody"></div>
+        </div>
+
         <div id="settingsView" class="view">
             <div class="settings-header">
                 <h2>Settings</h2>
             </div>
 
             <div class="settings-content">
+                <div class="settings-section">
+                    <h3>Appearance</h3>
+                    <p>Skins restyle the popup and this dashboard. Each one carries its own day and night, so the moon button switches within the skin you picked.</p>
+
+                    <div class="skin-picker" id="skinPicker">
+                        <button class="skin-option" type="button" data-skin-id="default" aria-pressed="true">
+                            <span class="skin-swatches"><span style="background:#b81808"></span><span style="background:#ffffff"></span><span style="background:#191515"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Default</span>
+                                <span class="skin-note">The house red, sampled from the icon</span>
+                            </span>
+                        </button>
+                        <button class="skin-option" type="button" data-skin-id="riso" aria-pressed="false">
+                            <span class="skin-swatches"><span style="background:#ff48b0"></span><span style="background:#1f5fd0"></span><span style="background:#ffc60b"></span><span style="background:#efece0"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Riso Paint</span>
+                                <span class="skin-note">Three spot inks on newsprint</span>
+                            </span>
+                        </button>
+                        <button class="skin-option" type="button" data-skin-id="medieval" aria-pressed="false">
+                            <span class="skin-swatches"><span style="background:#9c2b16"></span><span style="background:#ecdcb8"></span><span style="background:#a8791f"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Medieval</span>
+                                <span class="skin-note">Parchment, iron-gall ink, rubricated red</span>
+                            </span>
+                        </button>
+                        <button class="skin-option" type="button" data-skin-id="deco" aria-pressed="false">
+                            <span class="skin-swatches"><span style="background:#b99447"></span><span style="background:#f7f3e8"></span><span style="background:#14110d"></span></span>
+                            <span class="skin-text">
+                                <span class="skin-name">Art Deco</span>
+                                <span class="skin-note">Ivory and gilt, everything letter-spaced</span>
+                            </span>
+                        </button>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+                        <span class="setting-label">Popup size</span>
+                        <select id="popupWidth">
+                            <option value="wide">Wide — video list and checkpoints side by side</option>
+                            <option value="compact">Compact — one column, pick a video to see its checkpoints</option>
+                        </select>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
+                        <span class="setting-label">Add-to-pouch button</span>
+                        <select id="pouchButtonStyle">
+                            <option value="auto">Icon beside Subscribe (matches YouTube)</option>
+                            <option value="accent">Icon beside Subscribe (accent color)</option>
+                            <option value="hidden">Hidden</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div class="settings-section">
                     <h3>Keyboard Shortcuts</h3>
                     <div class="shortcut-list">
@@ -120,7 +188,7 @@
 
                     <div class="settings-option" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
                         <span class="setting-label">Preferred Subtitles</span>
-                        <select id="preferredSubtitleLanguage" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color, #ddd); background: var(--bg-secondary, #fff); color: var(--text-color, #333); font-size: 14px; min-width: 200px;">
+                        <select id="preferredSubtitleLanguage">
                             <option value="en">English</option>
                             <option value="af">Afrikaans</option>
                             <option value="sq">Albanian</option>
@@ -214,18 +282,19 @@
                         </select>
                     </div>
 
-                    <div class="settings-option" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
-                        <span class="setting-label">Add-to-pouch button</span>
-                        <select id="pouchButtonStyle" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color, #ddd); background: var(--bg-secondary, #fff); color: var(--text-color, #333); font-size: 14px; min-width: 200px;">
-                            <option value="auto">Icon beside Subscribe (matches YouTube)</option>
-                            <option value="accent">Icon beside Subscribe (accent color)</option>
-                            <option value="hidden">Hidden</option>
-                        </select>
-                    </div>
                 </div>
 
                 <div class="settings-section">
                     <h3>General</h3>
+
+                    <div class="settings-option">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="trackActivity">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Track my activity — adds an Activity tab with time per site, per hour and per day. Recorded on this machine only, never sent anywhere, and kept for 60 days</span>
+                    </div>
+
 
                     <div class="settings-option">
                         <label class="toggle-switch">
@@ -277,12 +346,16 @@
     <script src="src/shared/dom.js"></script>
     <script src="src/shared/speed.js"></script>
     <script src="src/shared/settings.js"></script>
+    <script src="src/shared/skin.js"></script>
+    <script src="src/shared/activity.js"></script>
     <script src="src/shared/youtube.js"></script>
     <script src="src/shared/bookmarks.js"></script>
     <script src="src/shared/subscriptions.js"></script>
     <script src="src/shared/feed.js"></script>
     <script src="src/page/ui.js"></script>
     <script src="src/page/settings-form.js"></script>
+    <script src="src/page/skin-picker.js"></script>
+    <script src="src/page/stats.js"></script>
     <script src="src/page/transfer.js"></script>
     <script src="src/page/tab-actions.js"></script>
     <script src="dashboard.js"></script>

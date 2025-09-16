@@ -1,0 +1,665 @@
+/* ============================================================
+   Bell Bearer — skins
+   One token contract, seven costumes.
+
+   Selection:  <body data-skin="default|riso|medieval|deco">
+   Day/night:  body.dark-theme  (unchanged from before — the existing
+               Ui.installTheme keeps working; each skin owns both states)
+
+   Every surface file (popup.css, dashboard.css) reads ONLY the variables
+   below. Adding a skin means adding one block here, nothing else.
+   ============================================================ */
+
+/* ---------------------------------------------------------------- 1. DEFAULT — day
+   Accent sampled from the extension icon: the field red behind the bearer. */
+
+:root,
+body[data-skin="default"] {
+    color-scheme: light;
+
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    --font-head: var(--font);
+    --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --head-case: none;
+    --head-track: .2px;
+    --head-weight: 700;
+
+    --brand-grad: linear-gradient(135deg, #e8300f 0%, #b81808 55%, #8e0f04 100%);
+    --accent: #b81808;
+    --accent-2: #e0331a;
+    --accent-hover: #9c1206;
+    --accent-grad: linear-gradient(135deg, #e0331a 0%, #b81808 100%);
+    --accent-soft: rgba(184, 24, 8, .09);
+    --accent-soft-2: rgba(184, 24, 8, .18);
+    --accent-ring: rgba(184, 24, 8, .30);
+    --accent-shadow: rgba(184, 24, 8, .32);
+    --on-accent: #ffffff;
+    --accent-ink: var(--accent);
+
+    --bg: #f2efee;
+    --surface: #ffffff;
+    --surface-2: #f7f5f4;
+    --surface-3: #efebea;
+    --header-bg: var(--surface);
+    --header-text: #191515;
+
+    --text: #191515;
+    --text-muted: #5c5252;
+    --text-faint: #8f8585;
+
+    --border: #e7e3e3;
+    --border-strong: #d6d0cf;
+    --rule-style: solid;
+
+    --border-color: var(--border-strong);
+    --bg-secondary: var(--surface-2);
+    --text-color: var(--text);
+
+    --info: #2563eb;
+    --success: #15803d;
+    --success-bg: #eefaf1;
+    --success-border: #bfe8cb;
+    --warning: #b45309;
+    --warning-bg: #fff9ea;
+    --warning-border: #fbe0a3;
+    --danger: #c1170a;
+    --danger-bg: #fcefed;
+    --danger-border: #f6cec8;
+
+    --r-sm: 8px;
+    --r: 12px;
+    --r-lg: 16px;
+    --r-pill: 999px;
+    --card-radius: var(--r);
+    --btn-radius: var(--r-pill);
+
+    --shadow-sm: 0 1px 2px rgba(30, 16, 12, .05), 0 2px 6px rgba(30, 16, 12, .06);
+    --shadow-md: 0 6px 18px rgba(30, 16, 12, .10), 0 2px 6px rgba(30, 16, 12, .06);
+    --shadow-lg: 0 22px 52px rgba(30, 16, 12, .22);
+    --shadow-accent: 0 6px 18px var(--accent-shadow);
+    --ring: 0 0 0 3px var(--accent-ring);
+    --card-shadow: 0 1px 2px rgba(30, 16, 12, .04);
+    --card-shadow-hover: var(--shadow-sm);
+
+    --tex: none;
+    --tex-size: auto;
+    --tex-blend: normal;
+    --tex-opacity: 0;
+    --dropcap: none;
+    --flourish: none;
+    --card-border-width: 1px;
+    --rail-width: 3px;
+}
+
+/* 1b. DEFAULT — night (the Discord blurple that was already there) */
+body.dark-theme,
+body[data-skin="default"].dark-theme {
+    color-scheme: dark;
+
+    --brand-grad: linear-gradient(135deg, #8a9bf0 0%, #7289da 52%, #5b6eae 100%);
+    --accent: #7289da;
+    --accent-2: #8a9bf0;
+    --accent-hover: #8a9bf0;
+    --accent-grad: linear-gradient(135deg, #8a9bf0 0%, #7289da 100%);
+    --accent-soft: rgba(114, 137, 218, .16);
+    --accent-soft-2: rgba(114, 137, 218, .26);
+    --accent-ring: rgba(114, 137, 218, .45);
+    --accent-shadow: rgba(73, 86, 145, .60);
+    --on-accent: #ffffff;
+    --accent-ink: var(--accent);
+
+    --bg: #202225;
+    --surface: #2f3136;
+    --surface-2: #36393f;
+    --surface-3: #40444b;
+    --header-bg: var(--surface);
+    --header-text: #ffffff;
+
+    --text: #e3e5e8;
+    --text-muted: #b5bac1;
+    --text-faint: #80848e;
+
+    --border: #26282c;
+    --border-strong: #1f2023;
+    --border-color: #40444b;
+    --bg-secondary: #36393f;
+    --text-color: #e3e5e8;
+
+    --success: #57d68b;
+    --success-bg: #16261d;
+    --success-border: #245238;
+    --warning: #f0b232;
+    --warning-bg: #2a2310;
+    --warning-border: #5a4a19;
+    --danger: #f0626c;
+    --danger-bg: #2c1517;
+    --danger-border: #4d2024;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .35);
+    --shadow-md: 0 8px 22px rgba(0, 0, 0, .50);
+    --shadow-lg: 0 24px 56px rgba(0, 0, 0, .65);
+    --shadow-accent: 0 8px 22px var(--accent-shadow);
+    --card-shadow: none;
+    --card-shadow-hover: var(--shadow-sm);
+}
+
+/* ---------------------------------------------------------------- 2. RISO — day
+   Three spot inks on newsprint. Nothing blends; ink sits on top of ink and
+   the plates never quite line up. */
+
+body[data-skin="riso"] {
+    color-scheme: light;
+
+    --font: 'Space Grotesk', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --font-head: 'Space Grotesk', 'Helvetica Neue', Helvetica, sans-serif;
+    --font-mono: 'DM Mono', ui-monospace, Menlo, monospace;
+    --head-case: uppercase;
+    --head-track: .06em;
+    --head-weight: 700;
+
+    --ink-pink: #ff48b0;
+    --ink-blue: #1f5fd0;
+    --ink-yellow: #ffc60b;
+
+    --brand-grad: linear-gradient(100deg, var(--ink-pink) 0%, var(--ink-pink) 50%, var(--ink-blue) 50%, var(--ink-blue) 100%);
+    --accent: #ff48b0;
+    --accent-2: #1f5fd0;
+    --accent-hover: #e8309a;
+    --accent-grad: linear-gradient(100deg, #ff48b0 0%, #1f5fd0 100%);
+    --accent-soft: rgba(255, 72, 176, .12);
+    --accent-soft-2: rgba(255, 72, 176, .24);
+    --accent-ring: rgba(31, 95, 208, .40);
+    --accent-shadow: rgba(255, 72, 176, .40);
+    --on-accent: #fffdf6;
+    --accent-ink: #d1157f;
+
+    --bg: #efece0;
+    --surface: #f7f4e9;
+    --surface-2: #ece8da;
+    --surface-3: #e2ddcb;
+    --header-bg: var(--ink-blue);
+    --header-text: #fffdf6;
+
+    --text: #17161a;
+    --text-muted: #4c4a52;
+    --text-faint: #86828c;
+
+    --border: #17161a;
+    --border-strong: #17161a;
+    --rule-style: solid;
+    --border-color: #17161a;
+    --bg-secondary: var(--surface-2);
+    --text-color: var(--text);
+
+    --info: #1f5fd0;
+    --success: #12795a;
+    --success-bg: rgba(255, 198, 11, .18);
+    --success-border: #17161a;
+    --warning: #a86a00;
+    --warning-bg: rgba(255, 198, 11, .28);
+    --warning-border: #17161a;
+    --danger: #d1157f;
+    --danger-bg: rgba(255, 72, 176, .14);
+    --danger-border: #17161a;
+
+    --r-sm: 0px;
+    --r: 0px;
+    --r-lg: 0px;
+    --r-pill: 0px;
+    --card-radius: 0px;
+    --btn-radius: 0px;
+
+    --shadow-sm: 3px 3px 0 var(--ink-blue);
+    --shadow-md: 5px 5px 0 var(--ink-blue);
+    --shadow-lg: 10px 10px 0 var(--ink-pink);
+    --shadow-accent: 3px 3px 0 var(--ink-yellow);
+    --ring: 0 0 0 3px var(--accent-ring);
+    --card-shadow: 3px 3px 0 rgba(31, 95, 208, .85);
+    --card-shadow-hover: 3px 3px 0 var(--ink-pink);
+
+    --tex: url("textures/newsprint.png");
+    --tex-size: 120px 120px;
+    --tex-blend: multiply;
+    --tex-opacity: .55;
+    --card-border-width: 1.5px;
+    --rail-width: 5px;
+}
+
+/* 2b. RISO — night: same inks, printed on black stock. */
+body[data-skin="riso"].dark-theme {
+    color-scheme: dark;
+
+    --bg: #121115;
+    --surface: #1b1a20;
+    --surface-2: #232128;
+    --surface-3: #2c2a33;
+    /* The header is the black stock itself. It used to be the pink ink, which
+       put the wordmark's pink misregistration ghost on a pink ground. */
+    --header-bg: #0d0c10;
+    --header-text: #f4f1e8;
+
+    --text: #f4f1e8;
+    --text-muted: #b3aec2;
+    --text-faint: #7d7890;
+
+    --border: #f4f1e8;
+    --border-strong: #f4f1e8;
+    --border-color: #f4f1e8;
+    --bg-secondary: var(--surface-2);
+    --text-color: var(--text);
+
+    --accent: #ff5cbb;
+    --accent-hover: #ff85cc;
+    --accent-ink: #ff85cc;
+    --on-accent: #121115;
+    --accent-soft: rgba(255, 92, 187, .18);
+    --accent-soft-2: rgba(255, 92, 187, .30);
+
+    --success-bg: rgba(255, 198, 11, .16);
+    --warning-bg: rgba(255, 198, 11, .22);
+    --danger: #ff5cbb;
+    --danger-bg: rgba(255, 92, 187, .16);
+
+    --card-shadow: 3px 3px 0 rgba(255, 198, 11, .9);
+    --card-shadow-hover: 3px 3px 0 var(--ink-blue);
+    --tex-blend: screen;
+    --tex-opacity: .22;
+}
+
+/* ---------------------------------------------------------------- 3. MEDIEVAL — day
+   Parchment, iron-gall ink, rubricated red, gold leaf. */
+
+body[data-skin="medieval"] {
+    color-scheme: light;
+
+    --font: 'Cardo', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+    --font-head: 'Grenze', 'Cardo', Georgia, serif;
+    --font-display: 'UnifrakturMaguntia', 'Grenze', Georgia, serif;
+    --font-mono: 'Cardo', Georgia, serif;
+    --head-case: none;
+    --head-track: .01em;
+    --head-weight: 600;
+
+    --gold: #a8791f;
+    --rubric: #9c2b16;
+
+    --brand-grad: linear-gradient(135deg, #7b4a12 0%, #4a3418 100%);
+    --accent: #9c2b16;
+    --accent-2: #a8791f;
+    --accent-hover: #7d2011;
+    --accent-grad: linear-gradient(135deg, #b4331b 0%, #7d2011 100%);
+    --accent-soft: rgba(156, 43, 22, .10);
+    --accent-soft-2: rgba(156, 43, 22, .20);
+    --accent-ring: rgba(168, 121, 31, .45);
+    --accent-shadow: rgba(74, 52, 24, .30);
+    --on-accent: #f6ecd4;
+    --accent-ink: #8a2413;
+
+    --bg: #ddcda6;
+    --surface: #ecdcb8;
+    --surface-2: #e4d3ac;
+    --surface-3: #d8c69c;
+    --header-bg: #4a3418;
+    --header-text: #f2e4c3;
+
+    --text: #3b2a17;
+    --text-muted: #6b543a;
+    --text-faint: #8d7757;
+
+    --border: #c3ab7c;
+    --border-strong: #a68d5e;
+    --rule-style: solid;
+    --border-color: var(--border-strong);
+    --bg-secondary: var(--surface-2);
+    --text-color: var(--text);
+
+    --info: #3f5a7a;
+    --success: #4a6b2f;
+    --success-bg: rgba(74, 107, 47, .12);
+    --success-border: #98a878;
+    --warning: #8a6410;
+    --warning-bg: rgba(168, 121, 31, .16);
+    --warning-border: #c0a463;
+    --danger: #9c2b16;
+    --danger-bg: rgba(156, 43, 22, .10);
+    --danger-border: #c48b7a;
+
+    --r-sm: 2px;
+    --r: 3px;
+    --r-lg: 4px;
+    --r-pill: 3px;
+    --card-radius: 3px;
+    --btn-radius: 3px;
+
+    --shadow-sm: 0 1px 2px rgba(59, 42, 23, .16);
+    --shadow-md: 0 6px 16px rgba(59, 42, 23, .22);
+    --shadow-lg: 0 20px 46px rgba(40, 28, 14, .42);
+    --shadow-accent: 0 4px 12px rgba(156, 43, 22, .30);
+    --ring: 0 0 0 3px var(--accent-ring);
+    --card-shadow: 0 1px 0 rgba(255, 248, 226, .55) inset, 0 1px 3px rgba(59, 42, 23, .12);
+    --card-shadow-hover: 0 2px 10px rgba(59, 42, 23, .22);
+
+    --tex: url("textures/parchment.png");
+    --tex-size: 160px 160px;
+    --tex-blend: multiply;
+    --tex-opacity: .9;
+    --dropcap: block;
+    --card-border-width: 1px;
+    --rail-width: 3px;
+}
+
+/* 3b. MEDIEVAL — night: the same page by candlelight. */
+body[data-skin="medieval"].dark-theme {
+    color-scheme: dark;
+
+    --brand-grad: linear-gradient(135deg, #2b2016 0%, #171009 100%);
+    --accent: #c4482c;
+    --accent-2: #d8ac52;
+    --accent-hover: #d95c3d;
+    --accent-soft: rgba(196, 72, 44, .16);
+    --accent-soft-2: rgba(196, 72, 44, .28);
+    --accent-ring: rgba(216, 172, 82, .45);
+    --on-accent: #1c1409;
+    --accent-ink: #d8663f;
+
+    --bg: #1b140c;
+    --surface: #241c12;
+    --surface-2: #2c2216;
+    --surface-3: #372b1c;
+    --header-bg: #120d07;
+    --header-text: #e8d5a3;
+
+    --text: #e8d5a3;
+    --text-muted: #bda67a;
+    --text-faint: #8d7a56;
+
+    --border: #443320;
+    --border-strong: #57422a;
+    --border-color: var(--border-strong);
+    --bg-secondary: var(--surface-2);
+    --text-color: var(--text);
+
+    --success: #8faa5f;
+    --success-bg: rgba(143, 170, 95, .12);
+    --success-border: #4e5c34;
+    --warning: #d8ac52;
+    --warning-bg: rgba(216, 172, 82, .12);
+    --warning-border: #6b5526;
+    --danger: #d8663f;
+    --danger-bg: rgba(196, 72, 44, .14);
+    --danger-border: #6d3320;
+
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, .55);
+    --shadow-md: 0 8px 22px rgba(0, 0, 0, .60);
+    --shadow-lg: 0 24px 56px rgba(0, 0, 0, .75);
+    --card-shadow: 0 1px 0 rgba(232, 213, 163, .06) inset, 0 2px 6px rgba(0, 0, 0, .4);
+    --card-shadow-hover: 0 4px 14px rgba(0, 0, 0, .55);
+    --tex-blend: overlay;
+    --tex-opacity: .28;
+}
+
+/* ---------------------------------------------------------------- 4. ART DECO — day
+   Ivory and gilt. Everything symmetrical, everything letter-spaced. */
+
+body[data-skin="deco"] {
+    color-scheme: light;
+
+    --font: 'Josefin Sans', 'Futura', 'Century Gothic', 'Avenir Next', sans-serif;
+    --font-head: 'Poiret One', 'Josefin Sans', 'Century Gothic', sans-serif;
+    --font-mono: 'Josefin Sans', 'Century Gothic', sans-serif;
+    --head-case: uppercase;
+    --head-track: .18em;
+    --head-weight: 400;
+
+    --gold: #b99447;
+    --gold-2: #e0c274;
+    --jade: #1f6e5c;
+
+    --brand-grad: linear-gradient(135deg, #14110d 0%, #2a241b 100%);
+    --accent: #a67c2e;
+    --accent-2: #b99447;
+    --accent-hover: #8c6621;
+    --accent-grad: linear-gradient(135deg, #e0c274 0%, #a67c2e 100%);
+    --accent-soft: rgba(185, 148, 71, .12);
+    --accent-soft-2: rgba(185, 148, 71, .26);
+    --accent-ring: rgba(185, 148, 71, .45);
+    --accent-shadow: rgba(20, 17, 13, .28);
+    --on-accent: #f7f3e8;
+    --accent-ink: #8c6621;
+
+    --bg: #ece7db;
+    --surface: #f7f3e8;
+    --surface-2: #f0ebdd;
+    --surface-3: #e5dfcd;
+    --header-bg: #14110d;
+    --header-text: #e8dcbb;
+
+    --text: #14110d;
+    --text-muted: #5a5142;
+    --text-faint: #8e836f;
+
+    --border: #d5cdb6;
+    --border-strong: #14110d;
+    --rule-style: solid;
+    --border-color: var(--border-strong);
+    --bg-secondary: var(--surface-2);
+    --text-color: var(--text);
+
+    --info: #2f5d73;
+    --success: #1f6e5c;
+    --success-bg: rgba(31, 110, 92, .10);
+    --success-border: #9dbcb2;
+    --warning: #a67c2e;
+    --warning-bg: rgba(185, 148, 71, .14);
+    --warning-border: #d3bd8a;
+    --danger: #8e2f24;
+    --danger-bg: rgba(142, 47, 36, .09);
+    --danger-border: #c69c94;
+
+    --r-sm: 0px;
+    --r: 0px;
+    --r-lg: 0px;
+    --r-pill: 0px;
+    --card-radius: 0px;
+    --btn-radius: 0px;
+
+    --shadow-sm: 0 1px 2px rgba(20, 17, 13, .08);
+    --shadow-md: 0 8px 24px rgba(20, 17, 13, .14);
+    --shadow-lg: 0 24px 60px rgba(20, 17, 13, .30);
+    --shadow-accent: 0 4px 14px rgba(166, 124, 46, .28);
+    --ring: 0 0 0 2px var(--accent-ring);
+    --card-shadow: none;
+    --card-shadow-hover: 0 4px 16px rgba(20, 17, 13, .12);
+
+    --tex: none;
+    --tex-size: auto;
+    --tex-opacity: 0;
+    --flourish: block;
+    --card-border-width: 1px;
+    --rail-width: 2px;
+}
+
+/* 4b. ART DECO — night: gilt on lacquer. */
+body[data-skin="deco"].dark-theme {
+    color-scheme: dark;
+
+    --accent: #c9a227;
+    --accent-2: #e0c274;
+    --accent-hover: #e0c274;
+    --accent-soft: rgba(201, 162, 39, .14);
+    --accent-soft-2: rgba(201, 162, 39, .28);
+    --accent-ring: rgba(201, 162, 39, .45);
+    --on-accent: #0e0d0c;
+    --accent-ink: #dcbc55;
+
+    --bg: #0e0d0c;
+    --surface: #161513;
+    --surface-2: #1d1b18;
+    --surface-3: #262320;
+    --header-bg: #0a0908;
+    --header-text: #dcbc55;
+
+    --text: #efe7d4;
+    --text-muted: #b3a88d;
+    --text-faint: #7e755f;
+
+    --border: #332f28;
+    --border-strong: #c9a227;
+    --border-color: var(--border-strong);
+    --bg-secondary: var(--surface-2);
+    --text-color: var(--text);
+
+    --success: #5f9b86;
+    --success-bg: rgba(95, 155, 134, .10);
+    --success-border: #35544a;
+    --warning: #c9a227;
+    --warning-bg: rgba(201, 162, 39, .12);
+    --warning-border: #6a561a;
+    --danger: #c2564a;
+    --danger-bg: rgba(194, 86, 74, .12);
+    --danger-border: #5c2c26;
+
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, .55);
+    --shadow-md: 0 8px 24px rgba(0, 0, 0, .60);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, .75);
+    --card-shadow: none;
+    --card-shadow-hover: 0 4px 18px rgba(0, 0, 0, .55);
+}
+
+/* ============================================================
+   Ornament layer — the bits that are not colour.
+   Component files stay skin-agnostic; everything below is costume.
+   ============================================================ */
+
+/* The paper itself. A fixed overlay so the grain does not scroll with
+   content and does not tile visibly inside every card. */
+body[data-skin]::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    background-image: var(--tex);
+    background-size: var(--tex-size);
+    background-repeat: repeat;
+    mix-blend-mode: var(--tex-blend);
+    opacity: var(--tex-opacity);
+}
+
+body[data-skin="default"]::before { content: none; }
+
+/* ---- Riso: the plates do not line up.
+   Misregistration is the two chromatic plates slipping either side of the key
+   plate — pink one way, blue the other — so the ghost reads against light and
+   dark stock alike. Yellow is a fill ink here; it disappears against paper. */
+body[data-skin="riso"] .bb-title,
+body[data-skin="riso"] header h1,
+body[data-skin="riso"] .bb-wordmark {
+    text-shadow: 1.4px .5px 0 rgba(255, 72, 176, .92), -1.4px -.5px 0 rgba(31, 95, 208, .8);
+}
+
+body[data-skin="riso"].dark-theme .bb-title,
+body[data-skin="riso"].dark-theme header h1,
+body[data-skin="riso"].dark-theme .bb-wordmark {
+    text-shadow: 1.4px .5px 0 rgba(255, 92, 187, .95), -1.4px -.5px 0 rgba(90, 150, 255, .85);
+}
+
+body[data-skin="riso"] .bb-rail::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 2px;
+    width: var(--rail-width);
+    background: var(--ink-yellow);
+    mix-blend-mode: multiply;
+}
+
+/* ---- Medieval: rubricated initial on section headings. */
+body[data-skin="medieval"] .bb-rubric::first-letter {
+    font-family: var(--font-display);
+    font-size: 2.1em;
+    line-height: .8;
+    float: left;
+    margin: .06em .12em 0 0;
+    color: var(--rubric, #9c2b16);
+}
+
+body[data-skin="medieval"] .bb-wordmark {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: .01em;
+}
+
+/* Double rule under headers, the way a ruled page divides. */
+body[data-skin="medieval"] .bb-ruled {
+    border-bottom: 1px solid var(--border-strong);
+    box-shadow: 0 3px 0 -2px var(--border-strong);
+}
+
+/* ---- Art deco: stepped corner brackets and a gilt hairline. */
+body[data-skin="deco"] .bb-framed {
+    position: relative;
+}
+
+body[data-skin="deco"] .bb-framed::before,
+body[data-skin="deco"] .bb-framed::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--accent);
+    pointer-events: none;
+}
+
+body[data-skin="deco"] .bb-framed::before {
+    top: 4px;
+    left: 4px;
+    border-right: none;
+    border-bottom: none;
+}
+
+body[data-skin="deco"] .bb-framed::after {
+    right: 4px;
+    bottom: 4px;
+    border-left: none;
+    border-top: none;
+}
+
+body[data-skin="deco"] .bb-ruled {
+    border-bottom: 1px solid var(--accent);
+    box-shadow: 0 3px 0 -2px var(--accent);
+}
+
+body[data-skin="deco"] .bb-wordmark {
+    text-transform: uppercase;
+    letter-spacing: .26em;
+}
+
+/* Chevron band — the deco equivalent of a divider. */
+body[data-skin="deco"] .bb-band {
+    background-image:
+        linear-gradient(135deg, var(--accent) 25%, transparent 25%),
+        linear-gradient(225deg, var(--accent) 25%, transparent 25%);
+    background-size: 10px 10px;
+    background-position: 0 0;
+    opacity: .5;
+    height: 5px;
+}
+
+body[data-skin="riso"] .bb-band {
+    background: repeating-linear-gradient(90deg,
+        var(--ink-pink) 0 14px, var(--ink-yellow) 14px 28px, var(--ink-blue) 28px 42px);
+    height: 5px;
+}
+
+body[data-skin="medieval"] .bb-band {
+    background: repeating-linear-gradient(90deg,
+        var(--gold) 0 2px, transparent 2px 7px);
+    height: 3px;
+    opacity: .8;
+}
+
+body[data-skin="default"] .bb-band { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

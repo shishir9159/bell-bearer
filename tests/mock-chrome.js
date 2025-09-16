@@ -33,6 +33,16 @@
         moveErrorsRemaining: 0,
     };
 
+    /**
+     * Defer a mocked callback the way a real chrome.* call does.
+     *
+     * This has to stay a macrotask. A microtask (queueMicrotask) makes the
+     * suite dramatically faster in a throttled background tab, but it also
+     * hoists every mocked callback ahead of any setTimeout the code under test
+     * is waiting on — which silently reorders the retry and back-off paths in
+     * tab-placement and sowon, and turns three real regression tests green
+     * whatever the code does. Fidelity beats speed here.
+     */
     const soon = (fn) => setTimeout(fn, 0);
     function pick(keys, store) {
         const out = {};
@@ -218,7 +228,20 @@
             return t ? t.index : -1;
         },
 
-        /** Lets queued async callbacks (storage, tabs.get, retries) run. */
-        settle: (ms) => new Promise((r) => setTimeout(r, ms === undefined ? 250 : ms)),
+        /**
+         * Lets queued async callbacks (storage, tabs.get, retries) run.
+         *
+         * The default has to move with the tab's visibility. Every mocked
+         * callback is deferred through a setTimeout, and a browser throttles
+         * those hard in a background tab — so a wait that comfortably drains
+         * the queue in a visible tab drains almost none of it in a hidden one,
+         * and tests fail for the environment rather than for the code.
+         *
+         * An explicit argument is never scaled: where a test passes one it is
+         * usually timing something deliberately, such as staying inside the
+         * sowon throttle window.
+         */
+        settle: (ms) => new Promise((r) =>
+            setTimeout(r, ms === undefined ? (document.hidden ? 4000 : 250) : ms)),
     };
 })();

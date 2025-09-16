@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-ff592e68-72d3-41a8-a7b8-d50b96745048/styles.css">
+<style>
+  body { margin: 0; }
+  .mk { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+</style>
+</helmet>
+<div style="min-height:100vh; background:var(--color-bg,#f2f2f3); padding:44px 48px 80px; font-family:var(--font-body,Barlow,sans-serif); color:var(--color-text,#1d1f20)">
+  <div style="display:flex; align-items:baseline; gap:16px; marginBottom:6px">
+    <div style="font-family:var(--font-heading,'Barlow Condensed',sans-serif); font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:var(--color-accent-700,#3f5d7d)">Option B</div>
+    <h1 style="font-family:var(--font-heading,'Barlow Condensed',sans-serif); font-size:34px; font-weight:600; margin:0; letter-spacing:-.01em">Rail</h1>
+  </div>
+  <p style="max-width:620px; margin:0 0 40px; font-size:15px; line-height:1.5; color:var(--color-neutral-700,#4a4f55)">Keeps the timeline motif and makes it the spine. Cards sit on a tinted ground, the accent rail marks position, and header actions live in a scrollable chip row so nothing gets cut off.</p>
+
+  <div style="display:flex; gap:44px; align-items:flex-start; flex-wrap:wrap">
+
+    <div>
+      <div class="blueprint" style="width:380px; background:#f6f7fb; border:1px solid #e6e8ef; position:relative">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="mk">
+          <div style="padding:13px 14px 11px; background:#fff; border-bottom:1px solid #e6e8ef">
+            <div style="display:flex; align-items:center; gap:9px; margin-bottom:11px">
+              <div style="width:22px; height:22px; border-radius:7px; background:linear-gradient(135deg,#ff5b78,#c80f41)"></div>
+              <div style="font-size:14px; font-weight:700; letter-spacing:.2px; color:#14171d">Bell Bearer</div>
+              <div style="margin-left:auto; font-size:11px; font-weight:600; color:#8b94a3">18 checkpoints</div>
+            </div>
+            <div style="display:flex; gap:6px; overflow:hidden">
+              <div style="font-size:11.5px; font-weight:600; color:#fff; background:#e11d48; padding:5px 12px; border-radius:999px; white-space:nowrap">Dashboard</div>
+              <div style="font-size:11.5px; font-weight:600; color:#59626f; background:#f0f2f7; padding:5px 12px; border-radius:999px; white-space:nowrap">Export</div>
+              <div style="font-size:11.5px; font-weight:600; color:#59626f; background:#f0f2f7; padding:5px 12px; border-radius:999px; white-space:nowrap">Import</div>
+              <div style="font-size:11.5px; font-weight:600; color:#dc2626; background:#fef2f2; padding:5px 12px; border-radius:999px; white-space:nowrap">Clear</div>
+            </div>
+          </div>
+
+          <div style="padding:10px; display:flex; flex-direction:column; gap:8px; max-height:400px; overflow:hidden">
+            <sc-for list="{{ videos }}" as="v" hint-placeholder-count="4">
+              <div style="background:#fff; border:1px solid #e6e8ef; border-left:3px solid #e11d48; border-radius:12px; padding:11px 13px; box-shadow:0 1px 2px rgba(20,24,40,.04)">
+                <div style="font-size:13px; font-weight:600; line-height:1.35; color:#14171d; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden">{{ v.title }}</div>
+                <div style="display:flex; align-items:center; gap:8px; margin-top:7px">
+                  <div style="font-size:10px; font-weight:700; color:#e11d48; background:rgba(225,29,72,.10); border:1px solid rgba(225,29,72,.16); border-radius:999px; padding:1px 8px">{{ v.count }}</div>
+                  <div style="font-size:11px; color:#8b94a3">{{ v.channel }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="padding:11px 14px; background:#fff; border-top:1px solid #e6e8ef; display:flex; align-items:center; justify-content:space-between; gap:10px">
+            <div style="font-size:11px; color:#59626f">Hold <span style="font-family:ui-monospace,Menlo,monospace; font-size:10px; background:#f0f2f7; border:1px solid #e6e8ef; border-radius:4px; padding:1px 5px">Ctrl B</span> to drop a checkpoint</div>
+            <div style="font-size:11px; font-weight:600; color:#fff; background:#e11d48; border-radius:999px; padding:4px 14px">Okay</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">380px — list</div>
+    </div>
+
+    <div>
+      <div class="blueprint" style="width:380px; background:#f6f7fb; border:1px solid #e6e8ef; position:relative">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="mk">
+          <div style="padding:12px 14px; background:#fff; border-bottom:1px solid #e6e8ef; display:flex; align-items:center; gap:10px">
+            <div style="width:26px; height:26px; border-radius:8px; background:#f0f2f7; color:#59626f; font-size:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0">‹</div>
+            <div style="min-width:0; flex:1">
+              <div style="font-size:13px; font-weight:700; color:#14171d; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">Bell tolling in the fog</div>
+              <div style="font-size:10.5px; color:#8b94a3; margin-top:2px">Ashen Vale · 4 checkpoints</div>
+            </div>
+          </div>
+
+          <div style="padding:14px 14px 16px 30px; position:relative">
+            <div style="position:absolute; left:17px; top:22px; bottom:22px; width:2px; border-radius:2px; background:linear-gradient(#e11d48,rgba(225,29,72,0))"></div>
+            <div style="display:flex; flex-direction:column; gap:9px">
+              <sc-for list="{{ checkpoints }}" as="c" hint-placeholder-count="4">
+                <div style="position:relative; background:#fff; border:1px solid #e6e8ef; border-radius:12px; padding:11px 13px">
+                  <div style="position:absolute; left:-18px; top:15px; width:10px; height:10px; border-radius:50%; background:#e11d48; box-shadow:0 0 0 3px #f6f7fb"></div>
+                  <div style="font-size:13px; font-weight:800; color:#e11d48; letter-spacing:.2px; font-variant-numeric:tabular-nums">{{ c.time }}</div>
+                  <div style="font-size:12px; font-weight:600; color:#14171d; margin-top:3px">{{ c.name }}</div>
+                  <div style="font-size:11.5px; color:#59626f; margin-top:3px; line-height:1.45">{{ c.note }}</div>
+                  <div style="display:flex; gap:7px; margin-top:9px">
+                    <div style="font-size:10.5px; font-weight:700; color:#e11d48; background:rgba(225,29,72,.10); border-radius:8px; padding:5px 11px">Go to</div>
+                    <div style="font-size:10.5px; font-weight:700; color:#59626f; background:#f0f2f7; border:1px solid #e6e8ef; border-radius:8px; padding:5px 11px">Delete</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">380px — checkpoints</div>
+    </div>
+
+    <div>
+      <div class="blueprint" style="width:620px; background:#f6f7fb; border:1px solid #e6e8ef; position:relative">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div class="mk">
+          <div style="padding:12px 16px; background:#fff; border-bottom:1px solid #e6e8ef; display:flex; align-items:center; justify-content:space-between; gap:12px">
+            <div style="display:flex; align-items:center; gap:9px">
+              <div style="width:22px; height:22px; border-radius:7px; background:linear-gradient(135deg,#ff5b78,#c80f41)"></div>
+              <div style="font-size:14px; font-weight:700; color:#14171d">Bell Bearer</div>
+            </div>
+            <div style="display:flex; gap:6px">
+              <div style="font-size:11.5px; font-weight:600; color:#fff; background:#e11d48; padding:5px 12px; border-radius:999px">Dashboard</div>
+              <div style="font-size:11.5px; font-weight:600; color:#59626f; background:#f0f2f7; padding:5px 12px; border-radius:999px">Export</div>
+              <div style="font-size:11.5px; font-weight:600; color:#59626f; background:#f0f2f7; padding:5px 12px; border-radius:999px">Import</div>
+              <div style="font-size:11.5px; font-weight:600; color:#dc2626; background:#fef2f2; padding:5px 12px; border-radius:999px">Clear</div>
+            </div>
+          </div>
+          <div style="display:flex; height:330px">
+            <div style="width:250px; border-right:1px solid #e6e8ef; padding:10px; display:flex; flex-direction:column; gap:8px; overflow:hidden">
+              <sc-for list="{{ videos }}" as="v" hint-placeholder-count="4">
+                <div style="background:#fff; border:1px solid #e6e8ef; border-left:3px solid #e11d48; border-radius:12px; padding:10px 12px">
+                  <div style="font-size:12.5px; font-weight:600; line-height:1.35; color:#14171d; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden">{{ v.title }}</div>
+                  <div style="font-size:10px; font-weight:700; color:#e11d48; background:rgba(225,29,72,.10); border-radius:999px; padding:1px 8px; display:inline-block; margin-top:6px">{{ v.count }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="flex:1; padding:14px 16px 16px 32px; position:relative; overflow:hidden">
+              <div style="position:absolute; left:19px; top:22px; bottom:16px; width:2px; border-radius:2px; background:linear-gradient(#e11d48,rgba(225,29,72,0))"></div>
+              <div style="display:flex; flex-direction:column; gap:9px">
+                <sc-for list="{{ checkpoints }}" as="c" hint-placeholder-count="4">
+                  <div style="position:relative; background:#fff; border:1px solid #e6e8ef; border-radius:12px; padding:10px 13px; display:flex; align-items:center; gap:12px">
+                    <div style="position:absolute; left:-18px; top:15px; width:10px; height:10px; border-radius:50%; background:#e11d48; box-shadow:0 0 0 3px #f6f7fb"></div>
+                    <div style="min-width:0; flex:1">
+                      <div style="font-size:13px; font-weight:800; color:#e11d48; font-variant-numeric:tabular-nums">{{ c.time }}</div>
+                      <div style="font-size:12px; font-weight:600; color:#14171d; margin-top:2px">{{ c.name }}</div>
+                      <div style="font-size:11.5px; color:#59626f; margin-top:2px">{{ c.note }}</div>
+                    </div>
+                    <div style="display:flex; gap:7px; flex-shrink:0">
+                      <div style="font-size:10.5px; font-weight:700; color:#e11d48; background:rgba(225,29,72,.10); border-radius:8px; padding:5px 11px">Go to</div>
+                      <div style="font-size:10.5px; font-weight:700; color:#59626f; background:#f0f2f7; border:1px solid #e6e8ef; border-radius:8px; padding:5px 11px">Delete</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px; font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--color-neutral-600,#6b7178)">620px — two panes</div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      videos: [
+        { title: 'Bell tolling in the fog', count: 4, channel: 'Ashen Vale' },
+        { title: 'How medieval scribes ruled a page before printing', count: 7, channel: 'Codex' },
+        { title: 'Risograph duplicators, explained end to end', count: 2, channel: 'Ink & Drum' },
+        { title: 'Art deco lettering: the geometry underneath', count: 5, channel: 'Type Foundry' },
+      ],
+      checkpoints: [
+        { time: '02:14', name: 'The opening peal', note: 'Three strikes, then the long decay' },
+        { time: '11:48', name: 'Rope technique', note: 'Hands high, let the wheel carry it' },
+        { time: '24:03', name: 'Change ringing', note: 'Pattern starts here' },
+        { time: '41:27', name: 'Tower acoustics', note: 'Why stone lengthens the tail' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
