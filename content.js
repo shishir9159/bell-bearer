@@ -9,6 +9,7 @@ class YouTubeBookmarker {
         this.speedSyncSetup = false;
         this.transcriptApi = typeof YouTubeTranscriptApi !== 'undefined' ? new YouTubeTranscriptApi() : null;
         this.currentTranscript = null;
+        this.preferredSubtitleLanguage = 'en'; // Default preferred subtitle
         this.enableSkipShortcuts = true;
         this.speedBoostTimeout = null; // Timeout for temporary speed boost
         this.originalSpeed = null; // Store original speed before boost
@@ -53,13 +54,21 @@ class YouTubeBookmarker {
     }
 
     loadSettings() {
-        chrome.storage.local.get(['enableSkipShortcuts'], (result) => {
+        chrome.storage.local.get(['enableSkipShortcuts', 'preferredSubtitleLanguage'], (result) => {
             this.enableSkipShortcuts = result.enableSkipShortcuts !== false;
+            if (result.preferredSubtitleLanguage) {
+                this.preferredSubtitleLanguage = result.preferredSubtitleLanguage;
+            }
         });
 
         chrome.storage.onChanged.addListener((changes, namespace) => {
-            if (namespace === 'local' && changes.enableSkipShortcuts) {
-                this.enableSkipShortcuts = changes.enableSkipShortcuts.newValue;
+            if (namespace === 'local') {
+                if (changes.enableSkipShortcuts) {
+                    this.enableSkipShortcuts = changes.enableSkipShortcuts.newValue;
+                }
+                if (changes.preferredSubtitleLanguage) {
+                    this.preferredSubtitleLanguage = changes.preferredSubtitleLanguage.newValue;
+                }
             }
         });
     }
@@ -185,8 +194,8 @@ class YouTubeBookmarker {
         if (!this.transcriptApi) return;
 
         try {
-            // Always fetch English (auto-generated preferred)
-            this.currentTranscript = await this.transcriptApi.fetch(videoId, { languages: ['en'] });
+            // Fetch preferred language, falling back to English (auto-generated preferred)
+            this.currentTranscript = await this.transcriptApi.fetch(videoId, { languages: [this.preferredSubtitleLanguage, 'en'] });
             console.log('Transcript fetched:', this.currentTranscript.language, this.currentTranscript.snippets.length, 'snippets');
         } catch (error) {
             console.warn('Failed to fetch transcript:', error.message);
@@ -264,6 +273,11 @@ class YouTubeBookmarker {
 
         // Get subtitles from start to end time range
         const subtitle = this.getSubtitlesInRange(startTime, endTime);
+
+        // Check if preferred subtitle language is missing and show warning
+        if (!this.currentTranscript || (this.currentTranscript.languageCode && !this.currentTranscript.languageCode.startsWith(this.preferredSubtitleLanguage))) {
+            this.showNotification(`Warning: Preferred subtitles language not found`, 'warning');
+        }
 
         const bookmark = {
             time: Math.floor(startTime), // For popup display - shows start time

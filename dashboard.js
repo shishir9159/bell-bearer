@@ -141,6 +141,24 @@ class Dashboard {
                 }
             }
         });
+
+        // Event delegation for bookmark title editing
+        videosContainer.addEventListener('change', (e) => {
+            if (e.target.classList.contains('bookmark-title-input')) {
+                const bookmarkItem = e.target.closest('.bookmark-item');
+                if (bookmarkItem) {
+                    const videoId = bookmarkItem.dataset.videoId;
+                    const bookmarkIndex = parseInt(bookmarkItem.dataset.bookmarkIndex);
+                    this.saveBookmarkTitle(videoId, bookmarkIndex, e.target.value.trim());
+                }
+            }
+        });
+
+        videosContainer.addEventListener('keydown', (e) => {
+            if (e.target.classList.contains('bookmark-title-input') && e.key === 'Enter') {
+                e.target.blur();
+            }
+        });
     }
 
     switchView(view) {
@@ -201,7 +219,10 @@ class Dashboard {
 
                 return `
                             <div class="bookmark-item" data-bookmark-index="${index}" data-video-id="${video.id}">
-                                <div class="bookmark-time">${timeDisplay}</div>
+                                <div class="bookmark-time-row">
+                                    <div class="bookmark-time">${timeDisplay}</div>
+                                    <input type="text" class="bookmark-title-input" placeholder="Add title…" value="${bookmark.title ? this.escapeHtml(bookmark.title) : ''}" />
+                                </div>
                                 ${bookmark.note ? `<div class="bookmark-note">${this.escapeHtml(bookmark.note)}</div>` : ''}
                                 ${bookmark.subtitle && bookmark.subtitle !== 'null' ? `<div class="bookmark-subtitle">"${this.escapeHtml(bookmark.subtitle)}"</div>` : ''}
                                 <div class="bookmark-actions">
@@ -641,6 +662,14 @@ class Dashboard {
         } catch (error) {
             console.error('Error saving bookmarks:', error);
         }
+    }
+
+    async saveBookmarkTitle(videoId, bookmarkIndex, title) {
+        const video = this.videos.find(v => v.id === videoId);
+        if (!video || bookmarkIndex < 0 || bookmarkIndex >= video.bookmarks.length) return;
+
+        video.bookmarks[bookmarkIndex].title = title;
+        await this.saveBookmarks();
     }
 
     formatTime(seconds) {
@@ -1131,12 +1160,18 @@ class Dashboard {
     }
 
     setupSettings() {
-        // Load skip shortcuts setting
-        chrome.storage.local.get(['enableSkipShortcuts'], (result) => {
+        // Load settings
+        chrome.storage.local.get(['enableSkipShortcuts', 'preferredSubtitleLanguage'], (result) => {
             const isEnabled = result.enableSkipShortcuts !== false; // Default to true if not set
             const toggle = document.getElementById('enableSkipShortcuts');
             if (toggle) {
                 toggle.checked = isEnabled;
+            }
+
+            const preferredLang = result.preferredSubtitleLanguage || 'en';
+            const langSelect = document.getElementById('preferredSubtitleLanguage');
+            if (langSelect) {
+                langSelect.value = preferredLang;
             }
         });
 
@@ -1146,6 +1181,14 @@ class Dashboard {
             toggle.addEventListener('change', (e) => {
                 const isEnabled = e.target.checked;
                 chrome.storage.local.set({ enableSkipShortcuts: isEnabled });
+            });
+        }
+
+        const langSelect = document.getElementById('preferredSubtitleLanguage');
+        if (langSelect) {
+            langSelect.addEventListener('change', (e) => {
+                const preferredLang = e.target.value;
+                chrome.storage.local.set({ preferredSubtitleLanguage: preferredLang });
             });
         }
     }
