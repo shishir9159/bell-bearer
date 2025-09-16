@@ -9,17 +9,20 @@ class BookmarkManager {
         await this.loadBookmarks();
         this.setupEventListeners();
         this.setupTheme();
+        this.setupSpeedBar();
         this.renderVideoList();
         this.renderBookmarkDetails();
     }
 
     async loadBookmarks() {
         try {
-            const result = await chrome.storage.local.get(['youtubeBookmarks']);
+            const result = await chrome.storage.local.get(['youtubeBookmarks', 'enableSpeedButtons']);
             this.videos = result.youtubeBookmarks || [];
+            this.enableSpeedButtons = result.enableSpeedButtons === true;
         } catch (error) {
             console.error('Error loading bookmarks:', error);
             this.videos = [];
+            this.enableSpeedButtons = false;
         }
     }
 
@@ -47,7 +50,13 @@ class BookmarkManager {
         // event delegation for bookmark actions
         const bookmarkDetails = document.getElementById('bookmarkDetails');
         bookmarkDetails.addEventListener('click', (e) => {
-            if (e.target.classList.contains('seek-btn')) {
+            if (e.target.classList.contains('speed-up-half-btn')) {
+                const videoId = e.target.dataset.videoId;
+                this.changeSpeed(videoId, 0.5);
+            } else if (e.target.classList.contains('speed-down-half-btn')) {
+                const videoId = e.target.dataset.videoId;
+                this.changeSpeed(videoId, -0.5);
+            } else if (e.target.classList.contains('seek-btn')) {
                 const bookmarkItem = e.target.closest('.bookmark-item');
                 if (bookmarkItem) {
                     const videoId = bookmarkItem.dataset.videoId;
@@ -63,6 +72,68 @@ class BookmarkManager {
                 }
             }
         });
+    }
+
+    async setupSpeedBar() {
+        const bar = document.getElementById('speedControlBar');
+        if (!bar) return;
+
+        if (!this.enableSpeedButtons) {
+            bar.style.display = 'none';
+            return;
+        }
+
+        bar.style.display = 'flex';
+
+        // Read current speed from active tab
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab) {
+                const results = await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: () => {
+                        const v = document.querySelector('video');
+                        return v ? v.playbackRate : 1;
+                    }
+                });
+                const rate = results?.[0]?.result ?? 1;
+                document.getElementById('speedDisplay').textContent = `${rate}x`;
+            }
+        } catch (_) {
+            // Tab may not support scripting — ignore
+        }
+
+        document.getElementById('speedUpBtn').addEventListener('click', () => {
+            this.changeSpeedActiveTab(0.5);
+        });
+        document.getElementById('speedDownBtn').addEventListener('click', () => {
+            this.changeSpeedActiveTab(-0.5);
+        });
+    }
+
+    async changeSpeedActiveTab(delta) {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (!tab) return;
+
+            const results = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                func: (d) => {
+                    const v = document.querySelector('video');
+                    if (!v) return null;
+                    v.playbackRate = Math.max(0.25, Math.min(16, v.playbackRate + d));
+                    return v.playbackRate;
+                },
+                args: [delta]
+            });
+
+            const newRate = results?.[0]?.result;
+            if (newRate != null) {
+                document.getElementById('speedDisplay').textContent = `${newRate}x`;
+            }
+        } catch (error) {
+            console.error('Error changing active tab speed:', error);
+        }
     }
 
     renderVideoList() {
@@ -116,6 +187,12 @@ class BookmarkManager {
             <p style="color: #666; margin-bottom: 16px; font-size: 12px;">
                 ${video.bookmarks.length} bookmark${video.bookmarks.length !== 1 ? 's' : ''}
             </p>
+            ${this.enableSpeedButtons ? `
+                <div style="margin-bottom: 16px;">
+                    <button class="btn-small speed-down-half-btn" data-video-id="${video.id}" style="margin-right: 4px;" title="Decrease playback speed by 0.5x">⏩ Slow Down 0.5x</button>
+                    <button class="btn-small speed-up-half-btn" data-video-id="${video.id}" style="margin-right: 4px;" title="Increase playback speed by 0.5x">⏪ Speed Up 0.5x</button>
+                </div>
+            ` : ''}
             ${video.bookmarks.map((bookmark, index) => {
                 const isSegment = 'start' in bookmark && 'end' in bookmark;
                 const time = isSegment ? bookmark.start : bookmark.time;
@@ -145,6 +222,60 @@ class BookmarkManager {
         this.selectedVideoId = videoId;
         this.renderVideoList();
         this.renderBookmarkDetails();
+    }
+    async changeSpeed(videoId, delta) {
+        try {
+            const tabs = await chrome.tabs.query({});
+            const youtubeTab = tabs.find(tab => {
+                const url = tab.url || '';
+                const currentVideoId = this.extractVideoIdFromUrl(url);
+                return (url.includes('youtube.com') || url.includes('youtu.be')) && currentVideoId === videoId;
+            });
+
+            if (youtubeTab) {
+                // Switch to existing tab
+                await chrome.tabs.update(youtubeTab.id, { active: true });
+                await chrome.windows.update(youtubeTab.windowId, { focused: true });
+
+                try {
+                    await chrome.tabs.sendMessage(youtubeTab.id, {
+                        action: 'changeSpeed',
+                        delta: delta
+                    });
+                } catch (messageError) {
+                    await chrome.scripting.executeScript({
+                        target: { tabId: youtubeTab.id },
+                        func: (speedDelta) => {
+                            const video = document.querySelector('video');
+                            if (video) {
+                                video.playbackRate = Math.max(0.25, Math.min(16, video.playbackRate + speedDelta));
+                                
+                                // show a visual indicator
+                                let indicator = document.getElementById('speed-indicator');
+                                if (!indicator) {
+                                    indicator = document.createElement('div');
+                                    indicator.id = 'speed-indicator';
+                                    indicator.style.cssText = 'position:fixed;top:10%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:white;padding:10px 20px;border-radius:10px;font-size:24px;z-index:9999;transition:opacity 0.5s;pointer-events:none;';
+                                    document.body.appendChild(indicator);
+                                }
+                                indicator.textContent = `Speed: ${video.playbackRate}x`;
+                                indicator.style.opacity = '1';
+                                
+                                clearTimeout(window.speedIndicatorTimeout);
+                                window.speedIndicatorTimeout = setTimeout(() => {
+                                    indicator.style.opacity = '0';
+                                }, 1500);
+                            }
+                        },
+                        args: [delta]
+                    });
+                }
+            } else {
+                alert('Video not currently open. Please open the video first.');
+            }
+        } catch (error) {
+            console.error('Error changing speed:', error);
+        }
     }
 
     async seekToTime(videoId, time) {

@@ -5,12 +5,14 @@ class Dashboard {
         this.channels = [];
         this.newVideos = [];
         this.currentView = 'dashboard';
+        this.enableSpeedButtons = false;
         this.init();
     }
 
     async init() {
-        await this.loadBookmarks();
-        await this.loadSubscriptions();
+        const settingsResult = await chrome.storage.local.get(['enableSpeedButtons']);
+        this.enableSpeedButtons = settingsResult.enableSpeedButtons === true;
+
         await this.loadBookmarks();
         await this.loadSubscriptions();
         this.setupEventListeners();
@@ -114,6 +116,12 @@ class Dashboard {
                     const bookmarkIndex = parseInt(bookmarkItem.dataset.bookmarkIndex);
                     this.deleteBookmark(videoId, bookmarkIndex);
                 }
+            } else if (e.target.classList.contains('speed-up-btn')) {
+                const videoId = e.target.dataset.videoId;
+                this.changeSpeed(videoId, 0.25);
+            } else if (e.target.classList.contains('speed-down-btn')) {
+                const videoId = e.target.dataset.videoId;
+                this.changeSpeed(videoId, -0.25);
             } else if (e.target.classList.contains('open-video-btn')) {
                 const videoCard = e.target.closest('.video-card');
                 if (videoCard) {
@@ -206,6 +214,10 @@ class Dashboard {
                             <button class="btn-small copy-subtitles-with-time" data-video-id="${video.id}" style="margin-right: 4px;" title="Copy all subtitles with timestamps">📋 Copy All (time)</button>
                             <button class="btn-small copy-subtitles-no-time" data-video-id="${video.id}" style="margin-right: 4px;" title="Copy all subtitles without timestamps">📋 Copy All</button>
                         ` : ''}
+                        ${this.enableSpeedButtons ? `
+                            <button class="btn-small speed-down-btn" data-video-id="${video.id}" style="margin-right: 4px;" title="Decrease playback speed">⏩ Slow Down</button>
+                            <button class="btn-small speed-up-btn" data-video-id="${video.id}" style="margin-right: 4px;" title="Increase playback speed">⏪ Speed Up</button>
+                        ` : ''}
                         <button class="open-video-btn btn-small">Open Video</button>
                     </div>
                 </div>
@@ -245,6 +257,61 @@ class Dashboard {
             </div>
         `;
         }).join('');
+    }
+
+    async changeSpeed(videoId, delta) {
+        try {
+            const tabs = await chrome.tabs.query({});
+            const youtubeTab = tabs.find(tab => {
+                const url = tab.url || '';
+                const currentVideoId = this.extractVideoIdFromUrl(url);
+                return (url.includes('youtube.com') || url.includes('youtu.be')) && currentVideoId === videoId;
+            });
+
+            if (youtubeTab) {
+                // Switch to existing tab
+                await chrome.tabs.update(youtubeTab.id, { active: true });
+                await chrome.windows.update(youtubeTab.windowId, { focused: true });
+
+                try {
+                    await chrome.tabs.sendMessage(youtubeTab.id, {
+                        action: 'changeSpeed',
+                        delta: delta
+                    });
+                } catch (messageError) {
+                    await chrome.scripting.executeScript({
+                        target: { tabId: youtubeTab.id },
+                        func: (speedDelta) => {
+                            const video = document.querySelector('video');
+                            if (video) {
+                                video.playbackRate = Math.max(0.25, Math.min(16, video.playbackRate + speedDelta));
+                                
+                                // show a visual indicator
+                                let indicator = document.getElementById('speed-indicator');
+                                if (!indicator) {
+                                    indicator = document.createElement('div');
+                                    indicator.id = 'speed-indicator';
+                                    indicator.style.cssText = 'position:fixed;top:10%;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:white;padding:10px 20px;border-radius:10px;font-size:24px;z-index:9999;transition:opacity 0.5s;pointer-events:none;';
+                                    document.body.appendChild(indicator);
+                                }
+                                indicator.textContent = `Speed: ${video.playbackRate}x`;
+                                indicator.style.opacity = '1';
+                                
+                                clearTimeout(window.speedIndicatorTimeout);
+                                window.speedIndicatorTimeout = setTimeout(() => {
+                                    indicator.style.opacity = '0';
+                                }, 1500);
+                            }
+                        },
+                        args: [delta]
+                    });
+                }
+            } else {
+                alert('Video not currently open. Click "Open Video" to open it first.');
+            }
+        } catch (error) {
+            console.error('Error changing speed:', error);
+        }
     }
 
     async seekToTime(videoId, time) {
@@ -1173,6 +1240,11 @@ class Dashboard {
             if (langSelect) {
                 langSelect.value = preferredLang;
             }
+
+            const speedToggle = document.getElementById('enableSpeedButtons');
+            if (speedToggle) {
+                speedToggle.checked = result.enableSpeedButtons === true;
+            }
         });
 
         // Save setting on change
@@ -1189,6 +1261,18 @@ class Dashboard {
             langSelect.addEventListener('change', (e) => {
                 const preferredLang = e.target.value;
                 chrome.storage.local.set({ preferredSubtitleLanguage: preferredLang });
+            });
+        }
+
+        const speedToggle = document.getElementById('enableSpeedButtons');
+        if (speedToggle) {
+            speedToggle.addEventListener('change', (e) => {
+                const isEnabled = e.target.checked;
+                chrome.storage.local.set({ enableSpeedButtons: isEnabled });
+                this.enableSpeedButtons = isEnabled;
+                if (this.currentView === 'dashboard') {
+                    this.renderDashboard();
+                }
             });
         }
     }

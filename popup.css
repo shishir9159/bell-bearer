@@ -393,6 +393,90 @@ header h1 {
     box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
 }
 
+/* Speed Control Bar */
+.speed-control-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 20px;
+    background: linear-gradient(90deg, #fff3e0, #fff8f0);
+    border-bottom: 1px solid #ffe0b2;
+}
+
+.speed-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e65100;
+}
+
+.speed-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.speed-display {
+    font-size: 13px;
+    font-weight: 700;
+    color: #e65100;
+    min-width: 36px;
+    text-align: center;
+    background: white;
+    border: 1px solid #ffe0b2;
+    border-radius: 4px;
+    padding: 2px 6px;
+}
+
+.btn-speed {
+    background: #ff9800;
+    border: 1px solid #f57c00;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.btn-speed:hover {
+    background: #f57c00;
+}
+
+.btn-speed:active {
+    background: #e65100;
+    transform: scale(0.95);
+}
+
+/* Dark theme - speed control bar */
+body.dark-theme .speed-control-bar {
+    background: linear-gradient(90deg, #2a1f0f, #332510);
+    border-bottom-color: #5a3a10;
+}
+
+body.dark-theme .speed-label {
+    color: #ffb74d;
+}
+
+body.dark-theme .speed-display {
+    background: #1e1e1e;
+    border-color: #5a3a10;
+    color: #ffb74d;
+}
+
+body.dark-theme .btn-speed {
+    background: #b56a00;
+    border-color: #8a5000;
+}
+
+body.dark-theme .btn-speed:hover {
+    background: #cc7a00;
+}
+
+body.dark-theme .btn-speed:active {
+    background: #e68900;
+}
+
 @media (max-width: 650px) {
     .container {
         width: 100%;

@@ -18,7 +18,16 @@
                 <button id="clearAll" class="btn-secondary">Clear All</button>
             </div>
         </header>
-        
+
+        <div id="speedControlBar" class="speed-control-bar" style="display:none;">
+            <span class="speed-label">⚡ Speed Control</span>
+            <div class="speed-buttons">
+                <button id="speedDownBtn" class="btn-speed" title="Decrease speed by 0.5x">− 0.5x</button>
+                <span id="speedDisplay" class="speed-display">1x</span>
+                <button id="speedUpBtn" class="btn-speed" title="Increase speed by 0.5x">+ 0.5x</button>
+            </div>
+        </div>
+
         <div class="main-content">
             <div class="video-list" id="videoList">
             </div>
