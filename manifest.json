@@ -29,10 +29,23 @@
         "https://www.reddit.com/*",
         "https://www.netflix.com/*"
       ],
-      "js": ["transcript.js", "content.js"],
-      "css": ["content.css"]
+      "js": [
+        "transcript.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ]
     }
   ],
+  "commands": {
+    "toggle-feature": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y"
+      },
+      "description": "Run my custom action"
+    }
+  },
   "background": {
     "service_worker": "background.js"
   },
@@ -41,4 +54,4 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   }
-} 
+}
