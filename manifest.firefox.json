@@ -1,0 +1,63 @@
+{
+  "manifest_version": 3,
+  "name": "bell bearer",
+  "version": "1.0",
+  "description": "bell bearer",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "bell-bearer@example.com",
+      "strict_min_version": "109.0"
+    }
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://twitter.com/*",
+    "https://x.com/*",
+    "https://www.reddit.com/*",
+    "https://www.netflix.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "bell bearer"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://twitter.com/*",
+        "https://x.com/*",
+        "https://www.reddit.com/*",
+        "https://www.netflix.com/*"
+      ],
+      "js": [
+        "transcript.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ]
+    }
+  ],
+  "commands": {
+    "toggle-feature": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y"
+      },
+      "description": "Run my custom action"
+    }
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
