@@ -28,7 +28,8 @@
     if (root.__bellBearerInstalled) return;
     root.__bellBearerInstalled = true;
 
-    const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown, PageInfo, DomWatch, Theme, YouTubeUi } = BB;
+    const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown,
+        PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -170,6 +171,64 @@
         window.addEventListener('popstate', onPageChange);
         document.addEventListener('loadstart', onPageChange, { capture: true, passive: true });
         onPageChange();
+
+        installWatchedTracking();
+        warmPouchInBackground();
+    }
+
+    /**
+     * Note that a video has actually been watched.
+     *
+     * The pouch stops offering back what has already been seen, and this is
+     * where "seen" is decided: a minute of playback, or a quarter of a short
+     * video, whichever comes first. Opening a card in the pouch marks it too,
+     * but most videos are reached from YouTube itself.
+     *
+     * It rides YouTube's own timeupdate rather than a timer of its own. That
+     * event fires about four times a second while playing and not at all while
+     * paused, which is exactly the clock wanted here, and the handler is one
+     * comparison once the video has been marked.
+     */
+    const WATCHED_AFTER_S = 60;
+
+    function installWatchedTracking() {
+        let marked = null;
+
+        document.addEventListener('timeupdate', () => {
+            const id = PageInfo.getVideoId();
+            if (!id || id === marked) return;
+
+            const video = getVideoElement();
+            if (!video) return;
+
+            const enough = Number.isFinite(video.duration) && video.duration > 0
+                ? Math.min(WATCHED_AFTER_S, video.duration * 0.25)
+                : WATCHED_AFTER_S;
+            if (video.currentTime < enough) return;
+
+            marked = id;
+            Watched.mark(id);
+        }, { capture: true, passive: true });
+    }
+
+    /**
+     * Pull the pouch's feeds down while the page is idle.
+     *
+     * The drawer entry is on screen from the moment YouTube's nav is, so by the
+     * time it is clicked the sheet should have something to draw immediately.
+     * Waiting for idle is the whole point — this must never compete with
+     * YouTube's own start-up for the network.
+     */
+    function warmPouchInBackground() {
+        const warm = async () => {
+            try {
+                const { channels } = await Subscriptions.load();
+                if (channels.length) await Feed.warm(channels);
+            } catch (_) { /* nothing is on screen to report this to */ }
+        };
+
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 10000 });
+        else setTimeout(warm, 5000);
     }
 
     // --------------------------------------------------------- settings

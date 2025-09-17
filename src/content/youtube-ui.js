@@ -1,12 +1,14 @@
 /**
  * Everything Bell Bearer injects into YouTube's own page: the "add to pouch"
- * button beside Subscribe, the entry in the left drawer, and the two surfaces
- * those open — the topics sheet and the pouch panel.
+ * button beside Subscribe, the "follow playlist" button in a playlist header,
+ * the entry in the left drawer, and the panel the pouch button opens.
+ *
+ * The sheet the drawer entry opens is not here — it is src/content/pouch-sheet.js,
+ * which is a surface of its own rather than an injection into YouTube's chrome.
  *
  * All the markup here interpolates data the user does not control — channel
- * names scraped from the page, titles and thumbnail URLs from an RSS feed — so
- * text goes through escapeHtml and every URL through safeUrlAttr, which drops
- * anything that is not http(s).
+ * and playlist names scraped from the page — so text goes through escapeHtml
+ * and every URL through safeUrlAttr, which drops anything that is not http(s).
  *
  * Both surfaces carry `data-bb-theme` and `data-bb-skin`, and content.css keys
  * its palette off the pair. The two are independent on purpose: the skin
@@ -20,37 +22,53 @@
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
     const Feed = ns.Feed || req('../shared/feed.js');
+    const Playlists = ns.Playlists || req('../shared/playlists.js');
     const Settings = ns.Settings || req('../shared/settings.js');
     const Subscriptions = ns.Subscriptions || req('../shared/subscriptions.js');
-    const Time = ns.Time || req('../shared/time.js');
+    const YouTube = ns.YouTube || req('../shared/youtube.js');
     const Overlay = ns.Overlay || req('./overlay.js');
     const PageInfo = ns.PageInfo || req('./page-info.js');
+    const PouchSheet = ns.PouchSheet || req('./pouch-sheet.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const BUTTON_ID = 'bb-add-to-subscriptions-btn';
+    const PLAYLIST_BUTTON_ID = 'bb-follow-playlist-btn';
     const GUIDE_ID = 'bb-guide-entry';
     const CONTEXT_LOST = 'Bell Bearer was updated — please refresh this page.';
 
-    /** How many uploads to pull per channel. The 90d range needs some depth. */
-    const PER_CHANNEL = 15;
-
-    const RANGES = [
-        { id: '7d', label: '7d', days: 7 },
-        { id: '30d', label: '30d', days: 30 },
-        { id: '90d', label: '90d', days: 90 },
-        { id: 'all', label: 'All', days: null },
-    ];
-    const DEFAULT_RANGE = '30d';
-
-    const SORTS = [
-        { id: 'newest', label: 'Newest' },
-        { id: 'oldest', label: 'Oldest' },
-        { id: 'channel', label: 'Channel' },
-    ];
-
-    const ALL_TOPICS = '__all__';
-
     const POUCH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:24px;height:24px;fill:currentColor;"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"></path></svg>';
+
+    /**
+     * The filed state. YouTube turns its own Subscribe button into a flat grey
+     * "Subscribed" pill once you are subscribed, and the pouch button sits
+     * right next to it — so a filed channel gets the same treatment, a tick on
+     * the same grey, rather than going on offering a "+" for something already
+     * done.
+     */
+    const TICK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:22px;height:22px;fill:currentColor;"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
+
+    /**
+     * Where the playlist panel on a watch page keeps its header, and where a
+     * /playlist page keeps its own. Newest spelling first, as everywhere else
+     * in this extension that reaches into YouTube's DOM.
+     */
+    const PLAYLIST_HEADER_SELECTORS = [
+        'ytd-playlist-panel-renderer #container > .header',
+        'ytd-playlist-panel-renderer .header.ytd-playlist-panel-renderer',
+        'ytd-playlist-header-renderer .metadata-buttons-wrapper',
+        'ytd-playlist-header-renderer #actions',
+        'yt-flexible-actions-view-model',
+        'ytd-playlist-sidebar-primary-info-renderer #menu',
+    ];
+
+    const PLAYLIST_TITLE_SELECTORS = [
+        'ytd-playlist-panel-renderer #container .header #publisher-container ~ * h3',
+        'ytd-playlist-panel-renderer #header-description h3 a',
+        'ytd-playlist-panel-renderer #header-description h3',
+        'ytd-playlist-header-renderer yt-dynamic-sizing-formatted-string',
+        'yt-page-header-renderer h1',
+        'ytd-playlist-sidebar-primary-info-renderer h1',
+    ];
 
     /**
      * The extension icon, for the drawer entry and the sheet header alike.
@@ -69,8 +87,6 @@
     function hasExtensionContext() {
         return !!(chrome.runtime && chrome.runtime.id);
     }
-
-    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
     /**
      * Dress an overlay in the current theme and skin. Every surface goes
@@ -93,7 +109,47 @@
         return { theme: Theme.pageTheme(), skin: skin || 'default' };
     }
 
+    function firstMatch(selectors) {
+        for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (element) return element;
+        }
+        return null;
+    }
+
     function createYouTubeUi({ watcher, notify, getPouchButtonStyle }) {
+
+        const sheet = PouchSheet.createPouchSheet({ notify, dress, appearance, iconUrl });
+
+        /**
+         * The pouch's channels, held here so that deciding whether the button
+         * on this page should read "+" or a tick does not go to storage on
+         * every SPA navigation. The storage watcher below keeps it honest.
+         */
+        let pouchChannels = null;
+
+        async function channels() {
+            if (!pouchChannels) pouchChannels = (await Subscriptions.load()).channels;
+            return pouchChannels;
+        }
+
+        Settings.watch([Settings.DATA.channels], () => {
+            pouchChannels = null;
+            markPouchButton();
+        });
+
+        /** Followed playlists, cached the same way and for the same reason. */
+        let followed = null;
+
+        async function followedPlaylists() {
+            if (!followed) followed = await Playlists.load();
+            return followed;
+        }
+
+        Settings.watch([Settings.DATA.playlists], () => {
+            followed = null;
+            markPlaylistButton();
+        });
 
         // ------------------------------------------------------ pouch button
 
@@ -117,9 +173,9 @@
             button.id = BUTTON_ID;
             button.type = 'button';
             button.className = getPouchButtonStyle() === 'accent' ? 'bb-accent' : '';
+            button.innerHTML = POUCH_ICON;
             button.title = 'Add channel to Bell Bearer pouch';
             button.setAttribute('aria-label', 'Add channel to Bell Bearer pouch');
-            button.innerHTML = POUCH_ICON;
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -132,7 +188,48 @@
 
             parent.classList.add('bb-inline-row');
             parent.insertBefore(button, target.nextSibling);
+
+            markPouchButton();
             return true;
+        }
+
+        /**
+         * Show whether this page's channel is already filed.
+         *
+         * Runs after injection and again on every navigation, because YouTube
+         * keeps the same button element across an SPA move to a different
+         * channel's video — without this the tick would stay behind on a
+         * channel that was never in the pouch.
+         */
+        async function markPouchButton() {
+            const button = document.getElementById(BUTTON_ID);
+            if (!button || !hasExtensionContext()) return;
+
+            const info = PageInfo.getChannelInfo();
+            const filed = (await channels()).some((channel) => sameChannel(channel, info));
+
+            button.classList.toggle('bb-in-pouch', filed);
+            button.innerHTML = filed ? TICK_ICON : POUCH_ICON;
+
+            const label = filed
+                ? `${info.channelName} is in your pouch — click to re-file`
+                : 'Add channel to Bell Bearer pouch';
+            button.title = label;
+            button.setAttribute('aria-label', label);
+            button.setAttribute('aria-pressed', String(filed));
+        }
+
+        /**
+         * A pouch record and the page's channel are the same channel when
+         * either the URL matches or the key derived from it does — a channel
+         * filed from its /@handle page and met again as /channel/UC… on a
+         * watch page is one channel, not two.
+         */
+        function sameChannel(channel, info) {
+            if (!info.channelUrl) return false;
+            if (channel.url === info.channelUrl) return true;
+            const key = YouTube.extractChannelId(info.channelUrl);
+            return !!key && channel.id === key;
         }
 
         /** Re-render the button after its style setting changed. */
@@ -141,6 +238,110 @@
             if (existing) existing.remove();
             if (getPouchButtonStyle() === 'hidden') return;
             watcher.add('pouch-button', injectPouchButton);
+        }
+
+        // --------------------------------------------------- playlist button
+
+        /**
+         * A "follow this playlist" button in the playlist header.
+         *
+         * YouTube will tell you when a channel uploads; it will not tell you
+         * when something is added to a playlist you care about, which for a
+         * course, a label's releases or a friend's mix is the only event that
+         * matters. Following one puts its new entries in the strip at the
+         * bottom of the pouch sheet.
+         */
+        function injectPlaylistButton(href) {
+            const playlistId = currentPlaylistId(href);
+            if (!playlistId) return true; // nothing to follow on this page
+
+            if (document.getElementById(PLAYLIST_BUTTON_ID)) return true;
+
+            const header = firstMatch(PLAYLIST_HEADER_SELECTORS);
+            if (!header) return false;
+
+            const button = document.createElement('button');
+            button.id = PLAYLIST_BUTTON_ID;
+            button.type = 'button';
+            button.className = 'bb-playlist-follow';
+            button.dataset.playlistId = playlistId;
+            button.innerHTML = '<span class="bb-pf-ico">' + POUCH_ICON + '</span><span class="bb-pf-label">Follow</span>';
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                togglePlaylist(button);
+            });
+
+            header.appendChild(button);
+            markPlaylistButton();
+            return true;
+        }
+
+        /**
+         * The playlist this page is about, mixes and autoplay queues excluded.
+         *
+         * `href` is a seam for the tests, which cannot move the address bar of
+         * the page they run in. Nothing in the extension passes it.
+         */
+        function currentPlaylistId(href) {
+            return YouTube.extractPlaylistId(href || window.location.href);
+        }
+
+        function playlistTitle() {
+            const element = firstMatch(PLAYLIST_TITLE_SELECTORS);
+            const text = element && (element.textContent || '').replace(/\s+/g, ' ').trim();
+            return text || 'Playlist';
+        }
+
+        async function markPlaylistButton() {
+            const button = document.getElementById(PLAYLIST_BUTTON_ID);
+            if (!button || !hasExtensionContext()) return;
+
+            const isFollowed = Playlists.has(await followedPlaylists(), button.dataset.playlistId);
+            button.classList.toggle('bb-following', isFollowed);
+            button.querySelector('.bb-pf-ico').innerHTML = isFollowed ? TICK_ICON : POUCH_ICON;
+            button.querySelector('.bb-pf-label').textContent = isFollowed ? 'Following' : 'Follow';
+            button.title = isFollowed
+                ? 'New entries in this playlist show in your pouch — click to stop following'
+                : 'Follow this playlist and see new entries in your pouch';
+            button.setAttribute('aria-pressed', String(isFollowed));
+        }
+
+        async function togglePlaylist(button) {
+            if (!hasExtensionContext()) return notify(CONTEXT_LOST, 'warning');
+
+            const playlistId = button.dataset.playlistId;
+            button.disabled = true;
+
+            try {
+                if (Playlists.has(await followedPlaylists(), playlistId)) {
+                    await Playlists.remove(playlistId);
+                    followed = null;
+                    await markPlaylistButton();
+                    notify('Playlist unfollowed', 'info');
+                    return;
+                }
+
+                // What the playlist holds right now is recorded as already
+                // seen, so following it does not immediately report all two
+                // hundred existing entries as new.
+                const current = await Feed.fetchPlaylistVideos(playlistId, Playlists.SEEN_LIMIT);
+                await Playlists.add({
+                    id: playlistId,
+                    title: playlistTitle(),
+                    url: YouTube.playlistUrl(playlistId),
+                    videoIds: current.map((video) => video.id),
+                });
+
+                followed = null;
+                await markPlaylistButton();
+                notify('Following this playlist — new entries appear in your pouch', 'success');
+            } catch (error) {
+                console.error('Bell Bearer: could not follow playlist', error);
+                notify('Could not follow that playlist', 'error');
+            } finally {
+                button.disabled = false;
+            }
         }
 
         // ------------------------------------------------------- guide entry
@@ -184,11 +385,16 @@
             // the label take their metrics from the same stylesheet Home and
             // Shorts do; content.css keeps a matching fallback for the day
             // YouTube renames them.
+            //
+            // The label is the one word. It used to read "Open Pouch", which
+            // is an instruction sitting in a list of places — every other row
+            // in that drawer is named after where it goes, not after what
+            // clicking it does.
             entry.innerHTML =
                 '<span class="bb-guide-ico guide-icon style-scope ytd-guide-entry-renderer">' +
                 '<img src="' + iconUrl() + '" alt="" aria-hidden="true">' +
                 '</span>' +
-                '<span class="bb-guide-text title style-scope ytd-guide-entry-renderer">Open Pouch</span>';
+                '<span class="bb-guide-text title style-scope ytd-guide-entry-renderer">Pouch</span>';
 
             const open = () => openTopicsDialog();
             entry.addEventListener('click', open);
@@ -204,251 +410,9 @@
 
         // ---------------------------------------------------- topics sheet
 
-        /**
-         * The topics sheet: a near-full-screen frosted panel, the topic rail on
-         * the left and a thumbnail grid on the right.
-         *
-         * Every channel's feed is fetched once when the sheet opens and held
-         * for as long as it stays open. Choosing a topic, narrowing the range
-         * and re-sorting are then all local. The previous version refetched on
-         * every topic click, so returning to a topic you had already looked at
-         * went back to the network for answers it already had.
-         */
         async function openTopicsDialog() {
             if (!hasExtensionContext()) return notify(CONTEXT_LOST, 'warning');
-
-            const [{ topics, channels }, look] = await Promise.all([
-                Subscriptions.load(),
-                appearance(),
-            ]);
-
-            const dialog = Overlay.open({ id: 'bb-topics-overlay', contentHtml: sheetHtml() });
-            if (!dialog) return;
-
-            dialog.element.classList.add('bb-sheet-overlay');
-            dress(dialog.element, look);
-
-            const $ = (selector) => dialog.element.querySelector(selector);
-            const rail = $('.bb-topics');
-            const grid = $('.bb-videos');
-            const sub = $('.bb-sheet-sub');
-
-            /** Everything fetched, across every channel. Filtered, never refetched. */
-            let videos = [];
-            let topicId = ALL_TOPICS;
-            let range = DEFAULT_RANGE;
-            let sort = 'newest';
-            let loading = true;
-
-            const channelsIn = (id) => channels.filter((channel) => channel.topicId === id);
-
-            function inRange(video) {
-                const days = (RANGES.find((entry) => entry.id === range) || {}).days;
-                if (!days) return true;
-                return video.published >= Date.now() - days * 864e5;
-            }
-
-            function visible() {
-                const wanted = videos.filter(inRange);
-                const scoped = topicId === ALL_TOPICS
-                    ? wanted
-                    : wanted.filter((video) => channelsIn(topicId).some((c) => c.id === video.channelId));
-
-                if (sort === 'oldest') return [...scoped].sort((a, b) => a.published - b.published);
-                if (sort === 'channel') {
-                    return [...scoped].sort((a, b) =>
-                        (a.channelName || '').localeCompare(b.channelName || '') ||
-                        b.published - a.published);
-                }
-                return [...scoped].sort((a, b) => b.published - a.published);
-            }
-
-            /** Videos in range per topic, for the counts down the rail. */
-            function counts() {
-                const wanted = videos.filter(inRange);
-                const byTopic = new Map(topics.map((topic) => [topic.id, 0]));
-                wanted.forEach((video) => {
-                    const channel = channels.find((entry) => entry.id === video.channelId);
-                    if (!channel || !byTopic.has(channel.topicId)) return;
-                    byTopic.set(channel.topicId, byTopic.get(channel.topicId) + 1);
-                });
-                return { total: wanted.length, byTopic };
-            }
-
-            function renderRail() {
-                const { total, byTopic } = counts();
-                const rows = topics.map((topic) => topicRow(
-                    topic.id,
-                    topic.name,
-                    loading ? '' : String(byTopic.get(topic.id) || 0),
-                    topic.id === topicId,
-                ));
-
-                rail.innerHTML = `
-                    <div class="bb-topics-label">Topics</div>
-                    ${topicRow(ALL_TOPICS, 'All', loading ? '' : String(total), topicId === ALL_TOPICS)}
-                    ${rows.join('')}
-                    <button class="bb-topic-add" type="button">+ New topic</button>`;
-
-                sub.textContent = loading
-                    ? 'Loading…'
-                    : `${plural(total, 'video')} · ${plural(topics.length, 'topic')}`;
-            }
-
-            function renderGrid() {
-                if (loading) {
-                    grid.innerHTML = '<p class="bb-muted">Loading the latest from your channels…</p>';
-                    return;
-                }
-                if (!channels.length) {
-                    grid.innerHTML = '<p class="bb-muted">No channels yet — use the button beside Subscribe to file one under a topic.</p>';
-                    return;
-                }
-
-                const list = visible();
-                grid.innerHTML = list.length
-                    ? `<div class="bb-video-grid">${list.map(videoCard).join('')}</div>`
-                    : '<p class="bb-muted">Nothing published in this range.</p>';
-            }
-
-            const render = () => { renderRail(); renderGrid(); };
-            render();
-
-            // ---- interaction
-
-            // One delegated listener: the rail is re-rendered whenever a count
-            // changes, so per-button listeners would have to be re-bound.
-            rail.addEventListener('click', (event) => {
-                const add = event.target.closest('.bb-topic-add');
-                if (add) return startNewTopic(add);
-
-                const button = event.target.closest('.bb-topic');
-                if (!button) return;
-                topicId = button.dataset.topicId;
-                render();
-            });
-
-            $('.bb-seg').addEventListener('click', (event) => {
-                const option = event.target.closest('.bb-seg-opt');
-                if (!option) return;
-                range = option.dataset.range;
-                dialog.element.querySelectorAll('.bb-seg-opt').forEach((other) => {
-                    other.setAttribute('aria-pressed', String(other === option));
-                });
-                render();
-            });
-
-            $('.bb-select').addEventListener('change', (event) => {
-                sort = event.target.value;
-                renderGrid();
-            });
-
-            /**
-             * "+ New topic" becomes an input in place. A nested modal was the
-             * obvious alternative, but its Escape handler and the sheet's would
-             * both sit on document, so one Escape would close the sheet out
-             * from under the prompt.
-             */
-            function startNewTopic(button) {
-                const form = document.createElement('form');
-                form.className = 'bb-new-topic';
-                form.innerHTML = `
-                    <input class="bb-input" type="text" placeholder="Topic name" aria-label="New topic name">
-                    <button class="bb-btn" type="submit">Create</button>`;
-                button.replaceWith(form);
-
-                const input = form.querySelector('input');
-                input.focus();
-
-                const cancel = () => { form.replaceWith(button); };
-                input.addEventListener('keydown', (event) => {
-                    if (event.key !== 'Escape') return;
-                    event.stopPropagation(); // do not also close the sheet
-                    cancel();
-                });
-                input.addEventListener('blur', () => { if (!input.value.trim()) cancel(); });
-
-                form.addEventListener('submit', async (event) => {
-                    event.preventDefault();
-                    const name = input.value.trim();
-                    if (!name) return cancel();
-
-                    form.querySelector('button').disabled = true;
-                    const id = await Subscriptions.createTopic(name);
-                    topics.push({ id, name });
-                    topicId = id;
-                    render();
-                    notify(`Topic "${name}" created`, 'success');
-                });
-            }
-
-            // ---- the fetch
-
-            if (!channels.length) {
-                loading = false;
-                render();
-                return;
-            }
-
-            const fetched = await Feed.fetchLatestForChannels(channels, PER_CHANNEL);
-            if (!dialog.element.isConnected) return; // closed while we waited
-            videos = fetched;
-            loading = false;
-            render();
-        }
-
-        function sheetHtml() {
-            const ranges = RANGES.map((range) => `
-                <button class="bb-seg-opt" type="button" data-range="${range.id}"
-                        aria-pressed="${range.id === DEFAULT_RANGE}">${range.label}</button>`).join('');
-
-            const sorts = SORTS.map((sort) =>
-                `<option value="${sort.id}">${sort.label}</option>`).join('');
-
-            return `
-                <div class="bb-sheet">
-                    <div class="bb-sheet-head">
-                        <div class="bb-sheet-brand">
-                            <img src="${Dom.escapeAttr(iconUrl())}" alt="">
-                            <span class="bb-sheet-title">Pouch</span>
-                            <span class="bb-sheet-sub">Loading…</span>
-                        </div>
-                        <div class="bb-sheet-tools">
-                            <div class="bb-seg" role="group" aria-label="Time range">${ranges}</div>
-                            <select class="bb-select" aria-label="Sort">${sorts}</select>
-                            <button class="bb-close" type="button" data-bb-close aria-label="Close">&times;</button>
-                        </div>
-                    </div>
-                    <div class="bb-sheet-body">
-                        <nav class="bb-topics"></nav>
-                        <div class="bb-videos"></div>
-                    </div>
-                </div>`;
-        }
-
-        function topicRow(id, name, count, active) {
-            return `
-                <button class="bb-topic" type="button" data-topic-id="${Dom.escapeAttr(id)}"${active ? ' aria-current="true"' : ''}>
-                    <span class="bb-topic-name">${Dom.escapeHtml(name)}</span>
-                    <span class="bb-topic-n">${Dom.escapeHtml(count)}</span>
-                </button>`;
-        }
-
-        function videoCard(video) {
-            // An entry with no published date gets no age label at all, rather
-            // than a placeholder dash the eye has to skip over.
-            const age = Time.relativeTime(video.published);
-            return `
-                <a class="bb-video-card" href="${Dom.safeUrlAttr(video.url)}">
-                    <img src="${Dom.safeUrlAttr(video.thumb)}" alt="" loading="lazy">
-                    <div class="bb-video-meta">
-                        <div class="bb-video-title">${Dom.escapeHtml(video.title)}</div>
-                        <div class="bb-video-channel">
-                            <span>${Dom.escapeHtml(video.channelName || '')}</span>
-                            ${age ? `<span class="bb-video-age">${Dom.escapeHtml(age)}</span>` : ''}
-                        </div>
-                    </div>
-                </a>`;
+            return sheet.open();
         }
 
         // ------------------------------------------------------ pouch panel
@@ -464,12 +428,12 @@
             if (!hasExtensionContext()) return notify(CONTEXT_LOST, 'warning');
 
             const channelInfo = PageInfo.getChannelInfo();
-            const [{ topics, channels }, look] = await Promise.all([
+            const [{ topics, channels: filed }, look] = await Promise.all([
                 Subscriptions.load(),
                 appearance(),
             ]);
 
-            const already = channels.find((channel) => channel.url === channelInfo.channelUrl);
+            const already = filed.find((channel) => sameChannel(channel, channelInfo));
             const currentTopic = already && topics.find((topic) => topic.id === already.topicId);
 
             const dialog = Overlay.open({
@@ -502,6 +466,12 @@
                 markChips();
             });
 
+            /**
+             * Creating a topic files the channel in it and closes, rather than
+             * creating an empty topic and waiting to be told to save. Naming a
+             * topic while a channel is on screen in front of you is not a
+             * request for a topic — it is the answer to "where does this go".
+             */
             createTopic.addEventListener('click', async () => {
                 const name = newTopicName.value.trim();
                 if (!name) {
@@ -511,18 +481,13 @@
 
                 createTopic.disabled = true;
                 const id = await Subscriptions.createTopic(name);
-
-                const chip = document.createElement('button');
-                chip.className = 'bb-topic-chip';
-                chip.type = 'button';
-                chip.dataset.topicId = id;
-                chip.textContent = name;
-                chipRow.appendChild(chip);
+                if (!id) {
+                    createTopic.disabled = false;
+                    return notify('Could not create that topic', 'error');
+                }
 
                 chosen = id;
-                markChips();
-                newTopicName.value = '';
-                createTopic.disabled = false;
+                await fileChannel(`Added to "${name}"`);
             });
 
             newTopicName.addEventListener('keydown', (event) => {
@@ -531,27 +496,36 @@
                 createTopic.click();
             });
 
-            save.addEventListener('click', async () => {
+            save.addEventListener('click', () => {
                 if (!chosen) {
                     notify('Pick a topic, or create one first.', 'warning');
                     return newTopicName.focus();
                 }
+                fileChannel('Channel added to pouch!');
+            });
 
+            /** The one write both paths go through. */
+            async function fileChannel(message) {
                 save.disabled = true; // a double-click otherwise filed it twice
+                createTopic.disabled = true;
+
                 try {
                     await Subscriptions.addChannel({
                         name: channelInfo.channelName,
                         url: channelInfo.channelUrl,
                         topicId: chosen,
                     });
+                    pouchChannels = null;
                     dialog.close();
-                    notify('Channel added to pouch!', 'success');
+                    markPouchButton();
+                    notify(message, 'success');
                 } catch (error) {
                     console.error('Bell Bearer: failed to save channel', error);
                     save.disabled = false;
+                    createTopic.disabled = false;
                     notify(CONTEXT_LOST, 'warning');
                 }
-            });
+            }
         }
 
         function pouchHtml(channelInfo, topics, currentTopic) {
@@ -586,7 +560,7 @@
                     <div class="bb-panel-body">
                         <span class="bb-field-label">Topic</span>
                         <div class="bb-chips">${chips}</div>
-                        <span class="bb-field-label">${topics.length ? 'Or start a new one' : 'Start your first topic'}</span>
+                        <span class="bb-field-label">${topics.length ? 'Or Create a New One' : 'Start your first topic'}</span>
                         <div class="bb-new-topic">
                             <input class="bb-input" type="text" placeholder="Topic name" aria-label="New topic name">
                             <button class="bb-btn" type="button">Create</button>
@@ -604,23 +578,47 @@
         function install() {
             watcher.add('pouch-button', injectPouchButton);
             watcher.add('guide-entry', injectGuideEntry);
+            watcher.add('playlist-button', injectPlaylistButton);
         }
 
         /** YouTube rebuilds the page on SPA navigation; re-arm the injections. */
         function onNavigate() {
             if (!document.getElementById(BUTTON_ID)) watcher.add('pouch-button', injectPouchButton);
+            else markPouchButton();
+
             if (!document.getElementById(GUIDE_ID)) watcher.add('guide-entry', injectGuideEntry);
+
+            // The playlist button is torn out rather than re-marked: a watch
+            // page reached from a different playlist keeps the old panel
+            // element, and following one list while looking at another is the
+            // kind of bug nobody notices until the wrong thing is followed.
+            const playlistButton = document.getElementById(PLAYLIST_BUTTON_ID);
+            if (playlistButton && playlistButton.dataset.playlistId !== currentPlaylistId()) {
+                playlistButton.remove();
+            }
+            if (!document.getElementById(PLAYLIST_BUTTON_ID)) {
+                watcher.add('playlist-button', injectPlaylistButton);
+            } else {
+                markPlaylistButton();
+            }
         }
 
         // injectGuideEntry is returned so a test can place the entry without
         // going through the watcher, which only runs on an animation frame.
         return {
             install, onNavigate, refreshPouchButton,
-            openTopicsDialog, openAddChannelDialog, injectGuideEntry,
+            openTopicsDialog, openAddChannelDialog,
+            injectGuideEntry, injectPouchButton, injectPlaylistButton,
+            markPouchButton, markPlaylistButton,
         };
     }
 
-    const YouTubeUi = { createYouTubeUi, BUTTON_ID, GUIDE_ID, RANGES, SORTS, ALL_TOPICS, PER_CHANNEL };
+    const YouTubeUi = {
+        createYouTubeUi,
+        BUTTON_ID, GUIDE_ID, PLAYLIST_BUTTON_ID,
+        RANGES: PouchSheet.RANGES, SORTS: PouchSheet.SORTS,
+        ALL_TOPICS: PouchSheet.ALL_TOPICS, PER_CHANNEL: PouchSheet.PER_CHANNEL,
+    };
 
     root.BB = root.BB || {};
     root.BB.YouTubeUi = YouTubeUi;
