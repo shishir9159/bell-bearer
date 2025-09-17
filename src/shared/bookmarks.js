@@ -139,6 +139,56 @@
         return next;
     }
 
+    /**
+     * When a video's most recent checkpoint was saved.
+     *
+     * Checkpoints written by early versions have no `timestamp` at all, which
+     * is why the sort below falls back to the video's position in the store:
+     * that order is append order, so it is the same answer for anything the
+     * clock cannot date.
+     */
+    function lastSaved(video) {
+        let latest = 0;
+        for (const bookmark of video.bookmarks) {
+            const at = typeof bookmark.timestamp === 'number' ? bookmark.timestamp : 0;
+            if (at > latest) latest = at;
+        }
+        return latest;
+    }
+
+    /**
+     * The orders the popup and the dashboard offer, in the order they are
+     * offered. `recent` is the default on both: the store is in append order,
+     * so without a sort the list opens on the oldest thing in it — which is
+     * the one video you are least likely to be still working through.
+     */
+    const SORTS = Object.freeze([
+        { id: 'recent', label: 'Newest first' },
+        { id: 'oldest', label: 'Oldest first' },
+        { id: 'title', label: 'Title A–Z' },
+        { id: 'most', label: 'Most checkpoints' },
+    ]);
+
+    /** A copy of `videos` in `order`. Never sorts the caller's array in place. */
+    function sortVideos(videos, order) {
+        const position = new Map(videos.map((video, index) => [video.id, index]));
+        const newest = (a, b) => (lastSaved(b) - lastSaved(a)) ||
+            (position.get(b.id) - position.get(a.id));
+
+        const next = videos.slice();
+        switch (order) {
+            case 'oldest':
+                return next.sort((a, b) => -newest(a, b));
+            case 'title':
+                return next.sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+            case 'most':
+                return next.sort((a, b) => (b.bookmarks.length - a.bookmarks.length) || newest(a, b));
+            case 'recent':
+            default:
+                return next.sort(newest);
+        }
+    }
+
     function buildExport(videos) {
         return {
             version: EXPORT_VERSION,
@@ -236,6 +286,7 @@
         KEY, EXPORT_VERSION,
         load, save, update,
         normalizeVideos, bookmarkTime, addBookmarks, removeBookmark,
+        lastSaved, sortVideos, SORTS,
         buildExport, validateImport, mergeImported, parseTimestampLinks,
     };
 

@@ -31,6 +31,15 @@
         popupWidth: 'wide', // 'wide' | 'compact'
         hideInstructions: false,
 
+        // How the dashboard orders its checkpoint cards. Pinned cards float
+        // above the order whatever it is — see src/shared/pins.js.
+        dashboardSort: 'recent', // 'recent' | 'oldest' | 'title' | 'most'
+
+        // The pouch sheet's "All" rail row covers the channels in the pouch.
+        // Turning this on widens it to every channel the account subscribes
+        // to; it is remembered so the sheet reopens the way it was left.
+        pouchShowAllSubscribed: false,
+
         // Browser integration
         openTabNextToCurrent: false,
         markdownContextMenu: true,
@@ -54,6 +63,23 @@
         // point at the wrong channels — see resolveChannelId in shared/feed.js.
         // A new key is how they are discarded rather than trusted.
         channelIdCache: 'bbChannelIdCache2',
+
+        // Parsed RSS, so the first pouch open after a browser restart is not a
+        // cold fetch of every channel. shared/feed.js owns the shape.
+        feedCache: 'bbFeedCache',
+
+        // Videos already watched, so the pouch stops offering them back.
+        watched: 'bbWatchedVideos',
+
+        // Checkpoint cards the user pinned to the top of the dashboard.
+        pinned: 'bbPinnedVideos',
+
+        // The account's own YouTube subscriptions, scraped once and cached —
+        // the pouch's "All subscribed" toggle reads this.
+        subscribed: 'bbSubscribedChannels',
+
+        // Playlists followed for new entries. shared/playlists.js owns it.
+        playlists: 'bbPlaylists',
     });
 
     function withDefaults(stored, keys) {

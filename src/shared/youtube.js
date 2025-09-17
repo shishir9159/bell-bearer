@@ -94,9 +94,34 @@
         return match ? match[1] : null;
     }
 
+    /**
+     * The playlist a URL names, or null.
+     *
+     * Only real playlists come back. YouTube puts a `list=` on a watch URL for
+     * autoplay mixes too, and those ids (RD…, UL…, TL…) are generated per
+     * viewer and have no feed — following one would be following nothing.
+     */
+    function extractPlaylistId(url) {
+        if (!url) return null;
+        try {
+            const parsed = new URL(url, 'https://www.youtube.com');
+            const id = parsed.searchParams.get('list');
+            if (!id) return null;
+            return /^(RD|UL|TL|LL|WL)/.test(id) ? null : id;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    /** Canonical URL for a playlist page. */
+    function playlistUrl(playlistId) {
+        return `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`;
+    }
+
     const YouTube = {
         extractVideoId, isYouTubeUrl, watchUrl, parseTimestampLink,
         extractChannelId, extractCanonicalChannelId,
+        extractPlaylistId, playlistUrl,
     };
 
     root.BB = root.BB || {};
