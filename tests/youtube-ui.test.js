@@ -80,12 +80,14 @@ suite('youtube drawer entry', () => {
         } finally { teardown(); }
     });
 
-    test('reads "Open Pouch", under the extension\'s own icon', () => {
+    test('reads "Pouch", under the extension\'s own icon', () => {
         drawer(3);
         try {
             makeUi().injectGuideEntry();
             const entry = document.getElementById('bb-guide-entry');
-            assertEqual(entry.textContent.trim(), 'Open Pouch');
+            // Every other row in that drawer is named after where it goes,
+            // not after what clicking it does, so this one is too.
+            assertEqual(entry.textContent.trim(), 'Pouch');
 
             const icon = entry.querySelector('.bb-guide-ico img');
             assert(icon, 'the row wears the Bell Bearer icon, not a generic glyph');

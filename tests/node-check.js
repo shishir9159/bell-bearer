@@ -414,6 +414,213 @@ const dayRecord = (at = T0) =>
         eq(Feed.ownChannelId(null), null);
     });
 
+    console.log('\n# checkpoint ordering');
+
+    const Pins = require('../src/shared/pins.js');
+
+    /** A video entry whose newest checkpoint was saved at `at`. */
+    const vid = (id, title, at, count = 1) => ({
+        id,
+        title,
+        url: 'u',
+        bookmarks: Array.from({ length: count }, (_, i) =>
+            ({ time: i * 10, timestamp: at - (count - 1 - i) * 1000 })),
+    });
+    const order = (videos, by) => Bookmarks.sortVideos(videos, by).map((v) => v.id);
+
+    check('newest first, which is not the order the store keeps', () => {
+        // The store appends, so an unsorted list opens on the first video ever
+        // saved — which is what the popup was showing.
+        eq(order([vid('old', 'Old', 1000), vid('new', 'New', 9000)], 'recent'), ['new', 'old']);
+    });
+    check('a video is dated by its newest checkpoint, not its first', () => {
+        eq(order([vid('a', 'A', 5000, 3), vid('b', 'B', 4000, 1)], 'recent'), ['a', 'b']);
+    });
+    check('checkpoints saved before timestamps existed keep append order', () => {
+        const undated = (id) => ({ id, title: id, bookmarks: [{ time: 0 }] });
+        eq(order([undated('first'), undated('second'), undated('third')], 'recent'),
+            ['third', 'second', 'first']);
+    });
+    check('the other three orders', () => {
+        const videos = [vid('a', 'Zebra', 1000, 5), vid('b', 'Apple', 9000, 1)];
+        eq(order(videos, 'oldest'), ['a', 'b']);
+        eq(order(videos, 'title'), ['b', 'a']);
+        eq(order(videos, 'most'), ['a', 'b']);
+    });
+    check('sorting leaves the caller’s array alone', () => {
+        const videos = [vid('old', 'Old', 1000), vid('new', 'New', 9000)];
+        Bookmarks.sortVideos(videos, 'recent');
+        eq(videos.map((v) => v.id), ['old', 'new']);
+    });
+
+    console.log('\n# pinning');
+    const hoisted = (videos, pins) => Pins.hoist(videos, pins).map((v) => v.id);
+    const three = [vid('a', 'A', 3), vid('b', 'B', 2), vid('c', 'C', 1)];
+
+    check('pinned first, most recently pinned at the very top', () => {
+        eq(hoisted(three, ['c', 'b']), ['c', 'b', 'a']);
+    });
+    check('the unpinned keep whatever order the sort gave them', () => {
+        eq(hoisted(three, ['b']), ['b', 'a', 'c']);
+        eq(hoisted(three, []), ['a', 'b', 'c']);
+    });
+    check('a pin on a video since deleted is ignored, not a hole in the list', () => {
+        eq(hoisted(three, ['gone', 'a']), ['a', 'b', 'c']);
+    });
+    await checkAsync('toggling pins, then unpins', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        eq(await Pins.toggle('x'), ['x']);
+        eq(await Pins.toggle('y'), ['y', 'x'], 'the newest pin goes to the top');
+        eq(await Pins.toggle('x'), ['y']);
+    });
+
+    console.log('\n# playlist ids');
+    check('a real playlist is picked out of either URL form', () => {
+        eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=abc&list=PLabc123'), 'PLabc123');
+        eq(YouTube.extractPlaylistId('https://www.youtube.com/playlist?list=PLabc123'), 'PLabc123');
+    });
+    check('an autoplay mix is not something anyone can follow', () => {
+        // RD/UL/TL ids are generated per viewer and have no RSS feed at all,
+        // so offering to follow one would be offering to follow nothing.
+        eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=a&list=RDabc'), null);
+        eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=a&list=WL'), null);
+        eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=a'), null);
+    });
+
+    console.log('\n# feed — fetching a large pouch');
+    await checkAsync('never opens more than MAX_PARALLEL at once', async () => {
+        let running = 0;
+        let peak = 0;
+        const out = await Feed.mapLimit(Array.from({ length: 40 }, (_, i) => i),
+            Feed.MAX_PARALLEL, async (n) => {
+                peak = Math.max(peak, ++running);
+                await new Promise((r) => setTimeout(r, 1));
+                running--;
+                return n;
+            });
+
+        if (peak > Feed.MAX_PARALLEL) throw new Error('peaked at ' + peak + ' in flight');
+        if (peak < 2) throw new Error('it must still be concurrent, peaked at ' + peak);
+        eq(out.slice(0, 4), [0, 1, 2, 3], 'results come back in input order');
+    });
+
+    console.log('\n# reading the account’s own subscriptions');
+
+    const YtSubs = require('../src/shared/yt-subs.js');
+
+    /** A stand-in /feed/channels document, shaped the way YouTube ships one. */
+    const subsPage = (channels, alsoMentioned) =>
+        '<script>var ytInitialData = ' + JSON.stringify({
+            contents: {
+                sectionListRenderer: {
+                    contents: channels.map((entry) => ({
+                        channelRenderer: {
+                            channelId: entry.id,
+                            title: { simpleText: entry.name },
+                            navigationEndpoint: { browseEndpoint: { canonicalBaseUrl: entry.handle } },
+                        },
+                    })),
+                },
+            },
+            ...(alsoMentioned || {}),
+        }) + ';</script>';
+
+    const uc = (ch) => 'UC' + ch.repeat(22);
+
+    check('pulls out every subscribed channel, with its handle URL', () => {
+        const found = YtSubs.parseSubscriptionsPage(subsPage([
+            { id: uc('a'), name: 'First', handle: '/@first' },
+            { id: uc('b'), name: 'Second', handle: '/@second' },
+        ]));
+        eq(found.length, 2);
+        eq(found[0].name, 'First');
+        eq(found[0].id, uc('a'));
+        eq(found[0].url, 'https://www.youtube.com/@first');
+    });
+
+    check('ignores channel ids the page merely mentions', () => {
+        // A subscriptions page names a dozen channels it is not listing — the
+        // viewer's own account in the masthead, anything in a recommendation
+        // shelf. This is why it walks for the grid's own renderers rather than
+        // running a regex for "channelId" over the document.
+        const found = YtSubs.parseSubscriptionsPage(subsPage(
+            [{ id: uc('a'), name: 'Subscribed', handle: '/@sub' }],
+            {
+                masthead: { channelId: uc('z') },
+                shelf: { videoRenderer: { channelId: uc('y') } },
+            }));
+        eq(found.map((c) => c.name), ['Subscribed']);
+    });
+
+    check('a title written as runs reads the same as a simpleText one', () => {
+        const html = '<script>var ytInitialData = ' + JSON.stringify({
+            gridChannelRenderer: {
+                channelId: uc('c'),
+                title: { runs: [{ text: 'Split ' }, { text: 'Name' }] },
+            },
+        }) + ';</script>';
+        eq(YtSubs.parseSubscriptionsPage(html)[0].name, 'Split Name');
+    });
+
+    check('braces inside a channel name do not end the object early', () => {
+        // This name closes the JSON if the extractor counts braces without
+        // knowing when it is inside a string literal.
+        const html = '<script>var ytInitialData = ' + JSON.stringify({
+            channelRenderer: { channelId: uc('d'), title: { simpleText: 'The } Channel {' } },
+        }) + ';</script>';
+        const found = YtSubs.parseSubscriptionsPage(html);
+        eq(found.length, 1);
+        eq(found[0].name, 'The } Channel {');
+    });
+
+    check('a page with nothing readable in it is an empty list, not a crash', () => {
+        eq(YtSubs.parseSubscriptionsPage('<html>signed out</html>'), []);
+        eq(YtSubs.parseSubscriptionsPage('var ytInitialData = {broken'), []);
+        eq(YtSubs.parseSubscriptionsPage(''), []);
+    });
+
+    console.log('\n# following a playlist');
+
+    const Playlists = require('../src/shared/playlists.js');
+
+    /** A Feed stand-in: the playlist holds v1 and v2, newest first. */
+    const twoEntries = {
+        fetchPlaylistVideos: async () => [
+            { id: 'v2', title: 'Two', published: 2 },
+            { id: 'v1', title: 'One', published: 1 },
+        ],
+    };
+
+    await checkAsync('what a playlist already holds is never reported as new', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        await Playlists.add({ id: 'PLone', title: 'Course', videoIds: ['v1', 'v2'] });
+        eq(await Playlists.newEntries(await Playlists.load(), twoEntries), [],
+            'following a two-hundred-entry playlist must not announce all two hundred');
+    });
+
+    await checkAsync('an entry added later is new, and stops being new once seen', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        await Playlists.add({ id: 'PLone', title: 'Course', videoIds: ['v1'] });
+
+        let entries = await Playlists.newEntries(await Playlists.load(), twoEntries);
+        eq(entries.map((e) => e.id), ['v2']);
+        eq(entries[0].playlistTitle, 'Course');
+
+        await Playlists.markAllSeen(entries);
+        eq(await Playlists.newEntries(await Playlists.load(), twoEntries), []);
+    });
+
+    await checkAsync('following one already followed renames it rather than duplicating', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        await Playlists.add({ id: 'PLone', title: 'Old name', videoIds: [] });
+        await Playlists.add({ id: 'PLone', title: 'New name', videoIds: [] });
+
+        const stored = await Playlists.load();
+        eq(stored.length, 1);
+        eq(stored[0].title, 'New name');
+        eq(Playlists.has(stored, 'PLone'), true);
+    });
+
     console.log('\n' + '='.repeat(52));
     console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
     process.exit(failed ? 1 : 0);

@@ -55,7 +55,8 @@ that code, not a replacement — it cannot press a key or play a video.
 | `shortcuts.test.js` | Which binding claims which keystroke, and the typing guard |
 | `bookmarks.test.js` | De-duplication, merging, import parsing, URL parsing, escaping |
 | `activity.test.js` | The activity store, and the relative-time labels on video cards |
-| `youtube-ui.test.js` | Where the "Open Pouch" row lands in YouTube's left drawer |
+| `youtube-ui.test.js` | Where the "Pouch" row lands in YouTube's left drawer |
+| `pouch.test.js` | The filed/followed state of the injected pouch and playlist buttons |
 | `node-check.js` | The Node gate — pure logic only, no DOM, no timers |
 
 ## How it works
