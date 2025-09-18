@@ -38,7 +38,7 @@ down in the background while you browse YouTube, cached to disk so a restart
 starts warm, and fetched a few at a time so a pouch with hundreds of channels
 draws its first row immediately instead of waiting for its slowest feed.
 
-Down the rail, **All** covers the channels you have filed. The **All subscribed**
+Down the rail, **All** covers the channels you have filed. The **Subscriptions**
 switch under it widens that to every channel the account follows, read once from
 your own subscriptions page and cached. Videos you have already watched drop out
 of **All** — opening one from the sheet counts, and so does a minute of playback

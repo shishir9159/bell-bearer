@@ -422,7 +422,7 @@
                 <button class="bb-subs-toggle" type="button" role="switch"
                         aria-checked="${this.allSubscribed}">
                     <span class="bb-switch" aria-hidden="true"><span class="bb-switch-dot"></span></span>
-                    <span class="bb-subs-label">All subscribed</span>
+                    <span class="bb-subs-label">Subscriptions</span>
                     <span class="bb-topic-n">${Dom.escapeHtml(note)}</span>
                 </button>`;
         }
@@ -432,7 +432,7 @@
 
             if (this.channels.length === 0 && !this.allSubscribed) {
                 parts.push(`<p class="bb-muted">No channels yet — use the button beside Subscribe to file one
-                    under a topic, or turn on <strong>All subscribed</strong> to see everything you follow.</p>`);
+                    under a topic, or turn on <strong>Subscriptions</strong> to see everything you follow.</p>`);
             } else {
                 const list = this.visible();
                 if (list.length) {

@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin } = window.BB;
+    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site } = window.BB;
 
     class Popup {
         constructor() {
@@ -23,12 +23,14 @@
             this.selectedVideoId = null;
             this.showSpeedBar = false;
             this.speedTab = null;
+            this.site = 'other';
         }
 
         async init() {
             Ui.installTheme({});
             if (Skin) await Skin.install();
             this.wireControls();
+            await this.detectSite();
 
             const [videos, settings] = await Promise.all([
                 Bookmarks.load(),
@@ -120,6 +122,27 @@
                     Settings.set({ hideInstructions: true });
                 });
             }
+        }
+
+        /**
+         * What the active tab is, so the popup can say something true about
+         * it: Ctrl+B only means anything on YouTube, but the speed keys work
+         * anywhere src/content/site.js already knows how to find a player.
+         */
+        async detectSite() {
+            try {
+                const tab = await TabActions.activeTab();
+                const hostname = tab && tab.url ? new URL(tab.url).hostname : '';
+                this.site = Site ? Site.detectSite(hostname) : 'other';
+            } catch (_) {
+                this.site = 'other';
+            }
+            document.body.dataset.bbSite = this.site;
+
+            const youtubeTip = document.getElementById('youtubeTip');
+            const genericTip = document.getElementById('genericTip');
+            if (youtubeTip) youtubeTip.hidden = this.site !== 'youtube';
+            if (genericTip) genericTip.hidden = this.site === 'youtube';
         }
 
         // ------------------------------------------------------ speed bar

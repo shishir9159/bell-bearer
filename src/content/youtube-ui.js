@@ -36,7 +36,15 @@
     const GUIDE_ID = 'bb-guide-entry';
     const CONTEXT_LOST = 'Bell Bearer was updated — please refresh this page.';
 
-    const POUCH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:24px;height:24px;fill:currentColor;"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"></path></svg>';
+    /**
+     * The pouch button carries two glyphs side by side: a "list" mark that
+     * says what the button is (a pouch of channels) and never changes, and a
+     * status mark that says whether this channel is in it. Only the status
+     * mark toggles between PLUS_ICON and TICK_ICON — the list mark is drawn
+     * once and markPouchButton never touches it again.
+     */
+    const BARS_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:15px;height:15px;fill:currentColor;"><path d="M2 6h20v2H2zm0 5h20v2H2zm0 5h14v2H2z"></path></svg>';
+    const PLUS_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:15px;height:15px;fill:currentColor;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></svg>';
 
     /**
      * The filed state. YouTube turns its own Subscribe button into a flat grey
@@ -45,7 +53,7 @@
      * the same grey, rather than going on offering a "+" for something already
      * done.
      */
-    const TICK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:22px;height:22px;fill:currentColor;"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
+    const TICK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:15px;height:15px;fill:currentColor;"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
 
     /**
      * Where the playlist panel on a watch page keeps its header, and where a
@@ -173,13 +181,16 @@
             button.id = BUTTON_ID;
             button.type = 'button';
             button.className = getPouchButtonStyle() === 'accent' ? 'bb-accent' : '';
-            button.innerHTML = POUCH_ICON;
+            button.innerHTML =
+                '<span class="bb-pouch-bars">' + BARS_ICON + '</span>' +
+                '<span class="bb-pouch-status">' + PLUS_ICON + '</span>';
             button.title = 'Add channel to Bell Bearer pouch';
             button.setAttribute('aria-label', 'Add channel to Bell Bearer pouch');
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                openAddChannelDialog();
+                if (button.classList.contains('bb-in-pouch')) openRemoveChannelDialog();
+                else openAddChannelDialog();
             });
 
             const smartimation = renderer && renderer.querySelector('yt-smartimation');
@@ -209,10 +220,11 @@
             const filed = (await channels()).some((channel) => sameChannel(channel, info));
 
             button.classList.toggle('bb-in-pouch', filed);
-            button.innerHTML = filed ? TICK_ICON : POUCH_ICON;
+            const status = button.querySelector('.bb-pouch-status');
+            if (status) status.innerHTML = filed ? TICK_ICON : PLUS_ICON;
 
             const label = filed
-                ? `${info.channelName} is in your pouch — click to re-file`
+                ? `${info.channelName} is in your pouch — click to remove it`
                 : 'Add channel to Bell Bearer pouch';
             button.title = label;
             button.setAttribute('aria-label', label);
@@ -265,7 +277,7 @@
             button.type = 'button';
             button.className = 'bb-playlist-follow';
             button.dataset.playlistId = playlistId;
-            button.innerHTML = '<span class="bb-pf-ico">' + POUCH_ICON + '</span><span class="bb-pf-label">Follow</span>';
+            button.innerHTML = '<span class="bb-pf-ico">' + PLUS_ICON + '</span><span class="bb-pf-label">Follow</span>';
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -299,7 +311,7 @@
 
             const isFollowed = Playlists.has(await followedPlaylists(), button.dataset.playlistId);
             button.classList.toggle('bb-following', isFollowed);
-            button.querySelector('.bb-pf-ico').innerHTML = isFollowed ? TICK_ICON : POUCH_ICON;
+            button.querySelector('.bb-pf-ico').innerHTML = isFollowed ? TICK_ICON : PLUS_ICON;
             button.querySelector('.bb-pf-label').textContent = isFollowed ? 'Following' : 'Follow';
             button.title = isFollowed
                 ? 'New entries in this playlist show in your pouch — click to stop following'
@@ -528,6 +540,65 @@
             }
         }
 
+        /**
+         * Take the channel on screen back out of the pouch.
+         *
+         * A tick that a stray click turns straight back into nothing would be
+         * the one nasty surprise in an otherwise reversible toggle, so this
+         * asks first — a skin-aware confirm rather than a native `confirm()`,
+         * which would sit outside the theme entirely.
+         */
+        async function openRemoveChannelDialog() {
+            if (!hasExtensionContext()) return notify(CONTEXT_LOST, 'warning');
+
+            const channelInfo = PageInfo.getChannelInfo();
+            const [filed, look] = await Promise.all([channels(), appearance()]);
+            const channel = filed.find((entry) => sameChannel(entry, channelInfo));
+            if (!channel) return openAddChannelDialog(); // state drifted; let the user re-file
+
+            const dialog = Overlay.open({
+                id: 'bb-remove-channel-modal',
+                contentHtml: removeChannelHtml(channelInfo),
+            });
+            if (!dialog) return;
+
+            dress(dialog.element, look);
+
+            const remove = dialog.element.querySelector('#bb-confirm-remove');
+            remove.addEventListener('click', async () => {
+                remove.disabled = true;
+                try {
+                    await Subscriptions.deleteChannel(channel.id);
+                    pouchChannels = null;
+                    dialog.close();
+                    markPouchButton();
+                    notify('Channel removed from pouch', 'info');
+                } catch (error) {
+                    console.error('Bell Bearer: failed to remove channel', error);
+                    remove.disabled = false;
+                    notify(CONTEXT_LOST, 'warning');
+                }
+            });
+        }
+
+        function removeChannelHtml(channelInfo) {
+            return `
+                <div class="bb-panel bb-panel-sm">
+                    <div class="bb-panel-head">
+                        <h3>Remove from pouch?</h3>
+                        <button class="bb-close" type="button" data-bb-close aria-label="Close">&times;</button>
+                    </div>
+                    <div class="bb-panel-body">
+                        <p class="bb-muted">${Dom.escapeHtml(channelInfo.channelName)} will be taken out of your
+                            pouch. Its topic keeps the other channels in it.</p>
+                        <div class="bb-actions">
+                            <button class="bb-btn" type="button" data-bb-close>Cancel</button>
+                            <button class="bb-btn bb-btn-danger" type="button" id="bb-confirm-remove">Remove</button>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
         function pouchHtml(channelInfo, topics, currentTopic) {
             const avatar = channelInfo.avatar
                 ? `<img class="bb-pouch-avatar" src="${Dom.safeUrlAttr(channelInfo.avatar)}" alt="">`
@@ -607,7 +678,7 @@
         // going through the watcher, which only runs on an animation frame.
         return {
             install, onNavigate, refreshPouchButton,
-            openTopicsDialog, openAddChannelDialog,
+            openTopicsDialog, openAddChannelDialog, openRemoveChannelDialog,
             injectGuideEntry, injectPouchButton, injectPlaylistButton,
             markPouchButton, markPlaylistButton,
         };

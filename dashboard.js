@@ -10,7 +10,7 @@
 (function () {
     'use strict';
 
-    const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, Transfer, TabActions, SettingsForm } = window.BB;
+    const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, Transfer, TabActions, SettingsForm, SiteIcons } = window.BB;
 
     /**
      * A pin, as a glyph. An emoji pin renders as a different object on every
@@ -22,7 +22,7 @@
     // Tab id / view id stems. 'stats' is the Activity view: its tab stays
     // hidden until the trackActivity setting is on, but the switching wiring
     // is unconditional so it works the moment the tab appears.
-    const VIEWS = ['dashboard', 'subscriptions', 'stats', 'settings'];
+    const VIEWS = ['dashboard', 'stats', 'settings'];
 
     class Dashboard {
         constructor() {
@@ -34,6 +34,14 @@
             this.view = 'dashboard';
             this.sort = Settings.DEFAULTS.dashboardSort;
             this.refreshing = false;
+
+            // The dashboard opens on the site launcher, not a site's own
+            // tools — see wireSiteWorkspace() for why one site can hold both
+            // a "which site" state and a "which tab within it" state without
+            // the two getting confused on the next click.
+            this.activeSite = null;
+            this.siteTab = 'checkpoints';
+            this.settingsSite = null;
 
             this.transfer = Transfer.createTransfer({
                 getVideos: () => this.videos,
@@ -53,6 +61,7 @@
             // then never be turned on.
             Ui.installTheme({ toggleId: 'themeToggle' });
             SettingsForm.bindAll();
+            this.renderSiteGrids();
             this.wireControls();
             this.transfer.install();
 
@@ -116,6 +125,102 @@
 
             this.wireVideosContainer();
             this.wireTopicsContainer();
+            this.wireSiteWorkspace();
+        }
+
+        // -------------------------------------------------- site launcher
+
+        /**
+         * One large, colored card per site Bell Bearer works with — today
+         * just YouTube, from src/shared/site-icons.js. The dashboard and the
+         * settings page each get their own grid, so a future site shows up
+         * in both the moment it is added to that one file.
+         */
+        renderSiteGrids() {
+            const html = SiteIcons.list().map(siteCardHtml).join('');
+            const dashboardGrid = document.getElementById('sitesGrid');
+            const settingsGrid = document.getElementById('settingsSitesGrid');
+            if (dashboardGrid) dashboardGrid.innerHTML = html;
+            if (settingsGrid) settingsGrid.innerHTML = html;
+        }
+
+        /**
+         * Picking a site card swaps the grid for that site's own workspace —
+         * its checkpoints and subscriptions, tabbed — rather than jumping
+         * straight into YouTube's tools as the only thing this page does.
+         * Settings gets the same launcher, one card deep, for the settings
+         * that only make sense for that one site.
+         */
+        wireSiteWorkspace() {
+            const on = (id, event, handler) => {
+                const element = document.getElementById(id);
+                if (element) element.addEventListener(event, handler);
+            };
+
+            const sitesGrid = document.getElementById('sitesGrid');
+            if (sitesGrid) {
+                sitesGrid.addEventListener('click', (event) => {
+                    const card = event.target.closest('.site-card');
+                    if (card) this.openSite(card.dataset.site);
+                });
+            }
+            on('siteBackBtn', 'click', () => this.closeSite());
+            on('siteCheckpointsTab', 'click', () => this.switchSiteTab('checkpoints'));
+            on('siteSubscriptionsTab', 'click', () => this.switchSiteTab('subscriptions'));
+
+            const settingsGrid = document.getElementById('settingsSitesGrid');
+            if (settingsGrid) {
+                settingsGrid.addEventListener('click', (event) => {
+                    const card = event.target.closest('.site-card');
+                    if (card) this.openSettingsSite(card.dataset.site);
+                });
+            }
+            on('siteSettingsBackBtn', 'click', () => this.closeSettingsSite());
+        }
+
+        openSite(siteId) {
+            const site = SiteIcons.get(siteId);
+            if (!site) return;
+
+            this.activeSite = siteId;
+            document.getElementById('sitesGrid').hidden = true;
+            document.getElementById('siteWorkspace').hidden = false;
+            document.getElementById('siteWorkspaceIcon').innerHTML = SiteIcons.svg(siteId, { size: 22 });
+            document.getElementById('siteWorkspaceName').textContent = site.name;
+            this.switchSiteTab(this.siteTab);
+        }
+
+        closeSite() {
+            this.activeSite = null;
+            document.getElementById('siteWorkspace').hidden = true;
+            document.getElementById('sitesGrid').hidden = false;
+        }
+
+        switchSiteTab(tab) {
+            this.siteTab = tab;
+            const isCheckpoints = tab === 'checkpoints';
+            document.getElementById('siteCheckpointsTab').classList.toggle('active', isCheckpoints);
+            document.getElementById('siteSubscriptionsTab').classList.toggle('active', !isCheckpoints);
+            document.getElementById('siteCheckpointsPanel').classList.toggle('active', isCheckpoints);
+            document.getElementById('siteSubscriptionsPanel').classList.toggle('active', !isCheckpoints);
+            this.render();
+        }
+
+        openSettingsSite(siteId) {
+            const site = SiteIcons.get(siteId);
+            if (!site) return;
+
+            this.settingsSite = siteId;
+            document.getElementById('settingsCommon').hidden = true;
+            document.getElementById('siteSettingsWorkspace').hidden = false;
+            document.getElementById('siteSettingsIcon').innerHTML = SiteIcons.svg(siteId, { size: 22 });
+            document.getElementById('siteSettingsName').textContent = site.name;
+        }
+
+        closeSettingsSite() {
+            this.settingsSite = null;
+            document.getElementById('siteSettingsWorkspace').hidden = true;
+            document.getElementById('settingsCommon').hidden = false;
         }
 
         wireVideosContainer() {
@@ -180,8 +285,10 @@
             const select = document.getElementById('sortVideos');
             if (select && select.value !== this.sort) select.value = this.sort;
 
-            if (this.view === 'dashboard') this.renderBookmarks();
-            else if (this.view === 'subscriptions') this.renderSubscriptions();
+            if (this.view === 'dashboard' && this.activeSite === 'youtube') {
+                if (this.siteTab === 'subscriptions') this.renderSubscriptions();
+                else this.renderBookmarks();
+            }
             // 'stats' renders itself — src/page/stats.js owns that view and
             // reads the activity store, never the bookmark store.
             else if (this.view === 'stats' && window.BB.Stats) window.BB.Stats.render();
@@ -510,6 +617,15 @@
     }
 
     // --------------------------------------------------------- templates
+
+    function siteCardHtml(site) {
+        return `
+            <button class="site-card" type="button" data-site="${Dom.escapeAttr(site.id)}">
+                <span class="site-card-icon">${SiteIcons.svg(site.id, { size: 40 })}</span>
+                <span class="site-card-name">${Dom.escapeHtml(site.name)}</span>
+                <span class="site-card-desc">${Dom.escapeHtml(site.description)}</span>
+            </button>`;
+    }
 
     function renderBookmarkRow(bookmark, index) {
         const isSpan = typeof bookmark.start === 'number' && typeof bookmark.end === 'number';

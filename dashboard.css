@@ -132,6 +132,117 @@ header h1 {
     to { opacity: 1; transform: translateY(0); }
 }
 
+/* ---------- site launcher ---------- */
+
+/* The dashboard's (and settings') entry point: one large card per site Bell
+   Bearer works with. Large and colored on purpose — this is meant to read as
+   a launcher for many sites, not a single YouTube screen with a label on it. */
+.sites-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+/* The browser's own `[hidden] { display: none }` loses to the class rule
+   above on specificity ties broken by source order — dashboard.css loads
+   after the UA sheet — so toggling `.hidden` in JS did nothing until this
+   said so explicitly. Same fix as .range-seg[hidden] further down. */
+.sites-grid[hidden] { display: none; }
+
+.site-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 24px;
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font);
+    transition: border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+
+.site-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--card-shadow-hover); }
+
+.site-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: var(--card-radius);
+    background: var(--surface-2);
+}
+
+.site-card-icon svg { display: block; }
+
+.site-card-name {
+    font-family: var(--font-head);
+    font-size: 16px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text);
+}
+
+.site-card-desc { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+
+/* ---------- site workspace ---------- */
+
+/* What a card opens into: a small header naming the site, and — on the
+   dashboard only — a pair of subtabs for that site's own views. Settings'
+   workspace reuses the same head without the subtabs, one panel being all
+   there is to show. */
+.site-workspace-head {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+}
+
+.site-workspace-brand { display: flex; align-items: center; gap: 10px; }
+.site-workspace-icon { display: flex; align-items: center; }
+.site-workspace-icon svg { display: block; }
+
+.site-workspace-brand h2 {
+    font-family: var(--font-head);
+    font-size: 19px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text);
+}
+
+.site-subtabs { display: flex; gap: 4px; margin-left: auto; }
+
+.site-subtab {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-family: var(--font);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: var(--r-pill);
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.site-subtab:hover { border-color: var(--accent-soft-2); }
+
+.site-subtab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+
+.site-panel { display: none; }
+.site-panel.active { display: block; animation: bb-rise .18s ease-out; }
+
 .dashboard-header,
 .subscriptions-header {
     display: flex;

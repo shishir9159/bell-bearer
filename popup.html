@@ -51,7 +51,11 @@
         <div class="instructions" id="instructions">
             <h3>How to use</h3>
             <ul>
-                <li>Hold <strong>Ctrl + B</strong> while watching to drop a checkpoint. <strong>&gt;</strong> <strong>&lt;</strong> step speed, <strong>+</strong> resets.</li>
+                <!-- Checkpoints only exist on YouTube; the speed keys work on
+                     any page with a video (see src/content/site.js). Only one
+                     of these two lines is shown, chosen by the active tab. -->
+                <li id="youtubeTip">Hold <strong>Ctrl + B</strong> while watching to drop a checkpoint. <strong>&gt;</strong> <strong>&lt;</strong> step speed, <strong>+</strong> resets.</li>
+                <li id="genericTip" hidden><strong>&gt;</strong> <strong>&lt;</strong> step playback speed on this page, <strong>+</strong> resets it. Checkpoints are a YouTube feature.</li>
             </ul>
             <div class="instructions-footer">
                 <button id="dismissInstructions" class="btn-okay">Okay</button>
@@ -68,6 +72,7 @@
     <script src="src/shared/skin.js"></script>
     <script src="src/shared/youtube.js"></script>
     <script src="src/shared/bookmarks.js"></script>
+    <script src="src/content/site.js"></script>
     <script src="src/page/ui.js"></script>
     <script src="src/page/tab-actions.js"></script>
     <script src="popup.js"></script>
