@@ -27,12 +27,32 @@ Dashboard alone, so the row never has to shrink or scroll.
 *Wide* puts the video list and its checkpoints side by side, *Compact* shows one
 column and drills in when you pick a video.
 
-The topics overlay opens from **Open Pouch**, third in YouTube's left drawer
-under Home and Shorts, or from the pouch button beside Subscribe. The drawer row
-wears the extension's icon and takes its metrics and type from YouTube's own
-rules, so it lines up with Home and Shorts to the pixel. Only the full drawer
-gets the row — the collapsed icon rail is a different renderer and is left
-alone.
+The pouch sheet opens from **Pouch**, third in YouTube's left drawer under Home
+and Shorts, or from the pouch button beside Subscribe. The drawer row wears the
+extension's icon and takes its metrics and type from YouTube's own rules, so it
+lines up with Home and Shorts to the pixel. Only the full drawer gets the row —
+the collapsed icon rail is a different renderer and is left alone.
+
+The sheet opens on what it already has and fills in behind you: feeds are pulled
+down in the background while you browse YouTube, cached to disk so a restart
+starts warm, and fetched a few at a time so a pouch with hundreds of channels
+draws its first row immediately instead of waiting for its slowest feed.
+
+Down the rail, **All** covers the channels you have filed. The **All subscribed**
+switch under it widens that to every channel the account follows, read once from
+your own subscriptions page and cached. Videos you have already watched drop out
+of **All** — opening one from the sheet counts, and so does a minute of playback
+on YouTube itself. Inside a topic nothing is hidden: a topic is a shelf you go
+back to, and a hole in it reads as something having gone missing.
+
+### Playlists
+
+YouTube will tell you when a channel uploads. It will not tell you when
+something is added to a playlist, which for a course, a label's releases or a
+friend's mix is the only event that matters. **Follow** in a playlist header —
+on the playlist page, or on the queue panel while watching from one — puts that
+playlist's new entries in a strip at the foot of the pouch sheet. What the
+playlist already holds when you follow it is not reported as new.
 
 ## Keyboard shortcuts
 

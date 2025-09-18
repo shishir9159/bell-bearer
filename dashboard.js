@@ -10,7 +10,14 @@
 (function () {
     'use strict';
 
-    const { Bookmarks, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, Transfer, TabActions, SettingsForm } = window.BB;
+    const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, Transfer, TabActions, SettingsForm } = window.BB;
+
+    /**
+     * A pin, as a glyph. An emoji pin renders as a different object on every
+     * platform and is coloured by the font rather than the skin; this one takes
+     * currentColor and so follows the accent of whichever skin is on.
+     */
+    const PIN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3v2h-1v5l2 2.5V15h-4.2v6l-.8 1-.8-1v-6H7v-2.5L9 10V5H8V3z"/></svg>';
 
     // Tab id / view id stems. 'stats' is the Activity view: its tab stays
     // hidden until the trackActivity setting is on, but the switching wiring
@@ -20,10 +27,12 @@
     class Dashboard {
         constructor() {
             this.videos = [];
+            this.pinned = [];
             this.topics = [];
             this.channels = [];
             this.newVideos = [];
             this.view = 'dashboard';
+            this.sort = Settings.DEFAULTS.dashboardSort;
             this.refreshing = false;
 
             this.transfer = Transfer.createTransfer({
@@ -54,10 +63,13 @@
             // only the store that moved. Saving one checkpoint used to re-read
             // the bookmarks, the topics, the channels and the new-video list.
             const subscriptionKeys = [Settings.DATA.topics, Settings.DATA.channels, Settings.DATA.newVideos];
-            Settings.watch([Bookmarks.KEY, ...subscriptionKeys], (changed) => {
+            Settings.watch([Bookmarks.KEY, Pins.KEY, ...subscriptionKeys], (changed) => {
                 const jobs = [];
                 if (Bookmarks.KEY in changed) {
                     jobs.push(Bookmarks.load().then((videos) => { this.videos = videos; }));
+                }
+                if (Pins.KEY in changed) {
+                    jobs.push(Pins.load().then((pinned) => { this.pinned = pinned; }));
                 }
                 if (subscriptionKeys.some((key) => key in changed)) {
                     jobs.push(Subscriptions.load().then((subscriptions) => {
@@ -71,8 +83,15 @@
         }
 
         async reload() {
-            const [videos, subscriptions] = await Promise.all([Bookmarks.load(), Subscriptions.load()]);
+            const [videos, subscriptions, pinned, settings] = await Promise.all([
+                Bookmarks.load(),
+                Subscriptions.load(),
+                Pins.load(),
+                Settings.get(['dashboardSort']),
+            ]);
             this.videos = videos;
+            this.pinned = pinned;
+            this.sort = settings.dashboardSort;
             this.topics = subscriptions.topics;
             this.channels = subscriptions.channels;
             this.newVideos = subscriptions.newVideos;
@@ -91,6 +110,7 @@
             on('exportBtn', 'click', () => this.transfer.exportBookmarks());
             on('importBtn', 'click', () => this.transfer.showImportOptions());
             on('clearAll', 'click', () => this.clearAll());
+            this.setupSortControl();
             on('addTopicBtn', 'click', () => this.addTopic());
             on('refreshVideosBtn', 'click', () => this.refreshNewVideos());
 
@@ -110,7 +130,8 @@
                 const videoId = card && card.dataset.videoId;
                 const index = item ? Number(item.dataset.bookmarkIndex) : -1;
 
-                if (button.classList.contains('seek-btn')) this.seek(videoId, Number(button.dataset.time));
+                if (button.classList.contains('pin-btn')) this.togglePin(videoId);
+                else if (button.classList.contains('seek-btn')) this.seek(videoId, Number(button.dataset.time));
                 else if (button.classList.contains('delete-btn')) this.deleteBookmark(videoId, index);
                 else if (button.classList.contains('copy-bookmark-subtitle')) this.copyOne(videoId, index);
                 else if (button.classList.contains('copy-subtitles-with-time')) this.copyAll(videoId, true);
@@ -156,6 +177,9 @@
         }
 
         render() {
+            const select = document.getElementById('sortVideos');
+            if (select && select.value !== this.sort) select.value = this.sort;
+
             if (this.view === 'dashboard') this.renderBookmarks();
             else if (this.view === 'subscriptions') this.renderSubscriptions();
             // 'stats' renders itself — src/page/stats.js owns that view and
@@ -177,16 +201,27 @@
                 return;
             }
 
-            container.innerHTML = this.videos.map((video) => this.renderVideoCard(video)).join('');
+            // Sort first, then lift the pinned ones out of the result: the two
+            // are independent, so changing the order never loses a pin and
+            // pinning never quietly changes the order of everything else.
+            const ordered = Pins.hoist(Bookmarks.sortVideos(this.videos, this.sort), this.pinned);
+            const pinned = new Set(this.pinned);
+
+            container.innerHTML = ordered
+                .map((video) => this.renderVideoCard(video, pinned.has(video.id)))
+                .join('');
         }
 
-        renderVideoCard(video) {
+        renderVideoCard(video, isPinned) {
             const hasSubtitles = video.bookmarks.some((bookmark) => bookmark.subtitle);
             const count = video.bookmarks.length;
 
             return `
-                <div class="video-card" data-video-id="${Dom.escapeAttr(video.id)}">
+                <div class="video-card${isPinned ? ' is-pinned' : ''}" data-video-id="${Dom.escapeAttr(video.id)}">
                     <div class="video-card-header">
+                        <button class="pin-btn" type="button" aria-pressed="${!!isPinned}"
+                                title="${isPinned ? 'Unpin from the top' : 'Pin to the top'}"
+                                aria-label="${isPinned ? 'Unpin' : 'Pin'} ${Dom.escapeAttr(video.title)}">${PIN_ICON}</button>
                         <h3 class="video-title">${Dom.escapeHtml(video.title)}</h3>
                         <div class="video-card-meta">
                             <span class="bookmark-count-badge">${count} checkpoint${count === 1 ? '' : 's'}</span>
@@ -245,6 +280,42 @@
                             </div>` : ''}
                     </div>`;
             }).join('');
+        }
+
+        // ------------------------------------------------- sorting, pinning
+
+        /**
+         * Fill the sort dropdown from the shared list and remember the choice.
+         *
+         * The options are built here rather than written into dashboard.html so
+         * that adding an order means touching one array in the bookmark store,
+         * not three files that then disagree.
+         */
+        setupSortControl() {
+            const select = document.getElementById('sortVideos');
+            if (!select) return;
+
+            select.innerHTML = Bookmarks.SORTS
+                .map((sort) => `<option value="${Dom.escapeAttr(sort.id)}">${Dom.escapeHtml(sort.label)}</option>`)
+                .join('');
+
+            select.addEventListener('change', () => {
+                this.sort = select.value;
+                Settings.set({ dashboardSort: this.sort });
+                this.renderBookmarks();
+            });
+        }
+
+        async togglePin(videoId) {
+            if (!videoId) return;
+            const wasPinned = this.pinned.includes(videoId);
+
+            this.pinned = await Pins.toggle(videoId);
+            this.renderBookmarks();
+
+            // Pinning moves the card to the top of a long list, which is easy
+            // to miss if you were looking at where it used to be.
+            Ui.toast(wasPinned ? 'Unpinned' : 'Pinned to the top', 'info');
         }
 
         // ---------------------------------------------------- bookmark ops
@@ -401,8 +472,16 @@
             button.textContent = 'Refreshing…';
 
             try {
-                // Refresh means refresh: skip the feed cache the pouch reads from.
-                const videos = await Feed.fetchLatestForChannels(this.channels, 3, { fresh: true });
+                // Refresh means refresh: skip the feed cache the pouch reads
+                // from. With a large pouch this is a minute of work, so the
+                // button counts the channels off rather than sitting on one
+                // unchanging "Refreshing…" while nothing appears to happen.
+                const videos = await Feed.fetchLatestForChannels(this.channels, 3, {
+                    fresh: true,
+                    onProgress: (_videos, done, total) => {
+                        button.textContent = `Refreshing ${done}/${total}…`;
+                    },
+                });
                 if (videos.length === 0) {
                     Ui.toast('Could not read any channel feeds', 'error');
                     return;

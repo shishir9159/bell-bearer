@@ -639,6 +639,22 @@
 
 #bb-add-to-subscriptions-btn.bb-accent:hover { background: #7d0e03; filter: none; }
 
+/* Filed. YouTube turns its own Subscribe button into a flat grey pill once
+   you are subscribed, and this sits right beside it — so a channel already in
+   the pouch gets the same treatment rather than going on offering a "+" for
+   something already done. The accent style is deliberately overridden too:
+   "already filed" outranks "make me easy to find".  */
+
+#bb-add-to-subscriptions-btn.bb-in-pouch,
+#bb-add-to-subscriptions-btn.bb-accent.bb-in-pouch {
+    background: var(--yt-spec-badge-chip-background, #f2f2f2);
+    border-color: transparent;
+    color: var(--yt-spec-text-secondary, #606060);
+}
+
+#bb-add-to-subscriptions-btn.bb-in-pouch:hover { filter: brightness(.94); }
+
+
 /* The button is inserted next to Subscribe; keep that row horizontal. */
 .bb-inline-row {
     display: flex !important;
@@ -900,6 +916,165 @@
 
 .bb-themed[data-bb-skin="medieval"] .bb-sheet { border-radius: 4px; }
 
+/* ------------------------------------- "All subscribed" switch in the rail */
+
+/* It is nested under the All row because that is the row it widens. The
+   indent and the smaller type are what say so; without them it reads as a
+   fifth topic. */
+
+.bb-subs-toggle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: calc(100% - 12px);
+    margin: 2px 0 6px 12px;
+    padding: 7px 9px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--bb-sub);
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: background .14s ease, color .14s ease;
+}
+
+.bb-subs-toggle:hover { background: var(--bb-chip); color: var(--bb-text); }
+
+.bb-subs-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bb-switch {
+    flex-shrink: 0;
+    width: 28px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--bb-border-strong);
+    position: relative;
+    transition: background .16s ease;
+}
+
+.bb-switch-dot {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--bb-panel-solid);
+    transition: transform .16s cubic-bezier(.2, .8, .2, 1);
+}
+
+.bb-subs-toggle[aria-checked="true"] { color: var(--bb-accent); }
+.bb-subs-toggle[aria-checked="true"] .bb-switch { background: var(--bb-btn-fill); }
+.bb-subs-toggle[aria-checked="true"] .bb-switch-dot { transform: translateX(12px); }
+
+/* ------------------------------------------ playlist strip under the grid */
+
+.bb-strip {
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top: 1px solid var(--bb-border);
+}
+
+.bb-strip-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.bb-strip-head h4 {
+    font-family: var(--bb-font-head);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: var(--bb-head-track);
+    text-transform: var(--bb-head-case);
+    color: var(--bb-text);
+    margin: 0;
+}
+
+.bb-strip-n {
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--bb-on-accent);
+    background: var(--bb-btn-fill);
+    border-radius: 999px;
+    padding: 1px 8px;
+    -webkit-font-smoothing: antialiased;
+}
+
+.bb-strip-n:empty { display: none; }
+
+.bb-strip-clear {
+    margin-left: auto;
+    border: 1px solid var(--bb-border-strong);
+    background: transparent;
+    color: var(--bb-sub);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 11px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+.bb-strip-clear:hover { border-color: var(--bb-accent); color: var(--bb-accent); }
+
+/* Which playlist an entry came from, in place of the channel name. */
+.bb-pill {
+    background: var(--bb-chip);
+    border-radius: 4px;
+    padding: 1px 6px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ------------------------------------------------ follow-playlist button */
+
+/* Dropped into YouTube's own playlist header, so like the pouch button it
+   borrows YouTube's tokens for its resting state and falls back to fixed
+   values on the day those are renamed. */
+
+.bb-playlist-follow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 8px;
+    padding: 0 14px;
+    height: 32px;
+    border-radius: 16px;
+    font-family: 'Roboto', 'Arial', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    background: var(--yt-spec-badge-chip-background, #f0f0f0);
+    border: 1px solid var(--yt-spec-10-percent-layer, #d0d0d0);
+    color: var(--yt-spec-text-primary, #0f0f0f);
+    transition: filter .2s, background-color .2s;
+}
+
+.bb-playlist-follow:hover { filter: brightness(.92); }
+.bb-playlist-follow:disabled { opacity: .5; cursor: default; }
+
+.bb-playlist-follow .bb-pf-ico { display: inline-flex; }
+.bb-playlist-follow .bb-pf-ico svg { width: 17px; height: 17px; }
+
+/* Followed reads the way YouTube's own "Subscribed" pill does: flat, grey,
+   secondary text. A button offering to do something already done is the thing
+   being fixed here, so it must not go on looking like an invitation. */
+.bb-playlist-follow.bb-following {
+    background: var(--yt-spec-badge-chip-background, #f2f2f2);
+    border-color: transparent;
+    color: var(--yt-spec-text-secondary, #606060);
+}
+
 .bb-themed[data-bb-skin="riso"] .bb-topic,
 .bb-themed[data-bb-skin="deco"] .bb-topic,
 .bb-themed[data-bb-skin="riso"] .bb-topic-add,
@@ -912,6 +1087,10 @@
 .bb-themed[data-bb-skin="deco"] .bb-select,
 .bb-themed[data-bb-skin="riso"] .bb-btn,
 .bb-themed[data-bb-skin="deco"] .bb-btn,
+.bb-themed[data-bb-skin="riso"] .bb-strip-clear,
+.bb-themed[data-bb-skin="deco"] .bb-strip-clear,
+.bb-themed[data-bb-skin="riso"] .bb-subs-toggle,
+.bb-themed[data-bb-skin="deco"] .bb-subs-toggle,
 .bb-themed[data-bb-skin="riso"] .bb-topic-chip,
 .bb-themed[data-bb-skin="deco"] .bb-topic-chip { border-radius: 0; }
 

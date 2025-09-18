@@ -29,6 +29,12 @@
             <div class="dashboard-header">
                 <h2>Your Saved Videos</h2>
                 <div class="dashboard-controls">
+                    <label class="sort-field">
+                        <span class="sort-label">Sort</span>
+                        <!-- Options come from Bookmarks.SORTS so the popup and
+                             this list can never disagree about what they mean. -->
+                        <select id="sortVideos" class="select-control" aria-label="Sort saved videos"></select>
+                    </label>
                     <button id="exportBtn" class="btn-secondary">Export</button>
                     <button id="importBtn" class="btn-secondary">Import</button>
                     <button id="clearAll" class="btn-secondary btn-danger">Clear All</button>
@@ -350,6 +356,7 @@
     <script src="src/shared/activity.js"></script>
     <script src="src/shared/youtube.js"></script>
     <script src="src/shared/bookmarks.js"></script>
+    <script src="src/shared/pins.js"></script>
     <script src="src/shared/subscriptions.js"></script>
     <script src="src/shared/feed.js"></script>
     <script src="src/page/ui.js"></script>

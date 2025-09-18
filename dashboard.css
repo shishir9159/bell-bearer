@@ -156,6 +156,52 @@ header h1 {
 .dashboard-controls,
 .subscriptions-controls { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* The sort field sits with the Export/Import row, so it is built to the same
+   height and radius as .btn-secondary rather than to the settings form's. */
+
+.sort-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--btn-radius);
+    padding: 0 10px 0 13px;
+    height: 35px;
+}
+
+.sort-field:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
+
+.sort-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.select-control {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0 18px 0 0;
+    /* The native arrow cannot be recoloured, so it is drawn here instead and
+       the control's own is removed — otherwise a dark skin gets a light one. */
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-size: 5px 5px, 5px 5px;
+    background-position: right 6px center, right 1px center;
+    background-repeat: no-repeat;
+}
+
+.select-control:focus { outline: none; }
+
 /* ---------- buttons ---------- */
 
 .btn-secondary {
@@ -196,11 +242,68 @@ header h1 {
 
 /* ---------- cards ---------- */
 
+/* A pinned card keeps its place at the top of whatever order is on, and says
+   so with a rule down its leading edge rather than a badge — the badge row on
+   the right is already carrying the checkpoint count and the copy buttons. */
+
+.video-card.is-pinned {
+    border-color: var(--accent);
+    box-shadow: var(--card-shadow-hover);
+}
+
+.video-card.is-pinned::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    border-radius: var(--card-radius) 0 0 var(--card-radius);
+    background: var(--accent);
+}
+
+.pin-btn {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    margin: -3px 0 0 -4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.pin-btn svg { width: 17px; height: 17px; fill: currentColor; display: block; }
+
+.pin-btn:hover {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+}
+
+/* An unpinned pin lies over; pinning stands it up. It is a small motion, but
+   it is the one that reads as "stuck in" without any colour at all. */
+.pin-btn svg { transform: rotate(-38deg); transition: transform .18s cubic-bezier(.2, .8, .2, 1); }
+
+.pin-btn[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+
+.pin-btn[aria-pressed="true"] svg { transform: rotate(0deg); }
+.pin-btn:active { transform: scale(.92); }
+
 .videos-container,
 .topics-container { display: flex; flex-direction: column; gap: 14px; }
 
 .video-card,
 .topic-card {
+    position: relative;
+    overflow: hidden;
     background: var(--surface);
     border: var(--card-border-width) solid var(--border);
     border-radius: var(--card-radius);

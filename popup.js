@@ -222,6 +222,14 @@
             label.textContent = total ? `${total} checkpoint${total === 1 ? '' : 's'}` : '';
         }
 
+        /**
+         * The list, most recently checkpointed first.
+         *
+         * The store is in append order, so rendering it as it comes put the
+         * first video ever saved at the top and pushed the one just
+         * checkpointed to the bottom of a scroll — in a popup that exists to
+         * get you back to where you were a minute ago.
+         */
         renderVideoList() {
             const list = document.getElementById('videoList');
 
@@ -235,7 +243,7 @@
                 return;
             }
 
-            list.innerHTML = this.videos.map((video) => {
+            list.innerHTML = Bookmarks.sortVideos(this.videos, 'recent').map((video) => {
                 const count = video.bookmarks.length;
                 return `
                     <div class="video-item${video.id === this.selectedVideoId ? ' selected' : ''}"
