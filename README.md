@@ -191,7 +191,6 @@ src/page/       shared by popup.html and dashboard.html
 skins.css       the token layer for every skin — linked before popup/dashboard css
 skin-fonts.css  @font-face for the skin families (files not bundled; see Skins)
 textures/       parchment, newsprint and grain tiles used by the skins
-design/         the source design files this restyle was built from
 
 tests/          zero-dependency browser test suite — see tests/README.md
 ```
