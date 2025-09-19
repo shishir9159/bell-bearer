@@ -89,6 +89,21 @@ body[data-skin="default"] {
     --flourish: none;
     --card-border-width: 1px;
     --rail-width: 3px;
+
+    /* Keyboard keycaps: a fixed hardware palette the user supplied, kept
+       constant across day/night so the board never sinks into --surface and
+       loses its keys — the whole point is that it reads as a physical object
+       sitting on the page, not a themed panel. */
+    --kbd-bg: #000000;
+    --kbd-key-bg: #fffff4;
+    --kbd-key-color: #000000;
+    --kbd-sub-color: #6b6b63;
+    --kbd-esc-bg: #ee786e;
+    --kbd-esc-color: #2a0f0b;
+    --kbd-arrow-bg: #a2ccb6;
+    --kbd-arrow-color: #12331f;
+    --kbd-active-bg: #fceeb5;
+    --kbd-active-color: #4a3a06;
 }
 
 /* 1b. DEFAULT — night (the Discord blurple that was already there) */
@@ -223,6 +238,19 @@ body[data-skin="riso"] {
     --tex-opacity: .55;
     --card-border-width: 1.5px;
     --rail-width: 5px;
+
+    /* Keyboard: black stock, cream keys, the three spot inks doing the same
+       job as the peach/green/yellow do in the default skin. */
+    --kbd-bg: #17161a;
+    --kbd-key-bg: #f7f4e9;
+    --kbd-key-color: #17161a;
+    --kbd-sub-color: #86828c;
+    --kbd-esc-bg: var(--ink-pink);
+    --kbd-esc-color: #fffdf6;
+    --kbd-arrow-bg: var(--ink-blue);
+    --kbd-arrow-color: #fffdf6;
+    --kbd-active-bg: var(--ink-yellow);
+    --kbd-active-color: #17161a;
 }
 
 /* 2b. RISO — night: same inks, printed on black stock. */
@@ -346,6 +374,18 @@ body[data-skin="medieval"] {
     --dropcap: block;
     --card-border-width: 1px;
     --rail-width: 3px;
+
+    /* Keyboard: iron-gall board, parchment keys, rubric and gold leaf. */
+    --kbd-bg: #2b2016;
+    --kbd-key-bg: #ecdcb8;
+    --kbd-key-color: #3b2a17;
+    --kbd-sub-color: #8d7757;
+    --kbd-esc-bg: var(--rubric);
+    --kbd-esc-color: #f6ecd4;
+    --kbd-arrow-bg: var(--gold);
+    --kbd-arrow-color: #2b2016;
+    --kbd-active-bg: #d8ac52;
+    --kbd-active-color: #2b2016;
 }
 
 /* 3b. MEDIEVAL — night: the same page by candlelight. */
@@ -477,6 +517,19 @@ body[data-skin="deco"] {
     --flourish: block;
     --card-border-width: 1px;
     --rail-width: 2px;
+
+    /* Keyboard: black lacquer, ivory keys, gilt and jade — the same pairing
+       the wordmark and rules already use. */
+    --kbd-bg: #14110d;
+    --kbd-key-bg: #f7f3e8;
+    --kbd-key-color: #14110d;
+    --kbd-sub-color: #8e836f;
+    --kbd-esc-bg: var(--gold);
+    --kbd-esc-color: #14110d;
+    --kbd-arrow-bg: var(--jade);
+    --kbd-arrow-color: #f7f3e8;
+    --kbd-active-bg: var(--gold-2);
+    --kbd-active-color: #14110d;
 }
 
 /* 4b. ART DECO — night: gilt on lacquer. */

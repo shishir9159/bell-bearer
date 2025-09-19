@@ -644,10 +644,10 @@ header h1 {
 .kbd-widget {
     position: relative;
     max-width: 780px;
-    margin-top: 4px;
+    margin: 4px auto 0;
     padding: 10px;
-    background: var(--surface-3);
-    border: 1px solid var(--border);
+    background: var(--kbd-bg);
+    border: none;
     border-radius: 10px;
 }
 
@@ -661,8 +661,8 @@ header h1 {
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    background: var(--surface);
-    color: var(--text);
+    background: var(--kbd-key-bg);
+    color: var(--kbd-key-color);
     border-radius: 5px;
     cursor: pointer;
     font-family: var(--font);
@@ -672,18 +672,18 @@ header h1 {
     transition: background .1s ease, transform .1s ease;
 }
 
-.kbd-key:hover { background: var(--surface-3); }
-.kbd-key:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kbd-key:hover { filter: brightness(.94); }
+.kbd-key:focus-visible { outline: 2px solid var(--kbd-active-bg); outline-offset: 1px; }
 .kbd-key.is-active,
-.kbd-key:active { background: var(--accent); color: var(--on-accent); transform: scale(.94); }
+.kbd-key:active { background: var(--kbd-active-bg); color: var(--kbd-active-color); transform: scale(.94); }
 
 .kbd-key svg { display: block; }
 
-.kbd-sub { font-size: 9px; color: var(--text-faint); margin-top: 1px; }
-.kbd-key.is-active .kbd-sub { color: var(--on-accent); opacity: .8; }
+.kbd-sub { font-size: 9px; color: var(--kbd-sub-color); margin-top: 1px; }
+.kbd-key.is-active .kbd-sub { color: var(--kbd-active-color); opacity: .8; }
 
-.kbd-key.key__esc { background: var(--danger-bg); color: var(--danger); }
-.kbd-key.key__arrow { background: var(--accent-soft); color: var(--accent-ink); }
+.kbd-key.key__esc { background: var(--kbd-esc-bg); color: var(--kbd-esc-color); }
+.kbd-key.key__arrow { background: var(--kbd-arrow-bg); color: var(--kbd-arrow-color); }
 
 .kbd-key.key__oneandhalf { flex-grow: 1.5; }
 .kbd-key.key__delete { flex-grow: 2; }
