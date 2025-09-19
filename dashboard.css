@@ -149,18 +149,21 @@ header h1 {
    said so explicitly. Same fix as .range-seg[hidden] further down. */
 .sites-grid[hidden] { display: none; }
 
+/* No name, no description — just the mark, filling the card. The card's own
+   footprint is unchanged from when it carried a name and a description
+   underneath (fixed min-height rather than shrink-to-fit), so the grid looks
+   the same from across the room; only what is drawn inside it changed. */
 .site-card {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    min-height: 156px;
     padding: 24px;
     background: var(--surface);
     border: var(--card-border-width) solid var(--border);
     border-radius: var(--card-radius);
     box-shadow: var(--card-shadow);
     cursor: pointer;
-    text-align: left;
     font-family: var(--font);
     transition: border-color .15s ease, transform .12s ease, box-shadow .15s ease;
 }
@@ -171,24 +174,14 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 64px;
-    height: 64px;
-    border-radius: var(--card-radius);
-    background: var(--surface-2);
+    width: 100%;
+    height: 100%;
 }
 
-.site-card-icon svg { display: block; }
-
-.site-card-name {
-    font-family: var(--font-head);
-    font-size: 16px;
-    font-weight: var(--head-weight);
-    letter-spacing: var(--head-track);
-    text-transform: var(--head-case);
-    color: var(--text);
-}
-
-.site-card-desc { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+/* The attribute width/height on the <svg> itself (see site-icons.js) are a
+   fallback for anywhere this glyph is used without this stylesheet; here the
+   card decides the size, as large as the card comfortably holds. */
+.site-card-icon svg { display: block; width: 84px; height: 84px; }
 
 /* ---------- site workspace ---------- */
 
@@ -637,6 +630,82 @@ header h1 {
 }
 
 .shortcut-desc { font-size: 13px; color: var(--text-muted); text-align: right; line-height: 1.45; }
+
+/* ---------- interactive keyboard ---------- */
+
+/* The layout — rows, which keys are wider, which carry an icon instead of a
+   letter — comes from a design the user supplied; only the palette is ours,
+   read off the same tokens as the rest of the page rather than the design's
+   own hard-coded colors, so the keyboard is never the one thing on the page
+   that ignores the chosen skin. Key widths are flex-grow ratios of the
+   original's pixel widths (e.g. a 100px key against a 50px base is grow: 2)
+   so the whole board scales with the settings column instead of overflowing
+   a narrow one. */
+.kbd-widget {
+    position: relative;
+    max-width: 780px;
+    margin-top: 4px;
+    padding: 10px;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.kbd-row { display: flex; gap: 3px; margin-top: 3px; }
+.kbd-row:first-child { margin-top: 0; }
+
+.kbd-key {
+    flex: 1 1 0;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: 12px;
+    line-height: 1;
+    user-select: none;
+    transition: background .1s ease, transform .1s ease;
+}
+
+.kbd-key:hover { background: var(--surface-3); }
+.kbd-key:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kbd-key.is-active,
+.kbd-key:active { background: var(--accent); color: var(--on-accent); transform: scale(.94); }
+
+.kbd-key svg { display: block; }
+
+.kbd-sub { font-size: 9px; color: var(--text-faint); margin-top: 1px; }
+.kbd-key.is-active .kbd-sub { color: var(--on-accent); opacity: .8; }
+
+.kbd-key.key__esc { background: var(--danger-bg); color: var(--danger); }
+.kbd-key.key__arrow { background: var(--accent-soft); color: var(--accent-ink); }
+
+.kbd-key.key__oneandhalf { flex-grow: 1.5; }
+.kbd-key.key__delete { flex-grow: 2; }
+.kbd-key.key__enter { flex-grow: 2.24; }
+.kbd-key.key__caps { flex-grow: 1.8; }
+.kbd-key.key__shift-left { flex-grow: 2; }
+.kbd-key.key__spacebar { flex-grow: 6; }
+.kbd-key.key__bottom-funct { flex-grow: 1.4; }
+
+.kbd-tip {
+    position: absolute;
+    z-index: 5;
+    max-width: 260px;
+    padding: 7px 10px;
+    background: var(--text);
+    color: var(--surface);
+    font-size: 12px;
+    line-height: 1.4;
+    border-radius: var(--r-sm);
+    box-shadow: var(--card-shadow-hover);
+    pointer-events: none;
+}
 
 /* ---------- toggles ---------- */
 

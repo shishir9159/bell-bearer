@@ -162,7 +162,7 @@ suite('the follow-playlist button', () => {
         } finally { clearWatchPage(); }
     });
 
-    test('a playlist already followed reads Following, with the tick', async () => {
+    test('a playlist already followed reads Following', async () => {
         MockChrome.reset({
             localStore: {
                 bbPlaylists: [{ id: 'PLcourse', title: 'Course', seen: ['v1'], addedAt: 1 }],
@@ -177,7 +177,7 @@ suite('the follow-playlist button', () => {
             const button = document.getElementById('bb-follow-playlist-btn');
             assert(button.classList.contains('bb-following'));
             assertEqual(button.querySelector('.bb-pf-label').textContent, 'Following');
-            assert(TICK_PATH.test(button.innerHTML));
+            // No icon on this button — just the label; see youtube-ui.js.
             assertEqual(button.getAttribute('aria-pressed'), 'true');
         } finally { clearWatchPage(); }
     });

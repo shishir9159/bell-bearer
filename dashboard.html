@@ -145,61 +145,15 @@
                 </div>
 
                 <div class="settings-section">
-                    <h3>Keyboard Shortcuts</h3>
+                    <h3>General Keyboard Shortcuts</h3>
                     <div class="shortcut-list">
                         <div class="shortcut-item">
-                            <span class="shortcut-key">Alt + 1-9</span>
-                            <span class="shortcut-desc">Skip forward by that many seconds</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">Shift + 1-9</span>
-                            <span class="shortcut-desc">Skip backward by that many seconds</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">Ctrl + Shift + 1-9</span>
-                            <span class="shortcut-desc">Temporary 3x speed boost for that many seconds</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">&gt;</span>
-                            <span class="shortcut-desc">Increase playback speed</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">&lt;</span>
-                            <span class="shortcut-desc">Decrease playback speed</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">+</span>
-                            <span class="shortcut-desc">Reset playback speed to 1x</span>
-                        </div>
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">Ctrl + Shift + L</span>
-                            <span class="shortcut-desc">Copy this page as a Markdown link (rebindable at chrome://extensions/shortcuts)</span>
+                            <span class="shortcut-key">Shift + F</span>
+                            <span class="shortcut-desc">Enter hop mode</span>
                         </div>
                     </div>
-
-                    <div class="settings-option">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="enableSkipShortcuts">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="setting-label">Enable Numeric Skip Shortcuts (Alt+1-9 forward / Shift+1-9 back)</span>
-                    </div>
-
-                    <div class="settings-option" style="margin-top: 16px;">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="showSpeedButtonsInPopup">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="setting-label">Show speed buttons in popup (Default: Off) — speed also works on any site via the &gt; &lt; + keys</span>
-                    </div>
-
-                    <div class="settings-option" style="margin-top: 16px;">
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="rememberPlaybackSpeed">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="setting-label">Keep my playback speed — re-apply the speed you chose when a site resets it (new video, ad break)</span>
-                    </div>
+                    <p>Click a key below for what it does. Site-specific shortcuts (checkpoints, subtitles) live under that site's own settings.</p>
+                    <div id="shortcutsKeyboard"></div>
                 </div>
 
                 <div class="settings-section">
@@ -288,6 +242,58 @@
                                 <span class="shortcut-key">Ctrl + B</span>
                                 <span class="shortcut-desc">Create checkpoint (hold and release)</span>
                             </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">Alt + 1-9</span>
+                                <span class="shortcut-desc">Skip forward by that many seconds</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">Shift + 1-9</span>
+                                <span class="shortcut-desc">Skip backward by that many seconds</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">Ctrl + Shift + 1-9</span>
+                                <span class="shortcut-desc">Temporary 3x speed boost for that many seconds</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">&gt;</span>
+                                <span class="shortcut-desc">Increase playback speed</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">&lt;</span>
+                                <span class="shortcut-desc">Decrease playback speed</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">+</span>
+                                <span class="shortcut-desc">Reset playback speed to 1x</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">Ctrl + Shift + L</span>
+                                <span class="shortcut-desc">Copy this page as a Markdown link (rebindable at chrome://extensions/shortcuts)</span>
+                            </div>
+                        </div>
+
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="enableSkipShortcuts">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="setting-label">Enable Numeric Skip Shortcuts (Alt+1-9 forward / Shift+1-9 back)</span>
+                        </div>
+
+                        <div class="settings-option" style="margin-top: 16px;">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="showSpeedButtonsInPopup">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="setting-label">Show speed buttons in popup (Default: Off) — speed also works on any site via the &gt; &lt; + keys</span>
+                        </div>
+
+                        <div class="settings-option" style="margin-top: 16px;">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="rememberPlaybackSpeed">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="setting-label">Keep my playback speed — re-apply the speed you chose when a site resets it (new video, ad break)</span>
                         </div>
 
                         <div class="settings-option" style="display: flex; align-items: center; gap: 12px;">
@@ -407,9 +413,11 @@
     <script src="src/shared/subscriptions.js"></script>
     <script src="src/shared/feed.js"></script>
     <script src="src/shared/site-icons.js"></script>
+    <script src="src/shared/feather-icons.js"></script>
     <script src="src/page/ui.js"></script>
     <script src="src/page/settings-form.js"></script>
     <script src="src/page/skin-picker.js"></script>
+    <script src="src/page/keyboard.js"></script>
     <script src="src/page/stats.js"></script>
     <script src="src/page/transfer.js"></script>
     <script src="src/page/tab-actions.js"></script>

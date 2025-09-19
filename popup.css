@@ -469,6 +469,66 @@ header h1 {
 .empty-state p, .no-selection p { font-size: 12.5px; line-height: 1.55; }
 .empty-icon { font-size: 30px; line-height: 1; margin-bottom: 10px; opacity: .8; }
 
+/* ---------- generic (non-YouTube) panel ---------- */
+
+/* #youtubePanel wraps .main-content and .instructions without a box of its
+   own — `display: contents` — so they still take part directly in .container's
+   flex column exactly as when they sat in it unwrapped. The [hidden] override
+   is needed because a plain class/id rule outranks the browser's own
+   `[hidden] { display: none }` on a specificity tie broken by source order;
+   see .sites-grid[hidden] in dashboard.css for the same fix. */
+#youtubePanel { display: contents; }
+#youtubePanel[hidden] { display: none; }
+
+.generic-panel {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    min-height: 0;
+}
+
+.generic-panel[hidden] { display: none; }
+
+.generic-panel-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    max-width: 300px;
+    text-align: center;
+}
+
+.generic-icon { font-size: 36px; line-height: 1; opacity: .55; }
+
+.generic-title {
+    font-family: var(--font-head);
+    font-size: 15px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    color: var(--text);
+}
+
+.generic-hint { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
+
+.btn-generic-dashboard {
+    margin-top: 8px;
+    padding: 11px 26px;
+    border: none;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: var(--font);
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s ease, transform .12s ease;
+}
+
+.btn-generic-dashboard:hover { background: var(--accent-hover); }
+.btn-generic-dashboard:active { transform: translateY(1px); }
+
 /* ---------- instructions ---------- */
 
 .instructions {

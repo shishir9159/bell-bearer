@@ -30,7 +30,7 @@
             Ui.installTheme({});
             if (Skin) await Skin.install();
             this.wireControls();
-            await this.detectSite();
+            await this.applySiteLayout();
 
             const [videos, settings] = await Promise.all([
                 Bookmarks.load(),
@@ -62,10 +62,12 @@
                 if (element) element.addEventListener(event, handler);
             };
 
-            on('dashboardBtn', 'click', () => {
+            const openDashboard = () => {
                 chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
                 window.close();
-            });
+            };
+            on('dashboardBtn', 'click', openDashboard);
+            on('genericDashboardBtn', 'click', openDashboard);
 
             // Delegation: the list is re-rendered wholesale, so per-row
             // listeners would have to be re-attached (and were leaking).
@@ -125,11 +127,20 @@
         }
 
         /**
-         * What the active tab is, so the popup can say something true about
-         * it: Ctrl+B only means anything on YouTube, but the speed keys work
-         * anywhere src/content/site.js already knows how to find a player.
+         * The popup is two different tools wearing one window: on YouTube it
+         * is the checkpoint list this file was written for; everywhere else
+         * checkpoints do not exist, so showing an empty list and a "hold
+         * Ctrl+B on a YouTube video" tip on, say, a Netflix tab was a popup
+         * explaining a feature that page cannot have. Decided once, up
+         * front, off the one thing that tells the two apart — the site.
+         *
+         * The speed bar is not part of this split: src/page/tab-actions.js
+         * already drives it through a generic "find a <video> on this page"
+         * fallback when the content script has no site-specific reader for
+         * it, so it is offered on both panels precisely because it is not
+         * site-specific.
          */
-        async detectSite() {
+        async applySiteLayout() {
             try {
                 const tab = await TabActions.activeTab();
                 const hostname = tab && tab.url ? new URL(tab.url).hostname : '';
@@ -139,10 +150,11 @@
             }
             document.body.dataset.bbSite = this.site;
 
-            const youtubeTip = document.getElementById('youtubeTip');
-            const genericTip = document.getElementById('genericTip');
-            if (youtubeTip) youtubeTip.hidden = this.site !== 'youtube';
-            if (genericTip) genericTip.hidden = this.site === 'youtube';
+            const isYouTube = this.site === 'youtube';
+            const youtubePanel = document.getElementById('youtubePanel');
+            const genericPanel = document.getElementById('genericPanel');
+            if (youtubePanel) youtubePanel.hidden = !isYouTube;
+            if (genericPanel) genericPanel.hidden = isYouTube;
         }
 
         // ------------------------------------------------------ speed bar

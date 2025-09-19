@@ -64,6 +64,9 @@
             this.renderSiteGrids();
             this.wireControls();
             this.transfer.install();
+            if (window.BB.KeyboardWidget) {
+                window.BB.KeyboardWidget.mount(document.getElementById('shortcutsKeyboard'));
+            }
 
             await this.reload();
             this.render();
@@ -618,12 +621,16 @@
 
     // --------------------------------------------------------- templates
 
+    /**
+     * Icon only — no name, no description underneath. The button still
+     * needs to say what it is to anyone not reading it by eye, so the name
+     * goes on aria-label and title instead of into visible markup.
+     */
     function siteCardHtml(site) {
         return `
-            <button class="site-card" type="button" data-site="${Dom.escapeAttr(site.id)}">
-                <span class="site-card-icon">${SiteIcons.svg(site.id, { size: 40 })}</span>
-                <span class="site-card-name">${Dom.escapeHtml(site.name)}</span>
-                <span class="site-card-desc">${Dom.escapeHtml(site.description)}</span>
+            <button class="site-card" type="button" data-site="${Dom.escapeAttr(site.id)}"
+                    aria-label="${Dom.escapeAttr(site.name)}" title="${Dom.escapeAttr(site.name)}">
+                <span class="site-card-icon">${SiteIcons.svg(site.id, { size: 84 })}</span>
             </button>`;
     }
 
