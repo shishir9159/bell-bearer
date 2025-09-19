@@ -1,7 +1,8 @@
 /**
  * The pouch sheet: a near-full-screen frosted panel over YouTube, the topic
- * rail on the left and a thumbnail grid on the right, with new playlist
- * entries in a strip beneath the grid.
+ * rail on the left and a thumbnail grid on the right. Followed playlists get
+ * their own rail entry, "Subscribed Playlist" — one card per playlist, its
+ * newest video not yet watched — rather than a strip under the grid.
  *
  * It used to live inside youtube-ui.js. It is here on its own because it grew
  * three things that have nothing to do with injecting buttons into YouTube's
@@ -53,6 +54,15 @@
      */
     const PER_SUBSCRIBED_CHANNEL = 3;
 
+    /**
+     * How far back into a playlist to look for its newest unwatched video.
+     * One would do if nothing were ever watched out of order, but a viewer
+     * who jumps around a playlist can leave its single newest entry watched
+     * while older ones are not — this is the depth that "newest unwatched"
+     * searches before giving up on a playlist.
+     */
+    const PLAYLIST_LATEST_DEPTH = 10;
+
     const RANGES = [
         { id: '7d', label: '7d', days: 7 },
         { id: '30d', label: '30d', days: 30 },
@@ -69,6 +79,14 @@
 
     const ALL_TOPICS = '__all__';
 
+    /**
+     * The rail entry for followed playlists. It behaves like a topic (same
+     * row template, same click handling) but its grid is not a slice of
+     * `byChannel` — it is one card per followed playlist: that playlist's
+     * newest video the user has not watched yet. See playlistLatestHtml().
+     */
+    const PLAYLISTS_VIEW = '__playlists__';
+
     /** Redraws while feeds are streaming in are coalesced onto this interval. */
     const REDRAW_MS = 220;
 
@@ -76,24 +94,42 @@
 
     function createPouchSheet({ notify, dress, appearance, iconUrl }) {
 
-        async function open() {
-            // Storage first, network never: everything below draws from what
-            // is already known and fills in afterwards.
-            const [{ topics, channels }, look, settings, watched, playlists] = await Promise.all([
-                Subscriptions.load(),
-                appearance(),
-                Settings.get(['pouchShowAllSubscribed']),
-                Watched.load(),
-                Playlists.load(),
-            ]);
-
+        /**
+         * Open the sheet now, load everything it needs behind it.
+         *
+         * The overlay used to wait on five storage reads — topics, channels,
+         * the "all subscribed" setting, watched marks, followed playlists —
+         * before the backdrop even appeared, so clicking the drawer entry did
+         * nothing for a beat. None of that is needed to draw the frame: the
+         * sheet opens on its "Loading…" shell immediately, off the same
+         * `sheetHtml` markup and empty state Sheet already renders for a
+         * channel-less pouch, and every read streams in behind it — skin
+         * first (so the dress-up is never wrong for more than a frame), then
+         * the rest as one batch that unlocks the rail and grid. The network
+         * fetch inside loadEverything() was already this asynchronous; this
+         * just extends the same idea one step earlier, to storage.
+         */
+        function open() {
             const dialog = Overlay.open({ id: OVERLAY_ID, contentHtml: sheetHtml(iconUrl()) });
             if (!dialog) return;
 
             dialog.element.classList.add('bb-sheet-overlay');
-            dress(dialog.element, look);
+            // Theme is read synchronously off the page; only the skin needs
+            // storage, so the shell dresses itself the instant that lands
+            // rather than holding up the shell that has nothing to do with it.
+            appearance().then((look) => { if (dialog.element.isConnected) dress(dialog.element, look); });
 
-            new Sheet({ dialog, topics, channels, settings, watched, playlists, notify }).start();
+            const sheet = new Sheet({ dialog, notify });
+            sheet.start();
+
+            Promise.all([
+                Subscriptions.load(),
+                Settings.get(['pouchShowAllSubscribed']),
+                Watched.load(),
+                Playlists.load(),
+            ]).then(([{ topics, channels }, settings, watched, playlists]) => {
+                if (sheet.alive) sheet.hydrate({ topics, channels, settings, watched, playlists });
+            });
         }
 
         return { open, PER_CHANNEL, ALL_TOPICS, RANGES, SORTS };
@@ -107,18 +143,27 @@
      * its own entries and not append to them.
      */
     class Sheet {
-        constructor({ dialog, topics, channels, settings, watched, playlists, notify }) {
+        /**
+         * Built with nothing yet to show: `open()` constructs this the
+         * instant the overlay exists, before any of topics, channels,
+         * settings, watched marks or playlists have been read. `hydrate()`
+         * is what turns it into the sheet described above — see there for
+         * why the two are split.
+         */
+        constructor({ dialog, notify }) {
             this.dialog = dialog;
-            this.topics = topics;
-            this.channels = channels;
             this.notify = notify;
-            this.watched = watched;
-            this.playlists = playlists;
+
+            this.topics = [];
+            this.channels = [];
+            this.watched = {};
+            this.playlists = [];
+            this.hydrated = false;
 
             /** channelId -> videos[]. */
             this.byChannel = new Map();
             /** channelId -> the channel record, pouch and subscribed alike. */
-            this.known = new Map(channels.map((channel) => [channel.id, channel]));
+            this.known = new Map();
 
             this.subscribed = null;   // lazily fetched, then cached here
             this.loadingSubs = false;
@@ -126,14 +171,15 @@
             this.topicId = ALL_TOPICS;
             this.range = DEFAULT_RANGE;
             this.sort = 'newest';
-            this.allSubscribed = !!settings.pouchShowAllSubscribed;
+            this.allSubscribed = false;
 
-            this.loading = channels.length > 0;
+            this.loading = false;
             this.done = 0;
-            this.total = channels.length;
+            this.total = 0;
 
-            this.playlistEntries = [];
-            this.playlistsRead = playlists.length === 0;
+            /** One entry per followed playlist: its newest unwatched video. */
+            this.playlistLatest = [];
+            this.playlistsRead = true;
             this.redrawTimer = null;
 
             const $ = (selector) => dialog.element.querySelector(selector);
@@ -148,8 +194,30 @@
             return this.dialog.element.isConnected;
         }
 
+        /** Wires the shell and draws its "Loading…" state — nothing to fetch yet. */
         start() {
             this.wire();
+            this.render();
+        }
+
+        /**
+         * What `open()` was waiting on before the sheet ever appeared, now
+         * arriving after it. One assignment, one render, one kick of the
+         * network fetch — the exact sequence `start()` used to run inline.
+         */
+        hydrate({ topics, channels, settings, watched, playlists }) {
+            this.topics = topics;
+            this.channels = channels;
+            this.watched = watched;
+            this.playlists = playlists;
+            this.known = new Map(channels.map((channel) => [channel.id, channel]));
+            this.allSubscribed = !!settings.pouchShowAllSubscribed;
+
+            this.loading = channels.length > 0;
+            this.total = channels.length;
+            this.playlistsRead = playlists.length === 0;
+            this.hydrated = true;
+
             this.render();
             this.loadEverything();
         }
@@ -184,9 +252,9 @@
             this.loading = false;
             this.render();
 
-            // The playlist strip and the subscription sweep are both extras:
-            // they come after the pouch itself is on screen.
-            this.loadPlaylists();
+            // The playlist rail entry and the subscription sweep are both
+            // extras: they come after the pouch itself is on screen.
+            this.loadPlaylistLatest();
             if (this.allSubscribed) this.loadSubscribed();
         }
 
@@ -248,12 +316,28 @@
             }
         }
 
-        async loadPlaylists() {
+        /**
+         * One card per followed playlist: whichever of its recent videos is
+         * newest and not yet watched. "Watched" here is the same map the
+         * main grid uses (see Watched.mark), not a playlist's own `seen`
+         * list — the point of this row is "what's left to watch", not "what
+         * changed since I followed this", so opening a video anywhere in the
+         * pouch also clears it from here.
+         */
+        async loadPlaylistLatest() {
             if (this.playlists.length === 0) return;
             try {
-                this.playlistEntries = await Playlists.newEntries(this.playlists, Feed);
+                const perPlaylist = await Promise.all(this.playlists.map(async (playlist) => {
+                    const videos = await Feed.fetchPlaylistVideos(playlist.id, PLAYLIST_LATEST_DEPTH);
+                    const unwatched = videos
+                        .filter((video) => !this.watched[video.id])
+                        .sort((a, b) => b.published - a.published);
+                    if (!unwatched.length) return null;
+                    return { ...unwatched[0], playlistId: playlist.id, playlistTitle: playlist.title };
+                }));
+                this.playlistLatest = perPlaylist.filter(Boolean);
             } catch (_) {
-                this.playlistEntries = [];
+                this.playlistLatest = [];
             }
             this.playlistsRead = true;
             if (this.alive) this.renderGrid();
@@ -385,6 +469,15 @@
             // name would throw the name away mid-keystroke.
             if (this.el.rail.querySelector('.bb-new-topic')) return;
 
+            // Nothing to draw a rail from yet — topics/channels are still in
+            // flight from hydrate(). A bare "Loading…" beats a rail that
+            // claims zero topics for the half-second it takes storage to answer.
+            if (!this.hydrated) {
+                this.el.rail.innerHTML = '<div class="bb-topics-label">Topics</div>';
+                this.el.sub.textContent = 'Loading…';
+                return;
+            }
+
             const { allTotal, byTopic } = this.counts();
             const show = (n) => (this.loading && this.byChannel.size === 0 ? '' : String(n));
 
@@ -399,6 +492,7 @@
                 <div class="bb-topics-label">Topics</div>
                 ${topicRow(ALL_TOPICS, 'All', show(allTotal), this.topicId === ALL_TOPICS)}
                 ${this.subscribedToggleHtml()}
+                ${this.playlistNavHtml()}
                 ${rows.join('')}
                 <button class="bb-topic-add" type="button">+ New topic</button>`;
 
@@ -427,7 +521,29 @@
                 </button>`;
         }
 
+        /**
+         * The rail row for followed playlists — a topic row in every way
+         * that matters to the DOM (same class, same click delegation in
+         * wire()), so it needs no wiring of its own. Absent until a playlist
+         * is followed, the way the "New in your playlists" strip used to be.
+         */
+        playlistNavHtml() {
+            if (this.playlists.length === 0) return '';
+            const count = this.playlistsRead ? String(this.playlistLatest.length) : '';
+            return topicRow(PLAYLISTS_VIEW, 'Subscribed Playlist', count, this.topicId === PLAYLISTS_VIEW);
+        }
+
         renderGrid() {
+            if (!this.hydrated) {
+                this.el.grid.innerHTML = '<p class="bb-muted">Loading your pouch…</p>';
+                return;
+            }
+
+            if (this.topicId === PLAYLISTS_VIEW) {
+                this.el.grid.innerHTML = this.playlistLatestHtml();
+                return;
+            }
+
             const parts = [];
 
             if (this.channels.length === 0 && !this.allSubscribed) {
@@ -444,43 +560,25 @@
                 }
             }
 
-            parts.push(this.playlistStripHtml());
             this.el.grid.innerHTML = parts.join('');
         }
 
         /**
-         * New entries in followed playlists, under the grid.
-         *
-         * A playlist is followed from its own header on YouTube; what is "new"
-         * is anything added since it was followed or last cleared — see
-         * shared/playlists.js, which owns that bookkeeping.
+         * The "Subscribed Playlist" rail entry's own grid: one card per
+         * followed playlist (see loadPlaylistLatest for what "latest" means
+         * here), not a slice of the channel feed the rest of the sheet reads.
          */
-        playlistStripHtml() {
-            if (this.playlists.length === 0) return '';
-
-            const entries = this.playlistEntries;
-            let body;
-            if (entries.length) {
-                body = `<div class="bb-video-grid">${entries.map(playlistCard).join('')}</div>`;
-            } else if (!this.playlistsRead) {
-                // "Nothing new" is a claim, and it must not be made before the
-                // playlists have actually been read.
-                body = '<p class="bb-muted">Checking your playlists…</p>';
-            } else {
-                body = `<p class="bb-muted">Nothing new in ${plural(this.playlists.length, 'playlist')} yet.</p>`;
+        playlistLatestHtml() {
+            if (this.playlists.length === 0) {
+                return '<p class="bb-muted">Follow a playlist from its own page on YouTube to see it here.</p>';
             }
-
-            return `
-                <section class="bb-strip">
-                    <div class="bb-strip-head">
-                        <h4>New in your playlists</h4>
-                        <span class="bb-strip-n">${entries.length || ''}</span>
-                        ${entries.length
-                            ? '<button class="bb-strip-clear" type="button">Mark all seen</button>'
-                            : ''}
-                    </div>
-                    ${body}
-                </section>`;
+            if (!this.playlistsRead) {
+                return '<p class="bb-muted">Checking your playlists…</p>';
+            }
+            if (this.playlistLatest.length === 0) {
+                return `<p class="bb-muted">Nothing unwatched in ${plural(this.playlists.length, 'playlist')}.</p>`;
+            }
+            return `<div class="bb-video-grid">${this.playlistLatest.map(playlistCard).join('')}</div>`;
         }
 
         // ----------------------------------------------------- interaction
@@ -504,11 +602,6 @@
             });
 
             this.el.grid.addEventListener('click', (event) => {
-                if (event.target.closest('.bb-strip-clear')) {
-                    event.preventDefault();
-                    return this.clearPlaylistStrip();
-                }
-
                 // Opening a card is the plainest signal there is that the video
                 // has been watched; the link itself is left alone.
                 const card = event.target.closest('[data-video-id]');
@@ -546,14 +639,6 @@
             if (!videoId || this.watched[videoId]) return;
             this.watched[videoId] = Date.now();
             Watched.mark(videoId);
-        }
-
-        async clearPlaylistStrip() {
-            const entries = this.playlistEntries;
-            this.playlistEntries = [];
-            this.renderGrid();
-            await Playlists.markAllSeen(entries);
-            this.playlists = await Playlists.load();
         }
 
         /**

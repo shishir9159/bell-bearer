@@ -36,15 +36,7 @@
     const GUIDE_ID = 'bb-guide-entry';
     const CONTEXT_LOST = 'Bell Bearer was updated — please refresh this page.';
 
-    /**
-     * The pouch button carries two glyphs side by side: a "list" mark that
-     * says what the button is (a pouch of channels) and never changes, and a
-     * status mark that says whether this channel is in it. Only the status
-     * mark toggles between PLUS_ICON and TICK_ICON — the list mark is drawn
-     * once and markPouchButton never touches it again.
-     */
-    const BARS_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:15px;height:15px;fill:currentColor;"><path d="M2 6h20v2H2zm0 5h20v2H2zm0 5h14v2H2z"></path></svg>';
-    const PLUS_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:15px;height:15px;fill:currentColor;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></svg>';
+    const POUCH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:24px;height:24px;fill:currentColor;"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"></path></svg>';
 
     /**
      * The filed state. YouTube turns its own Subscribe button into a flat grey
@@ -53,7 +45,7 @@
      * the same grey, rather than going on offering a "+" for something already
      * done.
      */
-    const TICK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:15px;height:15px;fill:currentColor;"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
+    const TICK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:22px;height:22px;fill:currentColor;"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
 
     /**
      * Where the playlist panel on a watch page keeps its header, and where a
@@ -117,10 +109,20 @@
         return { theme: Theme.pageTheme(), skin: skin || 'default' };
     }
 
+    /**
+     * The first selector that matches something actually on screen.
+     *
+     * A dedicated /playlist page keeps a `ytd-playlist-panel-renderer` header
+     * in the DOM — the queue-panel markup a watch page would show — fully
+     * built but with zero size and no offsetParent. `document.querySelector`
+     * cannot tell that apart from a real match, so a plain "first selector
+     * that exists" put the playlist-follow button inside that dead node on
+     * every /playlist page: present, but with nothing left to render it.
+     */
     function firstMatch(selectors) {
         for (const selector of selectors) {
             const element = document.querySelector(selector);
-            if (element) return element;
+            if (element && element.offsetParent) return element;
         }
         return null;
     }
@@ -181,9 +183,7 @@
             button.id = BUTTON_ID;
             button.type = 'button';
             button.className = getPouchButtonStyle() === 'accent' ? 'bb-accent' : '';
-            button.innerHTML =
-                '<span class="bb-pouch-bars">' + BARS_ICON + '</span>' +
-                '<span class="bb-pouch-status">' + PLUS_ICON + '</span>';
+            button.innerHTML = POUCH_ICON;
             button.title = 'Add channel to Bell Bearer pouch';
             button.setAttribute('aria-label', 'Add channel to Bell Bearer pouch');
             button.addEventListener('click', (event) => {
@@ -220,8 +220,7 @@
             const filed = (await channels()).some((channel) => sameChannel(channel, info));
 
             button.classList.toggle('bb-in-pouch', filed);
-            const status = button.querySelector('.bb-pouch-status');
-            if (status) status.innerHTML = filed ? TICK_ICON : PLUS_ICON;
+            button.innerHTML = filed ? TICK_ICON : POUCH_ICON;
 
             const label = filed
                 ? `${info.channelName} is in your pouch — click to remove it`
@@ -277,7 +276,7 @@
             button.type = 'button';
             button.className = 'bb-playlist-follow';
             button.dataset.playlistId = playlistId;
-            button.innerHTML = '<span class="bb-pf-ico">' + PLUS_ICON + '</span><span class="bb-pf-label">Follow</span>';
+            button.innerHTML = '<span class="bb-pf-label">Follow</span>';
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -311,7 +310,6 @@
 
             const isFollowed = Playlists.has(await followedPlaylists(), button.dataset.playlistId);
             button.classList.toggle('bb-following', isFollowed);
-            button.querySelector('.bb-pf-ico').innerHTML = isFollowed ? TICK_ICON : PLUS_ICON;
             button.querySelector('.bb-pf-label').textContent = isFollowed ? 'Following' : 'Follow';
             button.title = isFollowed
                 ? 'New entries in this playlist show in your pouch — click to stop following'
