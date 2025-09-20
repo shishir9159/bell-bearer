@@ -13,11 +13,17 @@
         });
     }
 
-    // Ctrl+Shift+L: copy the current page as a Markdown link.
-    // Rebindable at chrome://extensions/shortcuts.
+    // Ctrl+Shift+L: copy the current page as a Markdown link. The keys are
+    // rebindable at chrome://extensions/shortcuts; the on/off switch is ours,
+    // in the `shortcuts` setting (see src/shared/keybindings.js).
     if (chrome.commands) {
         chrome.commands.onCommand.addListener((command) => {
-            if (command === 'copy-markdown-link') tellActiveTab({ action: 'copyMarkdownLink' });
+            if (command !== 'copy-markdown-link') return;
+            chrome.storage.local.get(['shortcuts'], (stored) => {
+                const override = stored && stored.shortcuts && stored.shortcuts['copy-markdown-link'];
+                if (override && override.enabled === false) return;
+                tellActiveTab({ action: 'copyMarkdownLink' });
+            });
         });
     }
 

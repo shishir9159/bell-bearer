@@ -30,7 +30,7 @@
 
     const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown,
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
-        CookieSites, CookieBanner, ChessContent, Palette } = BB;
+        CookieSites, CookieBanner, ChessContent, Keybindings } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -84,8 +84,8 @@
         stopRecording: () => recorder.stopRecording(),
         toggleSegment: () => recorder.toggleSegment(),
     }, {
-        skipShortcutsEnabled: () => settings.enableSkipShortcuts,
         canRecord: () => !!getVideo(),
+        getShortcut: (id) => Keybindings.resolve(settings.shortcuts, id),
     });
 
     player.attach();
@@ -234,11 +234,13 @@
 
     // ------------------------------------------------------ chess.com extras
 
-    let chess = null;
-
     if (site === 'chess') {
-        chess = ChessContent.createChess({ Palette, Shortcuts, notify, getSettings: () => settings });
-        chess.install();
+        ChessContent.createChess({
+            Keybindings,
+            Shortcuts,
+            notify,
+            getShortcut: (id) => Keybindings.resolve(settings.shortcuts, id),
+        }).install();
     }
 
     // ------------------------------------------------------ cookie banners
@@ -246,7 +248,8 @@
     CookieBanner.createCookieBanner({
         CookieSites,
         notify,
-        isEnabled: () => settings.cookieBannerHelper,
+        showAccept: () => settings.cookieAcceptButton,
+        showReject: () => settings.cookieRejectButton,
     }).install();
 
     // --------------------------------------------------------- settings
@@ -254,13 +257,10 @@
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&
             values.pouchButtonStyle !== settings.pouchButtonStyle;
-        const chessChanged = 'chessLegalMoveColor' in values &&
-            values.chessLegalMoveColor !== settings.chessLegalMoveColor;
 
         Object.assign(settings, values);
 
         if (pouchStyleChanged && youtubeUi) youtubeUi.refreshPouchButton();
-        if (chessChanged && chess) chess.pushSettings();
     }
 
     Settings.get().then(applySettings);

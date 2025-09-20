@@ -1,8 +1,9 @@
 /**
  * Keyboard shortcuts.
  *
- * The bindings are a table rather than a run of `if` statements, so a new
- * shortcut is one row and a conflict is visible by reading down the list.
+ * Which keys each shortcut uses, and whether it is on, comes from
+ * src/shared/keybindings.js and the user's `shortcuts` setting; this file
+ * pairs each one with what it does.
  *
  * Two behaviours are load-bearing:
  *
@@ -17,6 +18,10 @@
  */
 (function (root) {
     'use strict';
+
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+    const ns = root.BB || {};
+    const Keybindings = ns.Keybindings || req('../shared/keybindings.js');
 
     /** Elements that own the keystroke: typing in them must never be hijacked. */
     const TYPING_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
@@ -34,91 +39,48 @@
         return false;
     }
 
-    /** 1-9 from either the number row or the numpad, else null. */
-    function digitOf(event) {
-        const match = /^(?:Digit|Numpad)([1-9])$/.exec(event.code || '');
-        return match ? Number(match[1]) : null;
-    }
+    const { digitOf } = Keybindings;
 
     /**
-     * Exact modifier match. Requiring the full set (rather than only checking
-     * the modifiers a binding cares about) is what keeps Alt+1 and Ctrl+Alt+1
-     * from both firing "skip forward".
-     */
-    function modifiers(event, { ctrl = false, shift = false, alt = false } = {}) {
-        return event.ctrlKey === ctrl && event.shiftKey === shift && event.altKey === alt && !event.metaKey;
-    }
-
-    /**
-     * Build the keydown/keyup bindings.
+     * Build the keydown bindings.
      *
-     * `actions` supplies the behaviour; `options.skipShortcutsEnabled()` gates
-     * the skip/boost rows, matching the Settings toggle.
+     * `actions` supplies the behaviour. `options.getShortcut(id)` returns the
+     * resolved binding — Keybindings.resolve over the user's `shortcuts`
+     * setting — and is read on every keystroke, so a change in Settings
+     * applies without reloading the page. Without it, the defaults apply.
+     *
+     * Modifiers match exactly, which is what keeps Alt+1 and Ctrl+Alt+1 from
+     * both firing "skip forward".
      */
     function createBindings(actions, options = {}) {
-        const skipEnabled = options.skipShortcutsEnabled || (() => true);
         const canRecord = options.canRecord || (() => false);
+        const getShortcut = options.getShortcut || ((id) => Keybindings.resolve(null, id));
+        const hasVideo = () => actions.hasVideo();
 
-        return [
-            {
-                name: 'record-checkpoint',
-                // Held, not tapped: keyup ends the checkpoint. Repeats are
-                // ignored so holding the key does not restart the recording.
-                match: (e) => !e.repeat && modifiers(e, { ctrl: true }) && e.key.toLowerCase() === 'b',
-                enabled: () => canRecord(),
-                run: () => actions.startRecording(),
-            },
-            {
-                name: 'segment-toggle',
-                // A press marks the start, the next press marks the end. The
-                // old binding set the start on keydown and ended it on keyup of
-                // the same press, so a segment was always zero-length — nothing
-                // ever bound the start, and the end handler was unreachable.
-                match: (e) => !e.repeat && modifiers(e, { ctrl: true, shift: true }) && e.key.toLowerCase() === 's',
-                enabled: () => canRecord(),
-                run: () => actions.toggleSegment(),
-            },
-            {
-                name: 'skip-forward',
-                match: (e) => modifiers(e, { alt: true }) && digitOf(e) !== null,
-                enabled: () => skipEnabled() && actions.hasVideo(),
-                run: (e) => actions.skip(digitOf(e)),
-            },
-            {
-                name: 'skip-backward',
-                match: (e) => modifiers(e, { shift: true }) && digitOf(e) !== null,
-                enabled: () => skipEnabled() && actions.hasVideo(),
-                run: (e) => actions.skip(-digitOf(e)),
-            },
-            {
-                name: 'speed-boost',
-                match: (e) => modifiers(e, { ctrl: true, shift: true }) && digitOf(e) !== null,
-                enabled: () => skipEnabled() && actions.hasVideo(),
-                run: (e) => actions.boostSpeed(digitOf(e)),
-            },
-            {
-                name: 'speed-up',
-                // Shift+. produces ">" on most layouts, but not all; accept the
-                // physical key too so the shortcut survives a different layout.
-                match: (e) => !e.ctrlKey && !e.altKey && !e.metaKey &&
-                    (e.key === '>' || (e.shiftKey && e.code === 'Period')),
-                enabled: () => actions.hasVideo(),
-                run: () => actions.faster(),
-            },
-            {
-                name: 'speed-down',
-                match: (e) => !e.ctrlKey && !e.altKey && !e.metaKey &&
-                    (e.key === '<' || (e.shiftKey && e.code === 'Comma')),
-                enabled: () => actions.hasVideo(),
-                run: () => actions.slower(),
-            },
-            {
-                name: 'speed-reset',
-                match: (e) => !e.ctrlKey && !e.altKey && !e.metaKey && e.key === '+',
-                enabled: () => actions.hasVideo(),
-                run: () => actions.resetSpeed(),
-            },
+        // Held or toggled bindings ignore auto-repeat: holding Ctrl+B must not
+        // restart the recording, and a held Ctrl+Shift+S must not flip the
+        // segment on and off.
+        const rows = [
+            ['record-checkpoint', { noRepeat: true, enabled: canRecord, run: () => actions.startRecording() }],
+            ['segment-toggle', { noRepeat: true, enabled: canRecord, run: () => actions.toggleSegment() }],
+            ['skip-forward', { enabled: hasVideo, run: (e) => actions.skip(digitOf(e)) }],
+            ['skip-backward', { enabled: hasVideo, run: (e) => actions.skip(-digitOf(e)) }],
+            ['speed-boost', { enabled: hasVideo, run: (e) => actions.boostSpeed(digitOf(e)) }],
+            ['speed-up', { enabled: hasVideo, run: () => actions.faster() }],
+            ['speed-down', { enabled: hasVideo, run: () => actions.slower() }],
+            ['speed-reset', { enabled: hasVideo, run: () => actions.resetSpeed() }],
         ];
+
+        return rows.map(([name, row]) => ({
+            name,
+            match: (e) => {
+                if (row.noRepeat && e.repeat) return false;
+                const shortcut = getShortcut(name);
+                return !!shortcut && shortcut.enabled && Keybindings.matches(e, shortcut.combo, shortcut.kind);
+            },
+            enabled: row.enabled,
+            run: row.run,
+        }));
     }
 
     /**
@@ -143,11 +105,13 @@
             }
         };
 
-        // Releasing B ends the held checkpoint. Compared case-insensitively:
-        // with Shift down the key is "B", and the old `=== 'b'` check meant the
-        // recording indicator could never be dismissed.
+        // Releasing the checkpoint key ends the held checkpoint. Matched by
+        // physical key, so a Shift held alongside it cannot stop the release
+        // from being recognised.
+        const getShortcut = options.getShortcut || ((id) => Keybindings.resolve(null, id));
         const onKeyUp = (event) => {
-            if (event.key && event.key.toLowerCase() === 'b') actions.stopRecording();
+            const shortcut = getShortcut('record-checkpoint');
+            if (shortcut && event.code && event.code === shortcut.combo.code) actions.stopRecording();
         };
 
         // A held Ctrl+B whose keyup lands on another window would otherwise
@@ -167,7 +131,7 @@
         };
     }
 
-    const Shortcuts = { install, createBindings, isTypingTarget, digitOf, modifiers };
+    const Shortcuts = { install, createBindings, isTypingTarget, digitOf };
 
     root.BB = root.BB || {};
     root.BB.Shortcuts = Shortcuts;
