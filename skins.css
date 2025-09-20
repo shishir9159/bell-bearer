@@ -104,6 +104,13 @@ body[data-skin="default"] {
     --kbd-arrow-color: #12331f;
     --kbd-active-bg: #fceeb5;
     --kbd-active-color: #4a3a06;
+
+    /* Site launcher cards, one tint per card in order (dashboard.css). Each
+       skin picks its own from its palette, day and night. */
+    --site-tint-1: #fbe3de;
+    --site-tint-2: #e3efdc;
+    --site-tint-3: #e1e6f3;
+    --site-tint-4: #f4ead6;
 }
 
 /* 1b. DEFAULT — night (the Discord blurple that was already there) */
@@ -156,6 +163,11 @@ body[data-skin="default"].dark-theme {
     --shadow-accent: 0 8px 22px var(--accent-shadow);
     --card-shadow: none;
     --card-shadow-hover: var(--shadow-sm);
+
+    --site-tint-1: #4a3437;
+    --site-tint-2: #2f4136;
+    --site-tint-3: #383e5e;
+    --site-tint-4: #483f2e;
 }
 
 /* ---------------------------------------------------------------- 2. RISO — day
@@ -251,6 +263,11 @@ body[data-skin="riso"] {
     --kbd-arrow-color: #fffdf6;
     --kbd-active-bg: var(--ink-yellow);
     --kbd-active-color: #17161a;
+
+    --site-tint-1: #ffd1ea;
+    --site-tint-2: #ffecaa;
+    --site-tint-3: #cfdcf5;
+    --site-tint-4: #e2ddcb;
 }
 
 /* 2b. RISO — night: same inks, printed on black stock. */
@@ -292,6 +309,11 @@ body[data-skin="riso"].dark-theme {
     --card-shadow-hover: 3px 3px 0 var(--ink-blue);
     --tex-blend: screen;
     --tex-opacity: .22;
+
+    --site-tint-1: #3d1a31;
+    --site-tint-2: #3a3010;
+    --site-tint-3: #172a4d;
+    --site-tint-4: #2c2a33;
 }
 
 /* ---------------------------------------------------------------- 3. MEDIEVAL — day
@@ -386,6 +408,11 @@ body[data-skin="medieval"] {
     --kbd-arrow-color: #2b2016;
     --kbd-active-bg: #d8ac52;
     --kbd-active-color: #2b2016;
+
+    --site-tint-1: #e5c2a8;
+    --site-tint-2: #d6d3a2;
+    --site-tint-3: #e8d08f;
+    --site-tint-4: #d8c69c;
 }
 
 /* 3b. MEDIEVAL — night: the same page by candlelight. */
@@ -436,6 +463,11 @@ body[data-skin="medieval"].dark-theme {
     --card-shadow-hover: 0 4px 14px rgba(0, 0, 0, .55);
     --tex-blend: overlay;
     --tex-opacity: .28;
+
+    --site-tint-1: #3b2216;
+    --site-tint-2: #2c2e1b;
+    --site-tint-3: #3b2e14;
+    --site-tint-4: #372b1c;
 }
 
 /* ---------------------------------------------------------------- 4. ART DECO — day
@@ -530,6 +562,11 @@ body[data-skin="deco"] {
     --kbd-arrow-color: #f7f3e8;
     --kbd-active-bg: var(--gold-2);
     --kbd-active-color: #14110d;
+
+    --site-tint-1: #efe0bb;
+    --site-tint-2: #d3e6dd;
+    --site-tint-3: #e9d7cf;
+    --site-tint-4: #e5dfcd;
 }
 
 /* 4b. ART DECO — night: gilt on lacquer. */
@@ -577,7 +614,17 @@ body[data-skin="deco"].dark-theme {
     --shadow-lg: 0 24px 60px rgba(0, 0, 0, .75);
     --card-shadow: none;
     --card-shadow-hover: 0 4px 18px rgba(0, 0, 0, .55);
+
+    --site-tint-1: #2b2412;
+    --site-tint-2: #12251e;
+    --site-tint-3: #2a1916;
+    --site-tint-4: #262320;
 }
+
+/* Proper nouns — site names — keep their own casing inside headings that a
+   skin sets in capitals: YouTube, not YOUTUBE. Important because it is
+   placed on headings whose own component rule is more specific. */
+.bb-proper { text-transform: none !important; }
 
 /* ============================================================
    Ornament layer — the bits that are not colour.

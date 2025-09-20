@@ -621,6 +621,205 @@ const dayRecord = (at = T0) =>
         eq(Playlists.has(stored, 'PLone'), true);
     });
 
+    // ------------------------------------------------------------ palette
+
+    console.log('\n# palette');
+
+    const Palette = require('../src/shared/palette.js');
+
+    check('hex colors convert to rgba, short form included', () => {
+        eq(Palette.rgba('#1c9bef', 0.5), 'rgba(28, 155, 239, 0.5)');
+        eq(Palette.rgba('#fff'), 'rgba(255, 255, 255, 1)');
+    });
+    check('anything that is not a hex color is refused, not guessed at', () => {
+        eq(Palette.isHex('red'), false);
+        eq(Palette.isHex('#12345'), false);
+        eq(Palette.rgba('javascript:1'), '');
+    });
+    check('readable text color flips on light and dark swatches', () => {
+        eq(Palette.readableOn('#f2b705'), '#000000');
+        eq(Palette.readableOn('#212529'), '#ffffff');
+    });
+
+    // ------------------------------------------------------- cookie sites
+
+    console.log('\n# remembered cookie sites');
+
+    const CookieSites = require('../src/shared/cookie-sites.js');
+    const clearStore = () => Object.keys(store).forEach((k) => delete store[k]);
+
+    check('a remembered site covers its subdomains, and www is the same site', () => {
+        const sites = { 'vulkan.org': { decision: 'accept', savedAt: 1 } };
+        eq(CookieSites.match(sites, 'docs.vulkan.org').host, 'vulkan.org');
+        eq(CookieSites.match(sites, 'www.vulkan.org').host, 'vulkan.org');
+        eq(CookieSites.match(sites, 'notvulkan.org'), null);
+    });
+    check('a bare top-level domain never matches everything under it', () => {
+        eq(CookieSites.match({ org: { decision: 'accept' } }, 'docs.vulkan.org'), null);
+    });
+
+    await checkAsync('remember and forget round-trip through storage', async () => {
+        clearStore();
+        await CookieSites.remember('www.docs.vulkan.org', 'accept', 42);
+        eq(await CookieSites.load(), { 'docs.vulkan.org': { decision: 'accept', savedAt: 42 } });
+        await CookieSites.forget('docs.vulkan.org');
+        eq(await CookieSites.load(), {});
+    });
+
+    check('an export imports back, and never overwrites a site already remembered', () => {
+        const exported = CookieSites.buildExport({ 'a.com': { decision: 'accept', savedAt: 1 } }, 0);
+        eq(CookieSites.validateImport(exported), true);
+        eq(CookieSites.validateImport({ type: 'bell-bearer-checkpoints', sites: {} }), false);
+
+        const current = { 'a.com': { decision: 'accept', savedAt: 9 } };
+        const result = CookieSites.mergeImported(current, { ...exported.sites, 'B.com': { decision: 'accept', savedAt: 2 } });
+        eq(result.added, 1);
+        eq(result.sites['a.com'].savedAt, 9);
+        eq(result.sites['b.com'], { decision: 'accept', savedAt: 2 });
+    });
+
+    // --------------------------------------------------------------- chess
+
+    console.log('\n# chess.com games');
+
+    const Chess = require('../src/shared/chess.js');
+
+    const PGN = [
+        '[Event "Live Chess"]', '[Site "Chess.com"]', '[Date "2026.09.12"]', '[UTCDate "2026.09.12"]',
+        '[StartTime "18:34:08"]', '[EndDate "2026.09.12"]', '[EndTime "18:39:05"]', '',
+        '1. e4 {[%clk 0:01:00.9]} 1... e5 {[%clk 0:01:00]} 2. Nf3 {[%clk 0:00:55][%timestamp 3]} 2... Nc6 {[%clk 0:00:50.5]} 1-0',
+    ].join('\n');
+
+    const game = (overrides = {}) => ({
+        url: 'https://www.chess.com/game/live/1',
+        time_control: '60+1',
+        time_class: 'bullet',
+        end_time: 1789238345,
+        rated: true,
+        pgn: PGN,
+        white: { username: 'Me', rating: 1500, result: 'win' },
+        black: { username: 'them', rating: 1480, result: 'resigned' },
+        ...overrides,
+    });
+
+    check('time controls parse, daily games included', () => {
+        eq(Chess.parseTimeControl('180+2'), { base: 180, increment: 2, daily: false });
+        eq(Chess.parseTimeControl('600'), { base: 600, increment: 0, daily: false });
+        eq(Chess.parseTimeControl('1/86400'), { base: 86400, increment: 0, daily: true });
+    });
+
+    check('clock annotations are read per side, extra comment tags and all', () => {
+        eq(Chess.parseClocks(PGN), { white: [60.9, 55], black: [60, 50.5] });
+    });
+
+    check('time used is start plus increments minus what was left', () => {
+        // White: 60 + 1*2 - 55 = 7. Black: 60 + 1*2 - 50.5 = 11.5.
+        const used = Chess.timeUsed(game());
+        eq([used.white, used.black, used.moves], [7, 11.5, 2]);
+    });
+
+    check('a game without clocks has no inferred time rather than a wrong one', () => {
+        eq(Chess.timeUsed(game({ pgn: '1. e4 e5 1-0' })).white, null);
+        eq(Chess.timeUsed(game({ time_control: '1/86400' })).white, null);
+    });
+
+    check('normalize reads the game from the player\'s side, case-insensitively', () => {
+        const mine = Chess.normalize(game(), 'ME');
+        eq([mine.color, mine.result, mine.how, mine.opponent, mine.myTime, mine.oppTime, mine.duration],
+            ['white', 'win', 'resigned', 'them', 7, 11.5, 297]);
+
+        const theirs = Chess.normalize(game(), 'them');
+        eq([theirs.color, theirs.result, theirs.myTime], ['black', 'loss', 11.5]);
+        eq(Chess.normalize(game(), 'stranger'), null);
+    });
+
+    check('draw codes are draws; every other non-win is a loss', () => {
+        eq(Chess.resultOf('repetition'), 'draw');
+        eq(Chess.resultOf('timevsinsufficient'), 'draw');
+        eq(Chess.resultOf('timeout'), 'loss');
+        eq(Chess.resultOf('abandoned'), 'loss');
+    });
+
+    check('summaries split by time class and respect the range', () => {
+        const at = (ms, cls, result) => ({ end: ms, timeClass: cls, result, myTime: 10, oppTime: 20 });
+        const games = [
+            at(1000, 'bullet', 'win'), at(2000, 'bullet', 'loss'), at(3000, 'blitz', 'draw'),
+            at(4000, 'rapid', 'win'), at(5000, 'daily', 'win'), at(100, 'blitz', 'win'),
+        ];
+        const summary = Chess.summarize(games, { since: 500, until: 10000 });
+        eq(summary.count, 5);
+        eq(summary.games[0].end, 5000, 'newest first');
+        eq([summary.byClass.bullet.win, summary.byClass.bullet.loss, summary.byClass.blitz.draw], [1, 1, 1]);
+        eq(summary.total.games, 5, 'daily counts toward the total');
+        eq([summary.total.myTime, summary.total.oppTime], [50, 100]);
+        eq(Chess.winRate(summary.byClass.bullet), 50);
+        eq(Chess.winLossRatio({ win: 3, loss: 2 }), 1.5);
+        eq(Chess.winLossRatio({ win: 3, loss: 0 }), null);
+    });
+
+    check('"today" starts at local midnight; the weeks are rolling', () => {
+        const now = new Date(2026, 8, 13, 15, 30).getTime();
+        eq(Chess.rangeStart('today', now), new Date(2026, 8, 13).getTime());
+        eq(Chess.rangeStart('week', now), now - 7 * 86400000);
+    });
+
+    check('a 30-day window across a month boundary reads both archives', () => {
+        eq(Chess.archiveMonths(Date.UTC(2026, 8, 13), 30), ['2026/08', '2026/09']);
+        eq(Chess.archiveMonths(Date.UTC(2026, 0, 5), 30), ['2025/12', '2026/01']);
+        eq(Chess.archiveMonths(Date.UTC(2026, 8, 30), 7), ['2026/09']);
+    });
+
+    await checkAsync('games are fetched once per closed month, and the live month re-read later', async () => {
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const calls = [];
+        const fetchImpl = async (url) => {
+            calls.push(url.replace(/.*games\//, ''));
+            const month = url.endsWith('2026/09') ? 9 : 8;
+            const end = Math.floor(Date.UTC(2026, month - 1, month === 9 ? 12 : 30) / 1000);
+            return { ok: true, status: 200, json: async () => ({ games: [game({ end_time: end })] }) };
+        };
+
+        const first = await Chess.fetchGames('Me', { now, fetchImpl });
+        eq(first.length, 2);
+        eq(calls, ['2026/08', '2026/09']);
+
+        await Chess.fetchGames('me', { now: now + 60 * 1000, fetchImpl });
+        eq(calls.length, 2, 'both months fresh a minute later');
+
+        await Chess.fetchGames('me', { now: now + 10 * 60 * 1000, fetchImpl });
+        eq(calls.slice(2), ['2026/09'], 'only the live month is read again');
+    });
+
+    await checkAsync('an unknown player is reported as such', async () => {
+        clearStore();
+        const fetchImpl = async () => ({ ok: false, status: 404, json: async () => ({}) });
+        let code = null;
+        try { await Chess.fetchGames('nobody', { fetchImpl }); } catch (error) { code = error.code; }
+        eq(code, 'not-found');
+    });
+
+    check('time and control labels', () => {
+        eq(Chess.human(42), '42s');
+        eq(Chess.human(125), '2m 05s');
+        eq(Chess.human(3725), '1h 02m');
+        eq(Chess.formatControl('180+2'), '3 | 2');
+        eq(Chess.formatControl('600'), '10 min');
+        eq(Chess.formatControl('30'), '30s');
+    });
+
+    // ------------------------------------------------------- site detection
+
+    console.log('\n# site detection');
+
+    const Site = require('../src/content/site.js');
+
+    check('chess.com is its own site', () => {
+        eq(Site.detectSite('www.chess.com'), 'chess');
+        eq(Site.detectSite('chess.com'), 'chess');
+        eq(Site.detectSite('notchess.com'), 'other');
+    });
+
     console.log('\n' + '='.repeat(52));
     console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
     process.exit(failed ? 1 : 0);

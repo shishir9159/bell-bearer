@@ -63,18 +63,13 @@
             </div>
         </div>
 
-        <!-- Everywhere else: nothing here belongs to this site, so the popup
-             says so and points at the one thing that is never site-specific.
-             The speed bar above still applies on its own — any page with an
-             HTML5 <video> gets it, this site included. -->
-        <div class="generic-panel" id="genericPanel" hidden>
-            <div class="generic-panel-body">
-                <div class="generic-icon">🔖</div>
-                <p class="generic-title">Checkpoints are a YouTube thing</p>
-                <p class="generic-hint">Open a YouTube video to drop one. Your saved checkpoints and topics live in the dashboard.</p>
-                <button id="genericDashboardBtn" class="btn-generic-dashboard">Open Dashboard</button>
-            </div>
+        <!-- chess.com: the player's games, from src/page/chess-stats.js. -->
+        <div class="chess-panel" id="chessPanel" hidden>
+            <div class="chess-pop-body" id="chessPopupBody"></div>
         </div>
+
+        <!-- Anywhere else the popup is the header alone (and the speed bar,
+             on a page with a <video>). -->
     </div>
 
 
@@ -86,9 +81,12 @@
     <script src="src/shared/skin.js"></script>
     <script src="src/shared/youtube.js"></script>
     <script src="src/shared/bookmarks.js"></script>
+    <script src="src/shared/site-icons.js"></script>
+    <script src="src/shared/chess.js"></script>
     <script src="src/content/site.js"></script>
     <script src="src/page/ui.js"></script>
     <script src="src/page/tab-actions.js"></script>
+    <script src="src/page/chess-stats.js"></script>
     <script src="popup.js"></script>
 </body>
 

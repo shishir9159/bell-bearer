@@ -36,8 +36,10 @@ for exactly that reason, so a hidden run is slow rather than falsely red.
 node tests/node-check.js
 ```
 
-The speed ladder, escaping and URL safety, checkpoint merging, timestamps and
-the activity store, in about a second. It is a fast gate while you are changing
+The speed ladder, escaping and URL safety, checkpoint merging, timestamps, the
+activity store, the color palette, remembered cookie sites and the chess.com
+game parsing (clock inference, win/loss summaries, archive caching), in about a
+second. It is a fast gate while you are changing
 that code, not a replacement — it cannot press a key or play a video.
 
 ## Layout

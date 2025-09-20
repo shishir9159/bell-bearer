@@ -22,7 +22,7 @@
     const NO_SHORTCUT = 'No shortcut assigned yet.';
 
     const SHIFT_TIP = 'Shift — hold with a number key to skip backward, or with F for hop mode.';
-    const MOD_TIP = "A modifier key. Bell Bearer's shortcuts that use one: Ctrl+Shift+1-9 and Ctrl+Shift+L.";
+    const MOD_TIP = "A modifier key. Bell Bearer's shortcuts that use one: Ctrl+Shift+1-9, Ctrl+Shift+L, and Alt+C on chess.com.";
 
     /** What each key id means, for the tooltip a click opens. */
     const TIPS = {
@@ -34,6 +34,7 @@
         shift: SHIFT_TIP,
         mod: MOD_TIP,
         esc: 'Closes an open Bell Bearer panel or dialog.',
+        clearArrows: 'Alt+C on chess.com — clear every arrow drawn on the board.',
     };
     for (let n = 1; n <= 9; n++) {
         TIPS[String(n)] =
@@ -73,9 +74,9 @@
         ],
         [
             { icon: 'arrow-up-circle', cls: 'key__shift-left', id: 'shift' },
-            { label: 'Z' }, { label: 'X' }, { label: 'C' }, { label: 'V' }, { label: 'B' },
+            { label: 'Z' }, { label: 'X' }, { label: 'C', id: 'clearArrows' }, { label: 'V' }, { label: 'B' },
             { label: 'N' }, { label: 'M' },
-            { label: '>', sub: '.', id: 'gt' }, { label: '<', sub: '.', id: 'lt' }, { label: '?', sub: '/' },
+            { label: '>', sub: '.', id: 'gt' }, { label: '<', sub: ',', id: 'lt' }, { label: '?', sub: '/' },
             { icon: 'arrow-up-circle', id: 'shift' },
             { icon: 'arrow-up', cls: 'key__arrow' },
             { icon: 'trash-2' },

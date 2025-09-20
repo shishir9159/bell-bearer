@@ -10,7 +10,25 @@
 (function () {
     'use strict';
 
-    const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, Transfer, TabActions, SettingsForm, SiteIcons } = window.BB;
+    const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, Transfer, TabActions, SettingsForm, SiteIcons,
+        SwatchPicker, CookieSitesPanel, ChessStats } = window.BB;
+
+    /** The emoji the popup used for "nothing saved"; every empty list here wears it too. */
+    const EMPTY_ICON = '🔖';
+
+    /**
+     * Each site's subtabs, in order: the tab id, its label, and the
+     * .site-panel it shows. The first is where a site opens the first time.
+     */
+    const SITE_TABS = {
+        youtube: [
+            { id: 'checkpoints', label: 'Checkpoints', panel: 'siteCheckpointsPanel' },
+            { id: 'subscriptions', label: 'Subscriptions', panel: 'siteSubscriptionsPanel' },
+        ],
+        chess: [
+            { id: 'games', label: 'Games', panel: 'chessGamesPanel' },
+        ],
+    };
 
     /**
      * A pin, as a glyph. An emoji pin renders as a different object on every
@@ -40,8 +58,9 @@
             // a "which site" state and a "which tab within it" state without
             // the two getting confused on the next click.
             this.activeSite = null;
-            this.siteTab = 'checkpoints';
+            this.siteTabs = {};
             this.settingsSite = null;
+            this.chessView = null;
 
             this.transfer = Transfer.createTransfer({
                 getVideos: () => this.videos,
@@ -67,8 +86,17 @@
             if (window.BB.KeyboardWidget) {
                 window.BB.KeyboardWidget.mount(document.getElementById('shortcutsKeyboard'));
             }
+            SwatchPicker.mount(document.getElementById('chessLegalMoveColorPicker'), { key: 'chessLegalMoveColor' });
+            CookieSitesPanel.mount(document.getElementById('cookieSitesPanel'));
+            this.chessView = ChessStats.createView({
+                body: document.getElementById('chessStatsBody'),
+                rangeSeg: document.getElementById('chessRange'),
+                refreshButton: document.getElementById('chessRefreshBtn'),
+                onSetUsername: () => this.openSiteSettings('chess'),
+            });
 
             await this.reload();
+            this.followHash();
             this.render();
 
             // Follow changes made from a YouTube page or the popup, reloading
@@ -134,8 +162,8 @@
         // -------------------------------------------------- site launcher
 
         /**
-         * One large, colored card per site Bell Bearer works with — today
-         * just YouTube, from src/shared/site-icons.js. The dashboard and the
+         * One large, colored card per site Bell Bearer works with, from
+         * src/shared/site-icons.js. The dashboard and the
          * settings page each get their own grid, so a future site shows up
          * in both the moment it is added to that one file.
          */
@@ -168,8 +196,10 @@
                 });
             }
             on('siteBackBtn', 'click', () => this.closeSite());
-            on('siteCheckpointsTab', 'click', () => this.switchSiteTab('checkpoints'));
-            on('siteSubscriptionsTab', 'click', () => this.switchSiteTab('subscriptions'));
+            on('siteSubtabs', 'click', (event) => {
+                const tab = event.target.closest('.site-subtab');
+                if (tab) this.switchSiteTab(tab.dataset.tab);
+            });
 
             const settingsGrid = document.getElementById('settingsSitesGrid');
             if (settingsGrid) {
@@ -190,7 +220,15 @@
             document.getElementById('siteWorkspace').hidden = false;
             document.getElementById('siteWorkspaceIcon').innerHTML = SiteIcons.svg(siteId, { size: 22 });
             document.getElementById('siteWorkspaceName').textContent = site.name;
-            this.switchSiteTab(this.siteTab);
+
+            const tabs = SITE_TABS[siteId] || [];
+            const subtabs = document.getElementById('siteSubtabs');
+            subtabs.innerHTML = tabs.map((tab) => `
+                <button class="site-subtab" type="button" data-tab="${Dom.escapeAttr(tab.id)}">${Dom.escapeHtml(tab.label)}</button>`).join('');
+            // A lone tab has nothing to switch to, so it is not drawn as one.
+            subtabs.hidden = tabs.length < 2;
+
+            this.switchSiteTab(this.siteTabs[siteId] || (tabs[0] && tabs[0].id));
         }
 
         closeSite() {
@@ -199,13 +237,23 @@
             document.getElementById('sitesGrid').hidden = false;
         }
 
-        switchSiteTab(tab) {
-            this.siteTab = tab;
-            const isCheckpoints = tab === 'checkpoints';
-            document.getElementById('siteCheckpointsTab').classList.toggle('active', isCheckpoints);
-            document.getElementById('siteSubscriptionsTab').classList.toggle('active', !isCheckpoints);
-            document.getElementById('siteCheckpointsPanel').classList.toggle('active', isCheckpoints);
-            document.getElementById('siteSubscriptionsPanel').classList.toggle('active', !isCheckpoints);
+        /** The active site's current tab id. */
+        get siteTab() {
+            return this.siteTabs[this.activeSite];
+        }
+
+        switchSiteTab(tabId) {
+            const tabs = SITE_TABS[this.activeSite] || [];
+            const tab = tabs.find((t) => t.id === tabId) || tabs[0];
+            if (!tab) return;
+            this.siteTabs[this.activeSite] = tab.id;
+
+            document.querySelectorAll('#siteSubtabs .site-subtab').forEach((button) => {
+                button.classList.toggle('active', button.dataset.tab === tab.id);
+            });
+            document.querySelectorAll('#siteWorkspace .site-panel').forEach((panel) => {
+                panel.classList.toggle('active', panel.id === tab.panel);
+            });
             this.render();
         }
 
@@ -218,6 +266,27 @@
             document.getElementById('siteSettingsWorkspace').hidden = false;
             document.getElementById('siteSettingsIcon').innerHTML = SiteIcons.svg(siteId, { size: 22 });
             document.getElementById('siteSettingsName').textContent = site.name;
+            document.querySelectorAll('[data-site-settings]').forEach((panel) => {
+                panel.hidden = panel.dataset.siteSettings !== siteId;
+            });
+        }
+
+        /** Settings → that site's panel, from anywhere on the page. */
+        openSiteSettings(siteId) {
+            this.switchView('settings');
+            this.openSettingsSite(siteId);
+            window.scrollTo({ top: 0 });
+        }
+
+        /**
+         * `dashboard.html#settings/chess` opens a site's settings and
+         * `#site/chess` its workspace — how the popup links straight in.
+         */
+        followHash() {
+            const [kind, siteId] = window.location.hash.replace(/^#/, '').split('/');
+            if (!siteId || !SiteIcons.get(siteId)) return;
+            if (kind === 'settings') this.openSiteSettings(siteId);
+            else if (kind === 'site') this.openSite(siteId);
         }
 
         closeSettingsSite() {
@@ -291,6 +360,8 @@
             if (this.view === 'dashboard' && this.activeSite === 'youtube') {
                 if (this.siteTab === 'subscriptions') this.renderSubscriptions();
                 else this.renderBookmarks();
+            } else if (this.view === 'dashboard' && this.activeSite === 'chess') {
+                this.chessView.render();
             }
             // 'stats' renders itself — src/page/stats.js owns that view and
             // reads the activity store, never the bookmark store.
@@ -305,8 +376,8 @@
             if (this.videos.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <h3>No saved checkpoints</h3>
-                        <p>Hold Ctrl + B while watching a video to save one.</p>
+                        <div class="empty-icon">${EMPTY_ICON}</div>
+                        <h3 class="bb-proper">No Bookmark is saved for YouTube</h3>
                     </div>`;
                 return;
             }
@@ -357,8 +428,8 @@
             if (this.topics.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <h3>No topics yet</h3>
-                        <p>Create a topic, then add channels to it with the pouch button next to Subscribe on YouTube.</p>
+                        <div class="empty-icon">${EMPTY_ICON}</div>
+                        <h3 class="bb-proper">No Topic is saved for YouTube</h3>
                     </div>`;
                 return;
             }
@@ -381,7 +452,7 @@
                             <h4>Channels (${channels.length})</h4>
                             ${channels.length > 0
                                 ? `<div class="channels-list">${channels.map(renderChannelRow).join('')}</div>`
-                                : '<p class="no-channels">No channels in this topic</p>'}
+                                : `<div class="empty-inline"><span class="empty-icon">${EMPTY_ICON}</span><span>No Channel is saved in this topic</span></div>`}
                         </div>
                         ${videos.length > 0 ? `
                             <div class="topic-new-videos">

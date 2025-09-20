@@ -29,7 +29,8 @@
     root.__bellBearerInstalled = true;
 
     const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown,
-        PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched } = BB;
+        PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
+        CookieSites, CookieBanner, ChessContent, Palette } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -231,15 +232,35 @@
         else setTimeout(warm, 5000);
     }
 
+    // ------------------------------------------------------ chess.com extras
+
+    let chess = null;
+
+    if (site === 'chess') {
+        chess = ChessContent.createChess({ Palette, Shortcuts, notify, getSettings: () => settings });
+        chess.install();
+    }
+
+    // ------------------------------------------------------ cookie banners
+
+    CookieBanner.createCookieBanner({
+        CookieSites,
+        notify,
+        isEnabled: () => settings.cookieBannerHelper,
+    }).install();
+
     // --------------------------------------------------------- settings
 
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&
             values.pouchButtonStyle !== settings.pouchButtonStyle;
+        const chessChanged = 'chessLegalMoveColor' in values &&
+            values.chessLegalMoveColor !== settings.chessLegalMoveColor;
 
         Object.assign(settings, values);
 
         if (pouchStyleChanged && youtubeUi) youtubeUi.refreshPouchButton();
+        if (chessChanged && chess) chess.pushSettings();
     }
 
     Settings.get().then(applySettings);

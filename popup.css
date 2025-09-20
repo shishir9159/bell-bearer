@@ -469,7 +469,7 @@ header h1 {
 .empty-state p, .no-selection p { font-size: 12.5px; line-height: 1.55; }
 .empty-icon { font-size: 30px; line-height: 1; margin-bottom: 10px; opacity: .8; }
 
-/* ---------- generic (non-YouTube) panel ---------- */
+/* ---------- per-site panels ---------- */
 
 /* #youtubePanel wraps .main-content and .instructions without a box of its
    own — `display: contents` — so they still take part directly in .container's
@@ -480,54 +480,138 @@ header h1 {
 #youtubePanel { display: contents; }
 #youtubePanel[hidden] { display: none; }
 
-.generic-panel {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
+/* A site with no panel of its own is the header alone, so the popup shrinks
+   to it instead of standing 600px tall around nothing. */
+body[data-bb-site]:not([data-bb-site="youtube"]):not([data-bb-site="chess"]) .container {
+    height: auto;
     min-height: 0;
 }
 
-.generic-panel[hidden] { display: none; }
+/* ---------- chess.com panel (src/page/chess-stats.js, compact) ---------- */
 
-.generic-panel-body {
+.chess-panel { flex: 1; min-height: 0; overflow-y: auto; background: var(--bg); }
+.chess-panel[hidden] { display: none; }
+
+.chess-pop-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+.chess-pop-figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+.chess-pop-figure {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    max-width: 300px;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    font-family: var(--font);
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color .15s ease, background .15s ease;
+}
+
+.chess-pop-figure:hover { border-color: var(--accent-soft-2); }
+.chess-pop-figure[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+
+.chess-pop-value {
+    font-family: var(--font-head);
+    font-size: 24px;
+    font-weight: var(--head-weight);
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+}
+
+.chess-pop-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.chess-pop-section {
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    padding: 11px 13px 13px;
+}
+
+.chess-pop-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.chess-pop-user { color: var(--accent-ink); text-transform: none; letter-spacing: .02em; }
+
+.chess-class-list { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+
+.chess-class-row { display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 10px; }
+.chess-class-name { font-size: 12px; font-weight: 600; color: var(--text); }
+
+.chess-class-score {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.chess-wdl { display: flex; height: 8px; overflow: hidden; background: var(--surface-3); border-radius: var(--r-pill); }
+.chess-wdl > span { display: block; height: 100%; }
+.chess-wdl-win { background: var(--success); }
+.chess-wdl-draw { background: var(--text-faint); opacity: .55; }
+.chess-wdl-loss { background: var(--danger); }
+
+.chess-pop-clock-row { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--text-muted); }
+
+.chess-pop-clock-row strong {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.chess-pop-games { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+
+.chess-pop-games li { display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 12px; }
+.chess-pop-games a { color: var(--text); font-weight: 600; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chess-pop-games a:hover { color: var(--accent-ink); text-decoration: underline; }
+.chess-pop-meta { margin-left: auto; font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+.chess-pop-none { font-size: 12px; color: var(--text-faint); }
+
+.chess-result {
+    flex-shrink: 0;
+    display: inline-block;
+    min-width: 42px;
+    padding: 1px 7px;
+    border-radius: var(--r-pill);
+    border: 1px solid transparent;
+    font-size: 10.5px;
+    font-weight: 700;
     text-align: center;
 }
 
-.generic-icon { font-size: 36px; line-height: 1; opacity: .55; }
+.chess-result.is-win { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+.chess-result.is-loss { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
+.chess-result.is-draw { background: var(--surface-3); color: var(--text-muted); border-color: var(--border); }
 
-.generic-title {
-    font-family: var(--font-head);
-    font-size: 15px;
-    font-weight: var(--head-weight);
-    letter-spacing: var(--head-track);
-    color: var(--text);
-}
+.chess-loading { padding: 40px 16px; text-align: center; font-size: 12.5px; color: var(--text-faint); }
 
-.generic-hint { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; }
-
-.btn-generic-dashboard {
-    margin-top: 8px;
-    padding: 11px 26px;
-    border: none;
-    border-radius: 999px;
-    background: var(--accent);
-    color: var(--on-accent);
-    font-family: var(--font);
-    font-size: 13.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background .15s ease, transform .12s ease;
-}
-
-.btn-generic-dashboard:hover { background: var(--accent-hover); }
-.btn-generic-dashboard:active { transform: translateY(1px); }
+.chess-empty .empty-icon svg { display: inline-block; width: 40px; height: 40px; }
+.chess-empty .btn-primary { margin-top: 14px; }
 
 /* ---------- instructions ---------- */
 

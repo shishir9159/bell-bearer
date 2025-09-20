@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site } = window.BB;
+    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site, ChessStats } = window.BB;
 
     class Popup {
         constructor() {
@@ -62,12 +62,7 @@
                 if (element) element.addEventListener(event, handler);
             };
 
-            const openDashboard = () => {
-                chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
-                window.close();
-            };
-            on('dashboardBtn', 'click', openDashboard);
-            on('genericDashboardBtn', 'click', openDashboard);
+            on('dashboardBtn', 'click', () => openDashboard(this.site === 'chess' ? '#site/chess' : ''));
 
             // Delegation: the list is re-rendered wholesale, so per-row
             // listeners would have to be re-attached (and were leaking).
@@ -127,12 +122,10 @@
         }
 
         /**
-         * The popup is two different tools wearing one window: on YouTube it
-         * is the checkpoint list this file was written for; everywhere else
-         * checkpoints do not exist, so showing an empty list and a "hold
-         * Ctrl+B on a YouTube video" tip on, say, a Netflix tab was a popup
-         * explaining a feature that page cannot have. Decided once, up
-         * front, off the one thing that tells the two apart — the site.
+         * The popup is a different tool per site: on YouTube it is the
+         * checkpoint list this file was written for, on chess.com the
+         * player's games, and anywhere else just the header. Decided once,
+         * up front, off the one thing that tells them apart — the site.
          *
          * The speed bar is not part of this split: src/page/tab-actions.js
          * already drives it through a generic "find a <video> on this page"
@@ -150,11 +143,16 @@
             }
             document.body.dataset.bbSite = this.site;
 
-            const isYouTube = this.site === 'youtube';
-            const youtubePanel = document.getElementById('youtubePanel');
-            const genericPanel = document.getElementById('genericPanel');
-            if (youtubePanel) youtubePanel.hidden = !isYouTube;
-            if (genericPanel) genericPanel.hidden = isYouTube;
+            document.getElementById('youtubePanel').hidden = this.site !== 'youtube';
+            document.getElementById('chessPanel').hidden = this.site !== 'chess';
+
+            if (this.site === 'chess') {
+                ChessStats.createView({
+                    body: document.getElementById('chessPopupBody'),
+                    compact: true,
+                    onSetUsername: () => openDashboard('#settings/chess'),
+                }).render();
+            }
         }
 
         // ------------------------------------------------------ speed bar
@@ -319,6 +317,11 @@
                     ${video.bookmarks.map((bookmark, index) => renderBookmark(video, bookmark, index)).join('')}
                 </div>`;
         }
+    }
+
+    function openDashboard(hash) {
+        chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard.html${hash || ''}`) });
+        window.close();
     }
 
     function renderBookmark(video, bookmark, index) {

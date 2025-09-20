@@ -29,6 +29,7 @@
         if (/(^|\.)netflix\.com$/.test(host)) return 'netflix';
         if (/(^|\.)reddit\.com$/.test(host)) return 'reddit';
         if (/(^|\.)(twitter|x)\.com$/.test(host)) return 'twitter';
+        if (/(^|\.)chess\.com$/.test(host)) return 'chess';
         return 'other';
     }
 

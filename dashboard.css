@@ -170,6 +170,14 @@ header h1 {
 
 .site-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--card-shadow-hover); }
 
+/* Each card sits on its own tint, taken in turn from the skin's four, so the
+   launcher reads as a set of distinct places rather than a row of identical
+   blank boxes — and changes color with the skin like everything else. */
+.site-card:nth-child(4n+1) { background: var(--site-tint-1); }
+.site-card:nth-child(4n+2) { background: var(--site-tint-2); }
+.site-card:nth-child(4n+3) { background: var(--site-tint-3); }
+.site-card:nth-child(4n+4) { background: var(--site-tint-4); }
+
 .site-card-icon {
     display: flex;
     align-items: center;
@@ -211,6 +219,7 @@ header h1 {
 }
 
 .site-subtabs { display: flex; gap: 4px; margin-left: auto; }
+.site-subtabs[hidden] { display: none; }
 
 .site-subtab {
     background: var(--surface-2);
@@ -563,9 +572,21 @@ header h1 {
 }
 
 .empty-state p { font-size: 13.5px; line-height: 1.55; }
+.empty-state .empty-icon { font-size: 40px; line-height: 1; margin-bottom: 14px; opacity: .85; }
 
-.no-bookmarks,
-.no-channels { color: var(--text-faint); font-size: 12.5px; padding: 10px 0; font-style: italic; }
+/* The same mark at list-row size, for an empty group inside a card. */
+.empty-inline {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 0;
+    color: var(--text-faint);
+    font-size: 12.5px;
+}
+
+.empty-inline .empty-icon { font-size: 17px; line-height: 1; opacity: .85; }
+
+.no-bookmarks { color: var(--text-faint); font-size: 12.5px; padding: 10px 0; font-style: italic; }
 
 /* ---------- settings ---------- */
 
@@ -679,7 +700,7 @@ header h1 {
 
 .kbd-key svg { display: block; }
 
-.kbd-sub { font-size: 9px; color: var(--kbd-sub-color); margin-top: 1px; }
+.kbd-sub { font-size: 9px; line-height: 1; color: var(--kbd-sub-color); margin-top: 5px; }
 .kbd-key.is-active .kbd-sub { color: var(--kbd-active-color); opacity: .8; }
 
 .kbd-key.key__esc { background: var(--kbd-esc-bg); color: var(--kbd-esc-color); }
@@ -770,6 +791,173 @@ header h1 {
 }
 
 .settings-section select:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+
+.text-control {
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 7px 12px;
+    min-width: 240px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.text-control::placeholder { color: var(--text-faint); }
+.text-control:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+
+.settings-section p.settings-hint { font-size: 12px; color: var(--text-faint); margin: 8px 0 0; }
+
+.settings-block { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+
+/* ---------- swatch picker (src/page/swatch-picker.js) ---------- */
+
+.swatch-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.swatch {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 50%;
+    border: 2px solid var(--surface);
+    background: var(--swatch, var(--surface-3));
+    box-shadow: 0 0 0 1px var(--border-strong);
+    cursor: pointer;
+    transition: transform .12s ease, box-shadow .15s ease;
+}
+
+.swatch:hover { transform: scale(1.08); }
+
+.swatch[aria-pressed="true"],
+.swatch-custom.is-selected { box-shadow: 0 0 0 2px var(--accent); }
+
+.swatch-default {
+    width: auto;
+    padding: 0 12px;
+    border-radius: var(--r-pill);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--surface-2);
+}
+
+.swatch-default:hover { transform: none; color: var(--text); }
+
+/* The custom swatch is a rainbow ring until a custom color is picked, then
+   that color; the native input fills it invisibly so the whole dot opens the
+   browser's picker. */
+.swatch-custom {
+    display: inline-block;
+    background:
+        radial-gradient(circle, var(--swatch, transparent) 0 45%, transparent 46%),
+        conic-gradient(#e8590c, #f2b705, #74b816, #12b886, #1c9bef, #4c6ef5, #9c36b5, #e64980, #e8590c);
+}
+
+.swatch-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+
+/* ---------- remembered cookie sites (src/page/cookie-sites-panel.js) ---------- */
+
+.cookie-sites { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0 54px; }
+
+.bb-dropdown { position: relative; }
+
+.bb-dropdown-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 230px;
+    padding: 7px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .15s ease;
+}
+
+.bb-dropdown-trigger:hover,
+.bb-dropdown.is-open .bb-dropdown-trigger { border-color: var(--accent); }
+.bb-dropdown.is-open .bb-dropdown-trigger { box-shadow: var(--ring); }
+
+.bb-dropdown-label { flex: 1; text-align: left; }
+
+.bb-dropdown-count {
+    min-width: 22px;
+    padding: 1px 7px;
+    border-radius: var(--r-pill);
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+.bb-dropdown-caret {
+    width: 7px;
+    height: 7px;
+    margin: -3px 2px 0 0;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform .15s ease;
+}
+
+.bb-dropdown.is-open .bb-dropdown-caret { transform: translateY(3px) rotate(-135deg); }
+
+.bb-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 20;
+    min-width: 100%;
+    width: max-content;
+    max-width: min(420px, 90vw);
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 5px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--card-radius);
+    box-shadow: var(--shadow-md);
+    animation: bb-pop .14s cubic-bezier(.2, .8, .2, 1);
+}
+
+.bb-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 6px 6px 10px;
+    border-radius: var(--r-sm);
+}
+
+.bb-dropdown-item:hover { background: var(--surface-2); }
+.bb-dropdown-host { flex: 1; font-family: var(--font-mono); font-size: 12.5px; color: var(--text); }
+.bb-dropdown-meta { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+
+.bb-dropdown-remove {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.bb-dropdown-remove:hover { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
+
+.bb-dropdown-empty { padding: 10px 12px; max-width: 300px; font-size: 12.5px; line-height: 1.5; color: var(--text-faint); }
 
 /* ---------- skin picker ---------- */
 
@@ -1286,4 +1474,93 @@ header h1 {
     color: var(--text-muted);
     font-size: 13.5px;
     line-height: 1.6;
+}
+
+
+/* ============================================================
+   Chess.com games — src/page/chess-stats.js
+   Built on the Activity view's figures, panels and tables above;
+   these are only the pieces Activity has no use for.
+   ============================================================ */
+
+.chess-class-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+
+.chess-class-row {
+    display: grid;
+    grid-template-columns: 64px 1fr minmax(150px, auto);
+    align-items: center;
+    gap: 12px;
+}
+
+.chess-class-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+
+.chess-class-score {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: right;
+}
+
+.chess-wdl {
+    display: flex;
+    height: 10px;
+    overflow: hidden;
+    background: var(--surface-3);
+    border-radius: var(--r-pill);
+}
+
+.chess-wdl > span { display: block; height: 100%; }
+.chess-wdl-win { background: var(--success); }
+.chess-wdl-draw { background: var(--text-faint); opacity: .55; }
+.chess-wdl-loss { background: var(--danger); }
+
+.chess-legend { display: flex; gap: 14px; margin-top: 16px; font-size: 11px; color: var(--text-faint); }
+.chess-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chess-legend span::before { content: ""; width: 9px; height: 9px; border-radius: 2px; }
+.chess-legend .is-win::before { background: var(--success); }
+.chess-legend .is-draw::before { background: var(--text-faint); opacity: .55; }
+.chess-legend .is-loss::before { background: var(--danger); }
+
+.stat-table .col-num {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    padding-left: 12px;
+}
+
+.stat-table th.col-num { font-family: var(--font); }
+.chess-per-game { color: var(--accent-ink); font-weight: 700; }
+.chess-per-game span { color: var(--text-faint); font-weight: 400; }
+
+.chess-recent-table td { vertical-align: middle; }
+.chess-recent-table .col-day { width: 132px; }
+
+.chess-opponent { color: var(--text); font-weight: 600; text-decoration: none; }
+.chess-opponent:hover { color: var(--accent-ink); text-decoration: underline; }
+
+.chess-result {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: var(--r-pill);
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.chess-result.is-win { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+.chess-result.is-loss { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
+.chess-result.is-draw { background: var(--surface-3); color: var(--text-muted); border-color: var(--border); }
+
+.chess-empty-icon svg { display: inline-block; width: 44px; height: 44px; }
+.chess-empty .btn-primary { margin-top: 18px; }
+
+@media (max-width: 720px) {
+    .chess-class-row { grid-template-columns: 56px 1fr; }
+    .chess-class-score { grid-column: 1 / -1; text-align: left; }
+    .cookie-sites { margin-left: 0; }
 }

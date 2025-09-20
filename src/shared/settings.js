@@ -46,9 +46,19 @@
         connectToSowon: false,
         bbTabMoveDebug: false,
 
+        // Cookie banners: adds an "Always accept here" button to consent
+        // popups, and accepts on its own on sites remembered that way. The
+        // remembered sites are data, under DATA.cookieSites.
+        cookieBannerHelper: true,
+
         // Activity tracking. Off by default and nothing is recorded while it
         // is off; turning it on reveals the dashboard's Activity tab.
         trackActivity: false,
+
+        // chess.com
+        chessUsername: '',
+        chessLegalMoveColor: '', // '' keeps chess.com's own; else a hex from src/shared/palette.js
+        chessClearArrowsShortcut: true, // Alt+C clears every drawn arrow
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
@@ -80,6 +90,13 @@
 
         // Playlists followed for new entries. shared/playlists.js owns it.
         playlists: 'bbPlaylists',
+
+        // Sites whose cookie banner is accepted without asking.
+        // shared/cookie-sites.js owns the shape.
+        cookieSites: 'bbCookieSites',
+
+        // chess.com monthly game archives, normalized. shared/chess.js.
+        chessCache: 'bbChessArchiveCache',
     });
 
     function withDefaults(stored, keys) {

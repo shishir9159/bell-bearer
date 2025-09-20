@@ -26,9 +26,9 @@
 
         <div id="dashboardView" class="view active">
             <!-- The launcher: one large card per site Bell Bearer works with.
-                 Today that is YouTube alone, but the grid — not a single
-                 YouTube-shaped view — is the point: a second site gets a card
-                 here and a workspace of its own, not a rewrite of this page. -->
+                 A site gets a card here and a workspace of its own below —
+                 its subtabs come from SITE_TABS in dashboard.js and its
+                 panels are the .site-panel blocks carrying its data-site. -->
             <div class="sites-grid" id="sitesGrid"></div>
 
             <div class="site-workspace" id="siteWorkspace" hidden>
@@ -36,15 +36,12 @@
                     <button id="siteBackBtn" class="btn-secondary" type="button">&larr; Sites</button>
                     <div class="site-workspace-brand">
                         <span class="site-workspace-icon" id="siteWorkspaceIcon"></span>
-                        <h2 id="siteWorkspaceName"></h2>
+                        <h2 id="siteWorkspaceName" class="bb-proper"></h2>
                     </div>
-                    <nav class="site-subtabs">
-                        <button id="siteCheckpointsTab" class="site-subtab active" type="button">Checkpoints</button>
-                        <button id="siteSubscriptionsTab" class="site-subtab" type="button">Subscriptions</button>
-                    </nav>
+                    <nav class="site-subtabs" id="siteSubtabs"></nav>
                 </div>
 
-                <div id="siteCheckpointsPanel" class="site-panel active">
+                <div id="siteCheckpointsPanel" class="site-panel" data-site="youtube">
                     <div class="dashboard-header">
                         <h2>Your Saved Videos</h2>
                         <div class="dashboard-controls">
@@ -65,7 +62,7 @@
                     </div>
                 </div>
 
-                <div id="siteSubscriptionsPanel" class="site-panel">
+                <div id="siteSubscriptionsPanel" class="site-panel" data-site="youtube">
                     <div class="subscriptions-header">
                         <h2>Subscription Manager</h2>
                         <div class="subscriptions-controls">
@@ -77,6 +74,21 @@
                     <div class="topics-container" id="topicsContainer">
                         <!-- Topics will be rendered here -->
                     </div>
+                </div>
+
+                <div id="chessGamesPanel" class="site-panel" data-site="chess">
+                    <div class="dashboard-header">
+                        <h2>Games</h2>
+                        <div class="dashboard-controls">
+                            <div class="range-seg" id="chessRange" role="group" aria-label="Range">
+                                <button class="range-opt" type="button" data-range="today" aria-pressed="true">Today</button>
+                                <button class="range-opt" type="button" data-range="week" aria-pressed="false">Last 7 days</button>
+                                <button class="range-opt" type="button" data-range="month" aria-pressed="false">Last 30 days</button>
+                            </div>
+                            <button id="chessRefreshBtn" class="btn-secondary" type="button">Refresh</button>
+                        </div>
+                    </div>
+                    <div id="chessStatsBody"></div>
                 </div>
             </div>
         </div>
@@ -190,6 +202,17 @@
                         </label>
                         <span class="setting-label">Show "Copy as Markdown" in the right-click menu — converts a link or the page to <code>[title](url)</code> only when you explicitly pick it; ordinary copying is never affected</span>
                     </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cookieBannerHelper">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Cookie banners — add an "Always accept here" button to a site's cookie popup; a site you pick that way has its popup accepted for you from then on</span>
+                    </div>
+
+                    <!-- Filled by src/page/cookie-sites-panel.js. -->
+                    <div class="cookie-sites" id="cookieSitesPanel"></div>
                 </div>
 
                 <div class="settings-section">
@@ -200,7 +223,7 @@
 
                 <div class="settings-section">
                     <h3>About</h3>
-                    <p>Bell Bearer helps you organize and manage your YouTube video bookmarks.</p>
+                    <p>Bell Bearer helps you organize and manage your <span class="bb-proper">YouTube</span> video bookmarks and your <span class="bb-proper">Chess.com</span> games.</p>
                     <p>Version: 1.0</p>
                 </div>
             </div>
@@ -211,13 +234,44 @@
                     <button id="siteSettingsBackBtn" class="btn-secondary" type="button">&larr; Settings</button>
                     <div class="site-workspace-brand">
                         <span class="site-workspace-icon" id="siteSettingsIcon"></span>
-                        <h2 id="siteSettingsName"></h2>
+                        <h2 id="siteSettingsName" class="bb-proper"></h2>
                     </div>
                 </div>
 
                 <div class="settings-content">
-                    <div class="settings-section" id="youtubeSettingsPanel">
-                        <h3>YouTube</h3>
+                    <div class="settings-section" id="chessSettingsPanel" data-site-settings="chess" hidden>
+                        <h3 class="bb-proper">Chess.com</h3>
+
+                        <div class="settings-option">
+                            <label class="setting-label" for="chessUsername">Username</label>
+                            <input type="text" id="chessUsername" class="text-control" placeholder="Your chess.com username"
+                                   autocomplete="off" spellcheck="false">
+                        </div>
+                        <p class="settings-hint">Games are read from chess.com's public API for this player — no sign-in, nothing sent anywhere else.</p>
+
+                        <div class="settings-block">
+                            <span class="setting-label">Legal move color — the dots and capture rings chess.com shows for a selected piece</span>
+                            <div id="chessLegalMoveColorPicker"></div>
+                        </div>
+
+                        <div class="shortcut-list" style="margin-top: 18px;">
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">Alt + C</span>
+                                <span class="shortcut-desc">Clear every arrow drawn on the board</span>
+                            </div>
+                        </div>
+
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="chessClearArrowsShortcut">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="setting-label">Enable the clear-arrows shortcut (Alt+C) on chess.com</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-section" id="youtubeSettingsPanel" data-site-settings="youtube" hidden>
+                        <h3 class="bb-proper">YouTube</h3>
 
                         <div class="settings-option" style="display: flex; align-items: center; gap: 12px;">
                             <span class="setting-label">Add-to-pouch button</span>
@@ -413,11 +467,17 @@
     <script src="src/shared/feed.js"></script>
     <script src="src/shared/site-icons.js"></script>
     <script src="src/shared/feather-icons.js"></script>
+    <script src="src/shared/palette.js"></script>
+    <script src="src/shared/cookie-sites.js"></script>
+    <script src="src/shared/chess.js"></script>
     <script src="src/page/ui.js"></script>
     <script src="src/page/settings-form.js"></script>
     <script src="src/page/skin-picker.js"></script>
+    <script src="src/page/swatch-picker.js"></script>
+    <script src="src/page/cookie-sites-panel.js"></script>
     <script src="src/page/keyboard.js"></script>
     <script src="src/page/stats.js"></script>
+    <script src="src/page/chess-stats.js"></script>
     <script src="src/page/transfer.js"></script>
     <script src="src/page/tab-actions.js"></script>
     <script src="dashboard.js"></script>

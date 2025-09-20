@@ -1122,3 +1122,45 @@
      </div>
    </div>
    ============================================================ */
+
+/* ---------------------------------------------------------- cookie banner */
+
+/* Added beside a site's own accept button (src/content/cookie-banner.js).
+   It lives inside somebody else's design, light or dark, so it carries its
+   own colors rather than inheriting them — inherited text vanished against a
+   dark banner whose button row set a dark color — and stays a small chip so
+   the banner's own accept button remains the loudest thing in it. */
+.bb-cookie-remember {
+    all: unset;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 6px 0 2px 8px;
+    padding: 5px 12px 5px 9px;
+    background: #ffffff;
+    color: #191515;
+    border: 1px solid rgba(25, 21, 21, .18);
+    border-radius: 999px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    white-space: nowrap;
+    vertical-align: middle;
+    transition: background .15s ease, border-color .15s ease;
+}
+
+.bb-cookie-remember::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #b81808;
+    flex-shrink: 0;
+}
+
+.bb-cookie-remember:hover { background: #fcefed; border-color: #b81808; }
+.bb-cookie-remember:focus-visible { outline: 2px solid #b81808; outline-offset: 2px; }
