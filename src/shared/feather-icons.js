@@ -9,7 +9,7 @@
  * glyph takes `currentColor` and follows the surrounding text/skin instead of
  * carrying a hard-coded color the way an <img src="icon.svg"> would.
  *
- * Only the names src/page/keyboard.js actually draws are here; add more the
+ * Only the names the settings page actually draws are here; add more the
  * same way — fetch dist/icons/<name>.svg from the feather-icons package and
  * copy its children in — rather than pulling in ones nothing uses yet.
  */
@@ -30,6 +30,9 @@
         'arrow-left': '<line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>',
         'arrow-down': '<line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline>',
         'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
+        'edit-2': '<path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>',
+        'rotate-ccw': '<polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>',
+        'external-link': '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>',
     };
 
     function svg(name, size = 16) {

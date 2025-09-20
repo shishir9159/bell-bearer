@@ -11,8 +11,9 @@
     'use strict';
 
     const DEFAULTS = Object.freeze({
-        // Shortcuts / playback
-        enableSkipShortcuts: true,
+        // Shortcuts / playback. `shortcuts` holds only what the user changed —
+        // `{ [id]: { enabled?, combo? } }` — see src/shared/keybindings.js.
+        shortcuts: {},
         rememberPlaybackSpeed: true,
         showSpeedButtonsInPopup: false,
 
@@ -46,10 +47,11 @@
         connectToSowon: false,
         bbTabMoveDebug: false,
 
-        // Cookie banners: adds an "Always accept here" button to consent
-        // popups, and accepts on its own on sites remembered that way. The
-        // remembered sites are data, under DATA.cookieSites.
-        cookieBannerHelper: true,
+        // Cookie banners: which of "Always accept" / "Always reject" are
+        // added to a site's consent popup. A site remembered either way is
+        // answered for you regardless; those sites are data, DATA.cookieSites.
+        cookieAcceptButton: true,
+        cookieRejectButton: true,
 
         // Activity tracking. Off by default and nothing is recorded while it
         // is off; turning it on reveals the dashboard's Activity tab.
@@ -57,8 +59,6 @@
 
         // chess.com
         chessUsername: '',
-        chessLegalMoveColor: '', // '' keeps chess.com's own; else a hex from src/shared/palette.js
-        chessClearArrowsShortcut: true, // Alt+C clears every drawn arrow
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

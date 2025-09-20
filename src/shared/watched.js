@@ -80,7 +80,7 @@
         const snapshot = cache;
         const write = () => chrome.storage.local.set({ [KEY]: snapshot });
         writeChain = writeChain.then(write, write).catch((error) => {
-            console.error('Bell Bearer: could not record watched videos', error);
+            console.log('Bell Bearer: could not record watched videos', error);
         });
         return cache;
     }

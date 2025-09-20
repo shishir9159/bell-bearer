@@ -1,10 +1,8 @@
 /**
  * A small, shared color palette and the color math that goes with it.
  *
- * The first user is the chess.com legal-move color, but nothing here knows
- * about chess: a feature that wants a user-chosen color stores a hex string
- * in a setting and draws with rgba(). src/page/swatch-picker.js is the
- * matching control for a settings page.
+ * Nothing uses it yet; it is here for the next feature that wants a
+ * user-chosen color — store a hex string in a setting, draw with rgba().
  */
 (function (root) {
     'use strict';
