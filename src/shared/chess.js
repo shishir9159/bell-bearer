@@ -30,6 +30,15 @@
 
     const DAY_MS = 24 * 60 * 60 * 1000;
 
+    /**
+     * How far back archives are kept once read: the heat map's year. The
+     * popup only asks for 30 days, and must not prune what the dashboard read.
+     */
+    const HISTORY_DAYS = 371;
+
+    /** Games per time control the flagging analysis looks back over. */
+    const FLAG_WINDOW = 20;
+
     // ------------------------------------------------------------- parsing
 
     /** "180+2" → { base: 180, increment: 2 }; "1/86400" is a daily game. */
@@ -193,6 +202,52 @@
         return out;
     }
 
+    /**
+     * Time management: of the last `window` games in each time control, how
+     * many were won by flagging the opponent and how many lost on time.
+     * `how` is the loser's result code, so a flag is 'timeout' either way —
+     * a timeout against insufficient material is a draw and counts as neither.
+     * Works for any site whose games carry { end, timeClass, result, how }.
+     */
+    function flagStats(games, window = FLAG_WINDOW) {
+        const out = {};
+        const newest = (games || []).slice().sort((a, b) => b.end - a.end);
+        for (const name of CLASSES) {
+            const recent = newest.filter((game) => game.timeClass === name).slice(0, window);
+            out[name] = {
+                games: recent.length,
+                won: recent.filter((game) => game.result === 'win' && game.how === 'timeout').length,
+                lost: recent.filter((game) => game.result === 'loss' && game.how === 'timeout').length,
+            };
+        }
+        return out;
+    }
+
+    /** 'YYYY-MM-DD' in local time — the heat map's day. */
+    function dayKey(ms) {
+        const date = new Date(ms);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    /**
+     * Seconds at the board per local day, and games per day. A game's time is
+     * its wall-clock length, or failing that both clocks' use. Daily
+     * (correspondence) games are left out: their "length" is days of waiting.
+     */
+    function dailyTime(games) {
+        const days = {};
+        for (const game of games || []) {
+            if (!game || !game.end || game.timeClass === 'daily' || game.timeClass === 'correspondence') continue;
+            const seconds = game.duration != null ? game.duration
+                : (game.myTime != null && game.oppTime != null ? game.myTime + game.oppTime : 0);
+            const key = dayKey(game.end);
+            const day = days[key] || (days[key] = { seconds: 0, games: 0 });
+            day.seconds += seconds;
+            day.games++;
+        }
+        return days;
+    }
+
     function human(seconds) {
         const s = Math.max(0, Math.round(Number(seconds) || 0));
         if (s < 60) return `${s}s`;
@@ -289,9 +344,12 @@
             };
         }
 
-        // Only the months still in the window are worth their storage.
+        // Only the months still in the history window are worth their storage —
+        // wider than `days`, so a 30-day read never drops the dashboard's year.
         const kept = {};
-        months.forEach((month) => { if (archives[month]) kept[month] = archives[month]; });
+        archiveMonths(now, Math.max(days, HISTORY_DAYS)).forEach((month) => {
+            if (archives[month]) kept[month] = archives[month];
+        });
         await Settings.set({ [Settings.DATA.chessCache]: { user, archives: kept } });
 
         const since = now - days * DAY_MS;
@@ -302,9 +360,9 @@
     }
 
     const Chess = {
-        CLASSES, CLASS_LABEL, RANGES, ChessApiError,
+        CLASSES, CLASS_LABEL, RANGES, HISTORY_DAYS, FLAG_WINDOW, DAY_MS, ChessApiError,
         parseTimeControl, parseClocks, parseHeaders, durationOf, timeUsed, resultOf, normalize,
-        rangeStart, summarize, counts, winRate, winLossRatio, human, formatControl,
+        rangeStart, summarize, counts, winRate, winLossRatio, flagStats, dayKey, dailyTime, human, formatControl,
         archiveMonths, cleanUsername, fetchGames,
     };
 

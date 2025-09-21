@@ -18,6 +18,7 @@
         Settings.DATA.channelIdCache,
         Settings.DATA.feedCache,
         Settings.DATA.chessCache,
+        Settings.DATA.lichessCache,
         'bbChannelIdCache',
         'bb_activity_last',
     ]);

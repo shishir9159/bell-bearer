@@ -42,10 +42,8 @@
         pouchShowAllSubscribed: false,
 
         // Browser integration
-        openTabNextToCurrent: false,
         markdownContextMenu: true,
         connectToSowon: false,
-        bbTabMoveDebug: false,
 
         // Cookie banners: which of "Always accept" / "Always reject" are
         // added to a site's consent popup. A site remembered either way is
@@ -59,6 +57,19 @@
 
         // chess.com
         chessUsername: '',
+
+        // A warning during a chess.com game when the opponent's clock is more
+        // than N seconds ahead of yours, per time control — src/content/chess.js.
+        chessWarnBullet: false,
+        chessWarnBulletSeconds: 10,
+        chessWarnBlitz: false,
+        chessWarnBlitzSeconds: 30,
+        chessWarnRapid: false,
+        chessWarnRapidSeconds: 60,
+
+        // Lichess, read alongside chess.com for the time-management figures
+        // and the heat map — src/shared/lichess.js.
+        lichessUsername: '',
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
@@ -97,6 +108,9 @@
 
         // chess.com monthly game archives, normalized. shared/chess.js.
         chessCache: 'bbChessArchiveCache',
+
+        // Lichess games, normalized, and how far the export was read. shared/lichess.js.
+        lichessCache: 'bbLichessGameCache',
     });
 
     function withDefaults(stored, keys) {
