@@ -14,7 +14,13 @@
     const Settings = ns.Settings || req('../shared/settings.js');
 
     function readControl(element) {
-        return element.type === 'checkbox' ? element.checked : element.value;
+        if (element.type === 'checkbox') return element.checked;
+        if (element.type === 'number') {
+            const value = Number(element.value);
+            const min = element.min === '' ? -Infinity : Number(element.min);
+            return Number.isFinite(value) ? Math.max(min, value) : Settings.DEFAULTS[element.id];
+        }
+        return element.value;
     }
 
     function writeControl(element, value) {

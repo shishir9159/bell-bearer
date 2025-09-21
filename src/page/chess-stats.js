@@ -116,7 +116,104 @@
         );
     }
 
-    function fullMarkup({ username, games, range, now }) {
+    // ------------------------------------------------------ time management
+
+    function flagCells(stats) {
+        return Chess.CLASSES.map((name) => {
+            const row = stats[name];
+            const label = Chess.CLASS_LABEL[name];
+            if (!row.games) {
+                return `<span class="chess-flag-cell is-empty" title="No ${label.toLowerCase()} games"><span class="chess-flag-class">${label}</span><span class="chess-flag-of">—</span></span>`;
+            }
+            const title = `Last ${row.games} ${label.toLowerCase()} game${row.games === 1 ? '' : 's'}: won ${row.won} by flagging, lost ${row.lost} on time`;
+            return `
+                <span class="chess-flag-cell" title="${esc(title)}">
+                    <span class="chess-flag-class">${label}</span>
+                    <span class="chess-flag-won">${row.won} won</span>
+                    <span class="chess-flag-lost">${row.lost} lost</span>
+                    <span class="chess-flag-of">/ ${row.games}</span>
+                </span>`;
+        }).join('');
+    }
+
+    function lichessFlagLine(lichess) {
+        if (!lichess.user) {
+            return '<span class="chess-flag-note">No Lichess username — <button type="button" class="chess-link" data-chess-action="set-username">add one in Settings</button></span>';
+        }
+        if (lichess.games && lichess.games.length) {
+            const reading = lichess.loading ? `<span class="chess-flag-note">reading… ${lichess.games.length}</span>` : '';
+            return flagCells(Chess.flagStats(lichess.games)) + reading;
+        }
+        if (lichess.error) {
+            return `<span class="chess-flag-note">${esc(lichess.error.message)} — <button type="button" class="chess-link" data-chess-action="lichess-retry">try again</button></span>`;
+        }
+        if (lichess.loading || !lichess.games) return `<span class="chess-flag-note">Reading games for ${esc(lichess.user)}…</span>`;
+        return '<span class="chess-flag-note">No games in the last year.</span>';
+    }
+
+    function timeManagementPanel({ games, history, lichess }) {
+        return `
+            <div class="stat-panel chess-flags">
+                <h3>Time management</h3>
+                <p class="stat-sub">Flagging over the last ${Chess.FLAG_WINDOW} games of each time control: games won on the opponent's clock, and lost on yours.</p>
+                <ul class="chess-flag-list">
+                    <li class="chess-flag-row"><span class="chess-flag-site bb-proper">Chess.com</span>${flagCells(Chess.flagStats(history || games))}</li>
+                    <li class="chess-flag-row"><span class="chess-flag-site bb-proper">Lichess</span>${lichessFlagLine(lichess)}</li>
+                </ul>
+            </div>`;
+    }
+
+    // --------------------------------------------------------------- heat map
+
+    const HEAT_STEPS = [15 * 60, 45 * 60, 90 * 60];
+    const HEAT_LEGEND = ['No games', 'Up to 15m', '15m – 45m', '45m – 1h 30m', 'Over 1h 30m'];
+
+    function heatPanel({ history, historyError, lichess, now }) {
+        let body;
+        let sub;
+        if (history) {
+            const games = history.concat((lichess.user && lichess.games) || []);
+            const daily = Chess.dailyTime(games);
+            const days = {};
+            let total = 0;
+            let played = 0;
+            let busiest = null;
+            for (const [key, day] of Object.entries(daily)) {
+                days[key] = { value: day.seconds, seconds: day.seconds, games: day.games };
+                total += day.seconds;
+                played++;
+                if (!busiest || day.seconds > busiest.seconds) busiest = { key, ...day };
+            }
+            const sites = lichess.user && lichess.games ? 'chess.com and Lichess' : 'chess.com';
+            sub = played
+                ? `${Chess.human(total)} across ${played} day${played === 1 ? '' : 's'} on ${sites} this past year · busiest ${esc(busiest.key)}, ${Chess.human(busiest.seconds)}`
+                : `No games on ${sites} this past year.`;
+            body = BB.HeatMap.render({
+                days,
+                end: now,
+                steps: HEAT_STEPS,
+                legend: HEAT_LEGEND,
+                describe: (day, date) => {
+                    const when = date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+                    return day ? `${when} — ${Chess.human(day.seconds)} · ${day.games} game${day.games === 1 ? '' : 's'}` : `${when} — no games`;
+                },
+            });
+        } else if (historyError) {
+            sub = esc(historyError.message);
+            body = '<button type="button" class="btn-secondary" data-chess-action="history-retry">Try again</button>';
+        } else {
+            sub = 'Reading a year of chess.com games — the first time takes a moment, after that only the current month is re-read.';
+            body = '<div class="hm-placeholder"></div>';
+        }
+        return `
+            <div class="stat-panel chess-heat">
+                <h3>Time at the board</h3>
+                <p class="stat-sub">${sub}</p>
+                ${body}
+            </div>`;
+    }
+
+    function fullMarkup({ username, games, range, now, history, historyError, lichess }) {
         const summary = Chess.summarize(games, { since: Chess.rangeStart(range, now), until: now });
         const count = Chess.counts(games, now);
         const label = Chess.RANGES[range].toLowerCase();
@@ -141,6 +238,8 @@
                     ${clockTable(summary)}
                 </div>
             </div>
+            ${timeManagementPanel({ games, history, lichess })}
+            ${heatPanel({ history, historyError, lichess, now })}
             <div class="stat-panel">
                 <h3>Games</h3>
                 <p class="stat-sub">${summary.count} game${summary.count === 1 ? '' : 's'} ${label}, newest first.</p>
@@ -245,6 +344,14 @@
         let range = 'today';
         let loadedFor = '';
 
+        // Dashboard only: a year of chess.com games for the heat map and the
+        // flagging figures, and the Lichess player's games beside them. Both
+        // are read after the 30-day view has drawn, so it never waits on them.
+        let history = null;
+        let historyError = null;
+        let historyLoading = false;
+        const lichess = { user: '', games: null, error: null, loading: false };
+
         function paint() {
             if (!body) return;
 
@@ -271,13 +378,66 @@
                 return;
             }
 
-            const state = { username, games, range, now: Date.now() };
+            const state = { username, games, range, now: Date.now(), history, historyError, lichess };
+            // Redrawing wholesale would snap a scrolled heat map back to its start.
+            const scroller = body.querySelector('.hm-scroll');
+            const scrolled = scroller ? scroller.scrollWidth - scroller.clientWidth - scroller.scrollLeft : 0;
             body.innerHTML = compact ? compactMarkup(state) : fullMarkup(state);
             if (compact) fitPills(body.querySelector('.chess-pills'));
+            const heat = body.querySelector('.hm-scroll');
+            if (heat) heat.scrollLeft = heat.scrollWidth - heat.clientWidth - scrolled;
+        }
+
+        async function loadHistory() {
+            if (compact || !username || historyLoading) return;
+            historyLoading = true;
+            historyError = null;
+            // Both reads write the same archive cache; one at a time.
+            if (refreshButton) refreshButton.disabled = true;
+            const wanted = username;
+            try {
+                // Not forced: the load before this one just re-read the live
+                // month, and the closed ones never change.
+                const result = await Chess.fetchGames(wanted, { days: Chess.HISTORY_DAYS });
+                if (wanted === username) history = result;
+            } catch (caught) {
+                if (wanted === username) historyError = caught;
+            } finally {
+                historyLoading = false;
+                if (refreshButton && !loading) refreshButton.disabled = false;
+                paint();
+                // The player changed mid-read; that load was turned away, so run it now.
+                if (wanted !== username) load(false);
+            }
+        }
+
+        async function loadLichess(force) {
+            if (compact || !lichess.user || lichess.loading || !BB.Lichess) return;
+            lichess.loading = true;
+            lichess.error = null;
+            const wanted = lichess.user;
+            paint();
+            try {
+                const result = await BB.Lichess.fetchGames(wanted, {
+                    force,
+                    onProgress: (partial) => {
+                        if (wanted !== lichess.user) return;
+                        lichess.games = partial;
+                        paint();
+                    },
+                });
+                if (wanted === lichess.user) lichess.games = result;
+            } catch (caught) {
+                if (wanted === lichess.user) lichess.error = caught;
+            } finally {
+                lichess.loading = false;
+                paint();
+                if (wanted !== lichess.user) loadLichess(false);
+            }
         }
 
         async function load(force) {
-            if (!username || loading) return;
+            if (!username || loading || historyLoading) return;
             loading = true;
             error = null;
             if (refreshButton) refreshButton.disabled = true;
@@ -299,6 +459,10 @@
                 loading = false;
                 if (refreshButton) refreshButton.disabled = false;
                 paint();
+            }
+            if (games && !compact) {
+                loadHistory();
+                loadLichess(force);
             }
         }
 
@@ -332,6 +496,8 @@
                 if (!action) return;
                 if (action.dataset.chessAction === 'set-username' && onSetUsername) onSetUsername();
                 else if (action.dataset.chessAction === 'retry') load(true);
+                else if (action.dataset.chessAction === 'history-retry') loadHistory();
+                else if (action.dataset.chessAction === 'lichess-retry') loadLichess(true);
             });
         }
 
@@ -347,12 +513,25 @@
             username = next;
             games = null;
             error = null;
+            history = null;
+            historyError = null;
+            return true;
+        };
+
+        const applyLichessUser = (value) => {
+            const next = BB.Lichess ? BB.Lichess.cleanUsername(value) : '';
+            if (next === lichess.user) return false;
+            lichess.user = next;
+            lichess.games = null;
+            lichess.error = null;
             return true;
         };
 
         /** Draw, reading games only when the username changed or none are loaded. */
         async function render() {
-            if (!username) applyUsername((await Settings.get(['chessUsername'])).chessUsername);
+            const stored = await Settings.get(['chessUsername', 'lichessUsername']);
+            if (!username) applyUsername(stored.chessUsername);
+            if (!compact && !lichess.user) applyLichessUser(stored.lichessUsername);
             showControls();
             if (username && !games && !error) load(false);
             else paint();
@@ -365,6 +544,14 @@
                 load(false);
             }
         });
+
+        if (!compact) {
+            Settings.watch(['lichessUsername'], (changed) => {
+                if (!applyLichessUser(changed.lichessUsername)) return;
+                paint();
+                if (games) loadLichess(false);
+            });
+        }
 
         return { render, refresh: () => load(true), setRange };
     }
