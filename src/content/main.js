@@ -234,13 +234,17 @@
 
     // ------------------------------------------------------ chess.com extras
 
+    let chess = null;
+
     if (site === 'chess') {
-        ChessContent.createChess({
+        chess = ChessContent.createChess({
             Keybindings,
             Shortcuts,
             notify,
             getShortcut: (id) => Keybindings.resolve(settings.shortcuts, id),
-        }).install();
+            getSettings: () => settings,
+        });
+        chess.install();
     }
 
     // ------------------------------------------------------ cookie banners
@@ -261,6 +265,7 @@
         Object.assign(settings, values);
 
         if (pouchStyleChanged && youtubeUi) youtubeUi.refreshPouchButton();
+        if (chess) chess.syncClockWarning();
     }
 
     Settings.get().then(applySettings);
