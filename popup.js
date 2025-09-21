@@ -24,6 +24,7 @@
             this.showSpeedBar = false;
             this.speedTab = null;
             this.site = 'other';
+            this.isWebPage = false;
         }
 
         async init() {
@@ -136,9 +137,16 @@
         async applySiteLayout() {
             try {
                 const tab = await TabActions.activeTab();
-                const hostname = tab && tab.url ? new URL(tab.url).hostname : '';
-                this.site = Site ? Site.detectSite(hostname) : 'other';
+                const url = tab && tab.url ? new URL(tab.url) : null;
+                // The speed bar only makes sense where a <video> could live —
+                // an ordinary web page. On the dashboard, on chrome:// /
+                // about: pages, and on the extension's own pages there is no
+                // video (and no content script), so the popup is the header
+                // alone: just "Dashboard", no playback controls.
+                this.isWebPage = !!url && (url.protocol === 'http:' || url.protocol === 'https:');
+                this.site = url && Site ? Site.detectSite(url.hostname) : 'other';
             } catch (_) {
+                this.isWebPage = false;
                 this.site = 'other';
             }
             document.body.dataset.bbSite = this.site;
@@ -161,7 +169,7 @@
             const bar = document.getElementById('speedControlBar');
             if (!bar) return;
 
-            if (!this.showSpeedBar) {
+            if (!this.showSpeedBar || !this.isWebPage) {
                 bar.hidden = true;
                 return;
             }

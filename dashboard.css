@@ -621,36 +621,116 @@ header h1 {
     max-width: 78ch;
 }
 
+/* A shortcut row (src/page/shortcut-list.js): keys, what they do, and the
+   row's own controls pinned to the right — reset (only once changed), edit,
+   on/off. The first column is a fixed width so descriptions start on one line
+   down the list, and the reset slot is kept even when empty so the edit
+   buttons and switches line up whether or not a row was changed. */
+.shortcut-heading {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 20px 0 9px;
+}
+
 .shortcut-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 22px; }
 
 .shortcut-item {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr) auto;
     align-items: center;
     gap: 16px;
-    padding: 9px 13px;
+    min-height: 46px;
+    padding: 7px 10px 7px 13px;
     background: var(--surface-2);
     border: 1px solid var(--border);
     border-radius: var(--r-sm);
-    transition: border-color .15s ease;
+    transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
 }
 
-.shortcut-item:hover { border-color: var(--accent-soft-2); }
+.shortcut-item:hover { border-color: var(--accent-soft-2); background: var(--surface); }
 
-.shortcut-key {
+.shortcut-item.is-editing {
+    border-color: var(--accent);
+    background: var(--surface);
+    box-shadow: var(--ring);
+}
+
+.shortcut-key { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
+
+.kbd-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
     background: var(--surface);
     border: 1px solid var(--border-strong);
+    border-bottom-width: 2px;
     border-radius: 5px;
-    padding: 3px 9px;
     font-family: var(--font-mono);
     font-size: 11.5px;
     font-weight: 600;
+    line-height: 1;
     color: var(--text);
     white-space: nowrap;
+}
+
+.kbd-plus { font-size: 11px; color: var(--text-faint); }
+.kbd-none { font-size: 12px; font-style: italic; color: var(--text-faint); }
+
+.kbd-listening {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 11px;
+    background: var(--accent-soft);
+    border: 1px dashed var(--accent);
+    border-radius: var(--r-pill);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-ink);
+}
+
+.shortcut-desc { font-size: 13px; color: var(--text-muted); line-height: 1.45; }
+
+.shortcut-item.is-off .shortcut-key,
+.shortcut-item.is-off .shortcut-desc { opacity: .45; }
+
+.shortcut-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+
+.shortcut-icon-btn,
+.shortcut-icon-slot {
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
 }
 
-.shortcut-desc { font-size: 13px; color: var(--text-muted); text-align: right; line-height: 1.45; }
+.shortcut-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.shortcut-icon-btn svg { display: block; }
+.shortcut-icon-btn:hover { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-soft-2); }
+.shortcut-icon-btn.is-active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+
+.shortcut-actions .toggle-switch { margin-left: 8px; }
+
+.toggle-switch.toggle-sm { width: 34px; height: 20px; }
+.toggle-sm .toggle-slider::before { width: 14px; height: 14px; }
+.toggle-sm input:checked + .toggle-slider::before { transform: translateX(13px); }
 
 /* ---------- interactive keyboard ---------- */
 
@@ -810,58 +890,15 @@ header h1 {
 
 .settings-block { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
 
-/* ---------- swatch picker (src/page/swatch-picker.js) ---------- */
-
-.swatch-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-
-.swatch {
-    position: relative;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border-radius: 50%;
-    border: 2px solid var(--surface);
-    background: var(--swatch, var(--surface-3));
-    box-shadow: 0 0 0 1px var(--border-strong);
-    cursor: pointer;
-    transition: transform .12s ease, box-shadow .15s ease;
-}
-
-.swatch:hover { transform: scale(1.08); }
-
-.swatch[aria-pressed="true"],
-.swatch-custom.is-selected { box-shadow: 0 0 0 2px var(--accent); }
-
-.swatch-default {
-    width: auto;
-    padding: 0 12px;
-    border-radius: var(--r-pill);
-    font-family: var(--font);
-    font-size: 11.5px;
-    font-weight: 600;
-    color: var(--text-muted);
-    background: var(--surface-2);
-}
-
-.swatch-default:hover { transform: none; color: var(--text); }
-
-/* The custom swatch is a rainbow ring until a custom color is picked, then
-   that color; the native input fills it invisibly so the whole dot opens the
-   browser's picker. */
-.swatch-custom {
-    display: inline-block;
-    background:
-        radial-gradient(circle, var(--swatch, transparent) 0 45%, transparent 46%),
-        conic-gradient(#e8590c, #f2b705, #74b816, #12b886, #1c9bef, #4c6ef5, #9c36b5, #e64980, #e8590c);
-}
-
-.swatch-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
-
-/* ---------- remembered cookie sites (src/page/cookie-sites-panel.js) ---------- */
+/* ---------- remembered cookie sites + global export/import (src/page/cookie-sites-panel.js) ---------- */
 
 .cookie-sites { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0 54px; }
 
 .bb-dropdown { position: relative; }
+
+/* One row, one height: the dropdown and the two buttons beside it. */
+.cookie-sites .bb-dropdown-trigger,
+.cookie-sites .btn-secondary { height: 34px; }
 
 .bb-dropdown-trigger {
     display: inline-flex;
@@ -937,7 +974,17 @@ header h1 {
 
 .bb-dropdown-item:hover { background: var(--surface-2); }
 .bb-dropdown-host { flex: 1; font-family: var(--font-mono); font-size: 12.5px; color: var(--text); }
-.bb-dropdown-meta { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+.bb-decision {
+    padding: 1px 8px;
+    border-radius: var(--r-pill);
+    border: 1px solid transparent;
+    font-size: 10.5px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.bb-decision.is-accept { background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
+.bb-decision.is-decline { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
 
 .bb-dropdown-remove {
     width: 24px;
@@ -1229,8 +1276,8 @@ header h1 {
     .view { padding: 20px 18px; }
     .nav-tabs { overflow-x: auto; scrollbar-width: none; }
     .nav-tabs::-webkit-scrollbar { display: none; }
-    .shortcut-item { flex-direction: column; align-items: flex-start; gap: 6px; }
-    .shortcut-desc { text-align: left; }
+    .shortcut-item { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+    .shortcut-desc { grid-column: 1 / -1; grid-row: 2; }
 }
 
 
@@ -1287,6 +1334,7 @@ header h1 {
 }
 
 .stat-figure {
+    transition: box-shadow .16s ease, transform .12s ease, border-color .15s ease;
     background: var(--surface);
     border: var(--card-border-width) solid var(--border);
     border-radius: var(--card-radius);
@@ -1325,6 +1373,7 @@ header h1 {
 }
 
 .stat-panel {
+    transition: box-shadow .16s ease, border-color .15s ease;
     background: var(--surface);
     border: var(--card-border-width) solid var(--border);
     border-radius: var(--card-radius);
@@ -1353,7 +1402,8 @@ header h1 {
 
 .site-row {
     display: grid;
-    grid-template-columns: minmax(96px, 30%) 1fr auto;
+    /* A floor under the time column keeps the bars one length down the list. */
+    grid-template-columns: minmax(96px, 30%) 1fr minmax(72px, auto);
     align-items: center;
     gap: 12px;
 }
@@ -1394,9 +1444,32 @@ header h1 {
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    text-align: right;
 }
 
+.stat-figure:hover { box-shadow: var(--card-shadow-hover); transform: translateY(-1px); border-color: var(--accent-soft-2); }
+.stat-panel:hover { box-shadow: var(--card-shadow-hover); border-color: var(--accent-soft-2); }
+
+.site-row { margin: -4px -8px; padding: 4px 8px; border-radius: var(--r-sm); transition: background .12s ease; }
+.site-row:hover { background: var(--surface-2); }
+.site-row:hover .site-bar span { opacity: 1; }
+.site-row:hover .site-name { color: var(--accent-ink); }
+
+.hour-bar { transition: opacity .12s ease; }
+.hour-bar:hover { opacity: 1; filter: brightness(1.12); }
+
+.chess-class-row:hover .chess-class-name { color: var(--accent-ink); }
+.chess-wdl { transition: box-shadow .15s ease; }
+.chess-class-row:hover .chess-wdl { box-shadow: 0 0 0 2px var(--accent-soft-2); }
+
 .stat-table { width: 100%; border-collapse: collapse; }
+.stat-table tbody tr { transition: background .12s ease; }
+.stat-table tbody tr:hover td { background: var(--surface-2); }
+.stat-table tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.stat-table th:first-child,
+.stat-table td:first-child { padding-left: 10px; }
+.stat-table th:last-child,
+.stat-table td:last-child { padding-right: 10px; }
 
 .stat-table th {
     text-align: left;
@@ -1483,14 +1556,18 @@ header h1 {
    these are only the pieces Activity has no use for.
    ============================================================ */
 
-.chess-class-list { list-style: none; display: flex; flex-direction: column; gap: 14px; }
-
-.chess-class-row {
+/* One grid for the whole list, rows as `display: contents`: every bar then
+   starts and ends at the same x whatever the score beside it says —
+   including a "—" for a time control not played. */
+.chess-class-list {
+    list-style: none;
     display: grid;
-    grid-template-columns: 64px 1fr minmax(150px, auto);
+    grid-template-columns: 64px minmax(0, 1fr) max-content;
     align-items: center;
-    gap: 12px;
+    gap: 14px 12px;
 }
+
+.chess-class-row { display: contents; }
 
 .chess-class-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
 
@@ -1501,7 +1578,6 @@ header h1 {
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    text-align: right;
 }
 
 .chess-wdl {
@@ -1560,7 +1636,7 @@ header h1 {
 .chess-empty .btn-primary { margin-top: 18px; }
 
 @media (max-width: 720px) {
-    .chess-class-row { grid-template-columns: 56px 1fr; }
-    .chess-class-score { grid-column: 1 / -1; text-align: left; }
+    .chess-class-list { grid-template-columns: 56px minmax(0, 1fr); }
+    .chess-class-score { grid-column: 2; margin-top: -8px; }
     .cookie-sites { margin-left: 0; }
 }

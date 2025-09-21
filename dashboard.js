@@ -11,7 +11,7 @@
     'use strict';
 
     const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, Transfer, TabActions, SettingsForm, SiteIcons,
-        SwatchPicker, CookieSitesPanel, ChessStats } = window.BB;
+        CookieSitesPanel, ShortcutList, ChessStats } = window.BB;
 
     /** The emoji the popup used for "nothing saved"; every empty list here wears it too. */
     const EMPTY_ICON = '🔖';
@@ -86,7 +86,7 @@
             if (window.BB.KeyboardWidget) {
                 window.BB.KeyboardWidget.mount(document.getElementById('shortcutsKeyboard'));
             }
-            SwatchPicker.mount(document.getElementById('chessLegalMoveColorPicker'), { key: 'chessLegalMoveColor' });
+            ShortcutList.mountAll();
             CookieSitesPanel.mount(document.getElementById('cookieSitesPanel'));
             this.chessView = ChessStats.createView({
                 body: document.getElementById('chessStatsBody'),

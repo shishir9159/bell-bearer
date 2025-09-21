@@ -159,12 +159,7 @@
                 <div class="settings-section">
                     <div id="shortcutsKeyboard"></div>
                     <h3 style="margin-top: 18px;">General Keyboard Shortcuts</h3>
-                    <div class="shortcut-list">
-                        <div class="shortcut-item">
-                            <span class="shortcut-key">Shift + F</span>
-                            <span class="shortcut-desc">Enter hop mode</span>
-                        </div>
-                    </div>
+                    <div class="shortcut-list" data-shortcut-scope="general"></div>
                 </div>
 
                 <div class="settings-section">
@@ -205,13 +200,21 @@
 
                     <div class="settings-option" style="margin-top: 16px;">
                         <label class="toggle-switch">
-                            <input type="checkbox" id="cookieBannerHelper">
+                            <input type="checkbox" id="cookieAcceptButton">
                             <span class="toggle-slider"></span>
                         </label>
-                        <span class="setting-label">Cookie banners — add an "Always accept here" button to a site's cookie popup; a site you pick that way has its popup accepted for you from then on</span>
+                        <span class="setting-label">Show "Always accept" on cookie popups — accepts, and answers that site's popup for you from then on</span>
                     </div>
 
-                    <!-- Filled by src/page/cookie-sites-panel.js. -->
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="cookieRejectButton">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Show "Always reject" on cookie popups — rejects, and answers that site's popup for you from then on</span>
+                    </div>
+
+                    <!-- Remembered sites, and the global Export / Import: src/page/cookie-sites-panel.js. -->
                     <div class="cookie-sites" id="cookieSitesPanel"></div>
                 </div>
 
@@ -249,25 +252,8 @@
                         </div>
                         <p class="settings-hint">Games are read from chess.com's public API for this player — no sign-in, nothing sent anywhere else.</p>
 
-                        <div class="settings-block">
-                            <span class="setting-label">Legal move color — the dots and capture rings chess.com shows for a selected piece</span>
-                            <div id="chessLegalMoveColorPicker"></div>
-                        </div>
-
-                        <div class="shortcut-list" style="margin-top: 18px;">
-                            <div class="shortcut-item">
-                                <span class="shortcut-key">Alt + C</span>
-                                <span class="shortcut-desc">Clear every arrow drawn on the board</span>
-                            </div>
-                        </div>
-
-                        <div class="settings-option">
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="chessClearArrowsShortcut">
-                                <span class="toggle-slider"></span>
-                            </label>
-                            <span class="setting-label">Enable the clear-arrows shortcut (Alt+C) on chess.com</span>
-                        </div>
+                        <h4 class="shortcut-heading">Keyboard shortcuts</h4>
+                        <div class="shortcut-list" data-shortcut-scope="chess"></div>
                     </div>
 
                     <div class="settings-section" id="youtubeSettingsPanel" data-site-settings="youtube" hidden>
@@ -290,48 +276,8 @@
                             <span class="setting-label">Match YouTube theme — switch Bell Bearer to dark mode when YouTube is dark</span>
                         </div>
 
-                        <div class="shortcut-list" style="margin-top: 16px;">
-                            <div class="shortcut-item">
-                                <span class="shortcut-key">Ctrl + B</span>
-                                <span class="shortcut-desc">Create checkpoint (hold and release)</span>
-                            </div>
-                            <div class="shortcut-item">
-                                <span class="shortcut-key">Alt + 1-9</span>
-                                <span class="shortcut-desc">Skip forward by that many seconds</span>
-                            </div>
-                            <div class="shortcut-item">
-                                <span class="shortcut-key">Shift + 1-9</span>
-                                <span class="shortcut-desc">Skip backward by that many seconds</span>
-                            </div>
-                            <div class="shortcut-item">
-                                <span class="shortcut-key">Ctrl + Shift + 1-9</span>
-                                <span class="shortcut-desc">Temporary 3x speed boost for that many seconds</span>
-                            </div>
-                            <div class="shortcut-item">
-                                <span class="shortcut-key">&gt;</span>
-                                <span class="shortcut-desc">Increase playback speed</span>
-                            </div>
-                            <div class="shortcut-item">
-                                <span class="shortcut-key">&lt;</span>
-                                <span class="shortcut-desc">Decrease playback speed</span>
-                            </div>
-                            <div class="shortcut-item">
-                                <span class="shortcut-key">+</span>
-                                <span class="shortcut-desc">Reset playback speed to 1x</span>
-                            </div>
-                            <div class="shortcut-item">
-                                <span class="shortcut-key">Ctrl + Shift + L</span>
-                                <span class="shortcut-desc">Copy this page as a Markdown link (rebindable at chrome://extensions/shortcuts)</span>
-                            </div>
-                        </div>
-
-                        <div class="settings-option">
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="enableSkipShortcuts">
-                                <span class="toggle-slider"></span>
-                            </label>
-                            <span class="setting-label">Enable Numeric Skip Shortcuts (Alt+1-9 forward / Shift+1-9 back)</span>
-                        </div>
+                        <h4 class="shortcut-heading">Keyboard shortcuts</h4>
+                        <div class="shortcut-list" data-shortcut-scope="youtube"></div>
 
                         <div class="settings-option" style="margin-top: 16px;">
                             <label class="toggle-switch">
@@ -458,6 +404,8 @@
     <script src="src/shared/dom.js"></script>
     <script src="src/shared/speed.js"></script>
     <script src="src/shared/settings.js"></script>
+    <script src="src/shared/keybindings.js"></script>
+    <script src="src/shared/backup.js"></script>
     <script src="src/shared/skin.js"></script>
     <script src="src/shared/activity.js"></script>
     <script src="src/shared/youtube.js"></script>
@@ -467,14 +415,13 @@
     <script src="src/shared/feed.js"></script>
     <script src="src/shared/site-icons.js"></script>
     <script src="src/shared/feather-icons.js"></script>
-    <script src="src/shared/palette.js"></script>
     <script src="src/shared/cookie-sites.js"></script>
     <script src="src/shared/chess.js"></script>
     <script src="src/page/ui.js"></script>
     <script src="src/page/settings-form.js"></script>
     <script src="src/page/skin-picker.js"></script>
-    <script src="src/page/swatch-picker.js"></script>
     <script src="src/page/cookie-sites-panel.js"></script>
+    <script src="src/page/shortcut-list.js"></script>
     <script src="src/page/keyboard.js"></script>
     <script src="src/page/stats.js"></script>
     <script src="src/page/chess-stats.js"></script>
