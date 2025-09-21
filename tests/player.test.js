@@ -54,7 +54,7 @@ function harness() {
         startRecording: () => notes.push('record:start'),
         stopRecording: () => notes.push('record:stop'),
         toggleSegment: () => notes.push('segment'),
-    }, { skipShortcutsEnabled: () => true, canRecord: () => true });
+    }, { canRecord: () => true });
 
     return {
         video, player, notes,

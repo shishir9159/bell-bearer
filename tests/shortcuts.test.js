@@ -20,7 +20,7 @@ function key(code, { key: keyName, ctrl = false, shift = false, alt = false, met
 
 /** Bindings with everything enabled, so match() is what is under test. */
 function bindings() {
-    return K.createBindings({}, { skipShortcutsEnabled: () => true, canRecord: () => true });
+    return K.createBindings({}, { canRecord: () => true });
 }
 
 /** Names of every binding that claims `event`. */

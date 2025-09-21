@@ -666,16 +666,99 @@ const dayRecord = (at = T0) =>
         eq(await CookieSites.load(), {});
     });
 
-    check('an export imports back, and never overwrites a site already remembered', () => {
-        const exported = CookieSites.buildExport({ 'a.com': { decision: 'accept', savedAt: 1 } }, 0);
-        eq(CookieSites.validateImport(exported), true);
-        eq(CookieSites.validateImport({ type: 'bell-bearer-checkpoints', sites: {} }), false);
+    await checkAsync('a site remembered as rejected keeps that answer', async () => {
+        clearStore();
+        await CookieSites.remember('example.com', 'decline', 7);
+        eq(CookieSites.match(await CookieSites.load(), 'shop.example.com').decision, 'decline');
+    });
 
-        const current = { 'a.com': { decision: 'accept', savedAt: 9 } };
-        const result = CookieSites.mergeImported(current, { ...exported.sites, 'B.com': { decision: 'accept', savedAt: 2 } });
-        eq(result.added, 1);
-        eq(result.sites['a.com'].savedAt, 9);
-        eq(result.sites['b.com'], { decision: 'accept', savedAt: 2 });
+    // ------------------------------------------------------------ backup
+
+    console.log('\n# export / import');
+
+    const Backup = require('../src/shared/backup.js');
+
+    check('an export carries settings and data, never the caches', () => {
+        const file = Backup.build({
+            skin: 'deco',
+            shortcuts: { 'speed-up': { enabled: false } },
+            bbCookieSites: { 'a.com': { decision: 'accept' } },
+            bbFeedCache: { huge: true },
+            bbChessArchiveCache: { huge: true },
+        }, 0);
+        eq(Object.keys(file.data).sort(), ['bbCookieSites', 'shortcuts', 'skin']);
+        eq(Backup.validate(file), true);
+        eq(Backup.validate({ type: 'bell-bearer-checkpoints', data: {} }), false);
+    });
+
+    await checkAsync('importing writes the file back, still without caches', async () => {
+        clearStore();
+        store.skin = 'default';
+        await Backup.importAll({ type: Backup.TYPE, data: { skin: 'riso', bbFeedCache: { stale: true } } });
+        eq(store.skin, 'riso');
+        eq(store.bbFeedCache, undefined);
+    });
+
+    // --------------------------------------------------------- shortcuts
+
+    console.log('\n# keyboard shortcuts');
+
+    const Keybindings = require('../src/shared/keybindings.js');
+    const Shortcuts = require('../src/content/shortcuts.js');
+    const press = (code, { key = code, ctrl = false, shift = false, alt = false, meta = false, repeat = false } = {}) =>
+        ({ code, key, ctrlKey: ctrl, shiftKey: shift, altKey: alt, metaKey: meta, repeat });
+    const claimed = (overrides, event) => Shortcuts.createBindings({}, {
+        canRecord: () => true,
+        getShortcut: (id) => Keybindings.resolve(overrides, id),
+    }).filter((binding) => binding.match(event)).map((binding) => binding.name);
+
+    check('the defaults are what they always were', () => {
+        eq(claimed({}, press('KeyB', { ctrl: true, key: 'b' })), ['record-checkpoint']);
+        eq(claimed({}, press('Digit5', { alt: true })), ['skip-forward']);
+        eq(claimed({}, press('Period', { shift: true, key: '>' })), ['speed-up']);
+        eq(claimed({}, press('NumpadAdd', { key: '+' })), ['speed-reset']);
+    });
+
+    check('no two default shortcuts share keys', () => {
+        const seen = new Map();
+        for (const binding of Keybindings.BINDINGS) {
+            const signature = Keybindings.signature(binding.combo, binding.kind);
+            eq(seen.get(signature), undefined, `${binding.id} vs ${seen.get(signature)}`);
+            seen.set(signature, binding.id);
+        }
+    });
+
+    check('a shortcut turned off claims nothing', () => {
+        eq(claimed({ 'skip-forward': { enabled: false } }, press('Digit5', { alt: true })), []);
+    });
+
+    check('a rebound shortcut answers its new keys and no longer its old ones', () => {
+        const overrides = { 'record-checkpoint': { combo: { alt: true, code: 'KeyK', key: 'k' } } };
+        eq(claimed(overrides, press('KeyK', { alt: true, key: 'k' })), ['record-checkpoint']);
+        eq(claimed(overrides, press('KeyB', { ctrl: true, key: 'b' })), []);
+    });
+
+    check('recording a combo: modifiers alone wait, digits need a modifier', () => {
+        eq(Keybindings.record(press('ShiftLeft', { key: 'Shift', shift: true }), 'key'), { pending: true });
+        eq(Keybindings.record(press('KeyJ', { ctrl: true, key: 'j' }), 'key').combo,
+            { ctrl: true, alt: false, shift: false, meta: false, code: 'KeyJ', key: 'j' });
+        eq(!!Keybindings.record(press('Digit4'), 'digit').error, true);
+        eq(Keybindings.record(press('Digit4', { ctrl: true, alt: true }), 'digit').combo,
+            { ctrl: true, alt: true, shift: false, meta: false });
+    });
+
+    check('a combo already in use is reported, unless that shortcut is off', () => {
+        const combo = { ctrl: true, code: 'KeyB', key: 'b' };
+        eq(Keybindings.conflicts({}, 'chess-clear-arrows', combo).map((c) => c.id), ['record-checkpoint']);
+        eq(Keybindings.conflicts({ 'record-checkpoint': { enabled: false } }, 'chess-clear-arrows', combo), []);
+        // Alt+digit rebinding a letter shortcut onto the number row still clashes with skip-forward.
+        eq(Keybindings.conflicts({}, 'chess-clear-arrows', { alt: true, code: 'Digit3', key: '3' }).map((c) => c.id), ['skip-forward']);
+    });
+
+    check('labels read the way a keyboard does', () => {
+        eq(Keybindings.format({ ctrl: true, shift: true }, 'digit'), 'Ctrl + Shift + 1-9');
+        eq(Keybindings.format({ alt: true, code: 'KeyC', key: 'c' }, 'key'), 'Alt + C');
+        eq(Keybindings.format({ shift: true, code: 'Period', key: '>', char: true }, 'key'), '>');
     });
 
     // --------------------------------------------------------------- chess
