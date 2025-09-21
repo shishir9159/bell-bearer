@@ -176,15 +176,47 @@
                     <span><strong>${total.timed ? avg(total.myTime, total.timed) : '—'}</strong> per game</span>
                 </div>
             </div>
-            <div class="chess-pop-section">
-                <div class="chess-pop-heading"><span>Recent</span></div>
-                ${summary.games.length ? `<ul class="chess-pop-games">${summary.games.slice(0, 6).map((game) => `
-                    <li>
-                        ${resultPill(game)}
-                        <a href="${Dom.safeUrlAttr(game.url)}" target="_blank" rel="noopener noreferrer">${esc(game.opponent)}</a>
-                        <span class="chess-pop-meta">${esc(Chess.CLASS_LABEL[game.timeClass] || game.timeClass)} · ${game.myTime != null ? `${Chess.human(game.myTime)} vs ${Chess.human(game.oppTime)}` : esc(Chess.formatControl(game.timeControl))}</span>
-                    </li>`).join('')}</ul>` : '<p class="chess-pop-none">No games in this range.</p>'}
+            <div class="chess-pop-section chess-pop-recent">
+                <div class="chess-pop-heading">
+                    <span>Recent · ${summary.count}</span>
+                    <span class="chess-pop-legend"><span class="is-win">Won</span><span class="is-loss">Lost</span><span class="is-draw">Draw</span></span>
+                </div>
+                ${summary.games.length
+                    ? `<div class="chess-pills">${summary.games.map(gamePill).join('')}</div>`
+                    : '<p class="chess-pop-none">No games in this range.</p>'}
             </div>`;
+    }
+
+    /** One game as a pill: its time control, colored by how it ended. */
+    function gamePill(game) {
+        const result = game.result === 'win' ? 'Won' : game.result === 'loss' ? 'Lost' : 'Draw';
+        return `<a class="chess-pill is-${game.result}" href="${Dom.safeUrlAttr(game.url)}" target="_blank" rel="noopener noreferrer"
+                   title="${esc(`${result} · ${Chess.formatControl(game.timeControl)} · ${dayLabel(game.end)}`)}">${esc(Chess.CLASS_LABEL[game.timeClass] || game.timeClass)}</a>`;
+    }
+
+    /**
+     * Keep only the pills that fit the box, with a "…" standing in for the
+     * rest — the popup does not scroll, so what does not fit is cut, and the
+     * "…" says so rather than a scrollbar.
+     */
+    function fitPills(list) {
+        if (!list || list.scrollHeight <= list.clientHeight) return;
+        const pills = Array.from(list.children);
+        const limit = list.clientHeight;
+        const fits = (element) => element.offsetTop + element.offsetHeight <= limit;
+
+        let keep = pills.findIndex((pill) => !fits(pill));
+        pills.slice(keep).forEach((pill) => pill.remove());
+
+        const more = document.createElement('span');
+        more.className = 'chess-pill is-more';
+        more.textContent = '…';
+        list.appendChild(more);
+        while (!fits(more) && list.children.length > 1) {
+            more.previousElementSibling.remove();
+            keep--;
+        }
+        more.title = `${pills.length - keep} more`;
     }
 
     function emptyMarkup({ title, message, action, actionId }) {
@@ -241,6 +273,7 @@
 
             const state = { username, games, range, now: Date.now() };
             body.innerHTML = compact ? compactMarkup(state) : fullMarkup(state);
+            if (compact) fitPills(body.querySelector('.chess-pills'));
         }
 
         async function load(force) {
