@@ -1,16 +1,21 @@
 /**
- * The chess.com games view, for the dashboard (full) and the popup (compact).
+ * A chess site's games view — chess.com or Lichess — for the dashboard (full)
+ * and the popup (compact).
  *
- * Reads through BB.Chess only; the markup reuses the Activity view's classes
- * (stat-figure, stat-panel, range-seg, stat-table) so the two read as one
- * page, with a few chess-* additions for what Activity has no use for — the
- * win/draw/loss bar and the result pills.
+ * Both sites go through one view: src/shared/chess-sites.js names the site and
+ * its reader, and both readers hand back games in the same shape, so every
+ * figure, panel and table below is drawn the same way for either.
+ *
+ * The markup reuses the Activity view's classes (stat-figure, stat-panel,
+ * range-seg, stat-table) so the two read as one page, with a few chess-*
+ * additions for what Activity has no use for — the win/draw/loss bar and the
+ * result pills.
  */
 (function (root) {
     'use strict';
 
     const BB = (root.BB = root.BB || {});
-    const { Chess, Settings, Dom, SiteIcons } = BB;
+    const { Chess, ChessSites, Settings, Dom, SiteIcons } = BB;
 
     const esc = Dom.escapeHtml;
 
@@ -58,22 +63,6 @@
         return n ? Chess.human(total / n) : '—';
     }
 
-    function clockTable(summary) {
-        return `<table class="stat-table chess-clock-table">
-            <thead><tr><th>Time control</th><th class="col-num">Games</th><th class="col-num">You</th><th class="col-num">Opponents</th><th class="col-num">Per game</th></tr></thead>
-            <tbody>${Chess.CLASSES.map((name) => {
-                const row = summary.byClass[name];
-                return `<tr>
-                    <td>${Chess.CLASS_LABEL[name]}</td>
-                    <td class="col-num">${row.games}</td>
-                    <td class="col-num">${row.timed ? Chess.human(row.myTime) : '—'}</td>
-                    <td class="col-num">${row.timed ? Chess.human(row.oppTime) : '—'}</td>
-                    <td class="col-num chess-per-game">${row.timed ? `${avg(row.myTime, row.timed)} <span>vs</span> ${avg(row.oppTime, row.timed)}` : '—'}</td>
-                </tr>`;
-            }).join('')}</tbody>
-        </table>`;
-    }
-
     function resultPill(game) {
         const label = game.result === 'win' ? 'Won' : game.result === 'loss' ? 'Lost' : 'Draw';
         return `<span class="chess-result is-${game.result}" title="${esc(game.how || '')}">${label}</span>`;
@@ -118,48 +107,45 @@
 
     // ------------------------------------------------------ time management
 
-    function flagCells(stats) {
-        return Chess.CLASSES.map((name) => {
+    /**
+     * Games won on the opponent's clock from the left of the bar, games lost
+     * on your own from the right, out of the last FLAG_WINDOW played.
+     */
+    function flagRows(stats) {
+        return `<ul class="chess-class-list">${Chess.CLASSES.map((name) => {
             const row = stats[name];
             const label = Chess.CLASS_LABEL[name];
             if (!row.games) {
-                return `<span class="chess-flag-cell is-empty" title="No ${label.toLowerCase()} games"><span class="chess-flag-class">${label}</span><span class="chess-flag-of">—</span></span>`;
+                return `
+                    <li class="chess-class-row">
+                        <span class="chess-class-name">${label}</span>
+                        <span class="chess-wdl is-empty"></span>
+                        <span class="chess-class-score">—</span>
+                    </li>`;
             }
+            const pct = (n) => (n / row.games) * 100;
             const title = `Last ${row.games} ${label.toLowerCase()} game${row.games === 1 ? '' : 's'}: won ${row.won} by flagging, lost ${row.lost} on time`;
             return `
-                <span class="chess-flag-cell" title="${esc(title)}">
-                    <span class="chess-flag-class">${label}</span>
-                    <span class="chess-flag-won">${row.won} won</span>
-                    <span class="chess-flag-lost">${row.lost} lost</span>
-                    <span class="chess-flag-of">/ ${row.games}</span>
-                </span>`;
-        }).join('');
+                <li class="chess-class-row">
+                    <span class="chess-class-name">${label}</span>
+                    <span class="chess-wdl" title="${esc(title)}">
+                        <span class="chess-wdl-win" style="width:${pct(row.won)}%"></span><span
+                              class="chess-wdl-rest"></span><span
+                              class="chess-wdl-loss" style="width:${pct(row.lost)}%"></span>
+                    </span>
+                    <span class="chess-class-score">${row.won} won · ${row.lost} lost of ${row.games}</span>
+                </li>`;
+        }).join('')}</ul>`;
     }
 
-    function lichessFlagLine(lichess) {
-        if (!lichess.user) {
-            return '<span class="chess-flag-note">No Lichess username — <button type="button" class="chess-link" data-chess-action="set-username">add one in Settings</button></span>';
-        }
-        if (lichess.games && lichess.games.length) {
-            const reading = lichess.loading ? `<span class="chess-flag-note">reading… ${lichess.games.length}</span>` : '';
-            return flagCells(Chess.flagStats(lichess.games)) + reading;
-        }
-        if (lichess.error) {
-            return `<span class="chess-flag-note">${esc(lichess.error.message)} — <button type="button" class="chess-link" data-chess-action="lichess-retry">try again</button></span>`;
-        }
-        if (lichess.loading || !lichess.games) return `<span class="chess-flag-note">Reading games for ${esc(lichess.user)}…</span>`;
-        return '<span class="chess-flag-note">No games in the last year.</span>';
-    }
-
-    function timeManagementPanel({ games, history, lichess }) {
+    function timeManagementPanel({ games, history, historyLoading }) {
+        const partial = !history && historyLoading ? ' Reading older games…' : '';
         return `
-            <div class="stat-panel chess-flags">
+            <div class="stat-panel">
                 <h3>Time management</h3>
-                <p class="stat-sub">Flagging over the last ${Chess.FLAG_WINDOW} games of each time control: games won on the opponent's clock, and lost on yours.</p>
-                <ul class="chess-flag-list">
-                    <li class="chess-flag-row"><span class="chess-flag-site bb-proper">Chess.com</span>${flagCells(Chess.flagStats(history || games))}</li>
-                    <li class="chess-flag-row"><span class="chess-flag-site bb-proper">Lichess</span>${lichessFlagLine(lichess)}</li>
-                </ul>
+                <p class="stat-sub">Your last ${Chess.FLAG_WINDOW} games of each time control: won on the opponent's clock, lost on yours.${partial}</p>
+                ${flagRows(Chess.flagStats(history || games))}
+                <div class="chess-legend"><span class="is-win">Won on time</span><span class="is-loss">Lost on time</span></div>
             </div>`;
     }
 
@@ -168,26 +154,24 @@
     const HEAT_STEPS = [15 * 60, 45 * 60, 90 * 60];
     const HEAT_LEGEND = ['No games', 'Up to 15m', '15m – 45m', '45m – 1h 30m', 'Over 1h 30m'];
 
-    function heatPanel({ history, historyError, lichess, now }) {
+    function heatPanel({ source, history, historyError, historyLoading, now }) {
         let body;
         let sub;
         if (history) {
-            const games = history.concat((lichess.user && lichess.games) || []);
-            const daily = Chess.dailyTime(games);
             const days = {};
             let total = 0;
             let played = 0;
             let busiest = null;
-            for (const [key, day] of Object.entries(daily)) {
+            for (const [key, day] of Object.entries(Chess.dailyTime(history))) {
                 days[key] = { value: day.seconds, seconds: day.seconds, games: day.games };
                 total += day.seconds;
                 played++;
                 if (!busiest || day.seconds > busiest.seconds) busiest = { key, ...day };
             }
-            const sites = lichess.user && lichess.games ? 'chess.com and Lichess' : 'chess.com';
             sub = played
-                ? `${Chess.human(total)} across ${played} day${played === 1 ? '' : 's'} on ${sites} this past year · busiest ${esc(busiest.key)}, ${Chess.human(busiest.seconds)}`
-                : `No games on ${sites} this past year.`;
+                ? `${Chess.human(total)} across ${played} day${played === 1 ? '' : 's'} on ${esc(source.name)} this past year · busiest ${esc(busiest.key)}, ${Chess.human(busiest.seconds)}`
+                : `No games on ${esc(source.name)} this past year.`;
+            if (historyLoading) sub += ' · reading older games…';
             body = BB.HeatMap.render({
                 days,
                 end: now,
@@ -202,7 +186,7 @@
             sub = esc(historyError.message);
             body = '<button type="button" class="btn-secondary" data-chess-action="history-retry">Try again</button>';
         } else {
-            sub = 'Reading a year of chess.com games — the first time takes a moment, after that only the current month is re-read.';
+            sub = `Reading a year of ${esc(source.name)} games — the first time takes a while, after that only new games are read.`;
             body = '<div class="hm-placeholder"></div>';
         }
         return `
@@ -213,7 +197,8 @@
             </div>`;
     }
 
-    function fullMarkup({ username, games, range, now, history, historyError, lichess }) {
+    function fullMarkup(state) {
+        const { username, games, range, now, loading } = state;
         const summary = Chess.summarize(games, { since: Chess.rangeStart(range, now), until: now });
         const count = Chess.counts(games, now);
         const label = Chess.RANGES[range].toLowerCase();
@@ -232,17 +217,12 @@
                     ${classRows(summary)}
                     <div class="chess-legend"><span class="is-win">Win</span><span class="is-draw">Draw</span><span class="is-loss">Loss</span></div>
                 </div>
-                <div class="stat-panel">
-                    <h3>Time on the clock</h3>
-                    <p class="stat-sub">Inferred from the clock after every move: what each side started with, plus increments, minus what was left.</p>
-                    ${clockTable(summary)}
-                </div>
+                ${timeManagementPanel(state)}
             </div>
-            ${timeManagementPanel({ games, history, lichess })}
-            ${heatPanel({ history, historyError, lichess, now })}
+            ${heatPanel(state)}
             <div class="stat-panel">
                 <h3>Games</h3>
-                <p class="stat-sub">${summary.count} game${summary.count === 1 ? '' : 's'} ${label}, newest first.</p>
+                <p class="stat-sub">${summary.count} game${summary.count === 1 ? '' : 's'} ${label}, newest first.${loading ? ' Still reading…' : ''}</p>
                 ${recentTable(summary, 25)}
             </div>`;
     }
@@ -318,10 +298,10 @@
         more.title = `${pills.length - keep} more`;
     }
 
-    function emptyMarkup({ title, message, action, actionId }) {
+    function emptyMarkup({ site, title, message, action, actionId }) {
         return `
             <div class="empty-state chess-empty">
-                <div class="empty-icon chess-empty-icon">${SiteIcons ? SiteIcons.svg('chess', { size: 40 }) : '♟'}</div>
+                <div class="empty-icon chess-empty-icon">${SiteIcons ? SiteIcons.svg(site, { size: 40 }) : '♟'}</div>
                 <h3 class="bb-proper">${title}</h3>
                 ${message ? `<p>${message}</p>` : ''}
                 ${action ? `<button class="btn-primary chess-empty-action" type="button" data-chess-action="${actionId}">${action}</button>` : ''}
@@ -330,13 +310,15 @@
 
     /**
      * @param {object} options
+     * @param {string} [options.site] a src/shared/chess-sites.js id
      * @param {HTMLElement} options.body where the view draws
      * @param {HTMLElement} [options.rangeSeg] a .range-seg of data-range buttons
      * @param {HTMLElement} [options.refreshButton]
      * @param {boolean} [options.compact] the popup's layout
      * @param {() => void} options.onSetUsername what "Add username" does here
      */
-    function createView({ body, rangeSeg, refreshButton, compact = false, onSetUsername }) {
+    function createView({ site = 'chess', body, rangeSeg, refreshButton, compact = false, onSetUsername }) {
+        const source = ChessSites.get(site);
         let username = '';
         let games = null;
         let error = null;
@@ -344,30 +326,30 @@
         let range = 'today';
         let loadedFor = '';
 
-        // Dashboard only: a year of chess.com games for the heat map and the
-        // flagging figures, and the Lichess player's games beside them. Both
-        // are read after the 30-day view has drawn, so it never waits on them.
+        // Dashboard only: a year of games for the heat map and the flagging
+        // figures, read after the 30-day view has drawn so it never waits on it.
         let history = null;
         let historyError = null;
         let historyLoading = false;
-        const lichess = { user: '', games: null, error: null, loading: false };
 
         function paint() {
             if (!body) return;
 
             if (!username) {
                 body.innerHTML = emptyMarkup({
-                    title: 'No Chess.com username is set',
-                    message: compact ? '' : 'Add the username whose games to read. It goes in Settings → Chess.com.',
+                    site,
+                    title: `No ${esc(source.name)} username is set`,
+                    message: compact ? '' : `Add the username whose games to read. It goes in Settings → ${esc(source.name)}.`,
                     action: 'Add username',
                     actionId: 'set-username',
                 });
                 return;
             }
-            if (error) {
+            if (error && !games) {
                 body.innerHTML = emptyMarkup({
+                    site,
                     title: esc(error.message),
-                    message: error.code === 'not-found' ? 'Check the spelling in Settings → Chess.com.' : '',
+                    message: error.code === 'not-found' ? `Check the spelling in Settings → ${esc(source.name)}.` : '',
                     action: error.code === 'not-found' ? 'Fix username' : 'Try again',
                     actionId: error.code === 'not-found' ? 'set-username' : 'retry',
                 });
@@ -378,7 +360,7 @@
                 return;
             }
 
-            const state = { username, games, range, now: Date.now(), history, historyError, lichess };
+            const state = { source, username, games, range, loading, now: Date.now(), history, historyError, historyLoading };
             // Redrawing wholesale would snap a scrolled heat map back to its start.
             const scroller = body.querySelector('.hm-scroll');
             const scrolled = scroller ? scroller.scrollWidth - scroller.clientWidth - scroller.scrollLeft : 0;
@@ -392,13 +374,20 @@
             if (compact || !username || historyLoading) return;
             historyLoading = true;
             historyError = null;
-            // Both reads write the same archive cache; one at a time.
+            // Both reads write the same cache; one at a time.
             if (refreshButton) refreshButton.disabled = true;
             const wanted = username;
+            paint();
             try {
-                // Not forced: the load before this one just re-read the live
-                // month, and the closed ones never change.
-                const result = await Chess.fetchGames(wanted, { days: Chess.HISTORY_DAYS });
+                // Not forced: the load before this one just read the newest games.
+                const result = await source.reader().fetchGames(wanted, {
+                    days: Chess.HISTORY_DAYS,
+                    onProgress: (partial) => {
+                        if (wanted !== username) return;
+                        history = partial;
+                        paint();
+                    },
+                });
                 if (wanted === username) history = result;
             } catch (caught) {
                 if (wanted === username) historyError = caught;
@@ -411,31 +400,6 @@
             }
         }
 
-        async function loadLichess(force) {
-            if (compact || !lichess.user || lichess.loading || !BB.Lichess) return;
-            lichess.loading = true;
-            lichess.error = null;
-            const wanted = lichess.user;
-            paint();
-            try {
-                const result = await BB.Lichess.fetchGames(wanted, {
-                    force,
-                    onProgress: (partial) => {
-                        if (wanted !== lichess.user) return;
-                        lichess.games = partial;
-                        paint();
-                    },
-                });
-                if (wanted === lichess.user) lichess.games = result;
-            } catch (caught) {
-                if (wanted === lichess.user) lichess.error = caught;
-            } finally {
-                lichess.loading = false;
-                paint();
-                if (wanted !== lichess.user) loadLichess(false);
-            }
-        }
-
         async function load(force) {
             if (!username || loading || historyLoading) return;
             loading = true;
@@ -445,25 +409,32 @@
                 games = null;
                 paint();
             }
+            const wanted = username;
             try {
-                const wanted = username;
-                const result = await Chess.fetchGames(wanted, { force });
+                const result = await source.reader().fetchGames(wanted, {
+                    force,
+                    onProgress: (partial) => {
+                        if (wanted !== username) return;
+                        games = partial;
+                        paint();
+                    },
+                });
                 if (wanted === username) {
                     games = result;
                     loadedFor = wanted;
                 }
             } catch (caught) {
-                error = caught;
-                games = null;
+                if (wanted === username) {
+                    error = caught;
+                    games = null;
+                }
             } finally {
                 loading = false;
                 if (refreshButton) refreshButton.disabled = false;
                 paint();
             }
-            if (games && !compact) {
-                loadHistory();
-                loadLichess(force);
-            }
+            if (wanted !== username) load(false);
+            else if (games && !compact) loadHistory();
         }
 
         function setRange(next) {
@@ -497,7 +468,6 @@
                 if (action.dataset.chessAction === 'set-username' && onSetUsername) onSetUsername();
                 else if (action.dataset.chessAction === 'retry') load(true);
                 else if (action.dataset.chessAction === 'history-retry') loadHistory();
-                else if (action.dataset.chessAction === 'lichess-retry') loadLichess(true);
             });
         }
 
@@ -508,7 +478,7 @@
         }
 
         const applyUsername = (value) => {
-            const next = Chess.cleanUsername(value);
+            const next = ChessSites.cleanUsername(value);
             if (next === username) return false;
             username = next;
             games = null;
@@ -518,43 +488,51 @@
             return true;
         };
 
-        const applyLichessUser = (value) => {
-            const next = BB.Lichess ? BB.Lichess.cleanUsername(value) : '';
-            if (next === lichess.user) return false;
-            lichess.user = next;
-            lichess.games = null;
-            lichess.error = null;
-            return true;
-        };
-
         /** Draw, reading games only when the username changed or none are loaded. */
         async function render() {
-            const stored = await Settings.get(['chessUsername', 'lichessUsername']);
-            if (!username) applyUsername(stored.chessUsername);
-            if (!compact && !lichess.user) applyLichessUser(stored.lichessUsername);
+            const stored = await Settings.get([source.usernameKey]);
+            if (!username) applyUsername(stored[source.usernameKey]);
             showControls();
             if (username && !games && !error) load(false);
             else paint();
         }
 
-        Settings.watch(['chessUsername'], (changed) => {
-            if (applyUsername(changed.chessUsername)) {
+        Settings.watch([source.usernameKey], (changed) => {
+            if (applyUsername(changed[source.usernameKey])) {
                 showControls();
                 paint();
                 load(false);
             }
         });
 
-        if (!compact) {
-            Settings.watch(['lichessUsername'], (changed) => {
-                if (!applyLichessUser(changed.lichessUsername)) return;
-                paint();
-                if (games) loadLichess(false);
-            });
-        }
-
         return { render, refresh: () => load(true), setRange };
     }
 
-    BB.ChessStats = { createView };
+    /**
+     * A site's whole Games panel on the dashboard — its header, range and
+     * refresh controls, and the view under them — drawn into `panel`.
+     */
+    function mountPanel(panel, { site, onSetUsername }) {
+        panel.innerHTML = `
+            <div class="dashboard-header">
+                <h2>Games</h2>
+                <div class="dashboard-controls">
+                    <div class="range-seg" role="group" aria-label="Range">
+                        ${Object.entries(Chess.RANGES).map(([id, name], index) => `
+                            <button class="range-opt" type="button" data-range="${id}" aria-pressed="${index === 0}">${name}</button>`).join('')}
+                    </div>
+                    <button class="btn-secondary" type="button" data-chess-refresh>Refresh</button>
+                </div>
+            </div>
+            <div class="chess-stats-body"></div>`;
+        return createView({
+            site,
+            body: panel.querySelector('.chess-stats-body'),
+            rangeSeg: panel.querySelector('.range-seg'),
+            refreshButton: panel.querySelector('[data-chess-refresh]'),
+            onSetUsername,
+        });
+    }
+
+    BB.ChessStats = { createView, mountPanel };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

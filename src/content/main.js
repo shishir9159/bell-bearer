@@ -232,12 +232,13 @@
         else setTimeout(warm, 5000);
     }
 
-    // ------------------------------------------------------ chess.com extras
+    // --------------------------------------------- chess.com / Lichess extras
 
     let chess = null;
 
-    if (site === 'chess') {
+    if (BB.ChessSites.get(site)) {
         chess = ChessContent.createChess({
+            site,
             Keybindings,
             Shortcuts,
             notify,
@@ -265,7 +266,7 @@
         Object.assign(settings, values);
 
         if (pouchStyleChanged && youtubeUi) youtubeUi.refreshPouchButton();
-        if (chess) chess.syncClockWarning();
+        if (chess) chess.sync();
     }
 
     Settings.get().then(applySettings);
