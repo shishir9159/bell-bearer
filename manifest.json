@@ -11,7 +11,8 @@
     "tabs",
     "tabGroups",
     "contextMenus",
-    "clipboardWrite"
+    "clipboardWrite",
+    "tts"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -55,6 +56,7 @@
         "src/content/pouch-sheet.js",
         "src/content/youtube-ui.js",
         "src/content/cookie-banner.js",
+        "src/shared/chess-sites.js",
         "src/content/chess.js",
         "src/content/main.js"
       ],

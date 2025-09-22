@@ -38,9 +38,11 @@ node tests/node-check.js
 
 The speed ladder, escaping and URL safety, checkpoint merging, timestamps, the
 activity store, the color palette, remembered cookie sites, export/import, the
-shortcut registry (defaults, turning off, rebinding, conflicts) and the
-chess.com game parsing (clock inference, win/loss summaries, archive caching),
-in about a second. It is a fast gate while you are changing
+shortcut registry (defaults, turning off, rebinding, conflicts), the chess.com
+and Lichess game reading (clock inference, win/loss and flagging summaries,
+archive caching, a Lichess read resuming at both edges after an interruption)
+and the in-game parts (time controls per site, warning and speech settings,
+moves spoken as words), in about a second. It is a fast gate while you are changing
 that code, not a replacement — it cannot press a key or play a video.
 
 ## Layout

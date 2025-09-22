@@ -482,7 +482,7 @@ header h1 {
 
 /* A site with no panel of its own is the header alone, so the popup shrinks
    to it instead of standing 600px tall around nothing. */
-body[data-bb-site]:not([data-bb-site="youtube"]):not([data-bb-site="chess"]) .container {
+body[data-bb-site]:not([data-bb-site="youtube"]):not([data-bb-site="chess"]):not([data-bb-site="lichess"]) .container {
     height: auto;
     min-height: 0;
 }

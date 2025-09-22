@@ -1630,8 +1630,6 @@ header h1 {
 }
 
 .stat-table th.col-num { font-family: var(--font); }
-.chess-per-game { color: var(--accent-ink); font-weight: 700; }
-.chess-per-game span { color: var(--text-faint); font-weight: 400; }
 
 .chess-recent-table td { vertical-align: middle; }
 .chess-recent-table .col-day { width: 132px; }
@@ -1656,52 +1654,13 @@ header h1 {
 .chess-empty-icon svg { display: inline-block; width: 44px; height: 44px; }
 .chess-empty .btn-primary { margin-top: 18px; }
 
-/* ---------- time management: one line per site ---------- */
+/* ---------- time management: the Win / loss panel's rows, flags only ----------
+   Won on the opponent's clock grows from the left, lost on yours from the
+   right; the track between is every game that did not end on time. */
 
-.chess-flags,
+.chess-wdl-rest { flex: 1; }
+
 .chess-heat { margin-bottom: 12px; }
-
-.chess-flag-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-
-.chess-flag-row {
-    display: grid;
-    grid-template-columns: 84px repeat(3, minmax(0, 1fr));
-    align-items: center;
-    gap: 12px;
-}
-
-.chess-flag-site { font-size: 12.5px; font-weight: 700; color: var(--text); }
-
-.chess-flag-cell {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 7px 12px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-    font-size: 12px;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-}
-
-.chess-flag-class { color: var(--text-muted); font-weight: 600; min-width: 36px; }
-.chess-flag-won { color: var(--success); font-family: var(--font-mono); font-weight: 700; }
-.chess-flag-lost { color: var(--danger); font-family: var(--font-mono); font-weight: 700; }
-.chess-flag-of { color: var(--text-faint); font-family: var(--font-mono); margin-left: auto; }
-.chess-flag-cell.is-empty .chess-flag-of { margin-left: 0; }
-
-.chess-flag-note { grid-column: 2 / -1; font-size: 12px; color: var(--text-muted); }
-
-.chess-link {
-    background: none;
-    border: none;
-    padding: 0;
-    font: inherit;
-    color: var(--accent-ink);
-    text-decoration: underline;
-    cursor: pointer;
-}
 
 /* ---------- heat map (src/page/heat-map.js) ----------
    One hue, light to dark: each level is the skin's accent mixed into its
@@ -1737,17 +1696,36 @@ header h1 {
 
 .hm-placeholder { height: 110px; border-radius: var(--r-sm); background: var(--surface-2); }
 
-/* ---------- Settings → Chess.com: opponent clock warning ---------- */
+/* ---------- Settings → Chess.com / Lichess (src/page/chess-settings.js) ---------- */
+
+.chess-settings-lead { margin: 0 0 12px; }
 
 .chess-warn-list { display: flex; flex-direction: column; gap: 10px; }
 .chess-warn-name { min-width: 48px; }
 .text-control.chess-warn-seconds { min-width: 0; width: 88px; }
 .chess-warn-unit { color: var(--text-muted); }
 
+.chess-speak-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.chess-speak-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px 7px 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.chess-speak-option:hover { border-color: var(--accent-soft-2); }
+.chess-speak-option:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.chess-speak-option input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+
 @media (max-width: 720px) {
     .chess-class-list { grid-template-columns: 56px minmax(0, 1fr); }
     .chess-class-score { grid-column: 2; margin-top: -8px; }
     .cookie-sites { margin-left: 0; }
-    .chess-flag-row { grid-template-columns: 1fr; gap: 6px; }
-    .chess-flag-note { grid-column: 1; }
 }

@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site, ChessStats } = window.BB;
+    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site, ChessSites, ChessStats } = window.BB;
 
     class Popup {
         constructor() {
@@ -63,7 +63,7 @@
                 if (element) element.addEventListener(event, handler);
             };
 
-            on('dashboardBtn', 'click', () => openDashboard(this.site === 'chess' ? '#site/chess' : ''));
+            on('dashboardBtn', 'click', () => openDashboard(ChessSites.get(this.site) ? `#site/${this.site}` : ''));
 
             // Delegation: the list is re-rendered wholesale, so per-row
             // listeners would have to be re-attached (and were leaking).
@@ -152,13 +152,15 @@
             document.body.dataset.bbSite = this.site;
 
             document.getElementById('youtubePanel').hidden = this.site !== 'youtube';
-            document.getElementById('chessPanel').hidden = this.site !== 'chess';
+            const chessSite = ChessSites.get(this.site);
+            document.getElementById('chessPanel').hidden = !chessSite;
 
-            if (this.site === 'chess') {
+            if (chessSite) {
                 ChessStats.createView({
+                    site: chessSite.id,
                     body: document.getElementById('chessPopupBody'),
                     compact: true,
-                    onSetUsername: () => openDashboard('#settings/chess'),
+                    onSetUsername: () => openDashboard(`#settings/${chessSite.id}`),
                 }).render();
             }
         }

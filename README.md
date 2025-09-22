@@ -18,6 +18,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Topics overlay**: A frosted sheet over YouTube — topic rail, thumbnail grid, time range and sort
 - **Skins**: Default, Riso Paint, Medieval and Art Deco, each with its own day and night
 - **Activity**: Opt-in, on-device record of where your screen time goes
+- **Chess.com and Lichess**: Games, time management and time at the board; a clock warning and moves read aloud while you play
 - **Reward System**: Track watch credits to spend them on popcorn for later
 
 Export and Import sit in the dashboard header, beside the theme button, and
@@ -129,6 +130,32 @@ dropped rather than counted as time at the screen. That "previous" marker lives
 in `chrome.storage.session`, because the worker itself does not survive the gap
 between two alarms.
 
+## Chess.com and Lichess
+
+The two sites are mirrors of each other: each has a card on the dashboard, a
+Games view, a popup panel on its own pages and a settings panel of its own,
+all drawn from one registry, `src/shared/chess-sites.js`. Set the username in
+**Settings › Chess.com** or **Settings › Lichess**; games are read from each
+site's public API.
+
+The Games view shows today / 7 days / 30 days, win/loss by time control, and
+beside it **time management** — of your last 20 bullet, blitz and rapid games,
+how many you won on the opponent's clock and lost on your own. Under that is a
+year of time at the board as a heat map in the skin's own accent. A year of
+Lichess games streams at about twenty a second, so the first read takes a
+while; the last 30 days come first, and later reads fetch only what is new.
+
+While you play, per time control:
+
+- **Opponent clock warning** — a toast when the opponent's clock is more than
+  N seconds ahead of yours.
+- **Speak moves** — every move, yours and your opponent's, read aloud through
+  `chrome.tts` ("Knight takes E 5, check"), for learning to follow the board
+  by ear. Firefox has no `chrome.tts`, so there the page's own speech is used.
+
+The time control is inferred from the starting clock, since the increment is
+not on the page.
+
 ## Offline Installation
 
 ### Method 1: Load as Unpacked Extension (Recommended for Development)
@@ -157,6 +184,9 @@ src/shared/     pure logic, used by every surface
   subscriptions.js topics, channels, new videos
   settings.js      every setting's key and default
   youtube.js       URL parsing
+  chess-sites.js   chess.com and Lichess: names, settings keys, time controls
+  chess.js         chess.com games and every summary both sites share
+  lichess.js       Lichess games, streamed and resumable
   feed.js          channel RSS, cached ten minutes; Refresh asks for fresh
                    resolves /@handle to a UC id by the page's canonical link
   time.js dom.js   formatting and escaping
@@ -168,6 +198,7 @@ src/content/    injected into every page
   checkpoints.js   recording and saving checkpoints
   transcripts.js   transcript fetching and caching
   site.js          which site, and which <video> on it
+  chess.js         in a chess game: clock warning, spoken moves, clear arrows
   youtube-ui.js    the pouch button, the drawer entry, the topics sheet, the pouch panel
   dom-watch.js     one throttled MutationObserver for all of the above
   overlay.js notify.js theme.js page-info.js markdown.js
@@ -176,7 +207,7 @@ src/background/ the service worker, pulled in by background.js
   proto.js         the sowon wire format
   sowon.js         focus reporting
   context-menus.js "Copy as Markdown"
-  commands.js      keyboard commands and messages
+  commands.js      keyboard commands and messages, chess moves spoken
   activity-heartbeat.js  the alarm that feeds the activity store
 
 src/page/       shared by popup.html and dashboard.html
@@ -186,6 +217,9 @@ src/page/       shared by popup.html and dashboard.html
   settings-form.js binds the settings form to storage
   skin-picker.js   the Appearance section
   stats.js         the Activity view
+  chess-stats.js   a chess site's Games view, dashboard and popup
+  chess-settings.js a chess site's settings panel
+  heat-map.js      the calendar heat map
   popup-width.js   applies the popup size setting, from popup.html's <head>
 
 skins.css       the token layer for every skin — linked before popup/dashboard css
@@ -215,6 +249,7 @@ Importing writes those keys back, replacing what is there.
 - `scripting`: To inject content scripts
 - `contextMenus`: For the "Copy as Markdown" right-click items
 - `tabs` / `tabGroups`: For the sowon focus report
+- `tts`: To read chess moves aloud (Chrome only; Firefox has no such API)
 - `host_permissions`: To access YouTube.com
 
 ## Persistance Storage

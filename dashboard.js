@@ -11,7 +11,7 @@
     'use strict';
 
     const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, TabActions, SettingsForm, SiteIcons,
-        CookieSitesPanel, ShortcutList, ChessStats, BackupButtons } = window.BB;
+        CookieSitesPanel, ShortcutList, ChessStats, ChessSettings, BackupButtons } = window.BB;
 
     /** The emoji the popup used for "nothing saved"; every empty list here wears it too. */
     const EMPTY_ICON = '🔖';
@@ -27,6 +27,9 @@
         ],
         chess: [
             { id: 'games', label: 'Games', panel: 'chessGamesPanel' },
+        ],
+        lichess: [
+            { id: 'games', label: 'Games', panel: 'lichessGamesPanel' },
         ],
     };
 
@@ -60,7 +63,8 @@
             this.activeSite = null;
             this.siteTabs = {};
             this.settingsSite = null;
-            this.chessView = null;
+            // One games view per chess site, keyed by site id.
+            this.chessViews = {};
         }
 
         async init() {
@@ -68,6 +72,8 @@
             // must never leave the settings toggles dead, since a setting could
             // then never be turned on.
             Ui.installTheme({ toggleId: 'themeToggle' });
+            // The chess settings are drawn, so they must exist before binding.
+            ChessSettings.mountAll();
             SettingsForm.bindAll();
             this.renderSiteGrids();
             this.wireControls();
@@ -80,11 +86,12 @@
             }
             ShortcutList.mountAll();
             CookieSitesPanel.mount(document.getElementById('cookieSitesPanel'));
-            this.chessView = ChessStats.createView({
-                body: document.getElementById('chessStatsBody'),
-                rangeSeg: document.getElementById('chessRange'),
-                refreshButton: document.getElementById('chessRefreshBtn'),
-                onSetUsername: () => this.openSiteSettings('chess'),
+            document.querySelectorAll('[data-chess-games]').forEach((panel) => {
+                const site = panel.dataset.chessGames;
+                this.chessViews[site] = ChessStats.mountPanel(panel, {
+                    site,
+                    onSetUsername: () => this.openSiteSettings(site),
+                });
             });
 
             await this.reload();
@@ -350,8 +357,8 @@
             if (this.view === 'dashboard' && this.activeSite === 'youtube') {
                 if (this.siteTab === 'subscriptions') this.renderSubscriptions();
                 else this.renderBookmarks();
-            } else if (this.view === 'dashboard' && this.activeSite === 'chess') {
-                this.chessView.render();
+            } else if (this.view === 'dashboard' && this.chessViews[this.activeSite]) {
+                this.chessViews[this.activeSite].render();
             }
             // 'stats' renders itself — src/page/stats.js owns that view and
             // reads the activity store, never the bookmark store.

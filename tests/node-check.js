@@ -959,34 +959,85 @@ const dayRecord = (at = T0) =>
         eq(Lichess.normalize(lichessGame(), 'stranger'), null);
     });
 
+    check('Lichess clocks give each side\'s time and the time control', () => {
+        const game = Lichess.normalize(lichessGame({
+            clock: { initial: 180, increment: 2 },
+            clocks: [18000, 18000, 17500, 17000],
+            moves: 'e4 e5 Nf3 Nc6',
+        }), 'me');
+        eq([game.timeControl, game.myTime, game.oppTime, game.moves, game.rating], ['180+2', 9, 14, 2, 1700]);
+        eq(Lichess.normalize(lichessGame(), 'me').myTime, null, 'no clocks, no time');
+    });
+
     check('NDJSON lines parse, a torn line is skipped', () => {
         eq(Lichess.parseNdjson('{"a":1}\n\n{"b":2}\n{"c":').length, 2);
     });
 
-    await checkAsync('Lichess reads resume after the newest game already kept', async () => {
+    await checkAsync('Lichess reads the newest games first, then resumes at both edges', async () => {
         clearStore();
         const now = Date.UTC(2026, 8, 13, 12);
         const urls = [];
         const created = now - 5 * 86400000;
         const fetchImpl = async (url) => {
-            urls.push(url);
+            urls.push(new URL(url));
             const body = urls.length === 1
-                ? [lichessGame({ id: 'g1', createdAt: created, lastMoveAt: created + 60000 }),
-                    lichessGame({ id: 'g2', createdAt: created + 100000, lastMoveAt: created + 200000, winner: 'black' })]
+                ? [lichessGame({ id: 'g2', createdAt: created + 100000, lastMoveAt: created + 200000, winner: 'black' }),
+                    lichessGame({ id: 'g1', createdAt: created, lastMoveAt: created + 60000 })]
                 : [];
             return { ok: true, status: 200, text: async () => body.map((g) => JSON.stringify(g)).join('\n') };
         };
 
         const first = await Lichess.fetchGames('me', { now, fetchImpl });
         eq(first.map((g) => g.url.slice(-2)), ['g2', 'g1'], 'newest first');
-        eq(/sort=dateAsc/.test(urls[0]), true);
+        eq([urls[0].searchParams.get('sort'), urls[0].searchParams.get('since'), urls[0].searchParams.get('until')],
+            ['dateDesc', String(now - 30 * 86400000), String(now)], 'a first read walks back from now over 30 days');
 
         await Lichess.fetchGames('me', { now: now + 60000, fetchImpl });
         eq(urls.length, 1, 'fresh for a few minutes');
 
         const again = await Lichess.fetchGames('me', { now: now + 10 * 60000, fetchImpl });
-        eq(new URL(urls[1]).searchParams.get('since'), String(created + 100001));
+        eq([urls[1].searchParams.get('sort'), urls[1].searchParams.get('since')], ['dateAsc', String(created + 100001)]);
         eq(again.length, 2, 'kept games survive an empty resume');
+
+        await Lichess.fetchGames('me', { now: now + 11 * 60000, days: Chess.HISTORY_DAYS, fetchImpl });
+        eq(urls.length, 3, 'the year needs only the older games: the newer were just read');
+        eq([urls[2].searchParams.get('sort'), urls[2].searchParams.get('until')],
+            ['dateDesc', String(now - 30 * 86400000 - 1)], 'the year continues back from where 30 days stopped');
+    });
+
+    await checkAsync('an interrupted Lichess read keeps what arrived and resumes from it', async () => {
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const created = now - 86400000;
+        const urls = [];
+        const games = Array.from({ length: 300 }, (_, i) => lichessGame({ id: `x${i}`, createdAt: created - i * 1000, lastMoveAt: created - i * 1000 + 500 }));
+        const encoder = new TextEncoder();
+        const fetchImpl = async (url) => {
+            urls.push(new URL(url));
+            if (urls.length > 1) return { ok: true, status: 200, text: async () => '' };
+            let sent = false;
+            return {
+                ok: true,
+                status: 200,
+                body: {
+                    getReader: () => ({
+                        read: async () => {
+                            if (sent) throw new Error('connection reset');
+                            sent = true;
+                            return { done: false, value: encoder.encode(games.map((g) => JSON.stringify(g)).join('\n') + '\n') };
+                        },
+                    }),
+                },
+            };
+        };
+        let code = null;
+        try { await Lichess.fetchGames('me', { now, fetchImpl }); } catch (error) { code = error.code; }
+        eq(code, 'network');
+        eq(store.bbLichessGameCache.games.length, 300, 'the games that arrived are saved');
+
+        await Lichess.fetchGames('me', { now: now + 1000, fetchImpl });
+        eq(urls[1].searchParams.get('sort'), 'dateAsc', 'newer games first');
+        eq(urls[2].searchParams.get('until'), String(created - 299 * 1000 - 1), 'then back from the oldest that arrived');
     });
 
     await checkAsync('an unknown Lichess player is reported as such', async () => {
@@ -999,33 +1050,69 @@ const dayRecord = (at = T0) =>
         eq(Backup.build({ bbLichessGameCache: { games: [] }, lichessUsername: 'me' }, 0).data, { lichessUsername: 'me' });
     });
 
-    // ------------------------------------------------- opponent clock warning
+    // --------------------------------------- in-game: clock warning, speech
 
-    console.log('\n# chess.com clock warning');
+    console.log('\n# chess sites in game: clock warning and spoken moves');
 
+    const ChessSites = require('../src/shared/chess-sites.js');
+    const { DEFAULTS: SETTING_DEFAULTS } = require('../src/shared/settings.js');
     const ChessContent = require('../src/content/chess.js');
+
+    check('every per-site, per-time-control setting has a default', () => {
+        const missing = [];
+        for (const site of ChessSites.list()) {
+            if (!(site.usernameKey in SETTING_DEFAULTS)) missing.push(site.usernameKey);
+            for (const name of ChessSites.CLASSES) {
+                for (const kind of ['warn', 'warnSeconds', 'speak']) {
+                    const key = ChessSites.settingKey(site.id, kind, name);
+                    if (!(key in SETTING_DEFAULTS)) missing.push(key);
+                }
+            }
+        }
+        eq(missing, []);
+        eq(ChessSites.settingKey('lichess', 'warnSeconds', 'blitz'), 'lichessWarnBlitzSeconds');
+    });
 
     check('clock text parses, tenths and hours included', () => {
         eq(ChessContent.parseClock('1:05'), 65);
         eq(ChessContent.parseClock('0:09.8'), 9.8);
-        eq(ChessContent.parseClock('1:02:03'), 3723);
+        eq(ChessContent.parseClock('01:02:03'), 3723);
         eq(ChessContent.parseClock(''), null);
     });
 
-    check('the starting time picks the time control the way chess.com does', () => {
-        eq(ChessContent.classify(60), 'bullet');
-        eq(ChessContent.classify(120), 'bullet');
-        eq(ChessContent.classify(180), 'blitz');
-        eq(ChessContent.classify(300), 'blitz');
-        eq(ChessContent.classify(600), 'rapid');
+    check('the starting time picks the time control the way each site does', () => {
+        eq([60, 120, 180, 300, 540, 600].map((s) => ChessSites.classify('chess', s)),
+            ['bullet', 'bullet', 'blitz', 'blitz', 'blitz', 'rapid']);
+        eq([60, 180, 300, 480, 1800].map((s) => ChessSites.classify('lichess', s)),
+            ['bullet', 'blitz', 'blitz', 'rapid', 'rapid'], 'Lichess blitz ends at 8 minutes');
     });
 
-    check('a warning applies only to a time control it is turned on for', () => {
-        const settings = { chessWarnBullet: true, chessWarnBulletSeconds: 8, chessWarnBlitz: false, chessWarnBlitzSeconds: 30 };
-        eq(ChessContent.thresholdFor(settings, 'bullet'), 8);
-        eq(ChessContent.thresholdFor(settings, 'blitz'), null);
-        eq(ChessContent.anyWarningOn(settings), true);
-        eq(ChessContent.anyWarningOn({ chessWarnRapid: true, chessWarnRapidSeconds: 0 }), false, 'zero seconds is no warning');
+    check('a warning or speech applies only to its own site and time control', () => {
+        const settings = { chessWarnBullet: true, chessWarnBulletSeconds: 8, chessWarnBlitz: false, chessWarnBlitzSeconds: 30, lichessSpeakRapid: true };
+        eq(ChessSites.thresholdFor(settings, 'chess', 'bullet'), 8);
+        eq(ChessSites.thresholdFor(settings, 'chess', 'blitz'), null);
+        eq(ChessSites.thresholdFor(settings, 'lichess', 'bullet'), null);
+        eq(ChessSites.anyWarningOn(settings, 'chess'), true);
+        eq(ChessSites.anyWarningOn({ chessWarnRapid: true, chessWarnRapidSeconds: 0 }, 'chess'), false, 'zero seconds is no warning');
+        eq([ChessSites.speaksFor(settings, 'lichess', 'rapid'), ChessSites.speaksFor(settings, 'lichess', 'blitz'),
+            ChessSites.anySpeechOn(settings, 'chess'), ChessSites.speaksFor(settings, 'lichess', null)], [true, false, false, false]);
+    });
+
+    check('moves are spoken as words', () => {
+        eq(['e4', 'Nf3', 'exd5', 'Nbd7', 'R1e2', 'Qh4xe1', 'Bxf7+', 'e8=Q#', 'O-O', 'O-O-O+', 'Qd8!?', '♘f3'].map(ChessContent.spokenMove), [
+            'E 4', 'Knight F 3', 'E takes D 5', 'Knight B D 7', 'Rook 1 E 2', 'Queen H 4 takes E 1',
+            'Bishop takes F 7, check', 'E 8 promotes to Queen, checkmate', 'Castles kingside', 'Castles queenside, check',
+            'Queen D 8', 'Knight F 3',
+        ]);
+        eq(ChessContent.spokenMove(''), '');
+    });
+
+    check('a chess.com move node gets its piece letter back from the figurine', () => {
+        const text = (value) => ({ nodeType: 3, textContent: value });
+        const element = (figurine, children = []) => ({ nodeType: 1, getAttribute: () => figurine, childNodes: children });
+        const node = element(null, [element(null, [element('N'), text('xe5+')])]);
+        eq(ChessContent.moveText(node), 'Nxe5+');
+        eq(ChessContent.moveText(element(null, [text('e8='), element('Q')])), 'e8=Q');
     });
 
     // ------------------------------------------------------- site detection
@@ -1034,10 +1121,13 @@ const dayRecord = (at = T0) =>
 
     const Site = require('../src/content/site.js');
 
-    check('chess.com is its own site', () => {
+    check('chess.com and Lichess are sites of their own', () => {
         eq(Site.detectSite('www.chess.com'), 'chess');
         eq(Site.detectSite('chess.com'), 'chess');
         eq(Site.detectSite('notchess.com'), 'other');
+        eq(Site.detectSite('lichess.org'), 'lichess');
+        eq(Site.detectSite('en.lichess.org'), 'lichess');
+        eq(Site.detectSite('notlichess.org'), 'other');
     });
 
     console.log('\n' + '='.repeat(52));
