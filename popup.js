@@ -15,7 +15,8 @@
 (function () {
     'use strict';
 
-    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site, ChessSites, ChessStats } = window.BB;
+    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site,
+        ChessSites, ChessStats, ChessLimitButton } = window.BB;
 
     class Popup {
         constructor() {
@@ -64,6 +65,11 @@
             };
 
             on('dashboardBtn', 'click', () => openDashboard(ChessSites.get(this.site) ? `#site/${this.site}` : ''));
+
+            // The daily-limit override. It draws itself or stays hidden, and
+            // is not a chess-panel control: the limit can bite while you are
+            // on any page, and this is the one place to lift it.
+            ChessLimitButton.mount(document.getElementById('limitOverrideBtn')).refresh();
 
             // Delegation: the list is re-rendered wholesale, so per-row
             // listeners would have to be re-attached (and were leaking).

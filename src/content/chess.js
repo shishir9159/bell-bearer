@@ -1,6 +1,7 @@
 /**
  * chess.com and Lichess, from the content script's side: the clear-arrows
- * shortcut (chess.com), the opponent clock warning, and moves read aloud.
+ * shortcut (chess.com), the opponent clock warning, the low-clock tone, and
+ * moves read aloud.
  *
  * The chess.com board itself is only reachable from the page's world, which is
  * src/content/chess-page.js. This half owns what that one cannot touch — the
@@ -10,9 +11,26 @@
  *
  * The clocks and the move list are plain text in both sites' pages, so the
  * warning and the speech need no bridge: one poll reads them twice a second,
- * and only while a warning or speech is turned on for this site. What each
+ * and only while something that needs it is turned on for this site. What each
  * setting is called and where a time control starts come from
  * src/shared/chess-sites.js.
+ *
+ * Three things here used to be wrong and are worth naming, because the shape of
+ * the file follows from them:
+ *
+ *   - Everything hung off the clocks. A game with no clock — Coach, a bot, an
+ *     analysis board — produced no state at all, so moves were never spoken on
+ *     any of them. Moves are now read whether or not the page has a clock, and
+ *     an untimed game speaks whenever any speech setting is on.
+ *   - The move list was counted, not read. Any selector that happened to match
+ *     rows rather than plies, or a list the site redrew, put the count out and
+ *     took the speech with it. What is read now is the notation itself, and a
+ *     selector whose matches do not look like chess moves is passed over for
+ *     the next one — so the site can rename its classes without silencing this.
+ *   - The move list was the only place moves were looked for. chess.com's
+ *     focus mode hides the sidebar it lives in, so that mode was silent too.
+ *     The board object knows the moves regardless; it is asked when the DOM
+ *     has nothing, over the same bridge as the arrows.
  *
  * Speech goes through chrome.tts in the background worker — a content script
  * cannot call it — with the page's own speechSynthesis where there is no
@@ -29,6 +47,8 @@
     const POLL_MS = 500;
     /** However the gap wobbles around the line, one warning per this long at most. */
     const REPEAT_MS = 15000;
+    /** The low-clock tone, likewise, so a clock at the line does not stutter. */
+    const LOW_REPEAT_MS = 8000;
     /** More new moves than this at once is a move list being drawn, not played. */
     const MAX_SPOKEN_AT_ONCE = 2;
 
@@ -50,6 +70,17 @@
 
     const PIECES = { K: 'King', Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight' };
     const FIGURINES = { '♔': 'K', '♚': 'K', '♕': 'Q', '♛': 'Q', '♖': 'R', '♜': 'R', '♗': 'B', '♝': 'B', '♘': 'N', '♞': 'N', '♙': '', '♟': '' };
+
+    /**
+     * Algebraic notation, and nothing else. This is the test a move-list
+     * selector has to pass before its matches are believed: a list of row
+     * containers or move numbers does not look like this, and is passed over.
+     */
+    const SAN = /^(?:O-O-O|O-O|0-0-0|0-0|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=?[QRBN])?)[+#]?[!?]{0,2}$/;
+
+    function isMoveText(text) {
+        return SAN.test(String(text || '').trim());
+    }
 
     /**
      * A move in algebraic notation as words a voice reads cleanly:
@@ -76,27 +107,64 @@
         return words.join(' ') + suffix;
     }
 
+    /**
+     * The moves played since `before`, given the list as it reads now.
+     *
+     * A move list is not append-only: it is redrawn on a takeback, truncated
+     * while a long game scrolls, and replaced wholesale when a new game starts
+     * on the same page. Only a list that still begins with the one already
+     * seen has genuinely grown; anything else is a resync, and speaking it
+     * would read the whole game out at once.
+     */
+    function newMoves(before, after) {
+        if (after.length < before.length) return null;
+        for (let i = 0; i < before.length; i++) {
+            if (after[i] !== before[i]) return null;
+        }
+        return after.slice(before.length);
+    }
+
     // ---------------------------------------------------------- page reading
 
     /**
-     * Where each site keeps its clocks and moves. On chess.com a flipped
-     * board can seat you on top, so yours is found by username; Lichess
-     * always seats the player at the bottom.
+     * Where each site keeps its clocks, its moves and the name of the time
+     * control being played. On chess.com a flipped board can seat you on top,
+     * so yours is found by username; Lichess always seats the player at the
+     * bottom.
+     *
+     * Several spellings are listed per slot on purpose. Both sites rename
+     * their classes freely, and the older spellings cost nothing to keep: the
+     * first selector that matches wins, and for the move list, the first whose
+     * matches actually read as chess moves.
      */
     const PAGES = {
         chess: {
-            top: '.clock-component.clock-top, .clock-top',
-            bottom: '.clock-component.clock-bottom, .clock-bottom',
-            time: '.clock-time-monospace, [role="timer"]',
-            moves: ['.main-line-ply', 'wc-simple-move-list .node', '.move-list .node'],
+            top: '.clock-component.clock-top, .clock-top, [class*="clock-top"]',
+            bottom: '.clock-component.clock-bottom, .clock-bottom, [class*="clock-bottom"]',
+            time: '.clock-time-monospace, [class*="clock-time"], [role="timer"]',
+            moves: [
+                'wc-simple-move-list .node',
+                'wc-vertical-move-list .node',
+                '.main-line-ply',
+                '.move-list .node',
+                '[class*="move-list"] .node',
+                '.node-highlight-content',
+            ],
             username: '.user-username-component, .cc-user-username-component, [data-test-element="user-tagline-username"]',
+            control: [
+                '.game-info-time-control',
+                '[data-cy="time-control"]',
+                '.live-game-buttons-time-control',
+                '.game-over-header-component',
+            ],
         },
         lichess: {
             top: '.rclock-top',
             bottom: '.rclock-bottom',
             time: '.time',
             // kwdb in current Lichess, u8t in older builds.
-            moves: ['l4x kwdb', 'l4x u8t'],
+            moves: ['l4x kwdb', 'l4x u8t', 'rm6 kwdb', '.moves kwdb'],
+            control: ['.game__meta .setup', '.game__meta__infos .setup', '.mchat__tabs .setup'],
         },
     };
 
@@ -106,7 +174,7 @@
         return parseClock(text.textContent);
     }
 
-    /** Both clocks, as { mine, theirs } in seconds, or null off a game. */
+    /** Both clocks, as { mine, theirs } in seconds, or null when the page has none. */
     function readClocks(doc, site, username) {
         const page = PAGES[site];
         if (!page) return null;
@@ -129,6 +197,14 @@
     /**
      * A move node's notation. chess.com draws the piece as an icon carrying
      * `data-figurine` beside the text, so the letter is put back from that.
+     *
+     * The spaces inside a move are closed up rather than split on. chess.com
+     * writes a piece move as the icon and then a space before the square —
+     * `<span data-figurine="Q"></span> g4` — so splitting on whitespace and
+     * taking the first token, which is what this used to do, reduced every
+     * piece move on the site to its bare letter: "Qg4" came out as "Q". Any
+     * text this glues together that is not a move is thrown out by the
+     * notation test in readMoves, so closing the gaps is the safe direction.
      */
     function moveText(node) {
         let out = '';
@@ -136,17 +212,139 @@
             if (child.nodeType === 3) out += child.textContent;
             else if (child.nodeType === 1) out += child.getAttribute('data-figurine') || moveText(child);
         });
-        return out.trim().split(/\s+/)[0] || '';
+        return out.replace(/\s+/g, '').replace(/^\d+\.+/, '');
     }
 
-    /** The move nodes, from the first of the site's move-list layouts present. */
+    /**
+     * The moves on the board, in notation, from the first of the site's
+     * layouts that yields something that reads like a game.
+     *
+     * "Reads like a game" is the whole trick: a selector matching row
+     * containers or move numbers yields text that is not algebraic notation,
+     * and is skipped rather than counted. A little leniency is allowed for the
+     * odd annotation glyph in the list, hence most rather than all.
+     */
     function readMoves(doc, site) {
         const page = PAGES[site];
         for (const selector of page ? page.moves : []) {
-            const nodes = doc.querySelectorAll(selector);
-            if (nodes.length) return Array.from(nodes);
+            const nodes = Array.from(doc.querySelectorAll(selector));
+            if (!nodes.length) continue;
+            const texts = nodes.map(moveText).filter(Boolean);
+            const moves = texts.filter(isMoveText);
+            if (moves.length && moves.length >= texts.length * 0.8) return moves;
         }
         return [];
+    }
+
+    /**
+     * The moves the board itself knows, asked of src/content/chess-page.js.
+     *
+     * chess.com's focus mode takes the sidebar away, and the move list with
+     * it, so there is nothing in the DOM left to read and moves went unspoken
+     * for anyone who plays that way. The board still has them; it just lives
+     * in the page's own world, so the question goes over a DOM event.
+     *
+     * The dispatch is synchronous and the page world answers during it, so the
+     * reply is already in hand when dispatchEvent returns. Whatever comes back
+     * is filtered to things that actually read as notation before use.
+     */
+    let boardReply = null;
+
+    function onBoardMoves(event) {
+        try { boardReply = JSON.parse(event.detail); } catch (_) { boardReply = null; }
+    }
+
+    function readBoardMoves() {
+        boardReply = null;
+        try {
+            document.dispatchEvent(new CustomEvent(EVENT, { detail: JSON.stringify({ type: 'moves' }) }));
+        } catch (_) {
+            return [];
+        }
+        return Array.isArray(boardReply) ? boardReply.filter(isMoveText) : [];
+    }
+
+    /**
+     * The moves on the board, from the sidebar if it is there and from the
+     * board object if it is not. The DOM comes first on purpose: it needs no
+     * bridge and does not care what chess.com calls its internals this month.
+     */
+    function currentMoves(site) {
+        const listed = readMoves(document, site);
+        if (listed.length || site !== 'chess') return listed;
+        return readBoardMoves();
+    }
+
+    /**
+     * The time control the page says it is, as a bucket, or null when it does
+     * not say. Preferred over the clocks: a page opened part-way through a
+     * game shows clocks that have already run down, and a 10-minute game with
+     * twenty seconds left is not bullet.
+     */
+    function readControl(doc, site) {
+        const page = PAGES[site];
+        for (const selector of (page && page.control) || []) {
+            const node = doc.querySelector(selector);
+            const found = node && ChessSites.classFromLabel(site, node.textContent);
+            if (found) return found;
+        }
+        return null;
+    }
+
+    // ----------------------------------------------------------------- sound
+
+    /**
+     * The low-clock tone.
+     *
+     * Chess.com plays its own sound here and gives no way to change how loud
+     * it is, so this is a tone of our own that the volume setting actually
+     * reaches — two short beeps through the page's Web Audio, which needs no
+     * file and so no web-accessible resource. Above 100% it really is louder:
+     * gain is not capped at 1 the way an <audio> element's volume is.
+     */
+    let audio = null;
+
+    /**
+     * Create or resume the audio context — only ever from inside a user
+     * gesture. Chrome refuses to start Web Audio that a page did not start in
+     * answer to a click or a key ("The AudioContext was not allowed to
+     * start"), and the tone is played from the poll timer, which is never a
+     * gesture. So the context is opened on the first pointerdown or keydown
+     * on the page — moving a piece is one — and the tone only ever plays
+     * through a context that is already running.
+     */
+    function unlockAudio() {
+        if (audio && audio.state === 'running') return;
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            if (!audio) audio = new Ctx();
+            if (audio.state === 'suspended') audio.resume().catch(() => {});
+        } catch (_) { /* no Web Audio on this page */ }
+    }
+
+    function beep(volume) {
+        // Not yet unlocked by a gesture: stay quiet rather than make Chrome
+        // warn. In a real game a piece has been touched long before a clock
+        // runs low.
+        if (volume <= 0 || !audio || audio.state !== 'running') return;
+        try {
+            const at = audio.currentTime;
+            for (const [offset, frequency] of [[0, 880], [0.18, 1180]]) {
+                const oscillator = audio.createOscillator();
+                const gain = audio.createGain();
+                oscillator.type = 'sine';
+                oscillator.frequency.value = frequency;
+                // Ramped rather than switched: a square edge on a sine is a
+                // click, and a click at 150% volume is unpleasant.
+                gain.gain.setValueAtTime(0.0001, at + offset);
+                gain.gain.exponentialRampToValueAtTime(volume * 0.3, at + offset + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, at + offset + 0.14);
+                oscillator.connect(gain).connect(audio.destination);
+                oscillator.start(at + offset);
+                oscillator.stop(at + offset + 0.16);
+            }
+        } catch (_) { /* the context went away; nothing to play through */ }
     }
 
     // ----------------------------------------------------------------- speech
@@ -182,38 +380,44 @@
             notify('Arrows cleared', 'info');
         }
 
-        // One game's worth of state; forgotten when the clocks go away or the
-        // page moves on to another game.
+        // One game's worth of state; forgotten when the page moves on to
+        // another game. `start` is the clock both sides began with, which is
+        // only knowable while the board is still empty — so it is taken then
+        // and, once moves are on it, left alone.
         let game = null;
         let timer = null;
 
-        const newGame = (clocks, start) => ({
+        const newGame = (clocks) => ({
             url: location.href,
-            start,
+            start: clocks ? Math.max(clocks.mine, clocks.theirs) : null,
             last: clocks,
             armed: true,
             warnedAt: 0,
+            lowArmed: true,
+            lowAt: 0,
             // The moves already on the page are not news: only what is played
             // from here on is spoken.
-            moves: readMoves(document, site).length,
+            moves: currentMoves(site),
         });
 
-        function speakNewMoves(settings) {
-            const nodes = readMoves(document, site);
-            if (nodes.length < game.moves) {
-                // A takeback, or the list was redrawn: start counting again.
-                game.moves = nodes.length;
-                return;
-            }
-            const fresh = nodes.slice(game.moves);
-            game.moves = nodes.length;
-            if (!fresh.length || fresh.length > MAX_SPOKEN_AT_ONCE) return;
-            if (!ChessSites.speaksFor(settings, site, ChessSites.classify(site, game.start))) return;
-            fresh.forEach((node) => speak(spokenMove(moveText(node))));
+        /**
+         * Which of the three controls this game is, or null when nothing on
+         * the page says — an untimed game, which has a setting of its own.
+         */
+        function timeClass() {
+            return readControl(document, site) || ChessSites.classify(site, game.start);
+        }
+
+        function speakNewMoves(settings, moves) {
+            const fresh = newMoves(game.moves, moves);
+            game.moves = moves;
+            if (!fresh || !fresh.length || fresh.length > MAX_SPOKEN_AT_ONCE) return;
+            if (!ChessSites.speaksFor(settings, site, timeClass())) return;
+            fresh.forEach((san) => speak(spokenMove(san)));
         }
 
         function warnAboutClock(settings, clocks) {
-            const threshold = ChessSites.thresholdFor(settings, site, ChessSites.classify(site, game.start));
+            const threshold = ChessSites.thresholdFor(settings, site, timeClass());
             if (threshold == null) return;
 
             const lead = clocks.theirs - clocks.mine;
@@ -228,35 +432,72 @@
             notify(`Opponent is ${human(lead)} ahead on the clock`, 'warning');
         }
 
+        function warnAboutLowClock(settings, clocks) {
+            const threshold = ChessSites.lowTimeFor(settings, site, timeClass());
+            if (threshold == null) return;
+
+            if (clocks.mine > threshold) {
+                game.lowArmed = true;
+                return;
+            }
+            const now = Date.now();
+            if (!game.lowArmed || now - game.lowAt < LOW_REPEAT_MS) return;
+            game.lowArmed = false;
+            game.lowAt = now;
+            beep(ChessSites.lowVolumeFor(settings, site));
+        }
+
+        /**
+         * A new game on the same page — a rematch, or the next pairing from
+         * the lobby. Both clocks reading the same and higher than last time is
+         * one; so is a move list that no longer starts the way it did, which
+         * is what catches a new game at a different time control.
+         */
+        function isNewGame(clocks, moves) {
+            if (clocks && game.last &&
+                clocks.mine === clocks.theirs &&
+                clocks.mine > game.last.mine && clocks.theirs > game.last.theirs) return true;
+            return moves.length < game.moves.length && moves.length <= 1;
+        }
+
         function poll() {
             const settings = getSettings();
             const clocks = readClocks(document, site, settings[ChessSites.get(site).usernameKey]);
-            if (!clocks || !game || game.url !== location.href) {
-                game = clocks ? newGame(clocks, Math.max(clocks.mine, clocks.theirs)) : null;
+            const moves = currentMoves(site);
+
+            if (!game || game.url !== location.href || isNewGame(clocks, moves)) {
+                game = newGame(clocks);
                 return;
             }
 
-            // Both clocks back up to the same full time is a new game on the
-            // same page (a rematch): start over from its starting time.
-            if (clocks.mine === clocks.theirs && clocks.mine > game.last.mine && clocks.theirs > game.last.theirs) {
-                game = newGame(clocks, clocks.mine);
-                return;
+            // The starting clock is only honest while the board is still
+            // empty; after that the clocks have run and say nothing about
+            // which control this is.
+            if (clocks && game.moves.length <= 1) {
+                game.start = Math.max(game.start || 0, clocks.mine, clocks.theirs);
             }
 
-            // Before the clock check: the mating move stops both clocks.
-            speakNewMoves(settings);
+            // Before the clock checks: the mating move stops both clocks, and
+            // it should still be read out.
+            speakNewMoves(settings, moves);
+
+            if (!clocks) return;
 
             // A clock that has not moved since the last look is a game that is
             // over (or not yet begun): nothing to warn about.
-            const ticking = clocks.mine !== game.last.mine || clocks.theirs !== game.last.theirs;
+            const ticking = !game.last || clocks.mine !== game.last.mine || clocks.theirs !== game.last.theirs;
             game.last = clocks;
-            if (ticking) warnAboutClock(settings, clocks);
+            if (!ticking) return;
+            warnAboutClock(settings, clocks);
+            warnAboutLowClock(settings, clocks);
         }
 
-        /** Poll only while a warning or speech is on; called again whenever settings change. */
+        /** Poll only while something that needs it is on; called again whenever settings change. */
         function sync() {
             const settings = getSettings();
-            const on = ChessSites.anyWarningOn(settings, site) || ChessSites.anySpeechOn(settings, site);
+            const on = ChessSites.anyWarningOn(settings, site) ||
+                ChessSites.anySpeechOn(settings, site) ||
+                ChessSites.anyLowTimeOn(settings, site);
             if (on && !timer) {
                 timer = setInterval(poll, POLL_MS);
             } else if (!on && timer) {
@@ -266,15 +507,62 @@
             }
         }
 
-        function install() {
-            if (site === 'chess') document.addEventListener('keydown', onKeyDown, true);
-            sync();
+        /** Unlock the tone on a gesture — but only for someone who wants the tone. */
+        function onGesture() {
+            if (ChessSites.anyLowTimeOn(getSettings(), site)) unlockAudio();
         }
 
-        return { install, sync };
+        function install() {
+            if (site === 'chess') {
+                document.addEventListener('keydown', onKeyDown, true);
+                document.addEventListener('bb:chess:moves', onBoardMoves);
+            }
+            document.addEventListener('pointerdown', onGesture, { capture: true, passive: true });
+            document.addEventListener('keydown', onGesture, { capture: true, passive: true });
+            sync();
+
+            // What the poller can see, for the page console. Both sites move
+            // their class names about, and this is how you find out which
+            // selector stopped matching without reading this file.
+            root.__bellBearerChess = {
+                site,
+                get clocks() { return readClocks(document, site, getSettings()[ChessSites.get(site).usernameKey]); },
+                get moves() { return currentMoves(site); },
+                get domMoves() { return readMoves(document, site); },
+                get boardMoves() { return site === 'chess' ? readBoardMoves() : []; },
+                get control() { return readControl(document, site); },
+                get timeClass() { return game ? timeClass() : null; },
+                get game() { return game; },
+                get polling() { return !!timer; },
+            };
+        }
+
+        /**
+         * The control being played right now, for anything that has to know
+         * what a bare "Rematch" would start. Read from the page even when the
+         * poller is off, so a user who wants only the daily limits still gets
+         * their rematch button matched to the right control.
+         */
+        function currentClass() {
+            return readControl(document, site) ||
+                (game ? ChessSites.classify(site, game.start) : null) ||
+                ChessSites.classify(site, startingSeconds(document, site, getSettings()));
+        }
+
+        return { install, sync, currentClass };
     }
 
-    const ChessContent = { createChess, EVENT, parseClock, spokenMove, moveText, readClocks, readMoves };
+    /** The larger clock on the page, as a starting time — a last resort. */
+    function startingSeconds(doc, site, settings) {
+        const clocks = readClocks(doc, site, settings[ChessSites.get(site).usernameKey]);
+        return clocks ? Math.max(clocks.mine, clocks.theirs) : null;
+    }
+
+    const ChessContent = {
+        createChess, EVENT, PAGES, currentMoves,
+        parseClock, spokenMove, moveText, isMoveText, newMoves,
+        readClocks, readMoves, readControl,
+    };
 
     root.BB = root.BB || {};
     root.BB.ChessContent = ChessContent;

@@ -15,7 +15,10 @@
 
     function readControl(element) {
         if (element.type === 'checkbox') return element.checked;
-        if (element.type === 'number') {
+        // A range's value is a string like a text input's, but what it stands
+        // for is a number — stored as one, so that comparing it with what is
+        // in storage does not come out unequal on every change.
+        if (element.type === 'number' || element.type === 'range') {
             const value = Number(element.value);
             const min = element.min === '' ? -Infinity : Number(element.min);
             return Number.isFinite(value) ? Math.max(min, value) : Settings.DEFAULTS[element.id];

@@ -161,6 +161,37 @@ header h1 {
 .controls .btn-danger { color: var(--danger); background: var(--danger-bg); }
 .controls .btn-danger:hover { background: var(--danger); color: #fff; }
 
+/* The daily-limit override (src/page/chess-limit-button.js). Only on screen
+   once a limit has been reached, so it can afford to be the loud one. */
+.limit-override {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    padding: 5px 10px;
+    border: 1px solid var(--danger);
+    border-radius: var(--btn-radius);
+    background: var(--danger-bg);
+    color: var(--danger);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+}
+
+.limit-override:hover { background: var(--danger); color: #fff; }
+.limit-override:active { transform: translateY(1px); }
+.limit-override:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+.limit-override svg { display: block; }
+
+.limit-override.is-granted {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
+}
+
 /* ---------- speed bar ---------- */
 
 .speed-control-bar {
@@ -174,6 +205,17 @@ header h1 {
 }
 
 .speed-control-bar[hidden] { display: none; }
+
+/* The speed icon. It paints with currentColor, so it takes the skin's accent
+   ink the way the other controls on an accent-soft ground do, and follows a
+   theme change without anything having to redraw it. */
+.speed-label {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: block;
+    color: var(--accent-ink);
+}
 
 .speed-buttons {
     display: flex;

@@ -56,10 +56,20 @@
         trackActivity: false,
 
         // Chess sites, one set per site; the key names come from
-        // src/shared/chess-sites.js#settingKey. Per time control:
+        // src/shared/chess-sites.js — #settingKey for the per-time-control
+        // ones, #siteKey for the rest. Per time control:
         //   <site>Warn<Class> / <site>Warn<Class>Seconds — a warning during a
         //     game when the opponent's clock is more than N seconds ahead;
-        //   <site>Speak<Class> — every move read aloud as it is played.
+        //   <site>Speak<Class> — every move read aloud as it is played;
+        //   <site>LowTime<Class>Seconds — where your own clock counts as low;
+        //   <site>Limit<Class> — games of that control allowed in a day.
+        // Per site:
+        //   <site>SpeakUntimed — read moves aloud in a game with no clock
+        //     (Coach, a bot, an analysis board), which no control describes;
+        //   <site>LowTime / <site>LowTimeVolume / <site>MuteSiteLowTime — the
+        //     low-clock tone, how loud (percent, above 100 amplifies), and
+        //     whether the site's own low-time sound is silenced for it;
+        //   <site>DailyLimits — whether the per-control daily limits apply.
         chessUsername: '',
         chessWarnBullet: false,
         chessWarnBulletSeconds: 10,
@@ -70,6 +80,17 @@
         chessSpeakBullet: false,
         chessSpeakBlitz: false,
         chessSpeakRapid: false,
+        chessSpeakUntimed: false,
+        chessLowTime: false,
+        chessLowTimeBulletSeconds: 10,
+        chessLowTimeBlitzSeconds: 30,
+        chessLowTimeRapidSeconds: 60,
+        chessLowTimeVolume: 60,
+        chessMuteSiteLowTime: false,
+        chessDailyLimits: false,
+        chessLimitBullet: 10,
+        chessLimitBlitz: 6,
+        chessLimitRapid: 3,
 
         lichessUsername: '',
         lichessWarnBullet: false,
@@ -81,6 +102,17 @@
         lichessSpeakBullet: false,
         lichessSpeakBlitz: false,
         lichessSpeakRapid: false,
+        lichessSpeakUntimed: false,
+        lichessLowTime: false,
+        lichessLowTimeBulletSeconds: 10,
+        lichessLowTimeBlitzSeconds: 30,
+        lichessLowTimeRapidSeconds: 60,
+        lichessLowTimeVolume: 60,
+        lichessMuteSiteLowTime: false,
+        lichessDailyLimits: false,
+        lichessLimitBullet: 10,
+        lichessLimitBlitz: 6,
+        lichessLimitRapid: 3,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
@@ -122,6 +154,10 @@
 
         // Lichess games, normalized, and how far the export was read. shared/lichess.js.
         lichessCache: 'bbLichessGameCache',
+
+        // Games played today per site and time control, and the extra games
+        // granted from the popup. shared/chess-limits.js owns the shape.
+        chessLimits: 'bbChessDailyLimits',
     });
 
     function withDefaults(stored, keys) {

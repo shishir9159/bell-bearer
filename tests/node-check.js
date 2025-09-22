@@ -1058,19 +1058,14 @@ const dayRecord = (at = T0) =>
     const { DEFAULTS: SETTING_DEFAULTS } = require('../src/shared/settings.js');
     const ChessContent = require('../src/content/chess.js');
 
-    check('every per-site, per-time-control setting has a default', () => {
-        const missing = [];
-        for (const site of ChessSites.list()) {
-            if (!(site.usernameKey in SETTING_DEFAULTS)) missing.push(site.usernameKey);
-            for (const name of ChessSites.CLASSES) {
-                for (const kind of ['warn', 'warnSeconds', 'speak']) {
-                    const key = ChessSites.settingKey(site.id, kind, name);
-                    if (!(key in SETTING_DEFAULTS)) missing.push(key);
-                }
-            }
-        }
+    check('every per-site setting the registry can name has a default', () => {
+        const missing = ChessSites.allKeys().filter((key) => !(key in SETTING_DEFAULTS));
         eq(missing, []);
         eq(ChessSites.settingKey('lichess', 'warnSeconds', 'blitz'), 'lichessWarnBlitzSeconds');
+        eq(ChessSites.settingKey('chess', 'limit', 'bullet'), 'chessLimitBullet');
+        eq(ChessSites.settingKey('chess', 'lowSeconds', 'rapid'), 'chessLowTimeRapidSeconds');
+        eq(ChessSites.siteKey('lichess', 'lowVolume'), 'lichessLowTimeVolume');
+        eq(ChessSites.settingKey('chess', 'nonsense', 'bullet'), null);
     });
 
     check('clock text parses, tenths and hours included', () => {
@@ -1095,7 +1090,7 @@ const dayRecord = (at = T0) =>
         eq(ChessSites.anyWarningOn(settings, 'chess'), true);
         eq(ChessSites.anyWarningOn({ chessWarnRapid: true, chessWarnRapidSeconds: 0 }, 'chess'), false, 'zero seconds is no warning');
         eq([ChessSites.speaksFor(settings, 'lichess', 'rapid'), ChessSites.speaksFor(settings, 'lichess', 'blitz'),
-            ChessSites.anySpeechOn(settings, 'chess'), ChessSites.speaksFor(settings, 'lichess', null)], [true, false, false, false]);
+            ChessSites.anySpeechOn(settings, 'chess'), ChessSites.speaksFor(settings, 'lichess', null)], [true, false, false, true]);
     });
 
     check('moves are spoken as words', () => {
@@ -1113,6 +1108,157 @@ const dayRecord = (at = T0) =>
         const node = element(null, [element(null, [element('N'), text('xe5+')])]);
         eq(ChessContent.moveText(node), 'Nxe5+');
         eq(ChessContent.moveText(element(null, [text('e8='), element('Q')])), 'e8=Q');
+
+        // What chess.com actually ships: the figurine is an empty icon span
+        // and the square follows after a space, inside a wrapper. Splitting on
+        // that space and keeping the first token — which is what this did —
+        // turned every piece move on the site into its bare letter, so "Qg4"
+        // was read aloud as "Queen".
+        const real = element(null, [text(' '), element(null, [element('Q'), text(' g4 ')])]);
+        eq(ChessContent.moveText(real), 'Qg4');
+        eq(ChessContent.spokenMove(ChessContent.moveText(real)), 'Queen G 4');
+        // A move number glued on by the same closing-up is taken off again.
+        eq(ChessContent.moveText(element(null, [text('12. '), element(null, [element('R'), text(' xh5 ')])])), 'Rxh5');
+    });
+
+    check('only actual notation counts as a move', () => {
+        // The gate that lets a move-list selector be believed or passed over:
+        // row containers and move numbers must not read as moves.
+        eq(['e4', 'Nf3', 'exd5', 'O-O', '0-0-0', 'e8=Q#', 'Qh4xe1', 'Bxf7+', 'Qd8!?']
+            .every(ChessContent.isMoveText), true);
+        eq(['12.', '1', '', 'White to move', '10:00', 'Rematch', '1-0', 'Zz9']
+            .some(ChessContent.isMoveText), false);
+    });
+
+    check('only a move list that grew, and grew from where it was, is spoken', () => {
+        const from = ['e4', 'e5', 'Nf3'];
+        eq(ChessContent.newMoves(from, ['e4', 'e5', 'Nf3', 'Nc6']), ['Nc6']);
+        eq(ChessContent.newMoves(from, from), []);
+        // A takeback, a redraw and a different game each resync in silence
+        // rather than reading the board out from the top.
+        eq(ChessContent.newMoves(from, ['e4', 'e5']), null, 'a takeback');
+        eq(ChessContent.newMoves(from, ['d4', 'd5', 'c4']), null, 'another game, same length');
+        eq(ChessContent.newMoves([], ['e4']), ['e4']);
+    });
+
+    check('an untimed game speaks whenever any speech is on', () => {
+        // The bug this fixes: Coach, bots and the analysis board have no clock,
+        // so they classify as no control at all. Gating them on a separate
+        // "Untimed" box, off by default, left a user with Blitz ticked hearing
+        // nothing on Coach.
+        const timed = { chessSpeakBlitz: true };
+        eq(ChessSites.speaksFor(timed, 'chess', null), true);
+        eq(ChessSites.speaksFor(timed, 'chess', 'bullet'), false);
+        // The Untimed box alone speaks in untimed games only.
+        const untimedOnly = { chessSpeakUntimed: true };
+        eq(ChessSites.speaksFor(untimedOnly, 'chess', null), true);
+        eq(ChessSites.speaksFor(untimedOnly, 'chess', 'bullet'), false);
+        eq(ChessSites.anySpeechOn(untimedOnly, 'chess'), true);
+        eq([ChessSites.speaksFor({}, 'chess', null), ChessSites.anySpeechOn({}, 'chess')], [false, false]);
+    });
+
+    check('a time-control label names a bucket, whichever way a site writes it', () => {
+        const chess = (text) => ChessSites.classFromLabel('chess', text);
+        eq(['1 min', '3 min', '10 min', '30 min'].map(chess), ['bullet', 'blitz', 'rapid', 'rapid']);
+        eq(['New 10 min game', '3 | 2', '1 | 1', 'Rapid'].map(chess), ['rapid', 'blitz', 'bullet', 'rapid']);
+        eq(['3+2', '30 sec', '1/2 min', 'UltraBullet'].map((t) => ChessSites.classFromLabel('lichess', t)),
+            ['blitz', 'bullet', 'bullet', 'bullet']);
+        // 5 minutes is blitz on chess.com and blitz on Lichess; 8 splits them.
+        eq([chess('8 min'), ChessSites.classFromLabel('lichess', '8 min')], ['blitz', 'rapid']);
+        eq(['Rematch', 'New game', '', 'Resign'].map(chess), [null, null, null, null]);
+    });
+
+    check('every speed either site reports lands in one of the three buckets', () => {
+        eq(['bullet', 'ultraBullet', 'blitz', 'rapid', 'classical'].map(ChessSites.bucket),
+            ['bullet', 'bullet', 'blitz', 'rapid', 'rapid']);
+        // Played over days, not at a sitting: outside every bucket on purpose.
+        eq([ChessSites.bucket('daily'), ChessSites.bucket('correspondence'), ChessSites.bucket('')],
+            [null, null, null]);
+    });
+
+    check('the low-clock tone is one switch a site, with a line per control', () => {
+        const settings = { chessLowTime: true, chessLowTimeBulletSeconds: 10, chessLowTimeBlitzSeconds: 0, chessLowTimeVolume: 150 };
+        eq(ChessSites.lowTimeFor(settings, 'chess', 'bullet'), 10);
+        eq(ChessSites.lowTimeFor(settings, 'chess', 'blitz'), null, 'zero seconds is no tone');
+        eq(ChessSites.lowTimeFor(settings, 'lichess', 'bullet'), null);
+        eq(ChessSites.lowTimeFor({ ...settings, chessLowTime: false }, 'chess', 'bullet'), null);
+        eq(ChessSites.anyLowTimeOn(settings, 'chess'), true);
+        // Percent in, gain out — above 1 really is louder, and it is capped.
+        eq([150, 0, 400, undefined].map((v) => ChessSites.lowVolumeFor({ chessLowTimeVolume: v }, 'chess')),
+            [1.5, 0, 2, 0.6]);
+    });
+
+    // -------------------------------------------------------- daily limits
+
+    console.log('\n# chess daily limits');
+
+    const ChessLimits = require('../src/shared/chess-limits.js');
+
+    const DAY = new Date(2026, 8, 16, 12, 0, 0).getTime();
+    const limitOn = {
+        chessDailyLimits: true, chessLimitBullet: 2, chessLimitBlitz: 0, chessLimitRapid: null,
+    };
+
+    check("today's games are counted per bucket, in local days", () => {
+        const games = [
+            { end: DAY, timeClass: 'bullet' },
+            { end: DAY - 60000, timeClass: 'bullet' },
+            { end: DAY, timeClass: 'ultraBullet' },
+            { end: DAY, timeClass: 'blitz' },
+            { end: DAY, timeClass: 'daily' },
+            { end: DAY - 26 * 60 * 60 * 1000, timeClass: 'bullet' },
+        ];
+        eq(ChessLimits.countToday(games, DAY), { bullet: 3, blitz: 1, rapid: 0 });
+        eq(ChessLimits.countToday([], DAY), { bullet: 0, blitz: 0, rapid: 0 });
+    });
+
+    check('a tally left over from yesterday is gone, grants and all', () => {
+        const yesterday = ChessLimits.withCounts(
+            ChessLimits.blank(DAY - 24 * 60 * 60 * 1000), 'chess', { bullet: 9 }, DAY - 24 * 60 * 60 * 1000,
+        );
+        eq(yesterday.sites.chess.counts.bullet, 9);
+        eq(ChessLimits.forDay(yesterday, DAY).sites.chess.counts.bullet, 0);
+        eq(ChessLimits.forDay(null, DAY).day, '2026-09-16');
+    });
+
+    check('a control is blocked once its count reaches what it is allowed', () => {
+        const state = ChessLimits.withCounts(ChessLimits.blank(DAY), 'chess', { bullet: 2 }, DAY);
+        const status = ChessLimits.statusFor(state, limitOn, 'chess', DAY);
+        eq(status.classes.bullet, { limit: 2, count: 2, grant: 0, allowed: 2, remaining: 0, blocked: true });
+        // Zero is a limit of none, not "no limit set".
+        eq(status.classes.blitz.blocked, true);
+        eq(status.classes.rapid, { limit: null, count: 0, grant: 0, allowed: null, remaining: null, blocked: false });
+        eq([status.anyBlocked, status.anyLimited, status.blocked], [true, true, ['bullet', 'blitz']]);
+        eq(ChessLimits.isBlocked(status, 'ultraBullet'), true, 'through the bucket, not the site name');
+        eq(ChessLimits.isBlocked(status, 'daily'), false);
+    });
+
+    check('limits apply only where they are switched on', () => {
+        const spent = ChessLimits.withCounts(ChessLimits.blank(DAY), 'chess', { bullet: 99 }, DAY);
+        eq(ChessLimits.statusFor(spent, { ...limitOn, chessDailyLimits: false }, 'chess', DAY).anyBlocked, false);
+        eq(ChessLimits.statusFor(spent, limitOn, 'lichess', DAY).anyLimited, false);
+    });
+
+    check('the override lets exactly one more game through each limited control', () => {
+        let state = ChessLimits.withCounts(ChessLimits.blank(DAY), 'chess', { bullet: 2, blitz: 0 }, DAY);
+        state = ChessLimits.withOneMore(state, 'chess', limitOn, DAY);
+
+        const after = ChessLimits.statusFor(state, limitOn, 'chess', DAY);
+        eq([after.classes.bullet.allowed, after.classes.bullet.blocked], [3, false]);
+        eq([after.classes.blitz.allowed, after.classes.blitz.blocked], [1, false]);
+        eq(after.classes.rapid.grant, 0, 'a control with no limit is granted nothing');
+
+        // That one game played, and the block is back — the point of a grant
+        // rather than a switch.
+        const played = ChessLimits.withCounts(state, 'chess', { bullet: 3, blitz: 1 }, DAY);
+        eq(ChessLimits.statusFor(played, limitOn, 'chess', DAY).blocked, ['bullet', 'blitz']);
+    });
+
+    check('a fresh count does not wipe the grants already given today', () => {
+        let state = ChessLimits.withOneMore(ChessLimits.blank(DAY), 'chess', limitOn, DAY);
+        state = ChessLimits.withCounts(state, 'chess', { bullet: 1 }, DAY);
+        eq(state.sites.chess.grants.bullet, 1);
+        eq(state.sites.chess.checkedAt, DAY);
     });
 
     // ------------------------------------------------------- site detection

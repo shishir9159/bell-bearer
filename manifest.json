@@ -57,7 +57,9 @@
         "src/content/youtube-ui.js",
         "src/content/cookie-banner.js",
         "src/shared/chess-sites.js",
+        "src/shared/chess-limits.js",
         "src/content/chess.js",
+        "src/content/chess-limits.js",
         "src/content/main.js"
       ],
       "css": [

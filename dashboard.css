@@ -751,9 +751,8 @@ header h1 {
 
 .shortcut-actions .toggle-switch { margin-left: 8px; }
 
-.toggle-switch.toggle-sm { width: 34px; height: 20px; }
-.toggle-sm .toggle-slider::before { width: 14px; height: 14px; }
-.toggle-sm input:checked + .toggle-slider::before { transform: translateX(13px); }
+/* The knob and its travel follow from these two; see .toggle-switch above. */
+.toggle-switch.toggle-sm { --track-w: 34px; --track-h: 20px; }
 
 /* ---------- interactive keyboard ---------- */
 
@@ -835,11 +834,26 @@ header h1 {
 
 .settings-option { display: flex; align-items: center; gap: 12px; }
 
+/**
+ * The knob's travel is derived from the track rather than typed in. Sizing it
+ * by hand meant every size needed its own translate to match, and the small
+ * variant's did not: the gap it left on the right was not the one it left on
+ * the left. Here the knob is the track's height less a gap at top and bottom,
+ * and it moves by the difference between the track's width and its height —
+ * which lands it exactly the same gap from the right edge. Change --track-w
+ * or --track-h and it stays centred on both ends.
+ */
 .toggle-switch {
+    --track-w: 42px;
+    --track-h: 24px;
+    --track-border: 1px;
+    --knob-gap: 3px;
+    --knob-size: calc(var(--track-h) - var(--knob-gap) * 2);
+
     position: relative;
     display: inline-block;
-    width: 42px;
-    height: 24px;
+    width: var(--track-w);
+    height: var(--track-h);
     flex-shrink: 0;
 }
 
@@ -849,19 +863,21 @@ header h1 {
     position: absolute;
     inset: 0;
     background: var(--surface-3);
-    border: 1px solid var(--border-strong);
+    border: var(--track-border) solid var(--border-strong);
     border-radius: var(--r-pill);
     cursor: pointer;
     transition: background .18s ease, border-color .18s ease;
 }
 
+/* Offsets are from the slider's padding box, so the border comes off the gap. */
 .toggle-slider::before {
     content: "";
     position: absolute;
-    width: 18px;
-    height: 18px;
-    left: 2px;
-    top: 2px;
+    box-sizing: border-box;
+    width: var(--knob-size);
+    height: var(--knob-size);
+    left: calc(var(--knob-gap) - var(--track-border));
+    top: calc(var(--knob-gap) - var(--track-border));
     background: var(--surface);
     border-radius: var(--r-pill);
     box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
@@ -869,7 +885,9 @@ header h1 {
 }
 
 .toggle-switch input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
-.toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(calc(var(--track-w) - var(--track-h)));
+}
 .toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .setting-label { font-size: 13.5px; color: var(--text); line-height: 1.5; }
@@ -1704,6 +1722,13 @@ header h1 {
 .chess-warn-name { min-width: 48px; }
 .text-control.chess-warn-seconds { min-width: 0; width: 88px; }
 .chess-warn-unit { color: var(--text-muted); }
+
+/* A row with no switch of its own still lines up with the rows that have one. */
+.chess-row-gap { width: var(--track-w, 42px); flex-shrink: 0; }
+
+.chess-volume-row { margin-top: 10px; }
+.chess-volume { flex: 1 1 auto; min-width: 0; max-width: 260px; accent-color: var(--accent); cursor: pointer; }
+.chess-volume-row output { min-width: 42px; }
 
 .chess-speak-list { display: flex; flex-wrap: wrap; gap: 8px; }
 

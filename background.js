@@ -12,9 +12,14 @@
 importScripts(
     'src/shared/settings.js',
     'src/shared/activity.js',
+    'src/shared/chess.js',
+    'src/shared/lichess.js',
+    'src/shared/chess-sites.js',
+    'src/shared/chess-limits.js',
     'src/background/proto.js',
     'src/background/sowon.js',
     'src/background/context-menus.js',
     'src/background/commands.js',
     'src/background/activity-heartbeat.js',
+    'src/background/chess-limits.js',
 );

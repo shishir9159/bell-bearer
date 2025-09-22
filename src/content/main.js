@@ -30,7 +30,8 @@
 
     const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown,
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
-        CookieSites, CookieBanner, ChessContent, Keybindings } = BB;
+        CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
+        Keybindings } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -235,8 +236,9 @@
     // --------------------------------------------- chess.com / Lichess extras
 
     let chess = null;
+    let chessLimits = null;
 
-    if (BB.ChessSites.get(site)) {
+    if (ChessSites.get(site)) {
         chess = ChessContent.createChess({
             site,
             Keybindings,
@@ -246,6 +248,47 @@
             getSettings: () => settings,
         });
         chess.install();
+
+        installChessLimits();
+    }
+
+    /**
+     * Grey out what would start a game once the day's allowance for that time
+     * control is gone.
+     *
+     * The tally is read from storage rather than counted here, because the
+     * worker fills it from the site's own API — see
+     * src/background/chess-limits.js. Landing on a chess page is also the cue
+     * to ask for a fresh read: the counts may have been left by a session that
+     * ended hours ago, and a stale tally either blocks a game that is allowed
+     * or lets one through that is not.
+     */
+    function installChessLimits() {
+        let limitState = ChessLimits.blank();
+
+        chessLimits = ChessLimitsContent.createChessLimits({
+            site,
+            notify,
+            getSettings: () => settings,
+            getStatus: () => ChessLimits.statusFor(limitState, settings, site),
+            getCurrentClass: () => chess.currentClass(),
+        });
+
+        const reload = () => ChessLimits.load().then((state) => {
+            limitState = state;
+            chessLimits.sync();
+        });
+
+        reload();
+        Settings.watch([ChessLimits.KEY], reload);
+
+        try {
+            chrome.runtime.sendMessage({ action: 'chessLimitsRefresh' }, () => {
+                // The worker writes what it read, and the watch above picks it
+                // up; a worker that is not listening is not an error here.
+                void chrome.runtime.lastError;
+            });
+        } catch (_) { /* the extension reloaded out from under this page */ }
     }
 
     // ------------------------------------------------------ cookie banners
@@ -267,6 +310,7 @@
 
         if (pouchStyleChanged && youtubeUi) youtubeUi.refreshPouchButton();
         if (chess) chess.sync();
+        if (chessLimits) chessLimits.sync();
     }
 
     Settings.get().then(applySettings);

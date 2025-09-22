@@ -23,12 +23,19 @@
                 <span class="brand-count" id="brandCount"></span>
             </div>
             <div class="controls">
+                <!-- Appears only once a daily limit has actually been reached;
+                     src/page/chess-limit-button.js draws and hides it. -->
+                <button id="limitOverrideBtn" class="limit-override" type="button" hidden></button>
                 <button id="dashboardBtn" class="btn-secondary is-primary" title="Open Dashboard">Dashboard</button>
             </div>
         </header>
 
-        <div id="speedControlBar" class="speed-control-bar" hidden>
-            <span class="speed-label">Playback</span>
+        <div id="speedControlBar" class="speed-control-bar" role="group" aria-label="Playback speed" hidden>
+            <!-- The word "Playback" was here. The icon carries no text of its
+                 own, so the group above is what a screen reader announces. -->
+            <svg class="speed-label" viewBox="0 0 240 240" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M158.83,48.83A71.17,71.17,0,1,0,230,120,71.163,71.163,0,0,0,158.83,48.83Zm45.293,77.632H152.34V74.708h12.952v38.83h38.83ZM35.878,74.708h38.83V87.66H35.878ZM10,113.538H61.755V126.49H10Zm25.878,38.83h38.83V165.32H35.878Z"></path>
+            </svg>
             <div class="speed-buttons">
                 <button id="speedDownBtn" class="btn-speed" title="Slower (previous step)" aria-label="Slower">−</button>
                 <span id="speedDisplay" class="speed-display" aria-live="polite">1x</span>
@@ -85,10 +92,12 @@
     <script src="src/shared/chess.js"></script>
     <script src="src/shared/lichess.js"></script>
     <script src="src/shared/chess-sites.js"></script>
+    <script src="src/shared/chess-limits.js"></script>
     <script src="src/content/site.js"></script>
     <script src="src/page/ui.js"></script>
     <script src="src/page/tab-actions.js"></script>
     <script src="src/page/chess-stats.js"></script>
+    <script src="src/page/chess-limit-button.js"></script>
     <script src="popup.js"></script>
 </body>
 

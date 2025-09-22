@@ -1,3 +1,9 @@
+For the low-time warning sound: Chess.com plays that sound through its own audio pipeline, which an extension can only hook into unreliably (the hook breaks whenever they change their bundler). How should I make it adjustable?
+
+
+
+known limitations at the moment: chess board flip is not detected
+
 let's migrate to <button onClick={} onMouseDown>   </button>
 https://developer.chrome.com/docs/extensions/reference/api/tabs
 https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/functional-samples/tutorial.tabs-manager

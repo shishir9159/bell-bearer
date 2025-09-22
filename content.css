@@ -1193,3 +1193,28 @@
 }
 .bb-cookie-remember:active { transform: translateY(0); }
 .bb-cookie-remember:focus-visible { outline: 2px solid #b81808; outline-offset: 2px; }
+
+/* ---------- chess daily limit (src/content/chess-limits.js) ----------
+ *
+ * A control the day's allowance has run out for. It keeps its pointer events
+ * on purpose: the click is swallowed in the capture phase and answered with a
+ * notification saying why, which a `disabled` attribute or `pointer-events:
+ * none` could not do. !important throughout because these sit on the sites'
+ * own buttons, which carry their own colours at a higher specificity.
+ */
+.bb-limit-blocked {
+    filter: grayscale(1) !important;
+    opacity: .45 !important;
+    cursor: not-allowed !important;
+    box-shadow: none !important;
+    transition: opacity .15s ease !important;
+    /* Struck through as well as greyed: on a dark board a grey button can
+     * still read as merely unemphasised, and the line says "closed", not
+     * "quiet". Done with text-decoration rather than a ::after rule, which
+     * would paint over whatever the site already draws in that slot — on both
+     * sites that is often the button's own icon. */
+    text-decoration: line-through !important;
+    text-decoration-thickness: 2px !important;
+}
+
+.bb-limit-blocked:hover { opacity: .6 !important; }
