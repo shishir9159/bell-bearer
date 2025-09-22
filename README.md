@@ -14,14 +14,15 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Quick Navigation**: Jump to the bookmarked timestamp with a single click
 - **Playback Control**: One speed ladder, stepped by the keyboard or by the popup, held against sites that reset it
 - **Persistent Storage**: Persist Bookmarks across browser sessions
-- **Import/Export**: Backup and restore bookmarks, import from YouTube timestamp links
+- **Import/Export**: One file with every setting and all saved data, from the dashboard header
 - **Topics overlay**: A frosted sheet over YouTube — topic rail, thumbnail grid, time range and sort
 - **Skins**: Default, Riso Paint, Medieval and Art Deco, each with its own day and night
 - **Activity**: Opt-in, on-device record of where your screen time goes
 - **Reward System**: Track watch credits to spend them on popcorn for later
 
-Import, export and "clear all" live in the dashboard. The popup header is
-Dashboard alone, so the row never has to shrink or scroll.
+Export and Import sit in the dashboard header, beside the theme button, and
+"clear all" above the saved videos. The popup header is Dashboard alone, so the
+row never has to shrink or scroll.
 
 **Settings › Appearance › Popup size** picks how much room the popup asks for:
 *Wide* puts the video list and its checkpoints side by side, *Compact* shows one
@@ -174,14 +175,13 @@ src/content/    injected into every page
 src/background/ the service worker, pulled in by background.js
   proto.js         the sowon wire format
   sowon.js         focus reporting
-  tab-placement.js "open new tabs next to the current tab"
   context-menus.js "Copy as Markdown"
   commands.js      keyboard commands and messages
   activity-heartbeat.js  the alarm that feeds the activity store
 
 src/page/       shared by popup.html and dashboard.html
   ui.js            modals, toasts, clipboard, files, theme
-  transfer.js      import/export
+  backup-buttons.js the header's Export / Import
   tab-actions.js   driving a video in another tab
   settings-form.js binds the settings form to storage
   skin-picker.js   the Appearance section
@@ -196,29 +196,16 @@ tests/          zero-dependency browser test suite — see tests/README.md
 ```
 
 #### Import/Export Data Format
-The JSON export file contains:
+The export is every key in `chrome.storage.local` except the network caches:
 ```json
 {
-  "version": "1.0",
-  "exportDate": "2025-01-08T06:30:00.000Z",
-  "totalVideos": 5,
-  "totalBookmarks": 25,
-  "videos": [
-    {
-      "id": "video_id",
-      "title": "Video Title",
-      "url": "https://www.youtube.com/watch?v=video_id",
-      "bookmarks": [
-        {
-          "time": 120,
-          "timestamp": 1234567890,
-          "note": "Checkpoint description"
-        }
-      ]
-    }
-  ]
+  "type": "bell-bearer-backup",
+  "version": 1,
+  "exportedAt": "2026-09-15T06:30:00.000Z",
+  "data": { "skin": "deco", "shortcuts": {}, "youtubeBookmarks": [] }
 }
 ```
+Importing writes those keys back, replacing what is there.
 
 ## Permissions
 
@@ -227,7 +214,7 @@ The JSON export file contains:
 - `activeTab`: To interact with YouTube pages
 - `scripting`: To inject content scripts
 - `contextMenus`: For the "Copy as Markdown" right-click items
-- `tabs` / `tabGroups`: For tab placement and the sowon focus report
+- `tabs` / `tabGroups`: For the sowon focus report
 - `host_permissions`: To access YouTube.com
 
 ## Persistance Storage
@@ -251,13 +238,6 @@ Chrome's storage API is used with the following data structure format:
   ]
 }
 ```
-
-### Import/Export Features
-
-- **Smart Merging**: When importing, the extension intelligently merges bookmarks without creating duplicates
-- **Format Validation**: Imported files are validated to ensure they contain valid bookmark data
-- **Error Handling**: Comprehensive error handling with user-friendly messages
-- **Multiple URL Formats**: Supports both youtube.com and youtu.be URLs with various timestamp formats
 
 ## Tests
 

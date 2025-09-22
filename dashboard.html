@@ -15,7 +15,12 @@
         <header class="bb-ruled">
             <div class="header-top">
                 <h1 class="bb-wordmark"><img class="brand-icon" src="icons/icon48.png" alt="">Bell Bearer Dashboard</h1>
-                <button id="themeToggle" class="btn-theme" title="Toggle dark theme">🌙</button>
+                <div class="header-actions">
+                    <!-- Every setting and all saved data, to and from one file: src/page/backup-buttons.js. -->
+                    <button id="exportSettingsBtn" class="btn-header" type="button" title="Export every Bell Bearer setting and all saved data to one file">Export</button>
+                    <button id="importSettingsBtn" class="btn-header" type="button" title="Import settings and data from a Bell Bearer export">Import</button>
+                    <button id="themeToggle" class="btn-theme" title="Toggle dark theme">🌙</button>
+                </div>
             </div>
             <nav class="nav-tabs">
                 <button id="dashboardTab" class="nav-tab active">Dashboard</button>
@@ -51,8 +56,6 @@
                                      this list can never disagree about what they mean. -->
                                 <select id="sortVideos" class="select-control" aria-label="Sort saved videos"></select>
                             </label>
-                            <button id="exportBtn" class="btn-secondary">Export</button>
-                            <button id="importBtn" class="btn-secondary">Import</button>
                             <button id="clearAll" class="btn-secondary btn-danger">Clear All</button>
                         </div>
                     </div>
@@ -176,14 +179,6 @@
 
                     <div class="settings-option" style="margin-top: 16px;">
                         <label class="toggle-switch">
-                            <input type="checkbox" id="openTabNextToCurrent">
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <span class="setting-label">Open new tabs next to the current tab (including Ctrl+T)</span>
-                    </div>
-
-                    <div class="settings-option" style="margin-top: 16px;">
-                        <label class="toggle-switch">
                             <input type="checkbox" id="connectToSowon">
                             <span class="toggle-slider"></span>
                         </label>
@@ -214,7 +209,7 @@
                         <span class="setting-label">Show "Always reject" on cookie popups — rejects, and answers that site's popup for you from then on</span>
                     </div>
 
-                    <!-- Remembered sites, and the global Export / Import: src/page/cookie-sites-panel.js. -->
+                    <!-- Remembered sites: src/page/cookie-sites-panel.js. -->
                     <div class="cookie-sites" id="cookieSitesPanel"></div>
                 </div>
 
@@ -251,6 +246,45 @@
                                    autocomplete="off" spellcheck="false">
                         </div>
                         <p class="settings-hint">Games are read from chess.com's public API for this player — no sign-in, nothing sent anywhere else.</p>
+
+                        <div class="settings-option" style="margin-top: 16px;">
+                            <label class="setting-label" for="lichessUsername">Lichess username</label>
+                            <input type="text" id="lichessUsername" class="text-control" placeholder="Your lichess.org username"
+                                   autocomplete="off" spellcheck="false">
+                        </div>
+                        <p class="settings-hint">Optional. Its games join chess.com's in the time-management figures and the heat map, read from Lichess's public API.</p>
+
+                        <h4 class="shortcut-heading">Opponent clock warning</h4>
+                        <p class="settings-hint" style="margin: 0 0 12px;">During a game on chess.com, warns when your opponent's clock is ahead of yours by more than this many seconds.</p>
+                        <div class="chess-warn-list">
+                            <div class="settings-option">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="chessWarnBullet">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <label class="setting-label chess-warn-name" for="chessWarnBulletSeconds">Bullet</label>
+                                <input type="number" id="chessWarnBulletSeconds" class="text-control chess-warn-seconds" min="1" step="1" inputmode="numeric">
+                                <span class="setting-label chess-warn-unit">seconds</span>
+                            </div>
+                            <div class="settings-option">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="chessWarnBlitz">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <label class="setting-label chess-warn-name" for="chessWarnBlitzSeconds">Blitz</label>
+                                <input type="number" id="chessWarnBlitzSeconds" class="text-control chess-warn-seconds" min="1" step="1" inputmode="numeric">
+                                <span class="setting-label chess-warn-unit">seconds</span>
+                            </div>
+                            <div class="settings-option">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="chessWarnRapid">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                                <label class="setting-label chess-warn-name" for="chessWarnRapidSeconds">Rapid</label>
+                                <input type="number" id="chessWarnRapidSeconds" class="text-control chess-warn-seconds" min="1" step="1" inputmode="numeric">
+                                <span class="setting-label chess-warn-unit">seconds</span>
+                            </div>
+                        </div>
 
                         <h4 class="shortcut-heading">Keyboard shortcuts</h4>
                         <div class="shortcut-list" data-shortcut-scope="chess"></div>
@@ -394,8 +428,6 @@
                 </div>
             </div>
         </div>
-
-        <input type="file" id="importFile" accept=".json" hidden>
     </div>
 
     <!-- Shared modules, in dependency order. Classic scripts sharing a `BB`
@@ -417,6 +449,7 @@
     <script src="src/shared/feather-icons.js"></script>
     <script src="src/shared/cookie-sites.js"></script>
     <script src="src/shared/chess.js"></script>
+    <script src="src/shared/lichess.js"></script>
     <script src="src/page/ui.js"></script>
     <script src="src/page/settings-form.js"></script>
     <script src="src/page/skin-picker.js"></script>
@@ -424,8 +457,9 @@
     <script src="src/page/shortcut-list.js"></script>
     <script src="src/page/keyboard.js"></script>
     <script src="src/page/stats.js"></script>
+    <script src="src/page/heat-map.js"></script>
     <script src="src/page/chess-stats.js"></script>
-    <script src="src/page/transfer.js"></script>
+    <script src="src/page/backup-buttons.js"></script>
     <script src="src/page/tab-actions.js"></script>
     <script src="dashboard.js"></script>
 </body>

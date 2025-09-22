@@ -95,6 +95,29 @@ header h1 {
 .btn-theme:hover { opacity: 1; }
 .btn-theme:active { transform: scale(.94); }
 
+/* Export / Import, right of the title and left of the theme button. Drawn
+   like the theme button — header ink on the header — so the three read as
+   one group whatever the skin paints the header. */
+.header-actions { display: flex; align-items: center; gap: 8px; }
+
+.btn-header {
+    background: transparent;
+    border: 1px solid currentColor;
+    color: var(--header-text);
+    opacity: .7;
+    height: 34px;
+    padding: 0 14px;
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s ease, transform .1s ease;
+}
+
+.btn-header:hover { opacity: 1; }
+.btn-header:active { transform: scale(.96); }
+
 /* ---------- nav tabs ---------- */
 
 .nav-tabs { display: flex; gap: 4px; }
@@ -890,15 +913,13 @@ header h1 {
 
 .settings-block { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
 
-/* ---------- remembered cookie sites + global export/import (src/page/cookie-sites-panel.js) ---------- */
+/* ---------- remembered cookie sites (src/page/cookie-sites-panel.js) ---------- */
 
 .cookie-sites { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0 54px; }
 
 .bb-dropdown { position: relative; }
 
-/* One row, one height: the dropdown and the two buttons beside it. */
-.cookie-sites .bb-dropdown-trigger,
-.cookie-sites .btn-secondary { height: 34px; }
+.cookie-sites .bb-dropdown-trigger { height: 34px; }
 
 .bb-dropdown-trigger {
     display: inline-flex;
@@ -1635,8 +1656,98 @@ header h1 {
 .chess-empty-icon svg { display: inline-block; width: 44px; height: 44px; }
 .chess-empty .btn-primary { margin-top: 18px; }
 
+/* ---------- time management: one line per site ---------- */
+
+.chess-flags,
+.chess-heat { margin-bottom: 12px; }
+
+.chess-flag-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+.chess-flag-row {
+    display: grid;
+    grid-template-columns: 84px repeat(3, minmax(0, 1fr));
+    align-items: center;
+    gap: 12px;
+}
+
+.chess-flag-site { font-size: 12.5px; font-weight: 700; color: var(--text); }
+
+.chess-flag-cell {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 7px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-size: 12px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.chess-flag-class { color: var(--text-muted); font-weight: 600; min-width: 36px; }
+.chess-flag-won { color: var(--success); font-family: var(--font-mono); font-weight: 700; }
+.chess-flag-lost { color: var(--danger); font-family: var(--font-mono); font-weight: 700; }
+.chess-flag-of { color: var(--text-faint); font-family: var(--font-mono); margin-left: auto; }
+.chess-flag-cell.is-empty .chess-flag-of { margin-left: 0; }
+
+.chess-flag-note { grid-column: 2 / -1; font-size: 12px; color: var(--text-muted); }
+
+.chess-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--accent-ink);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* ---------- heat map (src/page/heat-map.js) ----------
+   One hue, light to dark: each level is the skin's accent mixed into its
+   surface, so every skin, day and night, gets its own ramp for free. */
+
+.hm-scroll { overflow-x: auto; padding-bottom: 4px; }
+.hm-svg { display: block; }
+
+.hm-label { font-family: var(--font); font-size: 9.5px; fill: var(--text-faint); }
+
+.hm-l0 { fill: var(--surface-3); background: var(--surface-3); }
+.hm-l1 { fill: color-mix(in srgb, var(--accent) 28%, var(--surface)); background: color-mix(in srgb, var(--accent) 28%, var(--surface)); }
+.hm-l2 { fill: color-mix(in srgb, var(--accent) 52%, var(--surface)); background: color-mix(in srgb, var(--accent) 52%, var(--surface)); }
+.hm-l3 { fill: color-mix(in srgb, var(--accent) 76%, var(--surface)); background: color-mix(in srgb, var(--accent) 76%, var(--surface)); }
+.hm-l4 { fill: var(--accent); background: var(--accent); }
+
+.hm-cell { stroke: transparent; stroke-width: 1.5; transition: stroke .1s ease; }
+.hm-cell:hover { stroke: var(--text); }
+
+.hm-legend {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-faint);
+}
+
+.hm-legend > span:first-child { margin-right: 4px; }
+.hm-legend > span:last-child { margin-left: 4px; }
+.hm-swatch { width: 11px; height: 11px; border-radius: 2px; }
+
+.hm-placeholder { height: 110px; border-radius: var(--r-sm); background: var(--surface-2); }
+
+/* ---------- Settings → Chess.com: opponent clock warning ---------- */
+
+.chess-warn-list { display: flex; flex-direction: column; gap: 10px; }
+.chess-warn-name { min-width: 48px; }
+.text-control.chess-warn-seconds { min-width: 0; width: 88px; }
+.chess-warn-unit { color: var(--text-muted); }
+
 @media (max-width: 720px) {
     .chess-class-list { grid-template-columns: 56px minmax(0, 1fr); }
     .chess-class-score { grid-column: 2; margin-top: -8px; }
     .cookie-sites { margin-left: 0; }
+    .chess-flag-row { grid-template-columns: 1fr; gap: 6px; }
+    .chess-flag-note { grid-column: 1; }
 }

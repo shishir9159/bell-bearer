@@ -15,7 +15,6 @@ importScripts(
     'src/background/proto.js',
     'src/background/sowon.js',
     'src/background/context-menus.js',
-    'src/background/tab-placement.js',
     'src/background/commands.js',
     'src/background/activity-heartbeat.js',
 );

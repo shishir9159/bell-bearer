@@ -10,8 +10,8 @@
 (function () {
     'use strict';
 
-    const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, Transfer, TabActions, SettingsForm, SiteIcons,
-        CookieSitesPanel, ShortcutList, ChessStats } = window.BB;
+    const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, TabActions, SettingsForm, SiteIcons,
+        CookieSitesPanel, ShortcutList, ChessStats, BackupButtons } = window.BB;
 
     /** The emoji the popup used for "nothing saved"; every empty list here wears it too. */
     const EMPTY_ICON = '🔖';
@@ -61,17 +61,6 @@
             this.siteTabs = {};
             this.settingsSite = null;
             this.chessView = null;
-
-            this.transfer = Transfer.createTransfer({
-                getVideos: () => this.videos,
-                setVideos: async (videos) => {
-                    this.videos = videos;
-                    await Bookmarks.save(videos);
-                    this.renderBookmarks();
-                },
-                notify: (message, type) => Ui.toast(message, type),
-                fileInputId: 'importFile',
-            });
         }
 
         async init() {
@@ -82,7 +71,10 @@
             SettingsForm.bindAll();
             this.renderSiteGrids();
             this.wireControls();
-            this.transfer.install();
+            BackupButtons.mount({
+                exportButton: document.getElementById('exportSettingsBtn'),
+                importButton: document.getElementById('importSettingsBtn'),
+            });
             if (window.BB.KeyboardWidget) {
                 window.BB.KeyboardWidget.mount(document.getElementById('shortcutsKeyboard'));
             }
@@ -147,8 +139,6 @@
 
             VIEWS.forEach((view) => on(`${view}Tab`, 'click', () => this.switchView(view)));
 
-            on('exportBtn', 'click', () => this.transfer.exportBookmarks());
-            on('importBtn', 'click', () => this.transfer.showImportOptions());
             on('clearAll', 'click', () => this.clearAll());
             this.setupSortControl();
             on('addTopicBtn', 'click', () => this.addTopic());
