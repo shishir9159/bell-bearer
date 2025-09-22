@@ -40,6 +40,18 @@
                 sendResponse({ success: true });
                 return false;
 
+            // A chess move read aloud (src/content/chess.js). Queued, so a
+            // quick reply is spoken after the move before it, not over it.
+            // No chrome.tts (Firefox) answers ok:false and the page speaks.
+            case 'speak':
+                if (!chrome.tts || typeof message.text !== 'string') {
+                    sendResponse({ ok: false });
+                    return false;
+                }
+                chrome.tts.speak(message.text.slice(0, 200), { enqueue: true, rate: 1.1 });
+                sendResponse({ ok: true });
+                return false;
+
             default:
                 return false;
         }
