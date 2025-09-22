@@ -39,8 +39,8 @@
      * This has to stay a macrotask. A microtask (queueMicrotask) makes the
      * suite dramatically faster in a throttled background tab, but it also
      * hoists every mocked callback ahead of any setTimeout the code under test
-     * is waiting on — which silently reorders the retry and back-off paths in
-     * tab-placement and sowon, and turns three real regression tests green
+     * is waiting on — which silently reorders the back-off path in sowon, and
+     * turns a real regression test green
      * whatever the code does. Fidelity beats speed here.
      */
     const soon = (fn) => setTimeout(fn, 0);

@@ -51,7 +51,7 @@ that code, not a replacement — it cannot press a key or play a video.
 | `harness.js` | ~80-line test framework (`suite` / `test` / `assert*`) |
 | `mock-chrome.js` | Mock of the `chrome.*` APIs the extension uses, plus a mocked `fetch` |
 | `serve.js` | Static file server, for when `file://` will not do |
-| `background.test.js` | Tab positioning, sowon reporting, protobuf/gRPC-Web encoding |
+| `background.test.js` | Sowon reporting, protobuf/gRPC-Web encoding, context menus |
 | `transcript.test.js` | `TranscriptError` classification, `TimeIndex` lookups |
 | `speed.test.js` | The playback-rate ladder: stepping, clamping, formatting |
 | `player.test.js` | Speed shortcuts, holding the rate against the page, boost, skipping |
@@ -79,8 +79,8 @@ the shared modules use promises throughout.
 Switching it to `queueMicrotask` makes a hidden-tab run dramatically faster,
 and is tempting for that reason — but it hoists every mocked callback ahead of
 any `setTimeout` the code under test is waiting on. That silently reorders the
-retry path in `tab-placement` and the back-off in `sowon`, and turns three
-real regression tests green no matter what those files do.
+back-off in `sowon`, and turns a real regression test green no matter what
+that file does.
 
 `MockChrome.settle()`'s default moves with `document.hidden` for the same
 reason — a wait that comfortably drains the callback queue in a visible tab
@@ -90,9 +90,8 @@ like staying inside the sowon throttle window.
 
 That is also the limit of what adapting can buy. A hidden tab clamps *every*
 timer to roughly one a second, so the ordering between a 20ms wait and a 150ms
-throttle simply cannot be reproduced — both land at ~1s. The tab-placement
-tests, which turn on retries spaced 60ms apart, are the ones that notice. If
-they fail while everything else passes, check the tab was visible before
+throttle simply cannot be reproduced — both land at ~1s. If the sowon back-off
+test fails while everything else passes, check the tab was visible before
 reading it as a regression.
 
 The activity tests drive `Activity.tick`'s clock through its optional `now`
@@ -134,13 +133,10 @@ Speed has a dedicated regression suite because it is what actually broke.
 feel random: an off-ladder rate used to step to *nearest + 1*, so 2.4 became 3
 and skipped 2.5 entirely.
 
-`background.js` is covered thoroughly because it holds the other logic that has
-broken in the past. Every historical Ctrl+T failure mode has a dedicated test:
-
-- activation winning the race against `onCreated`
-- MV3 service-worker sleep wiping in-memory state
-- a brittle new-tab **URL** check skipping custom new-tab pages
-- Chrome transiently refusing `tabs.move` and the error being swallowed
+"Open new tabs next to the current tab" was removed rather than fixed again:
+moving tabs from `tabs.onCreated` cannot tell a Ctrl+T apart from a window
+being restored, so it reshuffled restored windows and dragged tabs into and out
+of tab groups.
 
 Copy-as-Markdown is covered too, including the regression test *"nothing is
 triggered by copying, only by the menu"*. An earlier version intercepted

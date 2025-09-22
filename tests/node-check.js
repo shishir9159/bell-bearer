@@ -891,6 +891,143 @@ const dayRecord = (at = T0) =>
         eq(Chess.formatControl('30'), '30s');
     });
 
+    await checkAsync('a 30-day read does not prune the heat map\'s older months', async () => {
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ games: [] }) });
+        await Chess.fetchGames('me', { now, days: Chess.HISTORY_DAYS, fetchImpl });
+        eq(Object.keys(store.bbChessArchiveCache.archives).length, 13);
+        await Chess.fetchGames('me', { now: now + 10 * 60 * 1000, fetchImpl });
+        eq(Object.keys(store.bbChessArchiveCache.archives).length, 13, 'popup-sized read must keep the year');
+    });
+
+    check('flagging counts only the last 20 games of each time control', () => {
+        const at = (end, timeClass, result, how) => ({ end, timeClass, result, how });
+        const games = [];
+        // 25 bullet games: the 5 oldest are flag wins that must fall outside the window.
+        for (let i = 0; i < 5; i++) games.push(at(i, 'bullet', 'win', 'timeout'));
+        for (let i = 5; i < 25; i++) games.push(at(i, 'bullet', i % 4 === 0 ? 'loss' : 'win', i % 2 === 0 ? 'timeout' : 'resigned'));
+        games.push(at(100, 'blitz', 'win', 'timeout'), at(101, 'blitz', 'loss', 'timeout'),
+            at(102, 'blitz', 'draw', 'timevsinsufficient'), at(103, 'rapid', 'loss', 'checkmated'));
+        const stats = Chess.flagStats(games);
+        // Bullet 5..24: even i are timeouts; of those, i % 4 === 0 are losses (8,12,16,20,24) and the rest wins (6,10,14,18,22).
+        eq(stats.bullet, { games: 20, won: 5, lost: 5 });
+        eq(stats.blitz, { games: 3, won: 1, lost: 1 }, 'a timeout against insufficient material is a draw, not a flag');
+        eq(stats.rapid, { games: 1, won: 0, lost: 0 });
+    });
+
+    check('time per day adds each game\'s length and leaves daily games out', () => {
+        const noon = new Date(2026, 8, 12, 12).getTime();
+        const days = Chess.dailyTime([
+            { end: noon, timeClass: 'blitz', duration: 300 },
+            { end: noon + 3600000, timeClass: 'bullet', duration: null, myTime: 50, oppTime: 40 },
+            { end: noon, timeClass: 'daily', duration: 86400 },
+            { end: noon + 86400000, timeClass: 'rapid', duration: 1200 },
+        ]);
+        eq(days['2026-09-12'], { seconds: 390, games: 2 });
+        eq(days['2026-09-13'], { seconds: 1200, games: 1 });
+    });
+
+    // ------------------------------------------------------------- lichess
+
+    console.log('\n# lichess games');
+
+    const Lichess = require('../src/shared/lichess.js');
+
+    const lichessGame = (overrides = {}) => ({
+        id: 'abcd1234',
+        rated: true,
+        speed: 'blitz',
+        createdAt: 1000000,
+        lastMoveAt: 1300000,
+        status: 'outoftime',
+        winner: 'white',
+        players: {
+            white: { user: { name: 'Me', id: 'me' }, rating: 1700 },
+            black: { user: { name: 'Them', id: 'them' }, rating: 1690 },
+        },
+        ...overrides,
+    });
+
+    check('a Lichess flag reads as a timeout; an opponent leaving does not', () => {
+        const won = Lichess.normalize(lichessGame(), 'ME');
+        eq([won.color, won.result, won.how, won.timeClass, won.duration, won.url],
+            ['white', 'win', 'timeout', 'blitz', 300, 'https://lichess.org/abcd1234']);
+        eq(Lichess.normalize(lichessGame(), 'them').result, 'loss');
+        eq(Lichess.normalize(lichessGame({ status: 'timeout' }), 'me').how === 'timeout', false);
+        eq(Lichess.normalize(lichessGame({ winner: undefined, status: 'draw' }), 'me').result, 'draw');
+        eq(Lichess.normalize(lichessGame(), 'stranger'), null);
+    });
+
+    check('NDJSON lines parse, a torn line is skipped', () => {
+        eq(Lichess.parseNdjson('{"a":1}\n\n{"b":2}\n{"c":').length, 2);
+    });
+
+    await checkAsync('Lichess reads resume after the newest game already kept', async () => {
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const urls = [];
+        const created = now - 5 * 86400000;
+        const fetchImpl = async (url) => {
+            urls.push(url);
+            const body = urls.length === 1
+                ? [lichessGame({ id: 'g1', createdAt: created, lastMoveAt: created + 60000 }),
+                    lichessGame({ id: 'g2', createdAt: created + 100000, lastMoveAt: created + 200000, winner: 'black' })]
+                : [];
+            return { ok: true, status: 200, text: async () => body.map((g) => JSON.stringify(g)).join('\n') };
+        };
+
+        const first = await Lichess.fetchGames('me', { now, fetchImpl });
+        eq(first.map((g) => g.url.slice(-2)), ['g2', 'g1'], 'newest first');
+        eq(/sort=dateAsc/.test(urls[0]), true);
+
+        await Lichess.fetchGames('me', { now: now + 60000, fetchImpl });
+        eq(urls.length, 1, 'fresh for a few minutes');
+
+        const again = await Lichess.fetchGames('me', { now: now + 10 * 60000, fetchImpl });
+        eq(new URL(urls[1]).searchParams.get('since'), String(created + 100001));
+        eq(again.length, 2, 'kept games survive an empty resume');
+    });
+
+    await checkAsync('an unknown Lichess player is reported as such', async () => {
+        clearStore();
+        let code = null;
+        try {
+            await Lichess.fetchGames('nobody', { fetchImpl: async () => ({ ok: false, status: 404 }) });
+        } catch (error) { code = error.code; }
+        eq(code, 'not-found');
+        eq(Backup.build({ bbLichessGameCache: { games: [] }, lichessUsername: 'me' }, 0).data, { lichessUsername: 'me' });
+    });
+
+    // ------------------------------------------------- opponent clock warning
+
+    console.log('\n# chess.com clock warning');
+
+    const ChessContent = require('../src/content/chess.js');
+
+    check('clock text parses, tenths and hours included', () => {
+        eq(ChessContent.parseClock('1:05'), 65);
+        eq(ChessContent.parseClock('0:09.8'), 9.8);
+        eq(ChessContent.parseClock('1:02:03'), 3723);
+        eq(ChessContent.parseClock(''), null);
+    });
+
+    check('the starting time picks the time control the way chess.com does', () => {
+        eq(ChessContent.classify(60), 'bullet');
+        eq(ChessContent.classify(120), 'bullet');
+        eq(ChessContent.classify(180), 'blitz');
+        eq(ChessContent.classify(300), 'blitz');
+        eq(ChessContent.classify(600), 'rapid');
+    });
+
+    check('a warning applies only to a time control it is turned on for', () => {
+        const settings = { chessWarnBullet: true, chessWarnBulletSeconds: 8, chessWarnBlitz: false, chessWarnBlitzSeconds: 30 };
+        eq(ChessContent.thresholdFor(settings, 'bullet'), 8);
+        eq(ChessContent.thresholdFor(settings, 'blitz'), null);
+        eq(ChessContent.anyWarningOn(settings), true);
+        eq(ChessContent.anyWarningOn({ chessWarnRapid: true, chessWarnRapidSeconds: 0 }), false, 'zero seconds is no warning');
+    });
+
     // ------------------------------------------------------- site detection
 
     console.log('\n# site detection');
