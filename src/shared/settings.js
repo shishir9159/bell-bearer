@@ -55,21 +55,32 @@
         // is off; turning it on reveals the dashboard's Activity tab.
         trackActivity: false,
 
-        // chess.com
+        // Chess sites, one set per site; the key names come from
+        // src/shared/chess-sites.js#settingKey. Per time control:
+        //   <site>Warn<Class> / <site>Warn<Class>Seconds — a warning during a
+        //     game when the opponent's clock is more than N seconds ahead;
+        //   <site>Speak<Class> — every move read aloud as it is played.
         chessUsername: '',
-
-        // A warning during a chess.com game when the opponent's clock is more
-        // than N seconds ahead of yours, per time control — src/content/chess.js.
         chessWarnBullet: false,
         chessWarnBulletSeconds: 10,
         chessWarnBlitz: false,
         chessWarnBlitzSeconds: 30,
         chessWarnRapid: false,
         chessWarnRapidSeconds: 60,
+        chessSpeakBullet: false,
+        chessSpeakBlitz: false,
+        chessSpeakRapid: false,
 
-        // Lichess, read alongside chess.com for the time-management figures
-        // and the heat map — src/shared/lichess.js.
         lichessUsername: '',
+        lichessWarnBullet: false,
+        lichessWarnBulletSeconds: 10,
+        lichessWarnBlitz: false,
+        lichessWarnBlitzSeconds: 30,
+        lichessWarnRapid: false,
+        lichessWarnRapidSeconds: 60,
+        lichessSpeakBullet: false,
+        lichessSpeakBlitz: false,
+        lichessSpeakRapid: false,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

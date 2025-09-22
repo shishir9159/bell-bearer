@@ -21,7 +21,11 @@
 
     const API = 'https://api.chess.com/pub/player';
     const CLASSES = Object.freeze(['bullet', 'blitz', 'rapid']);
-    const CLASS_LABEL = Object.freeze({ bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', daily: 'Daily' });
+    const CLASS_LABEL = Object.freeze({
+        bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', daily: 'Daily',
+        // Lichess's own speeds, for its games table.
+        ultraBullet: 'UltraBullet', classical: 'Classical', correspondence: 'Correspondence',
+    });
     const RANGES = Object.freeze({ today: 'Today', week: 'Last 7 days', month: 'Last 30 days' });
 
     const DRAW_CODES = new Set([
