@@ -1261,6 +1261,63 @@ const dayRecord = (at = T0) =>
         eq(state.sites.chess.checkedAt, DAY);
     });
 
+    // -------------------------------------------------------------- trials
+
+    console.log('\n# trials');
+
+    const Trials = require('../src/shared/trials.js');
+
+    check('a new trial is named, coloured and unattached', () => {
+        const list = Trials.create([], '  Thesis   chapter 3 ');
+        eq(list.length, 1);
+        eq(list[0].name, 'Thesis chapter 3', 'whitespace is collapsed');
+        eq([list[0].groupId, list[0].focusedAt], [null, 0]);
+        eq(Trials.create([], '')[0].name, 'Untitled trial');
+    });
+
+    check('fresh trials take different colours until the set runs out', () => {
+        let list = [];
+        for (let i = 0; i < Trials.COLORS.length; i++) list = Trials.create(list, `t${i}`);
+        eq(new Set(list.map((t) => t.color)).size, Trials.COLORS.length, 'all distinct');
+        // Past that it rotates rather than leaving a trial with no colour.
+        eq(Trials.COLORS.includes(Trials.nextColor(list)), true);
+    });
+
+    check('editing never changes the list it was given', () => {
+        const list = Trials.create([], 'One');
+        const renamed = Trials.rename(list, list[0].id, 'Two');
+        eq([list[0].name, renamed[0].name], ['One', 'Two']);
+        eq(Trials.rename(list, list[0].id, '   ')[0].name, 'One', 'an empty rename is a no-op');
+        eq(Trials.recolor(list, list[0].id, 'chartreuse')[0].color, list[0].color, 'unknown colour refused');
+        eq(Trials.recolor(list, list[0].id, 'cyan')[0].color, 'cyan');
+    });
+
+    check('a group id is a cache, and can be dropped when the group goes', () => {
+        let list = Trials.create([], 'Work');
+        const id = list[0].id;
+        list = Trials.setGroup(list, id, 12);
+        eq(Trials.byGroup(list, 12).name, 'Work');
+        eq(Trials.byGroup(list, 99), null);
+        eq(Trials.forgetGroup(list, 12)[0].groupId, null);
+        eq(Trials.byGroup(list, null), null, 'an ungrouped trial is not matched by null');
+    });
+
+    check('a bad write cannot break the view', () => {
+        eq(Trials.sanitize(null), []);
+        eq(Trials.sanitize([{ id: 'a', name: 'x', color: 'nope', groupId: 'seven' }]),
+            [{ id: 'a', name: 'x', color: 'grey', groupId: null, createdAt: 0, focusedAt: 0 }]);
+        eq(Trials.sanitize([{ name: 'no id' }, 'junk', null]), [], 'entries without an id are dropped');
+    });
+
+    check('trials order by hand, and by when they were last in front', () => {
+        let list = Trials.create(Trials.create(Trials.create([], 'A'), 'B'), 'C');
+        const [a, b] = [list[0].id, list[1].id];
+        eq(Trials.reorder(list, b, 0).map((t) => t.name), ['B', 'A', 'C']);
+        eq(Trials.reorder(list, a, 99).map((t) => t.name), ['B', 'C', 'A'], 'clamped to the end');
+        list = Trials.touch(list, b, 5000);
+        eq(Trials.byRecent(list)[0].name, 'B');
+    });
+
     // ------------------------------------------------------- site detection
 
     console.log('\n# site detection');

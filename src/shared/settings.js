@@ -158,6 +158,10 @@
         // Games played today per site and time control, and the extra games
         // granted from the popup. shared/chess-limits.js owns the shape.
         chessLimits: 'bbChessDailyLimits',
+
+        // Trials: a named task and the tab group standing in for it.
+        // shared/trials.js owns the shape.
+        trials: 'bbTrials',
     });
 
     function withDefaults(stored, keys) {
