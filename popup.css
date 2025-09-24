@@ -498,6 +498,18 @@ header h1 {
     color: var(--text-faint);
 }
 
+/* "Select a video to see its checkpoints" fills a pane as tall as the video
+   list beside it, so a fixed top padding left it stranded near the top of a
+   lot of empty column. Centred in whatever height the pane has instead —
+   scoped with :has() so a pane showing real checkpoints still flows from the
+   top, and its sticky header keeps working. */
+.bookmark-details:has(> .no-selection) { display: flex; }
+
+.bookmark-details > .no-selection {
+    margin: auto;
+    padding: 24px 22px;
+}
+
 .empty-state h3 {
     font-family: var(--font-head);
     font-size: 14px;
