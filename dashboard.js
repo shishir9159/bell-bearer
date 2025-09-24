@@ -11,7 +11,7 @@
     'use strict';
 
     const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, TabActions, SettingsForm, SiteIcons,
-        CookieSitesPanel, ShortcutList, ChessStats, ChessSettings, BackupButtons } = window.BB;
+        CookieSitesPanel, ShortcutList, Plate, ChessStats, ChessSettings, BackupButtons } = window.BB;
 
     /** The emoji the popup used for "nothing saved"; every empty list here wears it too. */
     const EMPTY_ICON = '🔖';
@@ -85,6 +85,9 @@
                 window.BB.KeyboardWidget.mount(document.getElementById('shortcutsKeyboard'));
             }
             ShortcutList.mountAll();
+            // After the lists exist: the plate moves their live rows inside
+            // the frame rather than redrawing them.
+            Plate.mountAll();
             CookieSitesPanel.mount(document.getElementById('cookieSitesPanel'));
             document.querySelectorAll('[data-chess-games]').forEach((panel) => {
                 const site = panel.dataset.chessGames;

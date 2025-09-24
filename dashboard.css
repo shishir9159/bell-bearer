@@ -1754,3 +1754,68 @@ header h1 {
     .chess-class-score { grid-column: 2; margin-top: -8px; }
     .cookie-sites { margin-left: 0; }
 }
+
+/* ---------- the framed plate (src/page/plate.js) ---------- */
+
+/* The two rule colours come from the skin, so the frame is the skin's own
+   rather than one house style laid over four. Medieval and Deco name a gilt
+   of their own; the rest take the accent they already use. */
+.bb-plate {
+    --plate-ink: var(--border-strong);
+    --plate-gilt: var(--accent);
+
+    position: relative;
+    padding: 34px 30px 26px;
+    margin-top: 22px;
+    background: var(--surface);
+}
+
+body[data-skin="medieval"] .bb-plate { --plate-gilt: #a8791f; }
+body[data-skin="deco"] .bb-plate { --plate-gilt: #b99447; }
+
+.bb-plate-rule {
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--plate-ink);
+    pointer-events: none;
+}
+
+.bb-plate-rule.is-inner { inset: 5px; border-color: var(--plate-gilt); }
+
+.bb-plate-corner { position: absolute; }
+
+.bb-plate-legend {
+    position: absolute;
+    top: -13px;
+    left: 42px;
+    margin: 0;
+    padding: 0 14px;
+    background: var(--surface);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    line-height: 26px;
+    color: var(--text);
+}
+
+.bb-plate-body { position: relative; }
+
+.bb-plate-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 22px;
+}
+
+.bb-plate-hr { flex: 1; height: 1px; background: var(--border); }
+.bb-plate-foot svg { display: block; flex-shrink: 0; }
+
+/* A pill-radius skin would leave the square corner motifs floating off the
+   rule, so the plate stays square whatever --r-pill is. */
+.bb-plate, .bb-plate-rule { border-radius: 0; }
+
+@media (max-width: 560px) {
+    .bb-plate { padding: 30px 16px 22px; }
+    .bb-plate-legend { left: 20px; font-size: 13px; }
+}

@@ -149,10 +149,18 @@
                     </div>
                 </div>
 
+                <!-- Every scope's shortcuts in one place. The YouTube ones
+                     used to sit inside the YouTube panel, which meant looking
+                     in two places to answer "what is bound to what". Each
+                     plate is framed by src/page/plate.js. -->
                 <div class="settings-section">
                     <div id="shortcutsKeyboard"></div>
-                    <h3 style="margin-top: 18px;">General Keyboard Shortcuts</h3>
-                    <div class="shortcut-list" data-shortcut-scope="general"></div>
+                    <div data-plate="General Keyboard Shortcuts">
+                        <div class="shortcut-list" data-shortcut-scope="general"></div>
+                    </div>
+                    <div data-plate="YouTube Shortcuts">
+                        <div class="shortcut-list" data-shortcut-scope="youtube"></div>
+                    </div>
                 </div>
 
                 <div class="settings-section">
@@ -250,9 +258,6 @@
                             </label>
                             <span class="setting-label">Match YouTube theme — switch Bell Bearer to dark mode when YouTube is dark</span>
                         </div>
-
-                        <h4 class="shortcut-heading">Keyboard shortcuts</h4>
-                        <div class="shortcut-list" data-shortcut-scope="youtube"></div>
 
                         <div class="settings-option" style="margin-top: 16px;">
                             <label class="toggle-switch">
@@ -397,6 +402,7 @@
     <script src="src/page/skin-picker.js"></script>
     <script src="src/page/cookie-sites-panel.js"></script>
     <script src="src/page/shortcut-list.js"></script>
+    <script src="src/page/plate.js"></script>
     <script src="src/page/keyboard.js"></script>
     <script src="src/page/stats.js"></script>
     <script src="src/page/heat-map.js"></script>
