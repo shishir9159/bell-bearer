@@ -97,12 +97,14 @@
       "src/shared/lichess.js",
       "src/shared/chess-sites.js",
       "src/shared/chess-limits.js",
+      "src/shared/trials.js",
       "src/background/proto.js",
       "src/background/sowon.js",
       "src/background/context-menus.js",
       "src/background/commands.js",
       "src/background/activity-heartbeat.js",
-      "src/background/chess-limits.js"
+      "src/background/chess-limits.js",
+      "src/background/trials.js"
     ]
   },
   "icons": {
