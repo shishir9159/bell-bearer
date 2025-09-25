@@ -57,6 +57,9 @@
         'ytd-playlist-panel-renderer .header.ytd-playlist-panel-renderer',
         'ytd-playlist-header-renderer .metadata-buttons-wrapper',
         'ytd-playlist-header-renderer #actions',
+        // The current /playlist page. The qualified form first, so the header's
+        // own action row wins over any other flexible-actions row on the page.
+        'yt-page-header-renderer yt-flexible-actions-view-model',
         'yt-flexible-actions-view-model',
         'ytd-playlist-sidebar-primary-info-renderer #menu',
     ];
@@ -110,19 +113,39 @@
     }
 
     /**
-     * The first selector that matches something actually on screen.
+     * Is this element actually drawn? Zero-sized and `display:none` nodes are
+     * both out; so is `visibility:hidden`, which keeps its box.
      *
-     * A dedicated /playlist page keeps a `ytd-playlist-panel-renderer` header
-     * in the DOM — the queue-panel markup a watch page would show — fully
-     * built but with zero size and no offsetParent. `document.querySelector`
-     * cannot tell that apart from a real match, so a plain "first selector
-     * that exists" put the playlist-follow button inside that dead node on
-     * every /playlist page: present, but with nothing left to render it.
+     * Size rather than `offsetParent`, which this used to test: offsetParent
+     * is null for a `position:fixed` element that is perfectly visible, and
+     * YouTube's headers do become fixed when the page is scrolled.
+     */
+    function isVisible(element) {
+        if (!element) return false;
+        const rect = element.getBoundingClientRect();
+        if (rect.width <= 0 && rect.height <= 0) return false;
+        const style = getComputedStyle(element);
+        return style.visibility !== 'hidden' && style.display !== 'none';
+    }
+
+    /**
+     * The first element, across these selectors, that is actually on screen.
+     *
+     * Every match of each selector is considered, not just the first in the
+     * document. That is the whole point: a /playlist page keeps a
+     * `ytd-playlist-panel-renderer` header in the DOM — the queue-panel markup
+     * a watch page would show — fully built but zero-sized, and YouTube also
+     * renders more than one `yt-flexible-actions-view-model` per page. Testing
+     * only `document.querySelector` meant that when the dead copy happened to
+     * come first, the selector was abandoned and the real header below it was
+     * never seen, so the follow button appeared on whichever playlists put the
+     * live node first and on no others.
      */
     function firstMatch(selectors) {
         for (const selector of selectors) {
-            const element = document.querySelector(selector);
-            if (element && element.offsetParent) return element;
+            for (const element of document.querySelectorAll(selector)) {
+                if (isVisible(element)) return element;
+            }
         }
         return null;
     }
@@ -684,6 +707,7 @@
 
     const YouTubeUi = {
         createYouTubeUi,
+        firstMatch, isVisible, PLAYLIST_HEADER_SELECTORS,
         BUTTON_ID, GUIDE_ID, PLAYLIST_BUTTON_ID,
         RANGES: PouchSheet.RANGES, SORTS: PouchSheet.SORTS,
         ALL_TOPICS: PouchSheet.ALL_TOPICS, PER_CHANNEL: PouchSheet.PER_CHANNEL,

@@ -149,3 +149,63 @@ suite('youtube drawer entry', () => {
         assertEqual(makeUi().injectGuideEntry(), false);
     });
 });
+
+/**
+ * Which header the playlist "Follow" button goes into.
+ *
+ * YouTube leaves a fully built but zero-sized `ytd-playlist-panel-renderer`
+ * on every /playlist page, and renders more than one flexible-actions row.
+ * Matching only `document.querySelector` per selector meant that whenever a
+ * dead copy came first in the document, the selector was abandoned and the
+ * live header after it was never found — so the button showed up on whichever
+ * playlists happened to order the DOM favourably, and on no others.
+ */
+suite('youtube playlist header', () => {
+    let host = null;
+
+    function stage(html) {
+        host = document.createElement('div');
+        host.innerHTML = html;
+        document.body.appendChild(host);
+        return host;
+    }
+
+    function teardown() {
+        if (host) host.remove();
+        host = null;
+    }
+
+    test('a hidden first match does not veto a visible later one', () => {
+        // The shape of the bug: same selector, dead copy first.
+        stage(`
+            <yt-flexible-actions-view-model id="dead" style="display:none"></yt-flexible-actions-view-model>
+            <yt-flexible-actions-view-model id="live" style="width:200px;height:40px"></yt-flexible-actions-view-model>
+        `);
+        try {
+            const found = YouTubeUi().firstMatch(['yt-flexible-actions-view-model']);
+            assertEqual(found && found.id, 'live');
+        } finally { teardown(); }
+    });
+
+    test('a zero-sized node is not a header', () => {
+        stage('<div class="header" style="width:0;height:0"></div>');
+        try {
+            assertEqual(YouTubeUi().firstMatch(['.header']), null);
+        } finally { teardown(); }
+    });
+
+    test('visibility:hidden keeps its box but is still not on screen', () => {
+        stage('<div class="header" style="width:200px;height:40px;visibility:hidden"></div>');
+        try {
+            assertEqual(YouTubeUi().firstMatch(['.header']), null);
+        } finally { teardown(); }
+    });
+
+    test('selectors are tried in order, and an absent one is skipped', () => {
+        stage('<div class="second" style="width:120px;height:20px"></div>');
+        try {
+            const found = YouTubeUi().firstMatch(['.first', '.second']);
+            assertEqual(found && found.className, 'second');
+        } finally { teardown(); }
+    });
+});
