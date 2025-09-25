@@ -43,7 +43,7 @@
     // Tab id / view id stems. 'stats' is the Activity view: its tab stays
     // hidden until the trackActivity setting is on, but the switching wiring
     // is unconditional so it works the moment the tab appears.
-    const VIEWS = ['dashboard', 'stats', 'settings'];
+    const VIEWS = ['dashboard', 'trials', 'stats', 'settings'];
 
     class Dashboard {
         constructor() {
@@ -88,6 +88,7 @@
             // After the lists exist: the plate moves their live rows inside
             // the frame rather than redrawing them.
             Plate.mountAll();
+            if (window.BB.TrialsView) window.BB.TrialsView.mount(document.getElementById('trialsView'));
             CookieSitesPanel.mount(document.getElementById('cookieSitesPanel'));
             document.querySelectorAll('[data-chess-games]').forEach((panel) => {
                 const site = panel.dataset.chessGames;
@@ -366,6 +367,9 @@
             // 'stats' renders itself — src/page/stats.js owns that view and
             // reads the activity store, never the bookmark store.
             else if (this.view === 'stats' && window.BB.Stats) window.BB.Stats.render();
+            // Trials reads live tab groups, so it re-reads whenever it is
+            // shown rather than trusting what it drew last time.
+            else if (this.view === 'trials' && window.BB.TrialsView) window.BB.TrialsView.render();
         }
 
         // ------------------------------------------------- checkpoint view

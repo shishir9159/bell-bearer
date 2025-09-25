@@ -1819,3 +1819,108 @@ body[data-skin="deco"] .bb-plate { --plate-gilt: #b99447; }
     .bb-plate { padding: 30px 16px 22px; }
     .bb-plate-legend { left: 20px; font-size: 13px; }
 }
+
+/* ---------- trials (src/page/trials.js) ---------- */
+
+/* Chrome's own tab-group colours, so a trial's swatch here is the colour of
+   its group in the tab strip. Named rather than taken from the skin on
+   purpose: the browser paints the strip and will not take our palette. */
+:root {
+    --tg-grey: #5f6368;
+    --tg-blue: #1a73e8;
+    --tg-red: #d93025;
+    --tg-yellow: #f9ab00;
+    --tg-green: #1e8e3e;
+    --tg-pink: #d01884;
+    --tg-purple: #9334e6;
+    --tg-cyan: #007b83;
+    --tg-orange: #fa903e;
+}
+
+.trials-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.trial-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-left: 4px solid var(--trial-color, var(--border-strong));
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+    padding: 16px;
+}
+
+/* The group is closed — normal after a restart, not an error. */
+.trial-card.is-dormant { opacity: .68; }
+
+.trial-card-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+
+.trial-swatch {
+    width: 11px;
+    height: 11px;
+    flex-shrink: 0;
+    border-radius: var(--r-pill);
+    background: var(--trial-color, var(--border-strong));
+}
+
+.trial-name {
+    font-family: var(--font-head);
+    font-size: 15px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trial-count { font-size: 11.5px; color: var(--text-faint); flex-shrink: 0; }
+
+.trial-tabs {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 168px;
+    overflow-y: auto;
+}
+
+.trial-tab { display: flex; align-items: center; gap: 6px; }
+
+.trial-tab-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trial-tab-drop {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 15px;
+    line-height: 1;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    opacity: 0;
+}
+
+.trial-tab:hover .trial-tab-drop,
+.trial-tab-drop:focus-visible { opacity: 1; }
+.trial-tab-drop:hover { background: var(--danger-bg); color: var(--danger); }
+
+.trial-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.trial-actions button { font-size: 12px; padding: 5px 11px; }

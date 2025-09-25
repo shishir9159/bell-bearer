@@ -24,6 +24,7 @@
             </div>
             <nav class="nav-tabs">
                 <button id="dashboardTab" class="nav-tab active">Dashboard</button>
+                <button id="trialsTab" class="nav-tab">Trials</button>
                 <button id="statsTab" class="nav-tab">Activity</button>
                 <button id="settingsTab" class="nav-tab">Settings</button>
             </nav>
@@ -85,6 +86,10 @@
                 <div id="lichessGamesPanel" class="site-panel" data-site="lichess" data-chess-games="lichess"></div>
             </div>
         </div>
+
+        <!-- Trials: named tasks, each holding a tab group. Drawn by
+             src/page/trials.js; the group work is in the worker. -->
+        <div id="trialsView" class="view"></div>
 
         <div id="statsView" class="view">
             <div class="dashboard-header">
@@ -403,6 +408,8 @@
     <script src="src/page/cookie-sites-panel.js"></script>
     <script src="src/page/shortcut-list.js"></script>
     <script src="src/page/plate.js"></script>
+    <script src="src/shared/trials.js"></script>
+    <script src="src/page/trials.js"></script>
     <script src="src/page/keyboard.js"></script>
     <script src="src/page/stats.js"></script>
     <script src="src/page/heat-map.js"></script>
