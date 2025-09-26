@@ -1,20 +1,21 @@
 /**
- * Trials: a named piece of work, and the tab group that holds it.
+ * Trials: the three tab groups you are working in, and the rest standing by.
  *
- * The browser already has the right container for "these twelve tabs are one
- * task" — a tab group — but nothing names the task, keeps it across a restart,
- * or lets you put one task in front and the rest away. A trial is that missing
- * half: a name, a colour, and whichever tab group is currently standing in for
- * it.
+ * The browser already names and colours a tab group, so this file does not
+ * keep a parallel list of tasks. What Chrome does not keep is which groups are
+ * *in play* and which are parked, how long each has gone untouched, and whether
+ * one of them is locked for a stretch of time. That is all this module holds:
+ * a small record per group id, and the pure rules the desk runs on.
  *
- * `groupId` is deliberately treated as disposable. Chrome hands out group ids
- * per session, and a group the user closes takes its id with it, so the id
- * here is a cache — src/background/trials.js re-makes the group when it has
- * gone and writes the new id back. Nothing in this file assumes the group on
- * record still exists.
+ * Three groups run at a time — SLOT_LIMIT. Opening a fourth parks whichever
+ * has gone untouched longest, which is the point: the desk stays the size of a
+ * desk. A locked group is never the one parked.
  *
- * Pure, and covered by tests/node-check.js; everything that actually touches
- * chrome.tabGroups lives in the background module.
+ * Group ids are handed out per session, so a record whose group has gone is
+ * dead weight; `sanitize` takes the live ids and drops the rest. Nothing here
+ * touches chrome.tabGroups — src/background/trials.js does that.
+ *
+ * Pure, and covered by tests/node-check.js.
  */
 (function (root) {
     'use strict';
@@ -23,10 +24,11 @@
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
 
-    /** The colours Chrome's own tab groups come in; no others are accepted. */
-    const COLORS = Object.freeze([
-        'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange', 'grey',
-    ]);
+    /** How many groups run at once. A fourth one parks one of these. */
+    const SLOT_LIMIT = 3;
+
+    /** The stretches a group can be locked for, in minutes. */
+    const LOCK_PRESETS = Object.freeze([25, 50, 90]);
 
     const MAX_NAME = 60;
 
@@ -34,127 +36,157 @@
         return String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, MAX_NAME);
     }
 
-    function newId() {
-        return `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+    // ------------------------------------------------------- tab identity
+
+    /** The host, without the www, or '' for anything that is not a real URL. */
+    function domainOf(url) {
+        try {
+            return new URL(String(url)).hostname.replace(/^www\./, '');
+        } catch (_) {
+            return '';
+        }
     }
 
     /**
-     * The colour to give the next trial: the first one no trial is using, so
-     * a fresh set is all different, falling back to the next in rotation once
-     * every colour is spoken for.
+     * The one letter that stands for a tab in the strip. Taken from the
+     * registrable-ish part of the host rather than the subdomain, so
+     * mail.google.com and drive.google.com both come out as G.
      */
-    function nextColor(list) {
-        const taken = new Set((list || []).map((trial) => trial.color));
-        const free = COLORS.find((color) => !taken.has(color));
-        return free || COLORS[(list || []).length % COLORS.length];
+    function mono(url) {
+        const domain = domainOf(url);
+        if (!domain) return '·';
+        const parts = domain.split('.').filter(Boolean);
+        const name = parts.length > 2 ? parts[parts.length - 2] : parts[0];
+        const letter = (String(name).match(/[a-z0-9]/i) || [''])[0];
+        return letter ? letter.toUpperCase() : '·';
     }
 
-    /** Every list operation returns a new array; none edit in place. */
-    function create(list, name, now = Date.now()) {
-        const trials = (list || []).slice();
-        const trial = {
-            id: newId(),
-            name: cleanName(name) || 'Untitled trial',
-            color: nextColor(trials),
-            groupId: null,
-            createdAt: now,
-            focusedAt: 0,
+    /**
+     * A colour for that letter, steady per domain so a site keeps the same
+     * badge all day. A hue off a cheap string hash, held mid-dark so it reads
+     * on both a light and a dark surface.
+     */
+    function tint(url) {
+        const domain = domainOf(url);
+        if (!domain) return 'currentColor';
+        let hash = 0;
+        for (let i = 0; i < domain.length; i += 1) hash = (hash * 31 + domain.charCodeAt(i)) % 360;
+        return `hsl(${hash} 58% 42%)`;
+    }
+
+    // ------------------------------------------------------------- records
+
+    /** The record for one group, with everything missing filled in. */
+    function recordFor(state, groupId) {
+        const row = (state || {})[String(groupId)] || {};
+        return {
+            usedAt: Number(row.usedAt) || 0,
+            lockUntil: Number(row.lockUntil) || 0,
+            lockSpan: Number(row.lockSpan) || 0,
         };
-        trials.push(trial);
-        return trials;
     }
 
-    function update(list, id, changes) {
-        return (list || []).map((trial) => (trial.id === id ? { ...trial, ...changes } : trial));
+    function write(state, groupId, changes) {
+        return { ...(state || {}), [String(groupId)]: { ...recordFor(state, groupId), ...changes } };
     }
 
-    function rename(list, id, name) {
-        const clean = cleanName(name);
-        // An empty rename is a no-op rather than a trial with no name at all.
-        return clean ? update(list, id, { name: clean }) : (list || []).slice();
+    /** This group was just worked in, so it is last in line to be parked. */
+    function touch(state, groupId, now = Date.now()) {
+        return write(state, groupId, { usedAt: now });
     }
 
-    function recolor(list, id, color) {
-        return COLORS.includes(color) ? update(list, id, { color }) : (list || []).slice();
+    function lock(state, groupId, minutes, now = Date.now()) {
+        const span = Math.max(0, Number(minutes) || 0) * 60000;
+        return write(state, groupId, { lockUntil: span ? now + span : 0, lockSpan: span });
     }
 
-    function remove(list, id) {
-        return (list || []).filter((trial) => trial.id !== id);
+    function unlock(state, groupId) {
+        return write(state, groupId, { lockUntil: 0, lockSpan: 0 });
     }
 
-    /** Note which tab group is standing in for this trial right now. */
-    function setGroup(list, id, groupId) {
-        return update(list, id, { groupId: groupId == null ? null : Number(groupId) });
+    function forget(state, groupId) {
+        const next = { ...(state || {}) };
+        delete next[String(groupId)];
+        return next;
     }
 
-    /** Forget a group id wherever it appears — the group has gone. */
-    function forgetGroup(list, groupId) {
-        return (list || []).map((trial) => (
-            trial.groupId === groupId ? { ...trial, groupId: null } : trial
-        ));
+    function isLocked(state, groupId, now = Date.now()) {
+        return recordFor(state, groupId).lockUntil > now;
     }
 
-    function touch(list, id, now = Date.now()) {
-        return update(list, id, { focusedAt: now });
+    /** The one group holding the desk, or null. Only an open group can hold it. */
+    function lockedId(state, openIds, now = Date.now()) {
+        const held = (openIds || []).find((groupId) => isLocked(state, groupId, now));
+        return held == null ? null : held;
     }
 
-    function byId(list, id) {
-        return (list || []).find((trial) => trial.id === id) || null;
+    /** Whole minutes left on a lock, rounded up, so one second left reads 1 min. */
+    function minutesLeft(state, groupId, now = Date.now()) {
+        const { lockUntil } = recordFor(state, groupId);
+        return lockUntil > now ? Math.ceil((lockUntil - now) / 60000) : 0;
     }
 
-    function byGroup(list, groupId) {
-        if (groupId == null) return null;
-        return (list || []).find((trial) => trial.groupId === groupId) || null;
+    /**
+     * Which of the open groups to park to free `n` slots: longest untouched
+     * first. A locked group goes to the back of the queue, so it is only ever
+     * parked when there is nothing else left to park.
+     */
+    function parkVictims(state, openIds, n, now = Date.now()) {
+        if (n <= 0) return [];
+        const byAge = (a, b) => recordFor(state, a).usedAt - recordFor(state, b).usedAt;
+        const ids = (openIds || []).slice();
+        const free = ids.filter((id) => !isLocked(state, id, now)).sort(byAge);
+        const held = ids.filter((id) => isLocked(state, id, now)).sort(byAge);
+        return free.concat(held).slice(0, n);
     }
 
-    /** Move a trial to `index`, so the dashboard can order them by hand. */
-    function reorder(list, id, index) {
-        const trials = (list || []).slice();
-        const from = trials.findIndex((trial) => trial.id === id);
-        if (from < 0) return trials;
-        const to = Math.max(0, Math.min(trials.length - 1, index));
-        trials.splice(to, 0, trials.splice(from, 1)[0]);
-        return trials;
-    }
-
-    /** Most recently focused first; never-focused trials keep their own order. */
-    function byRecent(list) {
-        return (list || []).slice().sort((a, b) => (b.focusedAt || 0) - (a.focusedAt || 0));
+    /** How long ago in words, for a parked group's card. */
+    function usedLabel(usedAt, now = Date.now()) {
+        if (!usedAt) return 'not yet used';
+        const ms = now - Number(usedAt);
+        if (ms < 90000) return 'just now';
+        if (ms < 3600000) return `${Math.round(ms / 60000)}m ago`;
+        if (ms < 86400000) return `${Math.round(ms / 3600000)}h ago`;
+        if (ms < 172800000) return 'yesterday';
+        if (ms < 604800000) return `${Math.floor(ms / 86400000)}d ago`;
+        return 'last week';
     }
 
     // ------------------------------------------------------------- storage
 
     const KEY = Settings.DATA.trials;
 
-    /** Drop anything that is not a trial, so one bad write cannot break the view. */
-    function sanitize(stored) {
-        if (!Array.isArray(stored)) return [];
-        return stored
-            .filter((trial) => trial && typeof trial.id === 'string')
-            .map((trial) => ({
-                id: trial.id,
-                name: cleanName(trial.name) || 'Untitled trial',
-                color: COLORS.includes(trial.color) ? trial.color : 'grey',
-                groupId: Number.isInteger(trial.groupId) ? trial.groupId : null,
-                createdAt: Number(trial.createdAt) || 0,
-                focusedAt: Number(trial.focusedAt) || 0,
-            }));
+    /**
+     * Keep only records for groups that still exist. Pass the live ids; with
+     * no list at all nothing is dropped, because "no groups" and "did not
+     * look" are not the same thing.
+     */
+    function sanitize(stored, liveIds) {
+        const out = {};
+        if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return out;
+        const live = liveIds ? new Set(liveIds.map(String)) : null;
+        for (const key of Object.keys(stored)) {
+            if (!/^-?\d+$/.test(key)) continue;
+            if (live && !live.has(key)) continue;
+            out[key] = recordFor(stored, key);
+        }
+        return out;
     }
 
-    async function load() {
+    async function load(liveIds) {
         try {
             const stored = await chrome.storage.local.get([KEY]);
-            return sanitize(stored[KEY]);
+            return sanitize(stored[KEY], liveIds);
         } catch (_) {
-            return [];
+            return {};
         }
     }
 
-    async function save(list) {
-        return Settings.set({ [KEY]: sanitize(list) });
+    async function save(state) {
+        return Settings.set({ [KEY]: sanitize(state) });
     }
 
-    /** Read, apply `change(list)`, write; returns what was written. */
+    /** Read, apply `change(state)`, write; returns what was written. */
     async function update_(change) {
         const next = sanitize(change(await load()));
         await save(next);
@@ -162,9 +194,10 @@
     }
 
     const Trials = {
-        KEY, COLORS, MAX_NAME,
-        cleanName, nextColor, create, rename, recolor, remove,
-        setGroup, forgetGroup, touch, byId, byGroup, reorder, byRecent, sanitize,
+        KEY, SLOT_LIMIT, LOCK_PRESETS, MAX_NAME,
+        cleanName, domainOf, mono, tint,
+        recordFor, touch, lock, unlock, forget, isLocked, lockedId, minutesLeft,
+        parkVictims, usedLabel, sanitize,
         load, save, update: update_,
     };
 
