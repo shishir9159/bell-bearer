@@ -1267,55 +1267,73 @@ const dayRecord = (at = T0) =>
 
     const Trials = require('../src/shared/trials.js');
 
-    check('a new trial is named, coloured and unattached', () => {
-        const list = Trials.create([], '  Thesis   chapter 3 ');
-        eq(list.length, 1);
-        eq(list[0].name, 'Thesis chapter 3', 'whitespace is collapsed');
-        eq([list[0].groupId, list[0].focusedAt], [null, 0]);
-        eq(Trials.create([], '')[0].name, 'Untitled trial');
+    check('a tab is known by one letter and a steady colour', () => {
+        eq(Trials.mono('https://mail.google.com/mail/u/0'), 'G', 'the site, not the subdomain');
+        eq(Trials.mono('https://arxiv.org/abs/2404.08236'), 'A');
+        eq(Trials.mono('about:blank'), '·', 'nothing to go on');
+        eq(Trials.domainOf('https://www.youtube.com/watch?v=1'), 'youtube.com');
+        eq(Trials.tint('https://github.com/x') === Trials.tint('https://github.com/y'), true);
+        eq(Trials.tint('https://github.com') === Trials.tint('https://gitlab.com'), false);
     });
 
-    check('fresh trials take different colours until the set runs out', () => {
-        let list = [];
-        for (let i = 0; i < Trials.COLORS.length; i++) list = Trials.create(list, `t${i}`);
-        eq(new Set(list.map((t) => t.color)).size, Trials.COLORS.length, 'all distinct');
-        // Past that it rotates rather than leaving a trial with no colour.
-        eq(Trials.COLORS.includes(Trials.nextColor(list)), true);
+    check('a lock runs down, and only an open group can hold the desk', () => {
+        const T = 1000000;
+        const state = Trials.lock({}, 7, 25, T);
+        eq(Trials.isLocked(state, 7, T + 60000), true);
+        eq(Trials.minutesLeft(state, 7, T + 60000), 24);
+        eq(Trials.minutesLeft(state, 7, T + 25 * 60000 - 1), 1, 'a second left still reads a minute');
+        eq(Trials.isLocked(state, 7, T + 25 * 60000), false, 'it expires on its own');
+        eq(Trials.lockedId(state, [1, 7], T + 60000), 7);
+        eq(Trials.lockedId(state, [1, 2], T + 60000), null, 'a parked group does not hold it');
+        eq(Trials.isLocked(Trials.unlock(state, 7), 7, T + 60000), false);
     });
 
-    check('editing never changes the list it was given', () => {
-        const list = Trials.create([], 'One');
-        const renamed = Trials.rename(list, list[0].id, 'Two');
-        eq([list[0].name, renamed[0].name], ['One', 'Two']);
-        eq(Trials.rename(list, list[0].id, '   ')[0].name, 'One', 'an empty rename is a no-op');
-        eq(Trials.recolor(list, list[0].id, 'chartreuse')[0].color, list[0].color, 'unknown colour refused');
-        eq(Trials.recolor(list, list[0].id, 'cyan')[0].color, 'cyan');
+    check('the group left longest is the one parked', () => {
+        let state = Trials.touch({}, 1, 1000);
+        state = Trials.touch(state, 2, 3000);
+        state = Trials.touch(state, 3, 2000);
+        eq(Trials.parkVictims(state, [1, 2, 3], 1, 4000), [1]);
+        eq(Trials.parkVictims(state, [1, 2, 3], 2, 4000), [1, 3]);
+        eq(Trials.parkVictims(state, [1, 2, 3], 0, 4000), [], 'nothing to free, nothing parked');
+        eq(Trials.parkVictims({}, [9], 1, 4000), [9], 'a group never touched is fair game');
     });
 
-    check('a group id is a cache, and can be dropped when the group goes', () => {
-        let list = Trials.create([], 'Work');
-        const id = list[0].id;
-        list = Trials.setGroup(list, id, 12);
-        eq(Trials.byGroup(list, 12).name, 'Work');
-        eq(Trials.byGroup(list, 99), null);
-        eq(Trials.forgetGroup(list, 12)[0].groupId, null);
-        eq(Trials.byGroup(list, null), null, 'an ungrouped trial is not matched by null');
+    check('a locked group is parked only when nothing else is left', () => {
+        const T = 1000000;
+        let state = Trials.touch({}, 1, T - 9000);
+        state = Trials.touch(state, 2, T - 1000);
+        state = Trials.lock(state, 1, 25, T);
+        eq(Trials.parkVictims(state, [1, 2], 1, T), [2], 'the newer one goes instead');
+        eq(Trials.parkVictims(state, [1, 2], 2, T), [2, 1], 'the lock is last, not exempt');
     });
 
-    check('a bad write cannot break the view', () => {
-        eq(Trials.sanitize(null), []);
-        eq(Trials.sanitize([{ id: 'a', name: 'x', color: 'nope', groupId: 'seven' }]),
-            [{ id: 'a', name: 'x', color: 'grey', groupId: null, createdAt: 0, focusedAt: 0 }]);
-        eq(Trials.sanitize([{ name: 'no id' }, 'junk', null]), [], 'entries without an id are dropped');
+    check('a record whose group has gone is dropped', () => {
+        const state = Trials.touch(Trials.touch({}, 4, 1), 5, 2);
+        eq(Object.keys(Trials.sanitize(state, [4])), ['4']);
+        eq(Object.keys(Trials.sanitize(state)), ['4', '5'], 'no list means nothing was checked');
+        eq(Trials.sanitize({ notanid: { usedAt: 1 } }, null), {});
+        eq(Trials.sanitize(null), {});
+        eq(Trials.sanitize([1, 2]), {}, 'the old array shape reads as empty');
+        eq(Object.keys(Trials.forget(state, 4)), ['5']);
     });
 
-    check('trials order by hand, and by when they were last in front', () => {
-        let list = Trials.create(Trials.create(Trials.create([], 'A'), 'B'), 'C');
-        const [a, b] = [list[0].id, list[1].id];
-        eq(Trials.reorder(list, b, 0).map((t) => t.name), ['B', 'A', 'C']);
-        eq(Trials.reorder(list, a, 99).map((t) => t.name), ['B', 'C', 'A'], 'clamped to the end');
-        list = Trials.touch(list, b, 5000);
-        eq(Trials.byRecent(list)[0].name, 'B');
+    check('how long ago a group was used reads in words', () => {
+        const T = 1000000000;
+        eq(Trials.usedLabel(0, T), 'not yet used');
+        eq(Trials.usedLabel(T - 10000, T), 'just now');
+        eq(Trials.usedLabel(T - 20 * 60000, T), '20m ago');
+        eq(Trials.usedLabel(T - 5 * 3600000, T), '5h ago');
+        eq(Trials.usedLabel(T - 30 * 3600000, T), 'yesterday');
+        eq(Trials.usedLabel(T - 3 * 86400000, T), '3d ago');
+        eq(Trials.usedLabel(T - 20 * 86400000, T), 'last week');
+    });
+
+    check('a record is read back whole however little was written', () => {
+        eq(Trials.recordFor({}, 3), { usedAt: 0, lockUntil: 0, lockSpan: 0 });
+        eq(Trials.recordFor({ 3: { usedAt: 'nonsense' } }, 3).usedAt, 0);
+        const state = Trials.touch({}, 3, 50);
+        eq(Trials.lock(state, 3, 25, 100).usedAt, undefined, 'the state is a map, not a record');
+        eq(Trials.lock(state, 3, 25, 100)['3'].usedAt, 50, 'locking keeps what was there');
     });
 
     // ------------------------------------------------------- site detection
