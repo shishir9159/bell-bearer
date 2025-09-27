@@ -1820,107 +1820,396 @@ body[data-skin="deco"] .bb-plate { --plate-gilt: #b99447; }
     .bb-plate-legend { left: 20px; font-size: 13px; }
 }
 
-/* ---------- trials (src/page/trials.js) ---------- */
 
-/* Chrome's own tab-group colours, so a trial's swatch here is the colour of
-   its group in the tab strip. Named rather than taken from the skin on
-   purpose: the browser paints the strip and will not take our palette. */
-:root {
-    --tg-grey: #5f6368;
-    --tg-blue: #1a73e8;
-    --tg-red: #d93025;
-    --tg-yellow: #f9ab00;
-    --tg-green: #1e8e3e;
-    --tg-pink: #d01884;
-    --tg-purple: #9334e6;
-    --tg-cyan: #007b83;
-    --tg-orange: #fa903e;
+/* ---------- trials: the tab-group desk (src/page/trials.js) ----------
+
+   Laid out to the design in "Website extension keyboard settings": the
+   ungrouped tabs down the left, the group slots to the right of them, the
+   parked shelf underneath. Every measurement here is that design's; what were
+   inline styles keyed to a tone table there are the skin variables here, which
+   hold the same values. Fluid rather than breakpointed — the left column asks
+   for 254px and the slots take what is left, wrapping under it when there is
+   not enough room. */
+
+.tg-intro {
+    max-width: 78ch;
+    margin: 0 0 4px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--text-muted);
 }
 
-.trials-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
+/* The lock running down, across the top of the plate. */
+.tg-lockbar {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: 8px;
+    height: 3px;
+    overflow: hidden;
+    background: var(--surface-3);
 }
 
-.trial-card {
+.tg-lockfill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 1s linear;
+}
+
+.tg-grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 22px;
+    margin-top: 16px;
+}
+
+.tg-loose { flex: 0 1 254px; min-width: 210px; }
+
+/* A locked group holds the desk; everything else is there but not in play. */
+.tg-loose,
+.tg-standby,
+.tg-slot { transition: opacity .18s ease; }
+
+.tg-loose.is-quiet,
+.tg-standby.is-quiet,
+.tg-slot.is-dimmed {
+    opacity: .4;
+    pointer-events: none;
+}
+
+.tg-slot.is-dimmed { opacity: .35; }
+
+.tg-col-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 9px;
+}
+
+.tg-col-head.is-ruled { align-items: center; margin-bottom: 11px; }
+
+.tg-col-label {
+    flex: 0 0 auto;
+    font-family: var(--font-head);
+    font-size: 11.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.tg-rule { flex: 1; height: 1px; background: var(--border); }
+
+.tg-loose-count,
+.tg-parked-count {
+    flex: 0 0 auto;
+    font-size: 11.5px;
+    color: var(--text-faint);
+}
+
+/* ---- the tabs ---- */
+
+.tg-zone {
     display: flex;
     flex-direction: column;
+    gap: 5px;
+    min-height: 120px;
+    padding: 9px;
+    background: var(--surface-2);
+    border: 1px dashed var(--border);
+    border-radius: var(--r);
+}
+
+.tg-zone.is-dropping { border-style: solid; border-color: var(--accent); }
+
+.tg-empty {
+    margin: 0;
+    padding: 8px 2px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-faint);
+}
+
+.tg-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 6px 8px;
     background: var(--surface);
-    border: var(--card-border-width) solid var(--border);
-    border-left: 4px solid var(--trial-color, var(--border-strong));
-    border-radius: var(--card-radius);
-    box-shadow: var(--card-shadow);
-    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-family: var(--font);
+    cursor: grab;
+    user-select: none;
 }
 
-/* The group is closed — normal after a restart, not an error. */
-.trial-card.is-dormant { opacity: .68; }
+.tg-tab.is-picked { background: var(--accent-soft); border-color: var(--accent); }
+.tg-tab.is-ghost { opacity: .35; }
+.tg-tab[draggable="false"] { cursor: default; }
 
-.trial-card-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
-
-.trial-swatch {
-    width: 11px;
-    height: 11px;
-    flex-shrink: 0;
-    border-radius: var(--r-pill);
-    background: var(--trial-color, var(--border-strong));
-}
-
-.trial-name {
+/* The one letter standing for a site. min() keeps the square sharp on the
+   skins that have no rounding at all. */
+.tg-mono {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: min(3px, var(--r-sm));
     font-family: var(--font-head);
-    font-size: 15px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.tg-mono.is-small { width: 16px; height: 16px; font-size: 9px; }
+
+.tg-tab-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--text);
+}
+
+/* Where the tab being dragged would land. */
+.tg-landing {
+    height: 31px;
+    background: var(--accent-soft-2);
+    border: 1px dashed var(--accent);
+    border-radius: var(--r-sm);
+}
+
+/* ---- the slots ---- */
+
+.tg-right {
+    flex: 1 1 430px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+}
+
+.tg-slots {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 12px;
+    min-width: 0;
+}
+
+.tg-slot {
+    flex: 1 1 252px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-2);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--r);
+}
+
+.tg-slot.is-locked { border-color: var(--accent); }
+.tg-slot.is-dropping { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+.tg-slot-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 9px;
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--border);
+}
+
+.tg-slot.is-locked .tg-slot-head { background: var(--accent-soft-2); }
+
+.tg-handle {
+    flex: 0 0 auto;
+    width: 7px;
+    height: 16px;
+    background-image: radial-gradient(var(--text-faint) 1px, transparent 1.1px);
+    background-size: 4px 5px;
+    cursor: grab;
+}
+
+.tg-handle[draggable="false"] { cursor: default; }
+
+.tg-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 1px 2px;
+    background: transparent;
+    border: 1px solid transparent;
+    text-overflow: ellipsis;
+    font-family: var(--font-head);
+    font-size: 13px;
     font-weight: var(--head-weight);
     letter-spacing: var(--head-track);
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    text-transform: var(--head-case);
+    color: var(--text);
+    cursor: text;
 }
 
-.trial-count { font-size: 11.5px; color: var(--text-faint); flex-shrink: 0; }
+.tg-name:focus { background: var(--surface); border-color: var(--border-strong); outline: none; }
+.tg-name[readonly] { cursor: default; }
 
-.trial-tabs {
-    list-style: none;
-    margin: 0 0 12px;
-    padding: 0;
+.tg-slot-count {
+    flex: 0 0 auto;
+    min-width: 14px;
+    text-align: right;
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text-faint);
+}
+
+.tg-icon {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
-    max-height: 168px;
-    overflow-y: auto;
-}
-
-.trial-tab { display: flex; align-items: center; gap: 6px; }
-
-.trial-tab-title {
-    flex: 1;
-    min-width: 0;
-    font-size: 12.5px;
-    color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.trial-tab-drop {
-    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
     width: 20px;
     height: 20px;
-    border: none;
+    padding: 0;
     background: transparent;
-    color: var(--text-faint);
-    font-size: 15px;
-    line-height: 1;
-    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    border-radius: var(--btn-radius);
+    color: var(--text-muted);
     cursor: pointer;
-    opacity: 0;
 }
 
-.trial-tab:hover .trial-tab-drop,
-.trial-tab-drop:focus-visible { opacity: 1; }
-.trial-tab-drop:hover { background: var(--danger-bg); color: var(--danger); }
+.tg-icon.is-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.tg-icon:disabled { opacity: .35; cursor: not-allowed; }
+.tg-icon:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-ink); }
+.tg-icon.is-on:hover { color: var(--on-accent); }
 
-.trial-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
-.trial-actions button { font-size: 12px; padding: 5px 11px; }
+.tg-menu {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 9px;
+    border-bottom: 1px solid var(--border);
+}
+
+.tg-menu-label {
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.tg-preset {
+    height: 24px;
+    padding: 0 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.tg-preset:hover { border-color: var(--accent); color: var(--accent-ink); }
+
+.tg-note {
+    padding: 7px 10px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--border);
+}
+
+.tg-slot-tabs { display: flex; flex-direction: column; gap: 5px; padding: 9px; }
+
+.tg-newslot {
+    flex: 1 1 252px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 92px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--r);
+}
+
+.tg-newslot.is-dropping { background: var(--accent-soft); border-color: var(--accent); }
+
+.tg-newslot span {
+    padding: 0 16px;
+    text-align: center;
+    font-family: var(--font-head);
+    font-size: 12.5px;
+    line-height: 1.6;
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text-faint);
+}
+
+/* ---- the parked shelf ---- */
+
+.tg-standby {
+    min-width: 0;
+    padding: 14px 16px 15px;
+    background: var(--surface-2);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--r);
+}
+
+.tg-parked { display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
+
+.tg-parked-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 10px 13px 11px;
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-family: var(--font);
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease;
+}
+
+.tg-parked-card:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+.tg-parked-name {
+    font-family: var(--font-head);
+    font-size: 13px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    white-space: nowrap;
+    color: var(--text);
+}
+
+.tg-faces { display: flex; align-items: center; gap: 4px; }
+.tg-more { font-size: 10px; color: var(--text-faint); }
+
+.tg-parked-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text-faint);
+}
+
+.tg-dot {
+    display: block;
+    width: 3px;
+    height: 3px;
+    border-radius: var(--r-pill);
+    background: var(--text-faint);
+}
