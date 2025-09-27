@@ -56,14 +56,14 @@
     }
 
     /** A yes/no dialog. Resolves to true only when the user confirms. */
-    function confirmDialog({ title, message, confirmLabel = 'Confirm', danger = false }) {
+    function confirmDialog({ title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false }) {
         return new Promise((resolve) => {
             const modal = openModal(`
                 <h3>${Dom.escapeHtml(title)}</h3>
                 <p class="modal-message">${Dom.escapeHtml(message)}</p>
                 <div class="import-modal-buttons">
                     <button id="bb-confirm-yes" class="btn-primary${danger ? ' btn-danger' : ''}">${Dom.escapeHtml(confirmLabel)}</button>
-                    <button class="import-modal-close">Cancel</button>
+                    <button class="import-modal-close">${Dom.escapeHtml(cancelLabel)}</button>
                 </div>`, { onClose: (result) => resolve(result === true) });
 
             modal.element.querySelector('#bb-confirm-yes').addEventListener('click', () => modal.close(true));
