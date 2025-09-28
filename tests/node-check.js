@@ -185,7 +185,12 @@ require('../src/shared/activity.js');
 const Activity = globalThis.BB.Activity;
 const Feed = require('../src/shared/feed.js');
 
-const T0 = new Date(2026, 6, 15, 13, 0, 0).getTime();
+// One o'clock today, not a fixed calendar date. The store prunes any day older
+// than KEEP_DAYS, and it prunes on write — so a hard-coded date quietly stops
+// being recorded at all once the suite is run more than sixty days after it was
+// written, and every tick starts the day over. One o'clock because these tests
+// add seconds and minutes to it and none of them should cross midnight.
+const T0 = new Date().setHours(13, 0, 0, 0);
 const secs = (n) => n * 1000;
 const tabAt = (url, title) => ({ url, title });
 
