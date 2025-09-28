@@ -1341,6 +1341,49 @@ const dayRecord = (at = T0) =>
         eq(Trials.lock(state, 3, 25, 100)['3'].usedAt, 50, 'locking keeps what was there');
     });
 
+    // -------------------------------------------------------- framed plate
+
+    console.log('\n# the framed plate');
+
+    const Plate = require('../src/page/plate.js');
+
+    check('each skin gets its own corner set, and the default none', () => {
+        eq(Plate.cornerForSkin('default'), 'plain');
+        eq(Plate.cornerForSkin('riso'), 'blocks');
+        eq(Plate.cornerForSkin('medieval'), 'bracket');
+        eq(Plate.cornerForSkin('deco'), 'fan');
+        eq(Plate.cornerForSkin('nonesuch'), 'plain', 'an unknown skin is undecorated');
+    });
+
+    check('the plain skin draws no corners at all', () => {
+        eq(Plate.CORNERS.plain, []);
+        eq(Plate.cornersHtml('plain'), '', 'not one empty svg either');
+        eq(Plate.cornersHtml('nonesuch'), '');
+    });
+
+    check('a decorated skin draws its set into all four corners', () => {
+        for (const name of ['blocks', 'bracket', 'fan']) {
+            const html = Plate.cornersHtml(name);
+            const corners = html.match(/<svg/g) || [];
+            const paths = html.match(/<path/g) || [];
+            eq(corners.length, 4, `${name} fills four corners`);
+            eq(paths.length, Plate.CORNERS[name].length * 4, `${name} repeats its whole set`);
+            eq(/viewBox="0 0 56 56"/.test(html), true, `${name} is drawn in a 56 box`);
+        }
+        // One corner drawn, the other three that same set flipped into place.
+        const html = Plate.cornersHtml('blocks');
+        eq((html.match(/transform:scale/g) || []).length, 3);
+    });
+
+    check('the corner colours come from the skin, never baked in', () => {
+        const html = Plate.cornersHtml('bracket');
+        eq(/stroke="var\(--accent\)"/.test(html), true);
+        eq(/stroke="var\(--gold\)"/.test(html), true);
+        eq(/fill="var\(--surface\)"/.test(html), true, 'the lozenge centre is punched out');
+        eq(/fill="var\(--border-strong\)"/.test(Plate.cornersHtml('blocks')), true);
+        eq(/#[0-9a-f]{3,6}/i.test(html), false, 'no literal colour anywhere');
+    });
+
     // ------------------------------------------------------- site detection
 
     console.log('\n# site detection');
