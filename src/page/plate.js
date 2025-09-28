@@ -1,20 +1,26 @@
 /**
- * The framed plate: a double rule, four corner motifs and a legend title that
- * breaks the top border. Settings uses it to set the keyboard shortcuts apart
- * from the rows of toggles around them.
+ * The framed plate a settings section sits in: two inner rules, a corner motif
+ * in each corner, and a title notched into the top rule.
  *
- * Five corner motifs were drawn, one per skin, and the mapping is SKIN_MOTIF
- * below — the whole point is that the frame is not one house style imposed on
- * four skins, but each skin's own idiom. 'full' is drawn and unassigned; put
- * it in the table to use it.
+ * Taken from the standalone design export, which is the live version of it —
+ * CORNERS and the skin mapping below are that file's own, not one of the
+ * earlier frame studies. There are four sets and one of them is empty:
  *
- * The motifs are inline SVG rather than a background-image, because a data:
- * URI cannot read a CSS variable and the two rule colours have to come from
- * the skin. They are painted with var(--plate-ink) and var(--plate-gilt),
- * which default to the skin's own border and accent.
+ *   default   plain     nothing at all. No corners, no inner rules — the
+ *                       section is a plain card and its title a plain heading.
+ *   riso      blocks    three flat squares, the spot inks stacked in a corner.
+ *   medieval  bracket   a square bracket, a hairline inside it, and a lozenge
+ *                       where the two meet — a ruled page, not a flourish.
+ *   deco      fan       the quarter-round fan and its stepped returns.
  *
- * One corner is drawn and the other three are the same path flipped, so a
- * motif is one path set, not four.
+ * That `plain` is empty is the whole shape of the thing: the frame is each
+ * skin's own idiom, and the default skin's idiom is to have none. So the plain
+ * skin must come out looking exactly like an undecorated section.
+ *
+ * One corner is drawn and the other three are that same set flipped, so a
+ * motif is one path list rather than four. Everything is inline SVG because a
+ * data: URI cannot read a CSS variable, and the colours have to come from the
+ * skin.
  */
 (function (root) {
     'use strict';
@@ -22,85 +28,70 @@
     const BB = (root.BB = root.BB || {});
     const { Dom, Settings, Skin } = BB;
 
-    const ink = 'stroke:var(--plate-ink)';
-    const gilt = 'stroke:var(--plate-gilt)';
-
-    /** `size` is the viewBox square; `paths` are drawn into the top-left corner. */
-    const MOTIFS = {
-        stepped: {
-            size: 46,
-            paths: `<path d="M0 46V18h10V10h8V0h28" style="${ink}"></path>
-                    <path d="M5 46V23h10v-8h8V5h23" style="${gilt}"></path>`,
-        },
-        fan: {
-            size: 54,
-            paths: `<path d="M0 40A40 40 0 0 0 40 0" style="${ink}"></path>
-                    <path d="M0 31A31 31 0 0 0 31 0" style="${gilt}"></path>
-                    <path d="M0 0l40 40M0 0l14 44M0 0l44 14" style="${gilt}"></path>`,
-        },
-        lozenge: {
-            size: 30,
-            paths: `<rect x="7" y="7" width="10" height="10" transform="rotate(45 12 12)"
-                          style="fill:var(--plate-gilt);stroke:none"></rect>
-                    <rect x="9.5" y="9.5" width="5" height="5" transform="rotate(45 12 12)"
-                          style="fill:var(--surface);stroke:none"></rect>`,
-        },
-        full: {
-            size: 62,
-            paths: `<path d="M0 46A46 46 0 0 0 46 0" style="${ink}"></path>
-                    <path d="M0 34A34 34 0 0 0 34 0" style="${gilt}"></path>
-                    <path d="M0 0l46 46M0 0l16 50M0 0l50 16M0 0l30 54M0 0l54 30"
-                          style="${gilt}" stroke-width=".7"></path>
-                    <rect x="20" y="20" width="7" height="7" transform="rotate(45 23.5 23.5)"
-                          style="fill:var(--plate-gilt);stroke:none"></rect>`,
-        },
-        medieval: {
-            size: 58,
-            paths: `<path d="M2 40C2 18 18 2 40 2" style="${ink}"></path>
-                    <path d="M2 26c8 0 14 6 14 14" style="${gilt}"></path>
-                    <path d="M26 2c0 8 6 14 14 14" style="${gilt}"></path>
-                    <circle cx="9" cy="9" r="3.4" style="fill:var(--plate-gilt);stroke:none"></circle>
-                    <path d="M16 40c0-13 11-24 24-24" style="${gilt}" stroke-width=".8"></path>`,
-        },
+    /** The tone names the design's paths ask for, as this stylesheet's vars. */
+    const INK = {
+        accent: 'var(--accent)',
+        gold: 'var(--gold)',
+        borderStrong: 'var(--border-strong)',
+        surface: 'var(--surface)',
+        border: 'var(--border)',
     };
 
-    const SKIN_MOTIF = {
-        default: 'lozenge',
-        riso: 'stepped',
-        medieval: 'medieval',
+    const paint_ = (name) => (name === 'none' ? 'none' : INK[name] || name);
+
+    /** Drawn into the top-left corner of a 56×56 box. */
+    const CORNERS = {
+        plain: [],
+        bracket: [
+            { d: 'M3 42V3h39', stroke: 'accent', fill: 'none', w: 1.2 },
+            { d: 'M8 42V8h34', stroke: 'gold', fill: 'none', w: 0.7 },
+            { d: 'M15 8.5 21.5 15 15 21.5 8.5 15Z', stroke: 'none', fill: 'gold', w: 0 },
+            { d: 'M15 11.6 18.4 15 15 18.4 11.6 15Z', stroke: 'none', fill: 'surface', w: 0 },
+        ],
+        fan: [
+            { d: 'M0.37 14.22A13.91 13.91 0 0 0 14.28 0.38', stroke: 'gold', fill: 'none', w: 0.9 },
+            { d: 'M0.36 16.25A15.94 15.94 0 0 0 16.31 0.38', stroke: 'gold', fill: 'none', w: 0.9 },
+            { d: 'M56 2.84L2.84 2.84L2.84 56', stroke: 'accent', fill: 'none', w: 0.9 },
+            { d: 'M7.77 0.37L7.77 7.77L18.75 7.77', stroke: 'accent', fill: 'none', w: 0.9 },
+            { d: 'M37.21 2.84L37.21 4.89L15.64 4.89', stroke: 'gold', fill: 'none', w: 0.9 },
+            { d: 'M0.37 28.23L0.37 0.37L28.23 0.37', stroke: 'accent', fill: 'none', w: 0.9 },
+            { d: 'M0.37 7.77L7.77 7.77L7.77 18.75', stroke: 'accent', fill: 'none', w: 0.9 },
+            { d: 'M2.84 37.21L4.89 37.21L4.89 15.64', stroke: 'gold', fill: 'none', w: 0.9 },
+        ],
+        blocks: [
+            { d: 'M0 0h16v16H0z', stroke: 'none', fill: 'accent', w: 0 },
+            { d: 'M19 0h9v9h-9z', stroke: 'none', fill: 'gold', w: 0 },
+            { d: 'M0 19h9v9H0z', stroke: 'none', fill: 'borderStrong', w: 0 },
+        ],
+    };
+
+    const SKIN_CORNER = {
+        default: 'plain',
+        riso: 'blocks',
+        medieval: 'bracket',
         deco: 'fan',
     };
 
-    /** Top-left, then the same path mirrored into the other three corners. */
-    const CORNERS = [
-        'left:-1px;top:-1px',
-        'right:-1px;top:-1px;transform:scaleX(-1)',
-        'left:-1px;bottom:-1px;transform:scaleY(-1)',
-        'right:-1px;bottom:-1px;transform:scale(-1,-1)',
+    /** Top-left, then the same set mirrored into the other three corners. */
+    const POSITIONS = [
+        'left:0;top:0',
+        'right:0;top:0;transform:scaleX(-1)',
+        'left:0;bottom:0;transform:scaleY(-1)',
+        'right:0;bottom:0;transform:scale(-1,-1)',
     ];
 
-    function cornersHtml(motifName) {
-        const motif = MOTIFS[motifName] || MOTIFS.lozenge;
-        return CORNERS.map((position) => `
-            <svg class="bb-plate-corner" width="${motif.size}" height="${motif.size}"
-                 viewBox="0 0 ${motif.size} ${motif.size}" fill="none" stroke-width="1"
-                 aria-hidden="true" focusable="false" style="${position}">${motif.paths}</svg>`).join('');
+    function cornerForSkin(skinId) {
+        return SKIN_CORNER[skinId] || SKIN_CORNER.default;
     }
 
-    /** The little run of dots that closes the plate. */
-    const FOOT = `
-        <div class="bb-plate-foot" aria-hidden="true">
-            <span class="bb-plate-hr"></span>
-            <svg width="34" height="9" viewBox="0 0 34 9" style="fill:var(--plate-gilt)">
-                <circle cx="17" cy="4.5" r="4"></circle>
-                <circle cx="27" cy="4.5" r="2.6"></circle><circle cx="7" cy="4.5" r="2.6"></circle>
-                <circle cx="33" cy="4.5" r="1.4"></circle><circle cx="1" cy="4.5" r="1.4"></circle>
-            </svg>
-            <span class="bb-plate-hr"></span>
-        </div>`;
-
-    function motifForSkin(skinId) {
-        return SKIN_MOTIF[skinId] || SKIN_MOTIF.default;
+    function cornersHtml(name) {
+        const paths = CORNERS[name] || CORNERS.plain;
+        if (!paths.length) return '';
+        const drawn = paths.map((path) => `<path d="${path.d}" stroke="${paint_(path.stroke)}"`
+            + ` fill="${paint_(path.fill)}" stroke-width="${path.w}"></path>`).join('');
+        return POSITIONS.map((position) => `
+            <svg class="bb-plate-corner" width="56" height="56" viewBox="0 0 56 56"
+                 fill="none" aria-hidden="true" focusable="false" style="${position}">${drawn}</svg>`).join('');
     }
 
     /**
@@ -114,12 +105,11 @@
         const plate = document.createElement('div');
         plate.className = 'bb-plate';
         plate.innerHTML = `
-            <div class="bb-plate-rule"></div>
-            <div class="bb-plate-rule is-inner"></div>
+            <div class="bb-plate-rule is-second"></div>
+            <div class="bb-plate-rule is-third"></div>
             <div class="bb-plate-corners"></div>
             ${title ? `<h3 class="bb-plate-legend">${Dom.escapeHtml(title)}</h3>` : ''}
-            <div class="bb-plate-body"></div>
-            ${FOOT}`;
+            <div class="bb-plate-body"></div>`;
 
         const body = plate.querySelector('.bb-plate-body');
         while (host.firstChild) body.appendChild(host.firstChild);
@@ -128,10 +118,10 @@
 
     /** Redraw every plate's corners for the skin now showing. */
     function paint(scope = document) {
-        const motif = motifForSkin(document.body.dataset.skin);
+        const name = cornerForSkin(document.body.dataset.skin);
         scope.querySelectorAll('.bb-plate').forEach((plate) => {
-            plate.dataset.motif = motif;
-            plate.querySelector('.bb-plate-corners').innerHTML = cornersHtml(motif);
+            plate.dataset.corner = name;
+            plate.querySelector('.bb-plate-corners').innerHTML = cornersHtml(name);
         });
     }
 
@@ -146,5 +136,8 @@
         if (Settings && Skin) Settings.watch([Skin.KEY], () => paint(scope));
     }
 
-    BB.Plate = { mountAll, wrap, paint, MOTIFS, SKIN_MOTIF, motifForSkin };
+    const Plate = { mountAll, wrap, paint, CORNERS, SKIN_CORNER, cornerForSkin, cornersHtml };
+
+    BB.Plate = Plate;
+    if (typeof module !== 'undefined' && module.exports) module.exports = Plate;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -35,6 +35,7 @@ body[data-skin="default"] {
     --accent-shadow: rgba(184, 24, 8, .32);
     --on-accent: #ffffff;
     --accent-ink: var(--accent);
+    --gold: var(--accent);
 
     --bg: #f2efee;
     --surface: #ffffff;
@@ -129,6 +130,7 @@ body[data-skin="default"].dark-theme {
     --accent-shadow: rgba(73, 86, 145, .60);
     --on-accent: #ffffff;
     --accent-ink: var(--accent);
+    --gold: var(--accent);
 
     --bg: #202225;
     --surface: #2f3136;
@@ -199,6 +201,7 @@ body[data-skin="riso"] {
     --accent-shadow: rgba(255, 72, 176, .40);
     --on-accent: #fffdf6;
     --accent-ink: #d1157f;
+    --gold: #ffc60b;
 
     --bg: #efece0;
     --surface: #f7f4e9;
@@ -428,6 +431,7 @@ body[data-skin="medieval"].dark-theme {
     --accent-ring: rgba(216, 172, 82, .45);
     --on-accent: #1c1409;
     --accent-ink: #d8663f;
+    --gold: #d8ac52;
 
     --bg: #1b140c;
     --surface: #241c12;
@@ -581,6 +585,7 @@ body[data-skin="deco"].dark-theme {
     --accent-ring: rgba(201, 162, 39, .45);
     --on-accent: #0e0d0c;
     --accent-ink: #dcbc55;
+    --gold: #e0c274;
 
     --bg: #0e0d0c;
     --surface: #161513;

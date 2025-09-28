@@ -1755,71 +1755,93 @@ header h1 {
     .cookie-sites { margin-left: 0; }
 }
 
-/* ---------- the framed plate (src/page/plate.js) ---------- */
+/* ---------- the framed plate (src/page/plate.js) ----------
 
-/* The two rule colours come from the skin, so the frame is the skin's own
-   rather than one house style laid over four. Medieval and Deco name a gilt
-   of their own; the rest take the accent they already use. */
+   The design carries the frame on custom properties rather than on a class per
+   skin, and so does this: the plate declares the undecorated values, and the
+   three decorated skins redefine them. That is what lets the default skin come
+   out as an ordinary card — its corner set is empty, both inner rules are
+   transparent, and its title is a plain heading in the flow. */
+
 .bb-plate {
-    --plate-ink: var(--border-strong);
-    --plate-gilt: var(--accent);
+    --plate-rule-2: transparent;
+    --plate-rule-3: transparent;
+    --plate-space: 22px;
+    --plate-title-pos: static;
+    --plate-title-left: auto;
+    --plate-title-shift: 0;
+    --plate-title-pad: 0;
+    --plate-title-bg: transparent;
+    --plate-title-margin: 0 0 12px;
 
     position: relative;
-    padding: 34px 30px 26px;
-    margin-top: 22px;
+    padding: var(--plate-space) 24px 22px;
     background: var(--surface);
+    border: var(--card-border-width) solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
 }
 
-body[data-skin="medieval"] .bb-plate { --plate-gilt: #a8791f; }
-body[data-skin="deco"] .bb-plate { --plate-gilt: #b99447; }
+/* The decorated skins: gilt second rule, a hairline third, and the title
+   notched into the top rule where the frame wants it. */
+body[data-skin="riso"] .bb-plate,
+body[data-skin="medieval"] .bb-plate,
+body[data-skin="deco"] .bb-plate {
+    --plate-rule-2: var(--gold);
+    --plate-rule-3: var(--border);
+    --plate-space: 34px;
+    --plate-title-pos: absolute;
+    --plate-title-left: 50%;
+    --plate-title-shift: -50%;
+    --plate-title-pad: 0 16px;
+    --plate-title-bg: var(--surface);
+    --plate-title-margin: 0;
+}
 
 .bb-plate-rule {
     position: absolute;
-    inset: 0;
-    border: 1px solid var(--plate-ink);
+    border-radius: var(--card-radius);
     pointer-events: none;
 }
 
-.bb-plate-rule.is-inner { inset: 5px; border-color: var(--plate-gilt); }
+.bb-plate-rule.is-second {
+    inset: 5px;
+    border: 1px solid var(--plate-rule-2);
+}
+
+/* Only top and bottom: the third rule is a band across the plate, not a box. */
+.bb-plate-rule.is-third {
+    inset: 9px;
+    border-top: 1px solid var(--plate-rule-3);
+    border-bottom: 1px solid var(--plate-rule-3);
+}
 
 .bb-plate-corner { position: absolute; }
 
 .bb-plate-legend {
-    position: absolute;
-    top: -13px;
-    left: 42px;
-    margin: 0;
-    padding: 0 14px;
-    background: var(--surface);
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: .18em;
-    text-transform: uppercase;
-    line-height: 26px;
+    position: var(--plate-title-pos);
+    top: -11px;
+    left: var(--plate-title-left);
+    transform: translateX(var(--plate-title-shift));
+    margin: var(--plate-title-margin);
+    padding: var(--plate-title-pad);
+    background: var(--plate-title-bg);
+    font-family: var(--font-head);
+    font-size: 16px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    line-height: 22px;
+    white-space: nowrap;
     color: var(--text);
 }
 
 .bb-plate-body { position: relative; }
 
-.bb-plate-foot {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 22px;
-}
-
-.bb-plate-hr { flex: 1; height: 1px; background: var(--border); }
-.bb-plate-foot svg { display: block; flex-shrink: 0; }
-
-/* A pill-radius skin would leave the square corner motifs floating off the
-   rule, so the plate stays square whatever --r-pill is. */
-.bb-plate, .bb-plate-rule { border-radius: 0; }
-
 @media (max-width: 560px) {
-    .bb-plate { padding: 30px 16px 22px; }
-    .bb-plate-legend { left: 20px; font-size: 13px; }
+    .bb-plate { padding-left: 16px; padding-right: 16px; }
+    .bb-plate-legend { font-size: 14px; }
 }
-
 
 /* ---------- trials: the tab-group desk (src/page/trials.js) ----------
 
