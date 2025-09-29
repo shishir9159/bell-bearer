@@ -67,6 +67,7 @@
         "src/content/main.js"
       ],
       "css": [
+        "skin-fonts.css",
         "content.css"
       ]
     },
@@ -115,7 +116,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "icons/*.png"
+        "icons/*.png",
+        "fonts/*.woff2"
       ],
       "matches": [
         "<all_urls>"

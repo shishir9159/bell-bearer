@@ -181,7 +181,7 @@ body[data-skin="riso"] {
 
     --font: 'Space Grotesk', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     --font-head: 'Space Grotesk', 'Helvetica Neue', Helvetica, sans-serif;
-    --font-mono: 'DM Mono', ui-monospace, Menlo, monospace;
+    --font-mono: ui-monospace, Menlo, monospace;
     --head-case: uppercase;
     --head-track: .06em;
     --head-weight: 700;
