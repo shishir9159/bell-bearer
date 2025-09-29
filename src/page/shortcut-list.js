@@ -21,8 +21,20 @@
     const BROWSER_SHORTCUTS_URL = 'chrome://extensions/shortcuts';
 
     let overrides = {};
-    let editing = null; // { id, row }
+    let editing = null; // { id }
     const mounts = [];
+    const watchers = [];
+
+    /**
+     * The keyboard in the same section draws the same bindings and the same
+     * "listening for a new shortcut" state, so it has to hear about every
+     * change from here rather than keep a second copy of any of it.
+     */
+    function announce() {
+        watchers.forEach((fn) => {
+            try { fn(); } catch (_) { /* one bad watcher must not stop the rest */ }
+        });
+    }
 
     function keysHtml(parts) {
         return parts.map((part) => `<kbd class="kbd-chip">${Dom.escapeHtml(part)}</kbd>`).join('<span class="kbd-plus">+</span>');
@@ -68,10 +80,16 @@
 
     let commandKeys = {};
 
+    /**
+     * The scope is read off the container at draw time, not captured at mount
+     * time: the keyboard's tab strip switches one container between scopes.
+     */
     function renderAll() {
-        for (const { container, scope } of mounts) {
+        for (const { container } of mounts) {
+            const scope = container.dataset.shortcutScope;
             container.innerHTML = Keybindings.list(overrides, scope).map((shortcut) => rowHtml(shortcut, commandKeys)).join('');
         }
+        announce();
     }
 
     function save(id, change) {
@@ -94,8 +112,17 @@
         renderAll();
     }
 
+    /**
+     * A click anywhere but on the row, or on the keycap that started it, ends
+     * rebind mode — the keyboard is a second way into the same state, so a
+     * click on it must not cancel what it just opened.
+     */
     function onOutside(event) {
-        if (editing && !event.target.closest(`[data-shortcut="${editing.id}"]`)) stopEditing();
+        if (!editing) return;
+        const target = event.target;
+        if (target.closest(`[data-shortcut="${editing.id}"]`)) return;
+        if (target.closest('[data-kid]')) return;
+        stopEditing();
     }
 
     function onCapture(event) {
@@ -181,10 +208,27 @@
         save(id, { enabled: input.checked });
     }
 
+    /** Every shortcut in `scope` back to its default keys, and back on. */
+    function resetScope(scope) {
+        const next = { ...overrides };
+        Keybindings.list(null, scope).forEach((shortcut) => { delete next[shortcut.id]; });
+        overrides = next;
+        stopEditing();
+        renderAll();
+        return Settings.set({ shortcuts: next });
+    }
+
+    /** Point a mounted list at another scope and redraw it. */
+    function setScope(container, scope) {
+        if (!container || container.dataset.shortcutScope === scope) return;
+        container.dataset.shortcutScope = scope;
+        renderAll();
+    }
+
     /** Fill every `[data-shortcut-scope]` element under `rootElement`. */
     async function mountAll(rootElement = document) {
         rootElement.querySelectorAll('[data-shortcut-scope]').forEach((container) => {
-            mounts.push({ container, scope: container.dataset.shortcutScope });
+            mounts.push({ container });
             container.addEventListener('click', onClick);
             container.addEventListener('change', onChange);
         });
@@ -201,5 +245,14 @@
     }
 
     root.BB = root.BB || {};
-    root.BB.ShortcutList = { mountAll };
+    root.BB.ShortcutList = {
+        mountAll,
+        setScope,
+        resetScope,
+        startEditing,
+        stopEditing,
+        editingId: () => (editing ? editing.id : null),
+        overrides: () => overrides,
+        watch: (fn) => { watchers.push(fn); },
+    };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -86,8 +86,6 @@
         const key = (kind) => ChessSites.siteKey(site.id, kind);
 
         return `
-            <h3 class="bb-proper">${name}</h3>
-
             <div class="settings-option">
                 <label class="setting-label" for="${site.usernameKey}">Username</label>
                 <input type="text" id="${site.usernameKey}" class="text-control" placeholder="Your ${esc(site.host)} username"
@@ -123,11 +121,7 @@
             <p class="settings-hint chess-settings-lead">How many games of each control you mean to play in a day. Past the limit, ${name}'s rematch and new-game buttons go grey and stop working until midnight. Games count from ${name}'s API, so games played on your phone count too. Zero blocks a control outright.</p>
             ${switchRow(key('limitsOn'), `Hold me to a daily limit on ${name}`)}
             <div class="chess-warn-list">${ChessSites.CLASSES.map((c) => limitRow(site, c)).join('')}</div>
-            <p class="settings-hint">Reached the limit and want one more anyway? Bell Bearer's toolbar popup grows a button that allows exactly one more game of each control.</p>
-
-            ${site.shortcutScope ? `
-                <h4 class="shortcut-heading">Keyboard shortcuts</h4>
-                <div class="shortcut-list" data-shortcut-scope="${esc(site.shortcutScope)}"></div>` : ''}`;
+            <p class="settings-hint">Reached the limit and want one more anyway? Bell Bearer's toolbar popup grows a button that allows exactly one more game of each control.</p>`;
     }
 
     /**
@@ -153,7 +147,12 @@
     function mountAll(scope = document) {
         scope.querySelectorAll('[data-chess-settings]').forEach((panel) => {
             const site = ChessSites.get(panel.dataset.chessSettings);
-            if (site) panel.innerHTML = panelHtml(site);
+            if (!site) return;
+            // The plate's legend carries the site's name, spelled the way
+            // the site spells it rather than uppercased by a skin.
+            panel.dataset.plate = site.name;
+            panel.setAttribute('data-plate-proper', '');
+            panel.innerHTML = panelHtml(site);
         });
         wireVolumeOutputs(scope);
     }

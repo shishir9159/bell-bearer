@@ -2,11 +2,15 @@
  * The Trials view: the desk of tab groups, and the ungrouped tabs beside it.
  *
  * Built to the design in "Website extension keyboard settings" — the ungrouped
- * tabs listed down the left, up to three group slots to the right of them, an
- * empty slot to start a group by dropping a tab on it, and the parked groups on
- * a shelf underneath. Everything moves by dragging: a tab into a group, back
- * out to the left-hand list, or onto the empty slot; a group by its handle to
- * reorder the desk.
+ * tabs listed down the left, up to three group slots to the right of them, and
+ * an empty slot to start a group by dropping a tab on it. Everything moves by
+ * dragging: a tab into a group, back out to the left-hand list, or onto the
+ * empty slot; a group by its handle to reorder the desk.
+ *
+ * The parked shelf runs across the top rather than sitting in the right-hand
+ * column: a parked group is a whole group, not a property of the slots, and
+ * the full width is what lets the cards sit on one line instead of stacking in
+ * a column narrower than they are.
  *
  * Nothing here touches chrome.tabGroups — see src/background/trials.js. This
  * file sends a message, then redraws from the snapshot that comes back, so the
@@ -417,6 +421,14 @@
                        </div>`
                     : `<div class="tg-lockbar" hidden><div class="tg-lockfill"></div></div>
                        <p class="tg-intro"></p>
+                       <div class="tg-standby">
+                           <div class="tg-col-head is-ruled">
+                               <span class="tg-col-label">Parked</span>
+                               <span class="tg-rule"></span>
+                               <span class="tg-parked-count"></span>
+                           </div>
+                           <div class="tg-parked"></div>
+                       </div>
                        <div class="tg-grid">
                            <div class="tg-loose">
                                <div class="tg-col-head">
@@ -427,14 +439,6 @@
                            </div>
                            <div class="tg-right">
                                <div class="tg-slots"></div>
-                               <div class="tg-standby">
-                                   <div class="tg-col-head is-ruled">
-                                       <span class="tg-col-label">Parked</span>
-                                       <span class="tg-rule"></span>
-                                       <span class="tg-parked-count"></span>
-                                   </div>
-                                   <div class="tg-parked"></div>
-                               </div>
                            </div>
                        </div>`}
             </div>`;

@@ -105,6 +105,8 @@ body[data-skin="default"] {
     --kbd-arrow-color: #12331f;
     --kbd-active-bg: #fceeb5;
     --kbd-active-color: #4a3a06;
+    --kbd-radius: 5px;
+    --kbd-board-radius: 10px;
 
     /* Site launcher cards, one tint per card in order (dashboard.css). Each
        skin picks its own from its palette, day and night. */
@@ -266,6 +268,8 @@ body[data-skin="riso"] {
     --kbd-arrow-color: #fffdf6;
     --kbd-active-bg: var(--ink-yellow);
     --kbd-active-color: #17161a;
+    --kbd-radius: 0px;
+    --kbd-board-radius: 0px;
 
     --site-tint-1: #ffd1ea;
     --site-tint-2: #ffecaa;
@@ -411,6 +415,8 @@ body[data-skin="medieval"] {
     --kbd-arrow-color: #2b2016;
     --kbd-active-bg: #d8ac52;
     --kbd-active-color: #2b2016;
+    --kbd-radius: 3px;
+    --kbd-board-radius: 3px;
 
     --site-tint-1: #e5c2a8;
     --site-tint-2: #d6d3a2;
@@ -566,6 +572,8 @@ body[data-skin="deco"] {
     --kbd-arrow-color: #f7f3e8;
     --kbd-active-bg: var(--gold-2);
     --kbd-active-color: #14110d;
+    --kbd-radius: 0px;
+    --kbd-board-radius: 0px;
 
     --site-tint-1: #efe0bb;
     --site-tint-2: #d3e6dd;

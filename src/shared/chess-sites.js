@@ -36,7 +36,6 @@
             host: 'chess.com',
             usernameKey: 'chessUsername',
             prefix: 'chess',
-            shortcutScope: 'chess',
             // Starting clock, in seconds, below which a game is bullet / blitz.
             limits: Object.freeze({ bullet: 180, blitz: 600 }),
             reader: () => (root.BB && root.BB.Chess) || req('./chess.js'),
@@ -47,7 +46,6 @@
             host: 'lichess.org',
             usernameKey: 'lichessUsername',
             prefix: 'lichess',
-            shortcutScope: null,
             // Lichess puts blitz under 8 minutes; its classical counts as rapid here.
             limits: Object.freeze({ bullet: 180, blitz: 480 }),
             reader: () => (root.BB && root.BB.Lichess) || req('./lichess.js'),

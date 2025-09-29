@@ -110,8 +110,7 @@
 
             <div id="settingsCommon">
             <div class="settings-content">
-                <div class="settings-section">
-                    <h3>Appearance</h3>
+                <div class="settings-section" data-plate="Appearance">
                     <p>Skins restyle the popup and this dashboard. Each one carries its own day and night, so the moon button switches within the skin you picked.</p>
 
                     <div class="skin-picker" id="skinPicker">
@@ -154,23 +153,15 @@
                     </div>
                 </div>
 
-                <!-- Every scope's shortcuts in one place. The YouTube ones
-                     used to sit inside the YouTube panel, which meant looking
-                     in two places to answer "what is bound to what". Each
-                     plate is framed by src/page/plate.js. -->
-                <div class="settings-section">
+                <!-- Every scope's shortcuts in one place, on one keyboard with
+                     a tab per site. They used to sit inside each site's own
+                     panel, which meant looking in four places to answer "what
+                     is bound to what". Drawn by src/page/keyboard.js. -->
+                <div class="settings-section" data-plate="Keyboard Shortcuts">
                     <div id="shortcutsKeyboard"></div>
-                    <div data-plate="General Keyboard Shortcuts">
-                        <div class="shortcut-list" data-shortcut-scope="general"></div>
-                    </div>
-                    <div data-plate="YouTube Shortcuts">
-                        <div class="shortcut-list" data-shortcut-scope="youtube"></div>
-                    </div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>General</h3>
-
+                <div class="settings-section" data-plate="General">
                     <div class="settings-option">
                         <label class="toggle-switch">
                             <input type="checkbox" id="trackActivity">
@@ -216,14 +207,12 @@
                     <div class="cookie-sites" id="cookieSitesPanel"></div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>Site-specific</h3>
+                <div class="settings-section" data-plate="Site-specific">
                     <p>Settings that only make sense for one particular site — pick it to see them.</p>
                     <div class="sites-grid" id="settingsSitesGrid"></div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>About</h3>
+                <div class="settings-section" data-plate="About">
                     <p>Bell Bearer helps you organize and manage your <span class="bb-proper">YouTube</span> video bookmarks and your <span class="bb-proper">Chess.com</span> and <span class="bb-proper">Lichess</span> games.</p>
                     <p>Version: 1.0</p>
                 </div>
@@ -244,9 +233,8 @@
                     <div class="settings-section" id="chessSettingsPanel" data-site-settings="chess" data-chess-settings="chess" hidden></div>
                     <div class="settings-section" id="lichessSettingsPanel" data-site-settings="lichess" data-chess-settings="lichess" hidden></div>
 
-                    <div class="settings-section" id="youtubeSettingsPanel" data-site-settings="youtube" hidden>
-                        <h3 class="bb-proper">YouTube</h3>
-
+                    <div class="settings-section" id="youtubeSettingsPanel" data-site-settings="youtube"
+                         data-plate="YouTube" data-plate-proper hidden>
                         <div class="settings-option" style="display: flex; align-items: center; gap: 12px;">
                             <span class="setting-label">Add-to-pouch button</span>
                             <select id="pouchButtonStyle">

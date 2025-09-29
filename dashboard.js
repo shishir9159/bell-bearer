@@ -11,7 +11,7 @@
     'use strict';
 
     const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, TabActions, SettingsForm, SiteIcons,
-        CookieSitesPanel, ShortcutList, Plate, ChessStats, ChessSettings, BackupButtons } = window.BB;
+        CookieSitesPanel, ShortcutList, Plate, ChessStats, ChessSettings, BackupButtons, Skin } = window.BB;
 
     /** The emoji the popup used for "nothing saved"; every empty list here wears it too. */
     const EMPTY_ICON = '🔖';
@@ -72,6 +72,11 @@
             // must never leave the settings toggles dead, since a setting could
             // then never be turned on.
             Ui.installTheme({ toggleId: 'themeToggle' });
+            // The popup has always installed the skin; this page never did, so
+            // it opened in the default palette whatever was saved, and a skin
+            // picked here lasted only until the next reload. Awaited, because
+            // the plates below read the skin to pick their corner motif.
+            if (Skin) await Skin.install().catch(() => {});
             // The chess settings are drawn, so they must exist before binding.
             ChessSettings.mountAll();
             SettingsForm.bindAll();

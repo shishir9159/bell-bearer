@@ -95,30 +95,42 @@
     }
 
     /**
-     * Frame everything already inside `host`, keeping those nodes — they are
-     * live: the shortcut rows carry listeners from ShortcutList, so the body
-     * is moved into the frame rather than re-created from its HTML.
+     * Frame `host` itself, keeping everything already inside it — those nodes
+     * are live: the shortcut rows carry listeners from ShortcutList, so the
+     * body is moved into the frame rather than re-created from its HTML.
+     *
+     * The frame goes on the host rather than into a wrapper inside it, so a
+     * section is one card and not a card inside a card. `data-plate-proper`
+     * asks for a legend the uppercasing skins leave alone — a site's own name
+     * is spelled the way the site spells it.
      */
     function wrap(host, title) {
-        if (!host || host.querySelector(':scope > .bb-plate')) return;
+        if (!host || host.classList.contains('bb-plate')) return;
 
-        const plate = document.createElement('div');
-        plate.className = 'bb-plate';
-        plate.innerHTML = `
+        const body = document.createElement('div');
+        body.className = 'bb-plate-body';
+        while (host.firstChild) body.appendChild(host.firstChild);
+
+        const proper = host.hasAttribute('data-plate-proper') ? ' bb-proper' : '';
+        host.classList.add('bb-plate');
+        host.innerHTML = `
             <div class="bb-plate-rule is-second"></div>
             <div class="bb-plate-rule is-third"></div>
             <div class="bb-plate-corners"></div>
-            ${title ? `<h3 class="bb-plate-legend">${Dom.escapeHtml(title)}</h3>` : ''}
-            <div class="bb-plate-body"></div>`;
-
-        const body = plate.querySelector('.bb-plate-body');
-        while (host.firstChild) body.appendChild(host.firstChild);
-        host.appendChild(plate);
+            ${title ? `<h3 class="bb-plate-legend${proper}">${Dom.escapeHtml(title)}</h3>` : ''}`;
+        host.appendChild(body);
     }
 
-    /** Redraw every plate's corners for the skin now showing. */
-    function paint(scope = document) {
-        const name = cornerForSkin(document.body.dataset.skin);
+    /**
+     * Redraw every plate's corners for `skinId`, or for the skin now showing.
+     *
+     * The id is passed in when the repaint comes from a storage change: the
+     * watchers run in the order they registered, and this one can run before
+     * BB.Skin has had a chance to put the new skin on <body> — reading it off
+     * the DOM there would draw the corners of the skin just left.
+     */
+    function paint(scope = document, skinId) {
+        const name = cornerForSkin(skinId || document.body.dataset.skin);
         scope.querySelectorAll('.bb-plate').forEach((plate) => {
             plate.dataset.corner = name;
             plate.querySelector('.bb-plate-corners').innerHTML = cornersHtml(name);
@@ -133,7 +145,7 @@
         scope.querySelectorAll('[data-plate]').forEach((host) => wrap(host, host.dataset.plate));
         paint(scope);
 
-        if (Settings && Skin) Settings.watch([Skin.KEY], () => paint(scope));
+        if (Settings && Skin) Settings.watch([Skin.KEY], (changed) => paint(scope, changed[Skin.KEY]));
     }
 
     const Plate = { mountAll, wrap, paint, CORNERS, SKIN_CORNER, cornerForSkin, cornersHtml };

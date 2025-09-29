@@ -616,25 +616,14 @@ header h1 {
 .settings-header { margin-bottom: 22px; }
 /* Full width, like the other two views. Prose inside is capped separately
    below so the panels can span without the paragraphs running on. */
-.settings-content { display: flex; flex-direction: column; gap: 16px; }
+/* The design sets the sections a long way apart — far enough that a decorated
+   skin's frame reads as a frame and not as a divider between two halves of one
+   panel. Nothing else on the page needs this much air; the sections do. */
+.settings-content { display: flex; flex-direction: column; gap: 46px; }
 
-.settings-section {
-    background: var(--surface);
-    border: var(--card-border-width) solid var(--border);
-    border-radius: var(--card-radius);
-    padding: 22px 24px;
-    box-shadow: var(--card-shadow);
-}
-
-.settings-section h3 {
-    font-family: var(--font-head);
-    font-size: 16px;
-    font-weight: var(--head-weight);
-    letter-spacing: var(--head-track);
-    text-transform: var(--head-case);
-    color: var(--text);
-    margin-bottom: 16px;
-}
+/* Every section is a framed plate (src/page/plate.js), which is what paints
+   the card, so the section itself carries no surface of its own. */
+.settings-section { position: relative; }
 
 .settings-section p {
     font-size: 13.5px;
@@ -754,30 +743,142 @@ header h1 {
 /* The knob and its travel follow from these two; see .toggle-switch above. */
 .toggle-switch.toggle-sm { --track-w: 34px; --track-h: 20px; }
 
-/* ---------- interactive keyboard ---------- */
+/* ---------- the annotated keyboard (src/page/keyboard.js) ----------
 
-/* The layout — rows, which keys are wider, which carry an icon instead of a
-   letter — comes from a design the user supplied; only the palette is ours,
-   read off the same tokens as the rest of the page rather than the design's
-   own hard-coded colors, so the keyboard is never the one thing on the page
-   that ignores the chosen skin. Key widths are flex-grow ratios of the
-   original's pixel widths (e.g. a 100px key against a 50px base is grow: 2)
-   so the whole board scales with the settings column instead of overflowing
-   a narrow one. */
-.kbd-widget {
+   The design draws this as a printed callout diagram: the board in the middle,
+   a label for every shortcut in the margin around it, and a leader line from
+   each label to the keycap it names. The lanes are a three-column grid — side
+   lane, board, side lane — with the top and bottom lanes spanning all three.
+   Below 860px there is no room for the side lanes, so the whole thing stacks
+   and every label moves above or below the board.
+
+   Key widths are flex-grow ratios of the design's pixel widths (a 100px key
+   against a 50px base is grow: 2) so the board scales with the column instead
+   of overflowing a narrow one. The palette is ours — the same tokens as the
+   rest of the page — so the keyboard is never the one thing that ignores the
+   chosen skin. */
+
+.kbd-scopebar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+}
+
+.kbd-scopes { display: flex; align-items: flex-end; gap: 2px; }
+
+/* A tab shows its mark alone until it is the one you are on, which is what
+   keeps four sites in the width one heading would take. */
+.kbd-scope {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px 9px;
+    margin-bottom: -1px;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-faint);
+    font-family: var(--font);
+    cursor: pointer;
+}
+
+.kbd-scope.is-active { color: var(--text); border-bottom-color: var(--accent); }
+.kbd-scope:hover { color: var(--text); }
+.kbd-scope-mark { display: block; width: 18px; height: 18px; }
+.kbd-scope-mark svg { display: block; }
+.kbd-scope-name { font-size: 12.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+.kbd-scope:not(.is-active) .kbd-scope-name { display: none; }
+
+.kbd-reset {
+    padding: 8px 2px 10px;
+    background: transparent;
+    border: none;
+    color: var(--text-faint);
+    font-family: var(--font);
+    font-size: 11.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+.kbd-reset:hover { color: var(--accent-ink); }
+
+.kbd-hint { font-size: 12.5px; color: var(--text-faint); margin: 10px 0 0; line-height: 1.5; }
+
+.kbd-annot {
+    position: relative;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr) 220px;
+    gap: 34px 26px;
+    margin-top: 22px;
+    align-items: center;
+}
+
+.kbd-annot.is-narrow { display: flex; flex-direction: column; gap: 34px; }
+
+.kbd-lane { display: flex; }
+.kbd-lane.is-top,
+.kbd-lane.is-bottom { grid-column: 1 / 4; flex-wrap: wrap; justify-content: center; gap: 18px; }
+.kbd-lane.is-left,
+.kbd-lane.is-right { flex-direction: column; gap: 14px; justify-content: center; }
+.kbd-lane.is-left { align-items: flex-end; text-align: right; }
+.kbd-lane.is-right { align-items: flex-start; }
+.kbd-annot.is-narrow .kbd-lane.is-left,
+.kbd-annot.is-narrow .kbd-lane.is-right { display: none; }
+.kbd-annot.is-narrow .kbd-lane.is-top,
+.kbd-annot.is-narrow .kbd-lane.is-bottom { gap: 14px; }
+
+.kbd-label {
+    max-width: 230px;
+    padding: 9px 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    cursor: default;
+    transition: opacity .15s ease, border-color .15s ease;
+}
+
+.kbd-label.is-dim { border-color: transparent; color: var(--text-faint); opacity: .4; }
+.kbd-label.is-editing { background: var(--accent-soft); border-color: var(--accent); }
+.kbd-label-title { display: block; font-size: 12.5px; line-height: 1.4; }
+.kbd-label-line { display: block; font-size: 11.5px; line-height: 1.5; opacity: .78; }
+
+/* The leaders paint above the board's stock but below the keycaps, so a line
+   shows in the gutters and disappears under the cap it names. */
+.kbd-leaders {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.kbd-leader { stroke: var(--accent); opacity: .62; }
+.kbd-leader.is-dim { stroke: var(--text-faint); opacity: .2; }
+
+.kbd-board {
     position: relative;
     max-width: 780px;
-    margin: 4px auto 0;
+    width: 100%;
+    margin: 0 auto;
     padding: 10px;
     background: var(--kbd-bg);
     border: none;
-    border-radius: 10px;
+    border-radius: var(--kbd-board-radius, 10px);
 }
 
 .kbd-row { display: flex; gap: 3px; margin-top: 3px; }
 .kbd-row:first-child { margin-top: 0; }
 
 .kbd-key {
+    position: relative;
+    z-index: 1;
     flex: 1 1 0;
     height: 40px;
     display: flex;
@@ -786,27 +887,48 @@ header h1 {
     flex-direction: column;
     background: var(--kbd-key-bg);
     color: var(--kbd-key-color);
-    border-radius: 5px;
-    cursor: pointer;
+    border: 1px solid transparent;
+    border-radius: var(--kbd-radius, 5px);
+    box-sizing: border-box;
+    cursor: default;
     font-family: var(--font);
     font-size: 12px;
     line-height: 1;
     user-select: none;
-    transition: background .1s ease, transform .1s ease;
+    transition: opacity .15s ease, background .12s ease,
+                transform .16s cubic-bezier(.2, 1.4, .4, 1), box-shadow .16s ease;
 }
 
-.kbd-key:hover { filter: brightness(.94); }
+.kbd-key[data-shortcut] { cursor: pointer; }
 .kbd-key:focus-visible { outline: 2px solid var(--kbd-active-bg); outline-offset: 1px; }
-.kbd-key.is-active,
-.kbd-key:active { background: var(--kbd-active-bg); color: var(--kbd-active-color); transform: scale(.94); }
+
+/* At rest every key reads normally; only a focused shortcut or a held
+   modifier pushes the rest of the board back. */
+.kbd-key.is-dim { opacity: .42; }
+.kbd-key.is-lit { background: var(--kbd-active-bg); color: var(--kbd-active-color); border-color: var(--accent); }
+
+/* The listening key lifts off the board instead of stretching it: a scale
+   about its own centre, so its neighbours keep their width and the cap simply
+   overlaps them. The legend grows a step further than the cap, so a zoomed key
+   reads as a keycap and not as a stretched thumbnail. */
+.kbd-key.is-editing {
+    z-index: 4;
+    border: 2px solid var(--accent);
+    font-size: 16px;
+    transform: scale(1.55) translateY(-3px);
+    box-shadow: 0 10px 22px -6px rgba(10, 6, 4, .45);
+}
 
 .kbd-key svg { display: block; }
 
 .kbd-sub { font-size: 9px; line-height: 1; color: var(--kbd-sub-color); margin-top: 5px; }
-.kbd-key.is-active .kbd-sub { color: var(--kbd-active-color); opacity: .8; }
+.kbd-key.is-lit .kbd-sub { color: var(--kbd-active-color); opacity: .8; }
+.kbd-key.is-editing .kbd-sub { font-size: 11px; margin-top: 4px; }
 
 .kbd-key.key__esc { background: var(--kbd-esc-bg); color: var(--kbd-esc-color); }
 .kbd-key.key__arrow { background: var(--kbd-arrow-bg); color: var(--kbd-arrow-color); }
+.kbd-key.key__esc.is-lit,
+.kbd-key.key__arrow.is-lit { background: var(--kbd-active-bg); color: var(--kbd-active-color); }
 
 .kbd-key.key__oneandhalf { flex-grow: 1.5; }
 .kbd-key.key__delete { flex-grow: 2; }
@@ -816,19 +938,32 @@ header h1 {
 .kbd-key.key__spacebar { flex-grow: 6; }
 .kbd-key.key__bottom-funct { flex-grow: 1.4; }
 
-.kbd-tip {
-    position: absolute;
-    z-index: 5;
-    max-width: 260px;
-    padding: 7px 10px;
-    background: var(--text);
-    color: var(--surface);
+/* The list view under the board: the same rows the diagram annotates, for
+   when you want to read them rather than find them. */
+.kbd-listbar { display: flex; align-items: center; gap: 14px; margin-top: 22px; }
+
+.kbd-listtoggle {
+    height: 30px;
+    padding: 0 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
     font-size: 12px;
-    line-height: 1.4;
-    border-radius: var(--r-sm);
-    box-shadow: var(--card-shadow-hover);
-    pointer-events: none;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
 }
+
+.kbd-listtoggle.is-on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.kbd-bound { font-size: 11.5px; color: var(--text-faint); }
+
+.kbd-list { margin-top: 14px; }
+.kbd-list .shortcut-list { margin-bottom: 0; }
+
+/* Lichess borrows the Chess.com bindings until it has its own, and they do
+   not work there yet — shown, but visibly not in play. */
+.kbd-list.is-unavailable { opacity: .5; }
 
 /* ---------- toggles ---------- */
 
@@ -2184,8 +2319,12 @@ body[data-skin="deco"] .bb-plate {
 
 /* ---- the parked shelf ---- */
 
+/* Across the top and the full width of the plate: a parked group is a whole
+   group, and the width is what lets the cards run on one line instead of
+   stacking inside a column narrower than a card. */
 .tg-standby {
     min-width: 0;
+    margin-top: 16px;
     padding: 14px 16px 15px;
     background: var(--surface-2);
     border: var(--card-border-width) solid var(--border);
