@@ -16,6 +16,8 @@
  *     }, …
  *   }
  *
+ * `top` is dropped after seven days; the rest of a day survives for sixty.
+ *
  * Wiring in background.js: call `BB.Activity.tick(tab)` on a short alarm with
  * the focused tab, and `BB.Activity.blur()` when the window loses focus. The
  * store does the bucketing.
@@ -29,6 +31,15 @@
     const LAST_KEY = 'bb_activity_last';
     const SETTING = 'trackActivity';
     const KEEP_DAYS = 60;
+    /**
+     * `top` is the only thing in the store that names a page rather than a
+     * host, so it is the only thing kept on a short leash: a week, today
+     * included. The totals, hosts and hour buckets are aggregates and keep
+     * the 60 days. Enforced on the way in (prune) and again on the way out
+     * (summarize), so a store written by an older version cannot hand back a
+     * page title from a month ago.
+     */
+    const TOP_KEEP_DAYS = 7;
     const IDLE_GAP_MS = 90 * 1000;
 
     const DAY_MS = 864e5;
@@ -113,9 +124,16 @@
         return new Promise((done) => chrome.storage.local.get([SETTING], (o) => done(!!o[SETTING])));
     }
 
-    function prune(data) {
-        const cutoff = dayKey(Date.now() - KEEP_DAYS * DAY_MS);
-        Object.keys(data).forEach((day) => { if (day < cutoff) delete data[day]; });
+    /** The oldest day still allowed to name a page, today counting as one. */
+    const topCutoff = (now = Date.now()) => dayKey(now - (TOP_KEEP_DAYS - 1) * DAY_MS);
+
+    function prune(data, now = Date.now()) {
+        const cutoff = dayKey(now - KEEP_DAYS * DAY_MS);
+        const keepTop = topCutoff(now);
+        Object.keys(data).forEach((day) => {
+            if (day < cutoff) { delete data[day]; return; }
+            if (day < keepTop && data[day].top) data[day].top = null;
+        });
         return data;
     }
 
@@ -139,7 +157,7 @@
         const seconds = Math.round((now - previous.at) / 1000);
         if (seconds <= 0 || now - previous.at > IDLE_GAP_MS) return;
 
-        const data = prune(await read());
+        const data = prune(await read(), now);
         const key = dayKey(previous.at);
         const day = (data[key] = data[key] || blankDay());
 
@@ -175,6 +193,7 @@
     function summarize(data, days, offset = 0) {
         const keys = [];
         for (let i = 0; i < days; i++) keys.push(dayKey(Date.now() - (offset + i) * DAY_MS));
+        const keepTop = topCutoff();
 
         const hosts = {};
         const hours = new Array(24).fill(0);
@@ -191,7 +210,7 @@
             for (const host of Object.keys(day.hosts)) {
                 hosts[host] = (hosts[host] || 0) + day.hosts[host];
             }
-            if (day.top) daily.push({ day: key, ...day.top });
+            if (day.top && key >= keepTop) daily.push({ day: key, ...day.top });
         }
 
         const ranked = Object.entries(hosts)
@@ -216,15 +235,22 @@
     }
 
     /**
-     * The window on screen, and the total of the one before it, from a single
-     * read. The view's "vs the period before" line used to cost a second full
-     * read of the store for what is one subtraction.
+     * The window on screen, the total of the one before it, and the last
+     * seven days, from a single read. The view's "vs the period before" line
+     * used to cost a second full read of the store for what is one
+     * subtraction.
+     *
+     * `week` is there because the per-day page is kept for a week whatever
+     * range the view is showing — so that panel is the same seven days under
+     * Today as it is under Last 30 days, rather than one row or a promise the
+     * store cannot keep.
      */
     async function report(days) {
         const data = await read();
         return {
             now: summarize(data, days),
             previousTotal: summarize(data, days, days).total,
+            week: summarize(data, TOP_KEEP_DAYS),
         };
     }
 
@@ -238,7 +264,10 @@
         return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
     }
 
-    const Activity = { KEY, LAST_KEY, SETTING, tick, blur, clear, summary, report, summarize, human, hostOf };
+    const Activity = {
+        KEY, LAST_KEY, SETTING, KEEP_DAYS, TOP_KEEP_DAYS,
+        tick, blur, clear, summary, report, summarize, human, hostOf,
+    };
 
     BB.Activity = Activity;
     if (typeof module !== 'undefined' && module.exports) module.exports = Activity;

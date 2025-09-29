@@ -1550,6 +1550,11 @@ header h1 {
 
 .page-host { font-size: 11px; color: var(--text-faint); }
 
+/* A day of the last seven with nothing recorded still gets its row, so the
+   table is the week it claims to be. */
+.stat-table tr.is-empty td { color: var(--text-faint); }
+.page-title.is-empty { color: var(--text-faint); font-style: italic; }
+
 .hour-strip {
     display: grid;
     grid-template-columns: repeat(24, 1fr);

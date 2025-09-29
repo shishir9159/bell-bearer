@@ -39,7 +39,23 @@
         return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
     }
 
-    function figures(now, before, range) {
+    /**
+     * The seven days ending today, newest first — the keys, not the records.
+     *
+     * The panel below is a rolling week rather than a calendar one. A week
+     * that restarts on Monday is empty every Monday morning and shows six
+     * days of last week on a Sunday night; this always shows the same seven
+     * days back from today, with today at the top.
+     */
+    function lastSevenDays() {
+        const out = [];
+        for (let back = 0; back < 7; back++) {
+            out.push(new Date(Date.now() - back * 864e5).toISOString().slice(0, 10));
+        }
+        return out;
+    }
+
+    function figures(now, before, range, week) {
         const human = BB.Activity.human;
         const delta = before == null ? null : now.total - before.total;
         const trend = delta == null || !before.total
@@ -47,12 +63,20 @@
             : `${delta >= 0 ? '+' : '−'}${human(Math.abs(delta))} vs the ${range === 'today' ? 'day' : 'period'} before`;
 
         const perDay = now.days > 1 ? `${human(Math.round(now.total / now.days))} a day` : 'so far';
-        const longest = now.longest ? human(now.longest.seconds) : '—';
+
+        // Which page was on screen longest is only kept for a week, so over a
+        // longer range this tile says so rather than quietly answering for
+        // seven days under a thirty-day heading.
+        const span = range === 'today' ? now : week;
+        const best = span.longest;
+        const note = best
+            ? `${esc(best.host)}${range === 'today' ? '' : ' · last 7 days'}`
+            : '—';
 
         return [
             ['Time on screen', human(now.total), trend || perDay],
             ['Sites', String(now.sites), now.hosts[0] ? `${esc(now.hosts[0].host)} leads` : 'nothing yet'],
-            ['Longest single page', longest, now.longest ? esc(now.longest.host) : '—'],
+            ['Longest single page', best ? human(best.seconds) : '—', note],
             ['Busiest hour', now.total ? clock(now.peakHour) : '—', now.total ? human(now.hours[now.peakHour]) : '—'],
         ].map(([label, value, note]) => `
             <div class="stat-figure">
@@ -74,19 +98,29 @@
             </li>`).join('')}</ul>`;
     }
 
+    /**
+     * One row per day of the last week whether or not it has a page, so the
+     * table is the seven days it says it is and a quiet day reads as a quiet
+     * day rather than falling out of the list.
+     */
     function pages(summary) {
-        if (!summary.daily.length) return '<p class="stat-sub">Nothing recorded in this range.</p>';
+        if (!summary.daily.length) return '<p class="stat-sub">Nothing recorded in the last 7 days.</p>';
+        const byDay = new Map(summary.daily.map((entry) => [entry.day, entry]));
         return `<table class="stat-table">
             <thead><tr><th class="col-day">Day</th><th>Page</th><th class="col-time">Time</th></tr></thead>
-            <tbody>${summary.daily.slice(0, 7).map((entry) => `
-                <tr>
-                    <td class="col-day">${dayName(entry.day)}</td>
-                    <td>
-                        <span class="page-title">${esc(entry.title)}</span>
-                        <span class="page-host">${esc(entry.host)}</span>
-                    </td>
-                    <td class="col-time">${BB.Activity.human(entry.seconds)}</td>
-                </tr>`).join('')}</tbody>
+            <tbody>${lastSevenDays().map((key) => {
+                const entry = byDay.get(key);
+                const page = entry
+                    ? `<span class="page-title">${esc(entry.title)}</span>
+                       <span class="page-host">${esc(entry.host)}</span>`
+                    : '<span class="page-title is-empty">Nothing recorded</span>';
+                return `
+                <tr${entry ? '' : ' class="is-empty"'}>
+                    <td class="col-day">${dayName(key)}</td>
+                    <td>${page}</td>
+                    <td class="col-time">${entry ? BB.Activity.human(entry.seconds) : '—'}</td>
+                </tr>`;
+            }).join('')}</tbody>
         </table>`;
     }
 
@@ -117,8 +151,8 @@
                     per day, and the single page you stayed on longest each day.
                     <br><br>
                     It is recorded on this machine only. Nothing is sent anywhere,
-                    no browsing history is read, and readings older than 60 days
-                    are dropped.
+                    no browsing history is read, time totals older than 60 days are
+                    dropped, and the page titles are kept for 7 days.
                 </p>
                 <button class="btn-primary" id="statsEnable" type="button">Turn on tracking</button>
             </div>`;
@@ -138,11 +172,11 @@
         const days = RANGES[range] || 1;
         // One read of the store covers both windows: the current one and the
         // total of the one before it, which is all the trend line needs.
-        const { now, previousTotal } = await BB.Activity.report(days);
+        const { now, previousTotal, week } = await BB.Activity.report(days);
         const previous = { total: previousTotal };
 
         body.innerHTML = `
-            <div class="stat-figures">${figures(now, previous, range)}</div>
+            <div class="stat-figures">${figures(now, previous, range, week)}</div>
             <div class="stat-grid">
                 <div class="stat-panel">
                     <h3>Where it went</h3>
@@ -151,8 +185,8 @@
                 </div>
                 <div class="stat-panel">
                     <h3>Longest page each day</h3>
-                    <p class="stat-sub">The single page you stayed on longest, day by day.</p>
-                    ${pages(now)}
+                    <p class="stat-sub">The single page you stayed on longest, the last 7 days, today first.</p>
+                    ${pages(week)}
                 </div>
             </div>
             <div class="stat-panel">

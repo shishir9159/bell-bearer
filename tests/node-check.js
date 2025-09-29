@@ -365,6 +365,47 @@ const dayRecord = (at = T0) =>
         eq(previousTotal, 40, 'the 7 days before those');
     });
 
+    await checkAsync('the page of the day is only answered for a week back', async () => {
+        const data = {};
+        seed(data, 2, { total: 60, hosts: { 'a.test': 60 }, top: { title: 'This week', host: 'a.test', seconds: 60 } });
+        seed(data, 9, { total: 900, hosts: { 'b.test': 900 }, top: { title: 'Last week', host: 'b.test', seconds: 900 } });
+        reset();
+        store[Activity.KEY] = data;
+
+        const month = await Activity.summary(30);
+        eq(month.total, 960, 'the older day still counts towards the totals');
+        eq(month.daily.length, 1, 'but it no longer names a page');
+        eq(month.daily[0].title, 'This week');
+        eq(month.longest.title, 'This week');
+    });
+
+    await checkAsync('report() carries the week the page panel draws', async () => {
+        const data = {};
+        seed(data, 0, { total: 60, hosts: { 'a.test': 60 }, top: { title: 'Today', host: 'a.test', seconds: 60 } });
+        seed(data, 4, { total: 30, hosts: { 'b.test': 30 }, top: { title: 'Midweek', host: 'b.test', seconds: 30 } });
+        reset();
+        store[Activity.KEY] = data;
+
+        const { now, week } = await Activity.report(1);
+        eq(now.days, 1, 'the range on screen is still today');
+        eq(week.daily.length, 2, 'the page panel gets the whole week whatever the range');
+        eq(week.daily[0].title, 'Today', 'newest day first');
+    });
+
+    await checkAsync('a tick drops the page titles that have aged out', async () => {
+        const data = {};
+        seed(data, 30, { total: 900, hosts: { 'b.test': 900 }, top: { title: 'Ancient', host: 'b.test', seconds: 900 } });
+        reset();
+        store[Activity.KEY] = data;
+
+        const old = Object.keys(data)[0];
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(30));
+
+        eq(store[Activity.KEY][old].top, null, 'the title is gone from storage, not just from the view');
+        eq(store[Activity.KEY][old].total, 900, 'the day itself is inside the 60-day window and stays');
+    });
+
     await checkAsync('an empty store summarises to zeroes', async () => {
         reset();
         const summary = await Activity.summary(7);
@@ -1382,6 +1423,53 @@ const dayRecord = (at = T0) =>
         eq(/fill="var\(--surface\)"/.test(html), true, 'the lozenge centre is punched out');
         eq(/fill="var\(--border-strong\)"/.test(Plate.cornersHtml('blocks')), true);
         eq(/#[0-9a-f]{3,6}/i.test(html), false, 'no literal colour anywhere');
+    });
+
+    // -------------------------------------------------- the annotated board
+
+    console.log('\n# the annotated keyboard');
+
+    const KeyboardWidget = require('../src/page/keyboard.js');
+
+    check('every binding finds the keycap it is actually on', () => {
+        const on = (id) => KeyboardWidget.kidOf(Keybindings.resolve(null, id));
+        eq(on('hop-mode'), 'KeyF');
+        eq(on('copy-markdown-link'), 'KeyL');
+        eq(on('record-checkpoint'), 'KeyB');
+        eq(on('chess-clear-arrows'), 'KeyC');
+        // Matched by the character its cap prints, since these have no code
+        // of their own that survives a layout change.
+        eq(on('speed-up'), 'Period', 'the > cap');
+        eq(on('speed-down'), 'Comma', 'the < cap');
+        eq(on('speed-reset'), 'Equal', 'the + cap');
+        // The three digit shortcuts share one label over the whole number row.
+        eq(on('skip-forward'), 'digits');
+        eq(on('skip-backward'), 'digits');
+        eq(on('speed-boost'), 'digits');
+    });
+
+    check('a rebound shortcut moves to its new keycap', () => {
+        const moved = Keybindings.resolve({ 'hop-mode': { combo: { code: 'KeyG', key: 'G' } } }, 'hop-mode');
+        eq(KeyboardWidget.kidOf(moved), 'KeyG', 'the label follows the binding');
+    });
+
+    check('an unbound keystroke has no cap to point at', () => {
+        eq(KeyboardWidget.kidOf({ kind: 'key', combo: { code: 'F13' } }), null);
+        eq(KeyboardWidget.kidOf({ kind: 'key', combo: {} }), null);
+    });
+
+    check('a cap knows which row it is on, which is the lane its label takes', () => {
+        eq(KeyboardWidget.rowOf('digits'), 0, 'the number row is annotated from above');
+        eq(KeyboardWidget.rowOf('KeyF'), 2, 'the home row from the sides');
+        eq(KeyboardWidget.rowOf('KeyB'), 3, 'the lower rows from below');
+    });
+
+    check('every scope on the tab strip is one the table knows', () => {
+        const scopes = KeyboardWidget.SCOPES.map((item) => item.id);
+        eq(scopes, ['general', 'youtube', 'chess', 'lichess']);
+        // Lichess borrows the Chess.com bindings, so it is the one tab with
+        // no scope of its own in the table.
+        eq(scopes.filter((id) => Keybindings.list(null, id).length === 0), ['lichess']);
     });
 
     // ------------------------------------------------------- site detection
