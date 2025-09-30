@@ -1569,6 +1569,12 @@ const dayRecord = (at = T0) =>
         eq(Skim.nextSource('actions'), 'page', 'cycling wraps');
     });
 
+    check('every action the list offers is one the worker can run', () => {
+        const worker = require('fs').readFileSync(`${__dirname}/../src/background/skim.js`, 'utf8');
+        for (const action of Skim.ACTIONS) {
+            eq(worker.includes(`'${action.id}'`), true, `${action.id} has no branch in the worker`);
+        }
+    });
 
     // ------------------------------------------------------- site detection
 

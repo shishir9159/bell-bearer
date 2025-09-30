@@ -9,6 +9,8 @@
     "activeTab",
     "scripting",
     "tabs",
+    "history",
+    "sessions",
     "tabGroups",
     "contextMenus",
     "clipboardWrite",
