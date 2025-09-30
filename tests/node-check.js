@@ -1493,6 +1493,83 @@ const dayRecord = (at = T0) =>
         eq(scopes.filter((id) => Keybindings.list(null, id).length === 0), ['lichess']);
     });
 
+    // ------------------------------------------------------------- skim
+
+    console.log('\n# skim — where the match lands');
+
+    const Skim = require('../src/shared/skim.js');
+
+    // A 900px window with a 260px launcher centred in it: the launcher runs
+    // from 320 to 580, so a match belongs at 620 — GAP below it.
+    const window900 = { viewport: 900, scrollMax: 4000, height: 260 };
+
+    check('the match is placed just under the launcher, not down the page', () => {
+        eq(Skim.landing('center', 900, 260), 620);
+        const out = Skim.plan({ ...window900, scrollTop: 0, target: 1620 });
+        eq(out.pos, 'center', 'the launcher does not move for an ordinary match');
+        eq(out.scrollTop, 1000, 'the page comes to the match, 620px down the window');
+        eq(out.moved, true);
+    });
+
+    check('a match already under the launcher does not move the page', () => {
+        const out = Skim.plan({ ...window900, scrollTop: 1000, target: 1622 });
+        eq(out.scrollTop, 1000);
+        eq(out.moved, false, 'moving the page under someone already looking at it is the worst case');
+        eq(out.note, 'already in place');
+    });
+
+    check('at the end of the page the launcher rises instead', () => {
+        const out = Skim.plan({ ...window900, scrollTop: 3900, target: 4800 });
+        eq(out.pos, 'top', 'there is no scroll left to spend');
+        eq(out.scrollTop, 4000, 'and the page stops at its own end');
+    });
+
+    check('at the top of the page the launcher drops', () => {
+        const out = Skim.plan({ ...window900, scrollTop: 0, target: 120 });
+        eq(out.pos, 'bottom');
+        eq(out.scrollTop, 0, 'a page that cannot scroll up is not asked to');
+    });
+
+    check('a match in a sticky panel moves the launcher, never the page', () => {
+        const high = Skim.plan({ ...window900, scrollTop: 500, target: 560, pinned: true });
+        eq(high.pos, 'bottom', 'the match is near the top, so the launcher goes low');
+        eq(high.scrollTop, 500, 'scrolling cannot move a sticky panel');
+        const low = Skim.plan({ ...window900, scrollTop: 500, target: 1300, pinned: true });
+        eq(low.pos, 'top');
+    });
+
+    console.log('\n# skim — the list');
+
+    check('hint labels are one character until the alphabet runs out', () => {
+        eq(Skim.hintLabels(3, 'fjd'), ['f', 'j', 'd']);
+        eq(Skim.hintLabels(4, 'fjd'), ['ff', 'jf', 'df', 'fj'],
+            'the first character is spread, so one keystroke clears most of the board');
+        eq(Skim.hintLabels(0, 'fjd'), []);
+        eq(Skim.hintLabels(2, '123'), ['f', 'j'], 'a set with no letters in it falls back');
+    });
+
+    check('two characters begin the match, one does nothing', () => {
+        const rows = [{ title: 'Latency budgets', sub: 'notes.example' }, { title: 'Inbox', sub: 'mail.example' }];
+        eq(Skim.filterRows(rows, 'l').length, 0);
+        eq(Skim.filterRows(rows, 'la').map((r) => r.title), ['Latency budgets']);
+        eq(Skim.filterRows(rows, 'example').length, 2, 'the subtitle counts too');
+    });
+
+    check('a snippet carries the line either side of the match', () => {
+        const out = Skim.snippet('the quick brown fox', 4, 5, 4);
+        eq(out.mid, 'quick');
+        eq(out.pre, 'the ');
+        eq(out.post, ' bro…');
+    });
+
+    check('the picked source leads and the rest still follow', () => {
+        const groups = Skim.SOURCES.map((source) => ({ source }));
+        eq(Skim.orderGroups(groups, 'history').map((g) => g.source),
+            ['history', 'page', 'tabs', 'actions']);
+        eq(Skim.nextSource('actions'), 'page', 'cycling wraps');
+    });
+
+
     // ------------------------------------------------------- site detection
 
     console.log('\n# site detection');
