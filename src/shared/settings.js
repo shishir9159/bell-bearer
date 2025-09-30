@@ -41,6 +41,15 @@
         // to; it is remembered so the sheet reopens the way it was left.
         pouchShowAllSubscribed: false,
 
+        // Skim: the search launcher (Shift+F page, Shift+H history, Shift+A
+        // actions) and the link hints (Shift+L). Both are off until asked
+        // for — they claim bare-Shift letters on every site, so they are not
+        // something to switch on for someone without being told. The keys
+        // themselves are bindings like any other; see shared/keybindings.js,
+        // whose `needs` field points back at these two keys.
+        skimMode: false,
+        linkHints: false,
+
         // Browser integration
         markdownContextMenu: true,
         connectToSowon: false,

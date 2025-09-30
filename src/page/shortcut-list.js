@@ -21,6 +21,14 @@
     const BROWSER_SHORTCUTS_URL = 'chrome://extensions/shortcuts';
 
     let overrides = {};
+    /**
+     * The settings that switch a whole feature on, for the bindings that name
+     * one in `needs`. A shortcut for a feature that is off is not listed and
+     * not drawn on the keyboard — turning Skim on in the section below is
+     * what makes its three keys appear.
+     */
+    let features = {};
+    const FEATURE_KEYS = ['skimMode', 'linkHints'];
     let editing = null; // { id }
     const mounts = [];
     const watchers = [];
@@ -87,7 +95,8 @@
     function renderAll() {
         for (const { container } of mounts) {
             const scope = container.dataset.shortcutScope;
-            container.innerHTML = Keybindings.list(overrides, scope).map((shortcut) => rowHtml(shortcut, commandKeys)).join('');
+            container.innerHTML = Keybindings.list(overrides, scope, features)
+                .map((shortcut) => rowHtml(shortcut, commandKeys)).join('');
         }
         announce();
     }
@@ -233,16 +242,24 @@
             container.addEventListener('change', onChange);
         });
 
-        const [values, commands] = await Promise.all([Settings.get(['shortcuts']), readCommands()]);
+        const [values, commands] = await Promise.all([
+            Settings.get(['shortcuts', ...FEATURE_KEYS]),
+            readCommands(),
+        ]);
         overrides = values.shortcuts || {};
+        features = pickFeatures(values);
         commandKeys = commands;
         renderAll();
 
-        Settings.watch(['shortcuts'], (changed) => {
-            overrides = changed.shortcuts || {};
+        Settings.watch(['shortcuts', ...FEATURE_KEYS], (changed) => {
+            if ('shortcuts' in changed) overrides = changed.shortcuts || {};
+            features = { ...features, ...pickFeatures(changed) };
             if (!editing) renderAll();
         });
     }
+
+    const pickFeatures = (values) => Object.fromEntries(
+        FEATURE_KEYS.filter((key) => key in values).map((key) => [key, values[key] === true]));
 
     root.BB = root.BB || {};
     root.BB.ShortcutList = {
@@ -253,6 +270,7 @@
         stopEditing,
         editingId: () => (editing ? editing.id : null),
         overrides: () => overrides,
+        features: () => features,
         watch: (fn) => { watchers.push(fn); },
     };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

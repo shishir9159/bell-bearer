@@ -778,6 +778,24 @@ const dayRecord = (at = T0) =>
         eq(claimed({ 'skip-forward': { enabled: false } }, press('Digit5', { alt: true })), []);
     });
 
+    check('a shortcut for a feature that is off is not listed at all', () => {
+        const ids = (settings) => Keybindings.list(null, 'general', settings).map((b) => b.id);
+        eq(ids({ skimMode: false, linkHints: false }), ['copy-markdown-link'],
+            'the bare-Shift keys are nobody else\'s until Settings asks for them');
+        eq(ids({ skimMode: true, linkHints: false }),
+            ['skim-find', 'skim-history', 'skim-actions', 'copy-markdown-link']);
+        eq(ids({ skimMode: true, linkHints: true }).includes('link-hints'), true);
+        eq(ids(null).length, 5, 'with no settings to check against, the table is the whole table');
+    });
+
+    check('every feature a binding needs is a setting that exists', () => {
+        const Settings = require('../src/shared/settings.js');
+        for (const binding of Keybindings.BINDINGS) {
+            if (!binding.needs) continue;
+            eq(binding.needs in Settings.DEFAULTS, true, `${binding.id} needs ${binding.needs}`);
+        }
+    });
+
     check('a rebound shortcut answers its new keys and no longer its old ones', () => {
         const overrides = { 'record-checkpoint': { combo: { alt: true, code: 'KeyK', key: 'k' } } };
         eq(claimed(overrides, press('KeyK', { alt: true, key: 'k' })), ['record-checkpoint']);
@@ -1433,7 +1451,10 @@ const dayRecord = (at = T0) =>
 
     check('every binding finds the keycap it is actually on', () => {
         const on = (id) => KeyboardWidget.kidOf(Keybindings.resolve(null, id));
-        eq(on('hop-mode'), 'KeyF');
+        eq(on('skim-find'), 'KeyF');
+        eq(on('skim-history'), 'KeyH');
+        eq(on('skim-actions'), 'KeyA');
+        eq(on('link-hints'), 'KeyL');
         eq(on('copy-markdown-link'), 'KeyL');
         eq(on('record-checkpoint'), 'KeyB');
         eq(on('chess-clear-arrows'), 'KeyC');
@@ -1449,7 +1470,7 @@ const dayRecord = (at = T0) =>
     });
 
     check('a rebound shortcut moves to its new keycap', () => {
-        const moved = Keybindings.resolve({ 'hop-mode': { combo: { code: 'KeyG', key: 'G' } } }, 'hop-mode');
+        const moved = Keybindings.resolve({ 'skim-find': { combo: { code: 'KeyG', key: 'G' } } }, 'skim-find');
         eq(KeyboardWidget.kidOf(moved), 'KeyG', 'the label follows the binding');
     });
 

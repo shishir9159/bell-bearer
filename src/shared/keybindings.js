@@ -8,6 +8,12 @@
  * as `{ [id]: { enabled?: false, combo?: {...} } }`; anything not in there is
  * the default.
  *
+ * A binding may also carry `needs`, the key of the setting that switches the
+ * whole feature on. Skim and the link hints are off until Settings turns them
+ * on, and a shortcut for something that is not running has no business on the
+ * keyboard map or in the list — so `list()` drops them when it is given the
+ * settings to check against.
+ *
  * A combo is `{ ctrl, shift, alt, meta, code, key }`. Three kinds of binding:
  *  - 'key'     the modifiers must match exactly and `code` names the physical
  *              key, so a shortcut survives a keyboard layout change;
@@ -24,7 +30,10 @@
     const SCOPES = Object.freeze({ general: 'General', youtube: 'YouTube', chess: 'Chess.com' });
 
     const BINDINGS = Object.freeze([
-        { id: 'hop-mode', scope: 'general', kind: 'key', label: 'Enter hop mode', combo: { shift: true, code: 'KeyF', key: 'F' } },
+        { id: 'skim-find', scope: 'general', kind: 'key', needs: 'skimMode', label: 'Skim — find within this page', combo: { shift: true, code: 'KeyF', key: 'F' } },
+        { id: 'skim-history', scope: 'general', kind: 'key', needs: 'skimMode', label: 'Skim — search browsing history', combo: { shift: true, code: 'KeyH', key: 'H' } },
+        { id: 'skim-actions', scope: 'general', kind: 'key', needs: 'skimMode', label: 'Skim — search browser actions', combo: { shift: true, code: 'KeyA', key: 'A' } },
+        { id: 'link-hints', scope: 'general', kind: 'key', needs: 'linkHints', label: 'Label every link for the keyboard', combo: { shift: true, code: 'KeyL', key: 'L' } },
         { id: 'copy-markdown-link', scope: 'general', kind: 'command', label: 'Copy this page as a Markdown link', combo: { ctrl: true, shift: true, code: 'KeyL', key: 'L' } },
 
         { id: 'record-checkpoint', scope: 'youtube', kind: 'key', label: 'Create checkpoint (hold and release)', combo: { ctrl: true, code: 'KeyB', key: 'b' } },
@@ -77,8 +86,21 @@
         };
     }
 
-    function list(overrides, scope) {
-        return BINDINGS.filter((binding) => !scope || binding.scope === scope).map((binding) => resolve(overrides, binding.id));
+    /**
+     * Is the feature behind this binding switched on? A binding with no
+     * `needs` always is. Called without settings — which is every caller that
+     * only wants the table — nothing is filtered out.
+     */
+    function available(binding, settings) {
+        if (!binding || !binding.needs) return true;
+        if (!settings) return true;
+        return settings[binding.needs] === true;
+    }
+
+    function list(overrides, scope, settings) {
+        return BINDINGS
+            .filter((binding) => (!scope || binding.scope === scope) && available(binding, settings))
+            .map((binding) => resolve(overrides, binding.id));
     }
 
     const CODE_LABELS = {
@@ -153,7 +175,7 @@
     }
 
     const Keybindings = {
-        SCOPES, BINDINGS, digitOf, modifiersMatch, matches, resolve, list,
+        SCOPES, BINDINGS, digitOf, modifiersMatch, matches, resolve, list, available,
         parts, format, signature, record, conflicts,
     };
 

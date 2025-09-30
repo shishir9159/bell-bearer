@@ -81,7 +81,10 @@
             { label: 'M', code: 'KeyM' },
             { label: '>', sub: '.', code: 'Period' }, { label: '<', sub: ',', code: 'Comma' },
             { label: '?', sub: '/', code: 'Slash' },
-            { icon: 'arrow-up-circle', mod: 'shift' },
+            // The right Shift is drawn but never lit. Two caps lighting for
+            // one modifier reads as two different keys being asked for, and
+            // the leader from the label only ever points at one of them.
+            { icon: 'arrow-up-circle' },
             { icon: 'arrow-up', cls: 'key__arrow', code: 'ArrowUp' },
             { icon: 'trash-2', code: 'Delete' },
         ],
@@ -138,9 +141,16 @@
 
     const scopeName = () => (SCOPES.find((item) => item.id === scope) || SCOPES[0]).name;
 
+    /**
+     * The bindings on this tab. A shortcut whose feature is switched off is
+     * not among them — the board is what the keyboard actually does right
+     * now, so turning Skim on in Settings is what makes its keys appear here.
+     */
     function shortcuts() {
-        const overrides = BB.ShortcutList ? BB.ShortcutList.overrides() : {};
-        return Keybindings.list(overrides, bindingScope());
+        const list = BB.ShortcutList;
+        const overrides = list ? list.overrides() : {};
+        const features = list && list.features ? list.features() : null;
+        return Keybindings.list(overrides, bindingScope(), features);
     }
 
     const editingId = () => (BB.ShortcutList ? BB.ShortcutList.editingId() : null);
