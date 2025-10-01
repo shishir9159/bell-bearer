@@ -31,7 +31,7 @@
     const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown,
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
         CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
-        Keybindings, SkimContent } = BB;
+        Keybindings, SkimContent, LinkHints } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -99,6 +99,16 @@
         ask: askWorker,
     });
 
+    const hints = LinkHints.createLinkHints({
+        openLink: (url) => askWorker({ action: 'skimOpenLink', url }),
+    });
+
+    /** Labels go up in the skin that is on, which may have changed since. */
+    async function openHints() {
+        hints.dress(await Theme.appearance());
+        hints.start();
+    }
+
     // --------------------------------------------------------- keyboard
 
     Shortcuts.install({
@@ -112,7 +122,7 @@
         stopRecording: () => recorder.stopRecording(),
         toggleSegment: () => recorder.toggleSegment(),
         openSkim: (source) => skim.show(source),
-        openHints: () => {},
+        openHints,
         featureOn: (key) => settings[key] === true,
     }, {
         canRecord: () => !!getVideo(),

@@ -1465,3 +1465,86 @@
     70% { box-shadow: 0 0 0 12px transparent; }
     100% { box-shadow: 0 0 0 0 transparent; }
 }
+
+/* ------------------------------------------------------------ link hints */
+
+.bb-hints {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483598;
+    display: none;
+    pointer-events: none;
+    font-family: var(--bb-font);
+}
+
+.bb-hints.is-on { display: block; }
+
+.bb-hint {
+    position: absolute;
+    padding: 2px 5px 3px;
+    font-family: var(--bb-font-head);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--bb-on-accent);
+    background: var(--bb-accent);
+    border: 1px solid var(--bb-border-strong);
+    /* A label is 12px tall, and the default skin’s 9px would round it into
+       a dot. Whichever is tighter: the skin keeps its square corners, the
+       round-cornered skin keeps a tag rather than a pill. */
+    border-radius: min(3px, var(--bb-r-sm));
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+
+/* The character already typed stays on the labels that survived it, so the
+   board reads as "these are the ones still in play". */
+.bb-hint b { font-weight: 700; opacity: .45; }
+
+.bb-hints-bar {
+    position: absolute;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    max-width: calc(100vw - 32px);
+    background: var(--bb-panel-solid);
+    color: var(--bb-text);
+    border: 1px solid var(--bb-border-strong);
+    border-radius: var(--bb-r-sm);
+    box-shadow: var(--bb-shadow);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.bb-hints-bar > span { padding: 8px 13px; }
+.bb-hints-bar > span + span { border-left: 1px solid var(--bb-border); }
+
+.bb-hints-title {
+    font-family: var(--bb-font-head);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--bb-on-accent);
+    background: var(--bb-accent);
+}
+
+.bb-hints-note { color: var(--bb-faint); }
+
+@media (max-width: 560px) {
+    /* The two asides are the first thing to go when there is no room. */
+    .bb-hints-note { display: none; }
+}
+
+.bb-hint-flash {
+    animation: bb-hint-flash 420ms ease-out 1;
+}
+
+@keyframes bb-hint-flash {
+    0% { background-color: var(--bb-skim-hit-on); }
+    100% { background-color: transparent; }
+}

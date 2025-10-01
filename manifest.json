@@ -54,6 +54,7 @@
         "src/content/player.js",
         "src/content/shortcuts.js",
         "src/content/skim.js",
+        "src/content/link-hints.js",
         "src/content/transcripts.js",
         "src/content/checkpoints.js",
         "src/content/markdown.js",
