@@ -64,7 +64,27 @@
         return { apply, stop: () => observer.disconnect() };
     }
 
-    const Theme = { pageTheme, isYouTubeDark, installYouTubeSync };
+    /**
+     * What to dress the next surface in: the skin the user picked, and the
+     * light/dark of the page it will sit on. Only the skin is a setting —
+     * see pageTheme above for why the theme is not.
+     */
+    async function appearance() {
+        const { skin } = await Settings.get(['skin']);
+        return { theme: pageTheme(), skin: skin || 'default' };
+    }
+
+    /**
+     * Dress an overlay in that. Every injected surface goes through here, so
+     * the two attributes are always set together and cannot drift apart.
+     */
+    function dress(element, { theme, skin }) {
+        element.classList.add('bb-themed');
+        element.dataset.bbTheme = theme;
+        element.dataset.bbSkin = skin;
+    }
+
+    const Theme = { pageTheme, isYouTubeDark, installYouTubeSync, appearance, dress };
 
     root.BB = root.BB || {};
     root.BB.Theme = Theme;

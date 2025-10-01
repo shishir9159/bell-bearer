@@ -91,26 +91,10 @@
         return !!(chrome.runtime && chrome.runtime.id);
     }
 
-    /**
-     * Dress an overlay in the current theme and skin. Every surface goes
-     * through this, so the two attributes are always set together and cannot
-     * drift apart.
-     */
-    function dress(element, { theme, skin }) {
-        element.classList.add('bb-themed');
-        element.dataset.bbTheme = theme;
-        element.dataset.bbSkin = skin;
-    }
-
-    /**
-     * What to dress the next surface in: the skin the user picked, and the
-     * light/dark of the page we are sitting on top of. Only the skin is a
-     * setting — see Theme.pageTheme for why the theme is not.
-     */
-    async function appearance() {
-        const { skin } = await Settings.get(['skin']);
-        return { theme: Theme.pageTheme(), skin: skin || 'default' };
-    }
+    // Dressing a surface and deciding what to dress it in both live in
+    // src/content/theme.js, so the launcher and the sheets cannot disagree.
+    const dress = (element, look) => Theme.dress(element, look);
+    const appearance = () => Theme.appearance();
 
     /**
      * Is this element actually drawn? Zero-sized and `display:none` nodes are
