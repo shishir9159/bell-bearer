@@ -60,7 +60,17 @@
         // Held or toggled bindings ignore auto-repeat: holding Ctrl+B must not
         // restart the recording, and a held Ctrl+Shift+S must not flip the
         // segment on and off.
+        // A shortcut whose feature is switched off is matched and then left
+        // alone — `enabled` false means the key goes back to the page, which
+        // is what a bare Shift+F must do when Skim is not turned on.
+        const feature = (name) => () => !!(actions.featureOn && actions.featureOn(name));
+
         const rows = [
+            ['skim-find', { enabled: feature('skimMode'), run: () => actions.openSkim('page') }],
+            ['skim-history', { enabled: feature('skimMode'), run: () => actions.openSkim('history') }],
+            ['skim-actions', { enabled: feature('skimMode'), run: () => actions.openSkim('actions') }],
+            ['link-hints', { enabled: feature('linkHints'), run: () => actions.openHints() }],
+
             ['record-checkpoint', { noRepeat: true, enabled: canRecord, run: () => actions.startRecording() }],
             ['segment-toggle', { noRepeat: true, enabled: canRecord, run: () => actions.toggleSegment() }],
             ['skip-forward', { enabled: hasVideo, run: (e) => actions.skip(digitOf(e)) }],

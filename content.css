@@ -743,14 +743,11 @@
    the palette and the type, `data-bb-theme` still follows the host page's
    own light/dark, so the overlay never fights the site it sits on.
 
-   Skin fonts need the files exposed to the page:
-
-     "web_accessible_resources": [{
-       "resources": ["fonts/*.woff2"],
-       "matches": ["https://*.youtube.com/*"]
-     }]
-
-   Without that they fall back to the stacks below and nothing breaks.
+   The faces themselves are declared in skin-fonts.css, which the manifest
+   loads alongside this file on every page, and fonts/*.woff2 is in
+   web_accessible_resources so the page is allowed to fetch them. A family
+   that ever went missing would fall back to the stacks below and nothing
+   would break.
    ============================================================ */
 
 /* ---- Riso Paint */
@@ -1218,3 +1215,253 @@
 }
 
 .bb-limit-blocked:hover { opacity: .6 !important; }
+
+/* ============================================================
+   Skim — the launcher over the page.
+
+   Every colour, radius and family below is a `--bb-*` token, so the window
+   wears whatever skin is on and follows the page's own light/dark, like the
+   rest of the injected UI.
+
+   The one thing that cannot: ::highlight() paints ranges in the page, and a
+   highlight pseudo-element resolves custom properties against the element it
+   is painted over — the page's, not ours. So the hit colours are declared on
+   :root instead, keyed off attributes src/content/skim.js puts on <html>
+   while the launcher is open and takes off again when it closes.
+   ============================================================ */
+
+:root {
+    --bb-skim-hit: rgba(184, 24, 8, .26);
+    --bb-skim-hit-on: #b81808;
+    --bb-skim-hit-on-text: #ffffff;
+}
+
+:root[data-bb-skim-theme="dark"] {
+    --bb-skim-hit: rgba(224, 51, 26, .34);
+    --bb-skim-hit-on: #e0331a;
+}
+
+:root[data-bb-skim-skin="riso"] {
+    --bb-skim-hit: rgba(255, 198, 11, .55);
+    --bb-skim-hit-on: #ff48b0;
+    --bb-skim-hit-on-text: #fffdf6;
+}
+
+:root[data-bb-skim-skin="medieval"] {
+    --bb-skim-hit: rgba(168, 121, 31, .34);
+    --bb-skim-hit-on: #9c2b16;
+    --bb-skim-hit-on-text: #f6ecd4;
+}
+
+:root[data-bb-skim-skin="deco"] {
+    --bb-skim-hit: rgba(185, 148, 71, .38);
+    --bb-skim-hit-on: #a67c2e;
+    --bb-skim-hit-on-text: #f7f3e8;
+}
+
+::highlight(bb-skim-hit) {
+    background-color: var(--bb-skim-hit);
+}
+
+::highlight(bb-skim-hit-active) {
+    background-color: var(--bb-skim-hit-on);
+    color: var(--bb-skim-hit-on-text);
+}
+
+.bb-skim {
+    position: fixed;
+    left: 50%;
+    top: 16px;
+    /* 600 is the width the launcher wants. A window narrower than that is
+       the only thing that changes it, and then it keeps a gutter either
+       side rather than running to the edges. */
+    width: 600px;
+    max-width: calc(100vw - 48px);
+    transform: translateX(-50%);
+    z-index: 2147483600;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: var(--bb-font);
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--bb-text);
+    background: var(--bb-panel-solid);
+    border: 1px solid var(--bb-border-strong);
+    border-radius: var(--bb-r);
+    box-shadow: var(--bb-shadow);
+    transition: top .18s cubic-bezier(.2, .8, .3, 1);
+}
+
+.bb-skim.is-open { display: flex; }
+
+@media (max-width: 560px) {
+    .bb-skim { max-width: calc(100vw - 24px); }
+}
+
+.bb-skim-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 56px;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--bb-border);
+}
+
+.bb-skim-caret {
+    font-family: var(--bb-font-head);
+    font-size: 22px;
+    line-height: 1;
+    color: var(--bb-accent);
+}
+
+.bb-skim-input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    outline: none;
+    font-family: var(--bb-font-head);
+    font-size: 22px;
+    letter-spacing: var(--bb-head-track);
+    color: var(--bb-text);
+}
+
+.bb-skim-input::placeholder { color: var(--bb-faint); }
+
+.bb-skim-count {
+    flex: none;
+    font-size: 12px;
+    color: var(--bb-faint);
+    white-space: nowrap;
+}
+
+.bb-skim-list {
+    position: relative;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.bb-skim-grouphead {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 18px 4px;
+    font-size: 10px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--bb-faint);
+    white-space: nowrap;
+}
+
+.bb-skim-rule {
+    flex: 1;
+    height: 1px;
+    background: var(--bb-border);
+}
+
+.bb-skim-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 34px;
+    padding: 0 18px;
+    cursor: pointer;
+}
+
+.bb-skim-row.is-on {
+    background: var(--bb-accent-soft);
+    box-shadow: inset 2px 0 0 var(--bb-accent);
+}
+
+.bb-skim-mark {
+    flex: none;
+    width: 14px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--bb-accent);
+}
+
+.bb-skim-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bb-skim-text b { font-weight: 700; }
+
+.bb-skim-crumb {
+    flex: none;
+    max-width: 34%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--bb-faint);
+}
+
+.bb-skim-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 20px 18px 24px;
+    color: var(--bb-sub);
+    font-size: 13px;
+}
+
+.bb-skim-empty b {
+    font-family: var(--bb-font-head);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--bb-text);
+}
+
+.bb-skim-foot {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    height: 38px;
+    padding: 0 18px;
+    border-top: 1px solid var(--bb-border);
+    background: var(--bb-chip);
+    font-size: 11px;
+    color: var(--bb-sub);
+}
+
+.bb-skim-rule-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bb-skim-keys {
+    margin-left: auto;
+    display: flex;
+    gap: 12px;
+    white-space: nowrap;
+    color: var(--bb-faint);
+}
+
+/* The match has just arrived: a ring that fades once. The highlight says
+   where it is; this says that the page moved to put it there. */
+.bb-skim-pulse {
+    position: fixed;
+    z-index: 2147483599;
+    pointer-events: none;
+    border-radius: 3px;
+}
+
+.bb-skim-pulse.is-on {
+    animation: bb-skim-pulse 900ms cubic-bezier(.2, .7, .3, 1) 1;
+}
+
+@keyframes bb-skim-pulse {
+    0% { box-shadow: 0 0 0 0 var(--bb-skim-hit-on); }
+    70% { box-shadow: 0 0 0 12px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+}

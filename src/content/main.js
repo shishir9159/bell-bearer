@@ -31,7 +31,7 @@
     const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown,
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
         CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
-        Keybindings } = BB;
+        Keybindings, SkimContent } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -72,6 +72,33 @@
 
     const markdown = Markdown.createMarkdown({ site, pageInfo: PageInfo });
 
+    // ------------------------------------------------------------- skim
+
+    /**
+     * One round trip to the worker, as a promise. Skim asks for tabs,
+     * history and the actions it cannot run itself; a worker that has been
+     * torn down by an extension reload answers nothing rather than throwing
+     * into the page.
+     */
+    function askWorker(message) {
+        return new Promise((done) => {
+            try {
+                chrome.runtime.sendMessage(message, (answer) => {
+                    void chrome.runtime.lastError;
+                    done(answer || null);
+                });
+            } catch (_) {
+                done(null);
+            }
+        });
+    }
+
+    const skim = SkimContent.createSkim({
+        notify,
+        appearance: () => Theme.appearance(),
+        ask: askWorker,
+    });
+
     // --------------------------------------------------------- keyboard
 
     Shortcuts.install({
@@ -84,6 +111,9 @@
         startRecording: () => recorder.startRecording(),
         stopRecording: () => recorder.stopRecording(),
         toggleSegment: () => recorder.toggleSegment(),
+        openSkim: (source) => skim.show(source),
+        openHints: () => {},
+        featureOn: (key) => settings[key] === true,
     }, {
         canRecord: () => !!getVideo(),
         getShortcut: (id) => Keybindings.resolve(settings.shortcuts, id),
