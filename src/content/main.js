@@ -127,6 +127,7 @@
     }, {
         canRecord: () => !!getVideo(),
         getShortcut: (id) => Keybindings.resolve(settings.shortcuts, id),
+        paused: () => skim.isOpen() || hints.isOn(),
     });
 
     player.attach();

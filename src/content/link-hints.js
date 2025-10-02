@@ -136,19 +136,20 @@
             if (!active) return;
             if (event.key === 'Escape') {
                 event.preventDefault();
-                event.stopPropagation();
+                event.stopImmediatePropagation();
                 stop();
                 return;
             }
             if (event.key === 'Backspace') {
                 event.preventDefault();
+                event.stopImmediatePropagation();
                 typed = typed.slice(0, -1);
                 draw();
                 return;
             }
             if (/^[a-z]$/i.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey) {
                 event.preventDefault();
-                event.stopPropagation();
+                event.stopImmediatePropagation();
                 type(typed + event.key.toLowerCase());
             }
         }
@@ -181,7 +182,11 @@
             layer.classList.add('is-on');
             draw();
 
-            document.addEventListener('keydown', onKey, true);
+            // At `window`, in the capture phase, for the same reason the
+            // shortcut dispatcher is: a site that binds a bare letter with a
+            // capture listener on window would otherwise run its own hotkey
+            // for the character being typed at a hint.
+            window.addEventListener('keydown', onKey, true);
             window.addEventListener('scroll', onScroll, true);
             window.addEventListener('resize', onScroll);
             window.addEventListener('blur', onScroll);
@@ -199,7 +204,7 @@
                 // things were, and the next Shift+L measures again anyway.
                 layer.querySelector('.bb-hints-marks').innerHTML = '';
             }
-            document.removeEventListener('keydown', onKey, true);
+            window.removeEventListener('keydown', onKey, true);
             window.removeEventListener('scroll', onScroll, true);
             window.removeEventListener('resize', onScroll);
             window.removeEventListener('blur', onScroll);

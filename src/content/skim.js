@@ -430,28 +430,58 @@
             if (rows[0] && rows[0].kind === 'page') select(0);
         }
 
+        /**
+         * Every key the launcher answers to, taken at `window` in the
+         * capture phase — the first place a keystroke can be seen.
+         *
+         * It used to be a listener on the input, which is the last place:
+         * plenty of sites bind Escape with a capture listener on window and
+         * stop it dead, so Escape reached the page's own handler and never
+         * reached ours, and the launcher would not close. Being first also
+         * means the arrows scroll our list rather than the page underneath.
+         */
         function onKey(event) {
-            if (event.key === 'Escape') {
+            if (!open) return;
+            const claim = () => {
                 event.preventDefault();
-                event.stopPropagation();
+                event.stopImmediatePropagation();
+            };
+
+            if (event.key === 'Escape') {
+                claim();
                 close();
             } else if (event.key === 'ArrowDown' || (event.ctrlKey && event.key.toLowerCase() === 'n')) {
-                event.preventDefault();
+                claim();
                 select(selected + 1);
             } else if (event.key === 'ArrowUp' || (event.ctrlKey && event.key.toLowerCase() === 'p')) {
-                event.preventDefault();
+                claim();
                 select(selected - 1);
             } else if (event.key === 'Enter') {
-                event.preventDefault();
+                claim();
                 activate(rows[selected]);
             } else if (event.key === 'Tab') {
-                event.preventDefault();
+                claim();
                 source = Skim.nextSource(source);
                 selected = 0;
                 asked = null;
                 refreshRemote();
                 draw();
                 place();
+            } else if (event.target !== input && !event.ctrlKey && !event.altKey && !event.metaKey) {
+                // The page can take the focus back from under us — YouTube
+                // does it on navigation. A printable key then belongs to the
+                // query, so it is put there by hand rather than lost.
+                if (event.key.length === 1) {
+                    claim();
+                    input.value += event.key;
+                    input.focus();
+                    onInput();
+                } else if (event.key === 'Backspace') {
+                    claim();
+                    input.value = input.value.slice(0, -1);
+                    input.focus();
+                    onInput();
+                }
             }
         }
 
@@ -488,7 +518,6 @@
             footer = panel.querySelector('.bb-skim-rule-text');
 
             input.addEventListener('input', onInput);
-            input.addEventListener('keydown', onKey);
             panel.addEventListener('mousedown', (event) => {
                 const row = event.target.closest('[data-row]');
                 if (!row) return;
@@ -538,6 +567,7 @@
             }
             dressRoot(true);
             open = true;
+            window.addEventListener('keydown', onKey, true);
             query = '';
             selected = 0;
             pos = 'center';
@@ -555,6 +585,7 @@
         function close() {
             if (!open) return;
             open = false;
+            window.removeEventListener('keydown', onKey, true);
             clearHits();
             dressRoot(false);
             clearTimeout(debounce);

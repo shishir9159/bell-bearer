@@ -98,9 +98,14 @@
      */
     function install(actions, options = {}) {
         const bindings = createBindings(actions, options);
+        // While one of our own overlays is up it owns the keyboard, down to
+        // the bare letters a hint label is made of. Without this the
+        // dispatcher, which is registered first, would run a shortcut for
+        // the character being typed at a hint.
+        const paused = options.paused || (() => false);
 
         const onKeyDown = (event) => {
-            if (isTypingTarget(event)) return;
+            if (paused() || isTypingTarget(event)) return;
 
             for (const binding of bindings) {
                 if (!binding.match(event)) continue;
@@ -128,14 +133,21 @@
         // leave the recording indicator up for good.
         const onInterrupt = () => actions.stopRecording();
 
-        document.addEventListener('keydown', onKeyDown, true);
-        document.addEventListener('keyup', onKeyUp, true);
+        // On `window`, not `document`, and in the capture phase — which is
+        // the very first point a keystroke can be seen. A site that binds its
+        // own hotkey with `window.addEventListener('keydown', fn, true)` was
+        // otherwise ahead of us: Shift+L reached the page's plain-L handler
+        // and ran it, because a capture listener on document cannot stop one
+        // that has already fired on window. Everything the dispatcher claims
+        // now stops there.
+        window.addEventListener('keydown', onKeyDown, true);
+        window.addEventListener('keyup', onKeyUp, true);
         window.addEventListener('blur', onInterrupt);
         document.addEventListener('visibilitychange', onInterrupt);
 
         return function uninstall() {
-            document.removeEventListener('keydown', onKeyDown, true);
-            document.removeEventListener('keyup', onKeyUp, true);
+            window.removeEventListener('keydown', onKeyDown, true);
+            window.removeEventListener('keyup', onKeyUp, true);
             window.removeEventListener('blur', onInterrupt);
             document.removeEventListener('visibilitychange', onInterrupt);
         };
