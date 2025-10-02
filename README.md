@@ -22,6 +22,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Persistent Storage**: Persist Bookmarks across browser sessions
 - **Import/Export**: One file with every setting and all saved data, from the dashboard header
 - **Topics overlay**: A frosted sheet over YouTube — topic rail, thumbnail grid, time range and sort
+- **Skim**: A launcher over any page — find within it, reach a tab, your history or a browser action, and label every link for the keyboard
 - **Skins**: Default, Riso Paint, Medieval and Art Deco, each with its own day and night
 - **Activity**: Opt-in, on-device record of where your screen time goes
 - **Chess.com and Lichess**: Games, time management and time at the board; a clock warning and moves read aloud while you play
@@ -78,6 +79,10 @@ while you are typing in a field.
 | `<` | Previous speed step |
 | `+` | Back to 1x |
 | `Ctrl + Shift + L` | Copy the page as a Markdown link (rebindable at `chrome://extensions/shortcuts`) |
+| `Shift + F` | Skim: find within this page |
+| `Shift + H` | Skim: search your browsing history |
+| `Shift + A` | Skim: search the actions it can run |
+| `Shift + L` | Label every link and button in view |
 
 Speed steps through one fixed ladder — 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2,
 2.25, 2.5, 3, 3.5, 4, 5 — and the popup's buttons step the same ladder, so the
@@ -85,6 +90,45 @@ two controls always agree. When a site resets the rate (a new video, an ad
 break) the speed you picked is re-applied; when *you* change it through the
 site's own speed menu, that becomes the new setting instead. Turn the re-apply
 off with **Keep my playback speed** in Settings.
+
+## Skim
+
+Off until **Settings › Skim** turns it on, because it claims three bare-Shift
+letters on every site.
+
+One window, 600px wide and centred, over whatever page you are on. The key you
+open it with decides which source it opens on — `Shift + F` the page itself,
+`Shift + H` your history, `Shift + A` the actions it can run — and every other
+source is still listed underneath, because a word typed to find a tab often
+turns out to be on the page. Tab moves to the next source. The list shows four
+rows at a time and scrolls for the rest. A window narrower than 600px is the
+only thing that changes its width, and then it keeps a gutter either side.
+
+Arrowing through page matches scrolls each one to rest just below the window,
+close enough to read in the same glance as the query that found it. Browser
+find parks a match wherever the scroll happens to land; this reserves the strip
+the window covers and places the match under it. A match inside a collapsed
+`<details>` opens it first, one inside a scrolling panel scrolls that panel
+first, and a match in a sticky header cannot be scrolled to at all — so there
+the window steps aside to the opposite edge instead. At the very top or bottom
+of a page, where there is no scroll left to spend, the window moves rather than
+the page.
+
+Nothing in the page is rewritten to highlight a match. Matches are painted with
+the CSS Custom Highlight API, which draws over ranges without touching the DOM,
+so no listener the page installed is ever replaced. Where the browser does not
+have it, the search and the scrolling still work and only the paint is missing.
+
+**Link hints** are the other half, switched on separately. `Shift + L` labels
+every link, button, field and card in view; type a label and it fires. A link
+opens in a tab immediately beside this one, so the page you were reading stays
+put; anything else is clicked or focused where it stands. A label that cannot
+match what has been typed so far disappears, and the character already typed
+stays on the ones that survived. Scrolling ends hint mode, and so does Escape —
+the labels are placed from where things were, and a label pointing at the wrong
+thing is worse than no label.
+
+Both wear the skin that is on and follow the host page's own light or dark.
 
 ## Skins
 
@@ -103,12 +147,13 @@ On the page itself the skin sets the palette and the type, but light/dark keeps
 following YouTube's own setting, so a sheet over a dark YouTube is never a
 white slab.
 
-The display faces are **not bundled** — all are SIL OFL, so download the woff2
-files from fonts.google.com into `fonts/` under the names listed at the top of
-`skin-fonts.css`. Without them every skin still works and simply falls back to
-a system stack. The injected UI additionally needs `fonts/*.woff2` in
-`web_accessible_resources` before a page-side skin font can load; the fallback
-is what ships today.
+The display faces ship with the extension, in `fonts/`: the same Cardo, Grenze,
+UnifrakturMaguntia, Josefin Sans, Poiret One and Space Grotesk subsets the
+design export was served, unpacked out of it so a skin looks here as it does
+there. All are SIL OFL. Only the latin and latin-ext cuts are kept, and
+anything outside them falls back to the stack named in `skins.css`. The same
+faces reach the injected UI, which is why `skin-fonts.css` is a content-script
+stylesheet and `fonts/*.woff2` is in `web_accessible_resources`.
 
 ## Activity
 
@@ -125,8 +170,10 @@ when the time went.
 
 It buckets by hostname across every http(s) site — nothing about it is
 YouTube-specific. Everything stays in `chrome.storage.local` on this machine,
-is never sent anywhere, is pruned past 60 days, and the only per-URL thing kept
-is the title of each day's single longest page.
+is never sent anywhere and is pruned past 60 days. The only per-URL thing kept
+is the title of each day’s single longest page, and that is kept for 7 days,
+not 60 — which is also the window the “longest page each day” panel shows,
+rolling back from today whatever range the rest of the view is on.
 
 A 30-second alarm in the service worker takes the readings, and it exists only
 while tracking is on — nothing is woken while the setting is off. Each reading
@@ -195,12 +242,15 @@ src/shared/     pure logic, used by every surface
   lichess.js       Lichess games, streamed and resumable
   feed.js          channel RSS, cached ten minutes; Refresh asks for fresh
                    resolves /@handle to a UC id by the page's canonical link
+  skim.js          where a match comes to rest, and the action table
   time.js dom.js   formatting and escaping
 
 src/content/    injected into every page
   main.js          bootstrap — decides what runs where
   player.js        speed, skipping, seeking, the temporary boost
   shortcuts.js     the keybinding table
+  skim.js          the launcher: page search, the jump, the result list
+  link-hints.js    a label on every link and button in view
   checkpoints.js   recording and saving checkpoints
   transcripts.js   transcript fetching and caching
   site.js          which site, and which <video> on it
@@ -215,6 +265,7 @@ src/background/ the service worker, pulled in by background.js
   context-menus.js "Copy as Markdown"
   commands.js      keyboard commands and messages, chess moves spoken
   activity-heartbeat.js  the alarm that feeds the activity store
+  skim.js          tabs, history, and the actions Skim can run
 
 src/page/       shared by popup.html and dashboard.html
   ui.js            modals, toasts, clipboard, files, theme
@@ -229,7 +280,8 @@ src/page/       shared by popup.html and dashboard.html
   popup-width.js   applies the popup size setting, from popup.html's <head>
 
 skins.css       the token layer for every skin — linked before popup/dashboard css
-skin-fonts.css  @font-face for the skin families (files not bundled; see Skins)
+skin-fonts.css  @font-face for the skin families
+fonts/          the woff2 subsets those faces load
 textures/       parchment, newsprint and grain tiles used by the skins
 
 tests/          zero-dependency browser test suite — see tests/README.md
@@ -256,6 +308,7 @@ Importing writes those keys back, replacing what is there.
 - `contextMenus`: For the "Copy as Markdown" right-click items
 - `tabs` / `tabGroups`: For the sowon focus report
 - `tts`: To read chess moves aloud (Chrome only; Firefox has no such API)
+- `history` / `sessions`: Skim’s history search and its “reopen the last tab I closed” action, both read only when you ask for them
 - `host_permissions`: To access YouTube.com
 
 ## Persistance Storage
