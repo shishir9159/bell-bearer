@@ -5,6 +5,15 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* The browser's own `[hidden] { display: none }` is a UA rule, so any class
+   rule here that sets a display beats it on origin alone — and the element
+   stays on screen with the attribute set. Every surface that toggles
+   `hidden` in JS was patching that one selector at a time (and the popup's
+   limit-override button was the one that got missed: it drew an empty box
+   left of Dashboard for anyone with no daily limit). One rule, said once,
+   for all of them. */
+[hidden] { display: none !important; }
+
 body {
     font-family: var(--font);
     background: var(--bg);
@@ -166,12 +175,6 @@ header h1 {
     gap: 16px;
 }
 
-/* The browser's own `[hidden] { display: none }` loses to the class rule
-   above on specificity ties broken by source order — dashboard.css loads
-   after the UA sheet — so toggling `.hidden` in JS did nothing until this
-   said so explicitly. Same fix as .range-seg[hidden] further down. */
-.sites-grid[hidden] { display: none; }
-
 /* No name, no description — just the mark, filling the card. The card's own
    footprint is unchanged from when it carried a name and a description
    underneath (fixed min-height rather than shrink-to-fit), so the grid looks
@@ -242,7 +245,6 @@ header h1 {
 }
 
 .site-subtabs { display: flex; gap: 4px; margin-left: auto; }
-.site-subtabs[hidden] { display: none; }
 
 .site-subtab {
     background: var(--surface-2);
@@ -1460,12 +1462,6 @@ header h1 {
    Tokens only; every skin dresses it for free.
    ============================================================ */
 
-/* The range control belongs to the figures, so it is hidden with them while
-   tracking is off. `display: flex` below and the browser's own `[hidden]`
-   rule have equal specificity, and ours is an author rule, so it wins — the
-   hidden attribute does nothing here unless this says otherwise. */
-.range-seg[hidden] { display: none; }
-
 /* The invitation shown in place of the figures. .empty-state sets the type;
    this is only the space its button needs. */
 #statsBody .empty-state p { max-width: 46ch; margin: 0 auto; }
@@ -2379,3 +2375,4 @@ body[data-skin="deco"] .bb-plate {
     border-radius: var(--r-pill);
     background: var(--text-faint);
 }
+

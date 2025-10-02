@@ -6,6 +6,15 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* The browser's own `[hidden] { display: none }` is a UA rule, so any class
+   rule here that sets a display beats it on origin alone — and the element
+   stays on screen with the attribute set. Every surface that toggles
+   `hidden` in JS was patching that one selector at a time (and the popup's
+   limit-override button was the one that got missed: it drew an empty box
+   left of Dashboard for anyone with no daily limit). One rule, said once,
+   for all of them. */
+[hidden] { display: none !important; }
+
 /* Preferred popup width. A browser action popup has no resizable viewport —
    Chrome and Firefox both size the popup to the document and cap it at
    800x600 — so the layout is chosen by asking for a width, never by measuring
@@ -204,7 +213,6 @@ header h1 {
     border-bottom: 1px solid var(--border);
 }
 
-.speed-control-bar[hidden] { display: none; }
 
 /* The speed icon. It paints with currentColor, so it takes the skin's accent
    ink the way the other controls on an accent-soft ground do, and follows a
@@ -527,12 +535,8 @@ header h1 {
 
 /* #youtubePanel wraps .main-content and .instructions without a box of its
    own — `display: contents` — so they still take part directly in .container's
-   flex column exactly as when they sat in it unwrapped. The [hidden] override
-   is needed because a plain class/id rule outranks the browser's own
-   `[hidden] { display: none }` on a specificity tie broken by source order;
-   see .sites-grid[hidden] in dashboard.css for the same fix. */
+   flex column exactly as when they sat in it unwrapped. */
 #youtubePanel { display: contents; }
-#youtubePanel[hidden] { display: none; }
 
 /* A site with no panel of its own is the header alone, so the popup shrinks
    to it instead of standing 600px tall around nothing. */
@@ -546,7 +550,6 @@ body[data-bb-site]:not([data-bb-site="youtube"]):not([data-bb-site="chess"]):not
 /* Never scrolls: the panel is exactly the popup's height, the last section
    (Recent) takes whatever is left, and its pills are cut to fit with a "…". */
 .chess-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
-.chess-panel[hidden] { display: none; }
 
 .chess-pop-body { flex: 1; min-height: 0; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 
