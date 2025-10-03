@@ -50,6 +50,15 @@
         skimMode: false,
         linkHints: false,
 
+        // Daily time limits on the two sites that take an afternoon without
+        // anyone deciding to spend one. Off, and counting nothing, until a
+        // limit is set; the tally is kept for the current day only. See
+        // src/shared/time-limits.js, which owns the key names below.
+        twitterDailyLimit: false,
+        twitterLimitMinutes: 30,
+        redditDailyLimit: false,
+        redditLimitMinutes: 30,
+
         // Browser integration
         markdownContextMenu: true,
         connectToSowon: false,
@@ -171,6 +180,10 @@
         // Trials: a named task and the tab group standing in for it.
         // shared/trials.js owns the shape.
         trials: 'bbTrials',
+
+        // Seconds spent on x.com and reddit.com today, and nothing older
+        // than today. shared/time-limits.js owns the shape.
+        timeLimits: 'bbTimeLimits',
     });
 
     function withDefaults(stored, keys) {

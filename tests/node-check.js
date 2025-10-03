@@ -1493,6 +1493,106 @@ const dayRecord = (at = T0) =>
         eq(scopes.filter((id) => Keybindings.list(null, id).length === 0), ['lichess']);
     });
 
+    // ------------------------------------------------- daily time limits
+
+    console.log('\n# daily time limits');
+
+    const TimeLimits = require('../src/shared/time-limits.js');
+
+    const A_DAY = 864e5;
+    const noon = new Date('2026-03-14T12:00:00').getTime();
+
+    // A tally straight into the store. add() caps a single credit, which is
+    // the right thing for a real one and no way to set up an afternoon.
+    const spent = (siteId, seconds, when = noon) => ({
+        day: TimeLimits.dayKey(when),
+        seconds: { twitter: 0, reddit: 0, [siteId]: seconds },
+    });
+
+    check('the two sites are the ones detectSite already names', () => {
+        eq(TimeLimits.ids(), ['twitter', 'reddit']);
+        eq(TimeLimits.get('twitter').host, 'x.com');
+        eq(TimeLimits.get('youtube'), null, 'no limit is offered on a site that has no row');
+    });
+
+    check('yesterday is discarded whole, not aged out', () => {
+        const yesterday = spent('twitter', 600, noon - A_DAY);
+        eq(TimeLimits.forDay(yesterday, noon - A_DAY).seconds.twitter, 600);
+        const today = TimeLimits.forDay(yesterday, noon);
+        eq(today.seconds.twitter, 0, 'the store is one day deep by design');
+        eq(today.day, TimeLimits.dayKey(noon));
+    });
+
+    check('time adds up, and a single credit is capped', () => {
+        let state = TimeLimits.blank(noon);
+        state = TimeLimits.add(state, 'reddit', 15, noon);
+        state = TimeLimits.add(state, 'reddit', 15, noon);
+        eq(state.seconds.reddit, 30);
+        // A laptop lid closed for three hours reports one enormous gap; the
+        // cap is what stops the night being charged to the morning.
+        state = TimeLimits.add(state, 'reddit', 3 * 3600, noon);
+        eq(state.seconds.reddit, 30 + TimeLimits.MAX_CREDIT);
+        eq(TimeLimits.add(state, 'reddit', -5, noon).seconds.reddit, 30 + TimeLimits.MAX_CREDIT,
+            'a negative gap credits nothing');
+    });
+
+    check('a site with the switch off, or no minutes, has no limit at all', () => {
+        const state = spent('twitter', 4000);
+        const off = TimeLimits.statusFor(state, { twitterDailyLimit: false, twitterLimitMinutes: 30 }, 'twitter', noon);
+        eq(off.on, false);
+        eq(off.blocked, false, 'nothing is blocked by a limit nobody set');
+        eq(off.spent, 4000, 'but what was spent is still there to show');
+
+        // Zero reads as "no limit", not as "blocked from the first second":
+        // a limit that bites the moment it is switched on looks like a bug.
+        const zero = TimeLimits.statusFor(state, { twitterDailyLimit: true, twitterLimitMinutes: 0 }, 'twitter', noon);
+        eq(zero.on, false);
+        eq(zero.blocked, false);
+    });
+
+    check('the block lands when the day is spent, not before', () => {
+        const settings = { redditDailyLimit: true, redditLimitMinutes: 30 };
+        const under = spent('reddit', 1700);
+        eq(TimeLimits.statusFor(under, settings, 'reddit', noon).blocked, false);
+        eq(TimeLimits.statusFor(under, settings, 'reddit', noon).remaining, 100);
+
+        const over = TimeLimits.add(under, 'reddit', 100, noon);
+        const status = TimeLimits.statusFor(over, settings, 'reddit', noon);
+        eq(status.blocked, true);
+        eq(status.remaining, 0);
+        eq(status.allowed, 1800);
+    });
+
+    check('a tally from another day cannot block today', () => {
+        const yesterday = spent('reddit', 9999, noon - A_DAY);
+        const status = TimeLimits.statusFor(yesterday, { redditDailyLimit: true, redditLimitMinutes: 30 }, 'reddit', noon);
+        eq(status.spent, 0);
+        eq(status.blocked, false);
+    });
+
+    check('the tally goes at local midnight', () => {
+        const midnight = TimeLimits.resetsAt(noon);
+        eq(new Date(midnight).getDate(), new Date(noon + A_DAY).getDate());
+        eq(new Date(midnight).getHours(), 0);
+        eq(midnight > noon, true);
+    });
+
+    check('durations read the way a person would say them', () => {
+        eq(TimeLimits.human(0), '0s');
+        eq(TimeLimits.human(45), '45s');
+        eq(TimeLimits.human(1800), '30m');
+        eq(TimeLimits.human(3600), '1h');
+        eq(TimeLimits.human(4500), '1h 15m');
+    });
+
+    check('every settings key a site names is a setting that exists', () => {
+        const Settings = require('../src/shared/settings.js');
+        for (const site of TimeLimits.list()) {
+            eq(site.onKey in Settings.DEFAULTS, true, site.onKey);
+            eq(site.minutesKey in Settings.DEFAULTS, true, site.minutesKey);
+        }
+    });
+
     // ------------------------------------------------------------- skim
 
     console.log('\n# skim — where the match lands');
