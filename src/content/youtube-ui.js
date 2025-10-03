@@ -269,14 +269,37 @@
          * matters. Following one puts its new entries in the strip at the
          * bottom of the pouch sheet.
          */
+        /**
+         * Kept armed for a few passes after it has placed the button, rather
+         * than finishing the moment it has.
+         *
+         * Opening the playlist from a video inside it is an SPA navigation
+         * that leaves the watch page's own playlist panel in the document —
+         * with our button still in it — while the /playlist header is built
+         * alongside. Finishing at the first sight of the button meant it was
+         * declared done while sitting in the panel of the page you had just
+         * left, and the playlist page got none until a reload. So each pass
+         * re-checks that the button is in the header that is on screen now,
+         * and moves it when it is not.
+         */
+        const PLAYLIST_SETTLE = 20;
+        let playlistTries = 0;
+
         function injectPlaylistButton(href) {
             const playlistId = currentPlaylistId(href);
-            if (!playlistId) return true; // nothing to follow on this page
-
-            if (document.getElementById(PLAYLIST_BUTTON_ID)) return true;
+            const existing = document.getElementById(PLAYLIST_BUTTON_ID);
+            if (!playlistId) {
+                if (existing) existing.remove(); // followed something, then left
+                return true;
+            }
 
             const header = firstMatch(PLAYLIST_HEADER_SELECTORS);
-            if (!header) return false;
+            if (!header) return ++playlistTries >= PLAYLIST_SETTLE;
+
+            if (existing && existing.dataset.playlistId === playlistId && header.contains(existing)) {
+                return ++playlistTries >= PLAYLIST_SETTLE;
+            }
+            if (existing) existing.remove();
 
             const button = document.createElement('button');
             button.id = PLAYLIST_BUTTON_ID;
@@ -292,7 +315,8 @@
 
             header.appendChild(button);
             markPlaylistButton();
-            return true;
+            playlistTries = 0;
+            return false;
         }
 
         /**
@@ -369,23 +393,37 @@
          * `#sections` read as a stray heading above the nav instead of an item
          * in it.
          *
-         * YouTube streams the drawer in, so the first section can be one or
-         * two items short on the first few passes. Returning false leaves the
-         * task armed and the watcher tries again on the next mutation. After
-         * GUIDE_ATTEMPTS passes we take whatever slot exists: a signed-out
-         * drawer, or one with Shorts turned off, may never reach three.
+         * YouTube streams the drawer in, so the first section is one or two
+         * items short on the first few passes. This used to wait for the
+         * third slot to exist before drawing anything, which is why the entry
+         * arrived visibly late — a dozen mutation frames after the drawer
+         * itself. It goes in immediately now, at whatever slot there is, and
+         * each later pass slides it back to third as YouTube's own rows
+         * arrive. The task settles once the drawer has stopped growing, or
+         * after GUIDE_ATTEMPTS passes: a signed-out drawer, or one with
+         * Shorts turned off, may never reach three items at all.
          */
         const GUIDE_ATTEMPTS = 12;
         let guideTries = 0;
 
-        function injectGuideEntry() {
-            const sections = document.querySelector('ytd-guide-renderer #sections');
-            if (!sections) return false;
-            if (document.getElementById(GUIDE_ID)) return true;
+        /** Third among YouTube's own rows, ours not counted. */
+        function guideSlot(items, entry) {
+            const theirs = Array.prototype.filter.call(items.children, (node) => node !== entry);
+            return theirs[2] || null;
+        }
 
-            const items = sections.querySelector('ytd-guide-section-renderer #items');
+        function injectGuideEntry() {
+            const items = document.querySelector('ytd-guide-renderer #sections ytd-guide-section-renderer #items');
             if (!items) return false;
-            if (items.children.length < 3 && ++guideTries < GUIDE_ATTEMPTS) return false;
+
+            const placed = document.getElementById(GUIDE_ID);
+            if (placed) {
+                const slot = guideSlot(items, placed);
+                if (placed.parentElement !== items || placed.nextElementSibling !== slot) {
+                    items.insertBefore(placed, slot);
+                }
+                return items.children.length > 3 || ++guideTries >= GUIDE_ATTEMPTS;
+            }
             guideTries = 0;
 
             const entry = document.createElement('div');
@@ -421,8 +459,8 @@
                 open();
             });
 
-            items.insertBefore(entry, items.children[2] || null);
-            return true;
+            items.insertBefore(entry, guideSlot(items, entry));
+            return false;
         }
 
         // ---------------------------------------------------- topics sheet
@@ -664,19 +702,15 @@
 
             if (!document.getElementById(GUIDE_ID)) watcher.add('guide-entry', injectGuideEntry);
 
-            // The playlist button is torn out rather than re-marked: a watch
-            // page reached from a different playlist keeps the old panel
-            // element, and following one list while looking at another is the
-            // kind of bug nobody notices until the wrong thing is followed.
-            const playlistButton = document.getElementById(PLAYLIST_BUTTON_ID);
-            if (playlistButton && playlistButton.dataset.playlistId !== currentPlaylistId()) {
-                playlistButton.remove();
-            }
-            if (!document.getElementById(PLAYLIST_BUTTON_ID)) {
-                watcher.add('playlist-button', injectPlaylistButton);
-            } else {
-                markPlaylistButton();
-            }
+            // Always re-armed rather than re-marked. The task itself decides
+            // whether the button is in the right header for the right
+            // playlist, which is more than "is there one in the document" can
+            // tell you: a watch page reached from a different list keeps the
+            // old panel, and following one list while looking at another is
+            // the kind of bug nobody notices until the wrong thing is
+            // followed.
+            playlistTries = 0;
+            watcher.add('playlist-button', injectPlaylistButton);
         }
 
         // injectGuideEntry is returned so a test can place the entry without

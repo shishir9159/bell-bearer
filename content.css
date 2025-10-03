@@ -1027,6 +1027,16 @@
     margin: 6px 8px;
     padding: 0 14px;
     height: 32px;
+    /* The /playlist header lays its actions out in a column, and a flex item
+       in one is stretched to the container's width unless it says otherwise —
+       which is how the button ended up a full-width slab. These four pin it
+       to its own content whichever way the row it lands in happens to run,
+       including the grid YouTube uses on the watch page's panel. */
+    align-self: center;
+    justify-self: start;
+    flex: 0 0 auto;
+    width: fit-content;
+    max-width: 100%;
     border-radius: 16px;
     font-family: 'Roboto', 'Arial', sans-serif;
     font-size: 13px;

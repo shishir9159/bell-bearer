@@ -64,7 +64,7 @@ suite('youtube drawer entry', () => {
     test('lands third, after Home and Shorts', () => {
         drawer(3);
         try {
-            assert(makeUi().injectGuideEntry() === true, 'placing it should finish the task');
+            makeUi().injectGuideEntry();
             assertDeepEqual(labels(),
                 ['Home', 'Shorts', 'bb-guide-entry', 'Subscriptions']);
         } finally { teardown(); }
@@ -103,34 +103,39 @@ suite('youtube drawer entry', () => {
         } finally { teardown(); }
     });
 
-    test('waits rather than settling for second place while the drawer fills in', () => {
+    test('appears at once on a half-built drawer, and slides back to third', () => {
         // YouTube streams the drawer; on the first pass only Home may exist.
-        // Taking that slot would leave the entry sitting second for good.
+        // Waiting for the third slot to exist before drawing anything is what
+        // made the row arrive visibly late, so it goes in wherever it fits and
+        // is moved as the rest turn up.
         drawer(1);
         try {
             const ui = makeUi();
-            assertEqual(ui.injectGuideEntry(), false, 'not enough items yet — try again later');
-            assertEqual(document.getElementById('bb-guide-entry'), null);
+            assertEqual(ui.injectGuideEntry(), false, 'placed, but still watching');
+            assertDeepEqual(labels(), ['Home', 'bb-guide-entry'],
+                'it is on screen from the first pass');
 
-            // The rest arrive, and now it takes its place.
+            // The rest arrive, around it.
             firstSection()[0].insertAdjacentHTML('afterend',
                 '<ytd-guide-entry-renderer>Shorts</ytd-guide-entry-renderer>' +
                 '<ytd-guide-entry-renderer>Subscriptions</ytd-guide-entry-renderer>');
-            assertEqual(ui.injectGuideEntry(), true);
+            assertEqual(ui.injectGuideEntry(), true, 'the drawer is full, so the task is done');
             assertDeepEqual(labels(), ['Home', 'Shorts', 'bb-guide-entry', 'Subscriptions']);
+            assertEqual(document.querySelectorAll('#bb-guide-entry').length, 1,
+                'moved, not duplicated');
         } finally { teardown(); }
     });
 
-    test('gives up waiting and appears anyway on a drawer that never reaches three', () => {
-        // Signed out, or with Shorts turned off. Never injecting would be worse
-        // than injecting in the wrong slot.
+    test('stops watching a drawer that never reaches three', () => {
+        // Signed out, or with Shorts turned off. The row is up from the first
+        // pass either way; this is only about when the task lets go.
         drawer(2);
         try {
             const ui = makeUi();
             let result = false;
             for (let i = 0; i < 20 && result === false; i += 1) result = ui.injectGuideEntry();
 
-            assertEqual(result, true, 'it must stop waiting eventually');
+            assertEqual(result, true, 'it must stop watching eventually');
             assertDeepEqual(labels(), ['Home', 'Shorts', 'bb-guide-entry']);
         } finally { teardown(); }
     });
@@ -179,7 +184,7 @@ suite('youtube playlist header', () => {
         // The shape of the bug: same selector, dead copy first.
         stage(`
             <yt-flexible-actions-view-model id="dead" style="display:none"></yt-flexible-actions-view-model>
-            <yt-flexible-actions-view-model id="live" style="width:200px;height:40px"></yt-flexible-actions-view-model>
+            <yt-flexible-actions-view-model id="live" style="display:block;width:200px;height:40px"></yt-flexible-actions-view-model>
         `);
         try {
             const found = YouTubeUi().firstMatch(['yt-flexible-actions-view-model']);
