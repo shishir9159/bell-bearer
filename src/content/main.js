@@ -31,7 +31,7 @@
     const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown,
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
         CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
-        Keybindings, SkimContent, LinkHints } = BB;
+        Keybindings, SkimContent, LinkHints, TimeLimitContent } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -331,6 +331,16 @@
             });
         } catch (_) { /* the extension reloaded out from under this page */ }
     }
+
+    // ---------------------------------------------------- daily time limit
+
+    // Only the two sites a limit can be set on build one of these, and it
+    // does nothing at all until a limit is actually set.
+    TimeLimitContent.createTimeLimit({
+        site,
+        getSettings: () => settings,
+        appearance: () => Theme.appearance(),
+    }).install();
 
     // ------------------------------------------------------ cookie banners
 

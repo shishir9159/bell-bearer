@@ -1558,3 +1558,72 @@
     0% { background-color: var(--bb-skim-hit-on); }
     100% { background-color: transparent; }
 }
+
+/* ----------------------------------------------------- daily time limit */
+
+/* A sheet over the site once its daily limit is spent, not a redirect: being
+   bounced somewhere else tells you nothing, and this can say what went and
+   when it comes back. Above everything the page can draw, but below the
+   notification, which still has things to say. */
+.bb-limit-sheet {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--bb-scrim);
+    -webkit-backdrop-filter: blur(14px) saturate(.6);
+    backdrop-filter: blur(14px) saturate(.6);
+    font-family: var(--bb-font);
+    color: var(--bb-text);
+    animation: bb-fade .2s ease-out;
+}
+
+.bb-limit-card {
+    max-width: 440px;
+    padding: 28px 30px 30px;
+    background: var(--bb-panel-solid);
+    border: 1px solid var(--bb-border-strong);
+    border-radius: var(--bb-r);
+    box-shadow: var(--bb-shadow);
+    text-align: center;
+}
+
+.bb-limit-kicker {
+    margin: 0 0 10px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--bb-accent);
+}
+
+.bb-limit-title {
+    margin: 0 0 12px;
+    font-family: var(--bb-font-head);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: var(--bb-head-track);
+    text-transform: var(--bb-head-case);
+    color: var(--bb-text);
+}
+
+.bb-limit-body {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--bb-sub);
+}
+
+.bb-limit-spent {
+    margin: 18px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--bb-border);
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--bb-faint);
+}
