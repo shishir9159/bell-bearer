@@ -20,9 +20,6 @@
 
     function bodyHtml(site, status) {
         const spent = TimeLimits.human(status.spent);
-        const resets = new Date(TimeLimits.resetsAt())
-            .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-
         if (!status.on) {
             return `
                 <div class="limit-figure">
@@ -35,8 +32,8 @@
 
         const share = Math.min(100, Math.round((status.spent / status.allowed) * 100));
         const left = status.blocked
-            ? `Spent. ${esc(site.host)} is covered until ${esc(resets)}.`
-            : `${esc(TimeLimits.human(status.remaining))} left of ${esc(TimeLimits.human(status.allowed))} — the tally goes at ${esc(resets)}.`;
+            ? `Spent. ${esc(site.host)} is covered until midnight.`
+            : `${esc(TimeLimits.human(status.remaining))} left of ${esc(TimeLimits.human(status.allowed))} — the tally goes at midnight.`;
 
         return `
             <div class="limit-figure">

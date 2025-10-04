@@ -1570,11 +1570,12 @@ const dayRecord = (at = T0) =>
         eq(status.blocked, false);
     });
 
-    check('the tally goes at local midnight', () => {
-        const midnight = TimeLimits.resetsAt(noon);
-        eq(new Date(midnight).getDate(), new Date(noon + A_DAY).getDate());
-        eq(new Date(midnight).getHours(), 0);
-        eq(midnight > noon, true);
+    check('a day is a local day, so a limit runs to local midnight', () => {
+        // Not UTC: a limit that reset at 4am because that is when midnight
+        // falls in London would be nobody's idea of a daily limit.
+        eq(TimeLimits.dayKey(noon), '2026-03-14');
+        eq(TimeLimits.dayKey(new Date('2026-03-14T23:59:59').getTime()), '2026-03-14');
+        eq(TimeLimits.dayKey(new Date('2026-03-15T00:00:01').getTime()), '2026-03-15');
     });
 
     check('durations read the way a person would say them', () => {

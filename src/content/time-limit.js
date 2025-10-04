@@ -83,15 +83,13 @@
         // ------------------------------------------------------- the sheet
 
         function sheetHtml(now) {
-            const resets = new Date(TimeLimits.resetsAt())
-                .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
             return `
                 <div class="bb-limit-card">
                     <p class="bb-limit-kicker">Bell Bearer</p>
                     <h2 class="bb-limit-title">That is ${TimeLimits.human(now.allowed)} of ${known.name} today</h2>
                     <p class="bb-limit-body">
                         You set the limit; this is it arriving. The tally starts again
-                        at midnight, ${resets}, and nothing about today is kept past that.
+                        at midnight, and nothing about today is kept past that.
                     </p>
                     <p class="bb-limit-spent">${TimeLimits.human(now.spent)} spent</p>
                 </div>`;

@@ -140,13 +140,6 @@
         return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
     }
 
-    /** Local midnight after `now`, which is when a tally is forgotten. */
-    function resetsAt(now = Date.now()) {
-        const date = new Date(now);
-        date.setHours(24, 0, 0, 0);
-        return date.getTime();
-    }
-
     // ----------------------------------------------------------- storage
 
     async function load() {
@@ -180,7 +173,7 @@
 
     const TimeLimits = {
         KEY, SITES, MAX_CREDIT,
-        get, list, ids, dayKey, blank, forDay, add, spentOn, statusFor, human, resetsAt,
+        get, list, ids, dayKey, blank, forDay, add, spentOn, statusFor, human,
         load, save, update,
     };
 
