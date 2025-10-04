@@ -7,14 +7,11 @@
     "storage",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "clipboardWrite"
   ],
   "host_permissions": [
-    "https://www.youtube.com/*",
-    "https://twitter.com/*",
-    "https://x.com/*",
-    "https://www.reddit.com/*",
-    "https://www.netflix.com/*"
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -23,11 +20,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.youtube.com/*",
-        "https://twitter.com/*",
-        "https://x.com/*",
-        "https://www.reddit.com/*",
-        "https://www.netflix.com/*"
+        "<all_urls>"
       ],
       "js": [
         "transcript.js",
@@ -39,11 +32,12 @@
     }
   ],
   "commands": {
-    "toggle-feature": {
+    "copy-markdown-link": {
       "suggested_key": {
-        "default": "Ctrl+Shift+Y"
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
       },
-      "description": "Run my custom action"
+      "description": "Copy current page as a Markdown link"
     }
   },
   "background": {

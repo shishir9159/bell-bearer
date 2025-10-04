@@ -11,6 +11,8 @@ class YouTubeBookmarker {
         this.currentTranscript = null;
         this.preferredSubtitleLanguage = 'en'; // Default preferred subtitle
         this.enableSkipShortcuts = true;
+        this.pouchButtonStyle = 'auto'; // 'auto' | 'accent' | 'hidden' — look of the on-page "Add to pouch" button
+        this.syncThemeWithYouTube = false; // make Bell Bearer follow YouTube's light/dark theme
         this.speedBoostTimeout = null; // Timeout for temporary speed boost
         this.originalSpeed = null; // Store original speed before boost
         this.currentSite = this.detectSite(); // Detect which site we're on
@@ -42,22 +44,33 @@ class YouTubeBookmarker {
             this.detectVideoChange();
             this.setupPlaybackSpeedSync();
             this.setupSubscribeButton();
+            this.setupThemeSync();
+            this.setupGuideDrawer();
             setInterval(() => {
                 this.detectVideoChange();
             }, 2000);
         }
 
-        // Speed enforcement for sites that may reset playbackRate
-        if (this.currentSite === 'netflix' || this.currentSite === 'reddit') {
+        // Speed enforcement for non-YouTube sites that may reset playbackRate.
+        // (YouTube respects playbackRate and has its own speed menu, so we leave
+        // it alone to avoid fighting the native control.) Enforcement only acts
+        // after the user changes speed with our shortcuts (userSetSpeed is set).
+        if (this.currentSite !== 'youtube') {
             this.setupSpeedEnforcement();
         }
     }
 
     loadSettings() {
-        chrome.storage.local.get(['enableSkipShortcuts', 'preferredSubtitleLanguage'], (result) => {
+        chrome.storage.local.get(['enableSkipShortcuts', 'preferredSubtitleLanguage', 'pouchButtonStyle', 'syncThemeWithYouTube'], (result) => {
             this.enableSkipShortcuts = result.enableSkipShortcuts !== false;
+            this.syncThemeWithYouTube = result.syncThemeWithYouTube === true;
+            if (this.syncThemeWithYouTube && this._applyYouTubeTheme) this._applyYouTubeTheme();
             if (result.preferredSubtitleLanguage) {
                 this.preferredSubtitleLanguage = result.preferredSubtitleLanguage;
+            }
+            if (result.pouchButtonStyle) {
+                this.pouchButtonStyle = result.pouchButtonStyle;
+                this.applyPouchButtonStyle();
             }
         });
 
@@ -69,27 +82,303 @@ class YouTubeBookmarker {
                 if (changes.preferredSubtitleLanguage) {
                     this.preferredSubtitleLanguage = changes.preferredSubtitleLanguage.newValue;
                 }
+                if (changes.pouchButtonStyle) {
+                    this.pouchButtonStyle = changes.pouchButtonStyle.newValue || 'auto';
+                    this.applyPouchButtonStyle();
+                }
+                if (changes.syncThemeWithYouTube) {
+                    this.syncThemeWithYouTube = changes.syncThemeWithYouTube.newValue === true;
+                    if (this.syncThemeWithYouTube && this._applyYouTubeTheme) this._applyYouTubeTheme();
+                }
             }
         });
+    }
+
+    /**
+     * Re-render the on-page "Add to pouch" button after its style setting
+     * changes. Removes the current button; the persistent check re-adds it with
+     * the new look (unless the style is 'hidden').
+     */
+    applyPouchButtonStyle() {
+        const existing = document.getElementById('bb-add-to-subscriptions-btn');
+        if (existing) existing.remove();
+        if (this.pouchButtonStyle !== 'hidden' && this.currentSite === 'youtube' && this._recheckPouchButton) {
+            this._recheckPouchButton();
+        }
+    }
+
+    /**
+     * When "Match YouTube theme" is enabled, mirror YouTube's light/dark mode
+     * into Bell Bearer's saved theme so the popup/dashboard follow it.
+     */
+    setupThemeSync() {
+        this._applyYouTubeTheme = () => {
+            if (!this.syncThemeWithYouTube) return;
+            const isDark = document.documentElement.hasAttribute('dark') ||
+                getComputedStyle(document.documentElement).getPropertyValue('--yt-spec-base-background').trim() === '#0f0f0f';
+            const theme = isDark ? 'dark' : 'light';
+            try {
+                chrome.storage.local.get(['theme'], (res) => {
+                    if (!chrome.runtime.lastError && res.theme !== theme) {
+                        chrome.storage.local.set({ theme });
+                    }
+                });
+            } catch (e) {
+                // Extension context may be invalid after a reload — ignore.
+            }
+        };
+
+        // YouTube toggles the `dark` attribute on <html> when its theme changes.
+        const observer = new MutationObserver(() => this._applyYouTubeTheme());
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['dark'] });
+
+        this._applyYouTubeTheme();
+    }
+
+    /**
+     * Inject a "Bell Bearer" entry into YouTube's left drawer. Clicking it opens
+     * an overlay to pick a topic and see the latest upload from each of its channels.
+     */
+    setupGuideDrawer() {
+        const inject = () => {
+            const sections = document.querySelector('ytd-guide-renderer #sections');
+            if (!sections || document.getElementById('bb-guide-entry')) return;
+
+            const entry = document.createElement('div');
+            entry.id = 'bb-guide-entry';
+            entry.className = 'bb-guide-entry';
+            entry.setAttribute('role', 'link');
+            entry.setAttribute('tabindex', '0');
+            entry.title = 'Bell Bearer — latest from your topics';
+            entry.innerHTML = `
+                <span class="bb-guide-ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
+                <span class="bb-guide-text">Bell Bearer</span>
+            `;
+            const open = () => this.showTopicsOverlay();
+            entry.addEventListener('click', open);
+            entry.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+            });
+            sections.prepend(entry);
+        };
+
+        inject();
+        const observer = new MutationObserver(() => inject());
+        observer.observe(document.body, { childList: true, subtree: true });
+        setInterval(inject, 2000);
+    }
+
+    /**
+     * Overlay that lists the user's topics; picking one loads the latest upload
+     * from each channel in that topic.
+     */
+    async showTopicsOverlay() {
+        if (!chrome.runtime || !chrome.runtime.id) {
+            this.showNotification('Bell Bearer was updated — please refresh this page.', 'warning');
+            return;
+        }
+        if (document.getElementById('bb-topics-overlay')) return;
+
+        let topics = [], channels = [], savedTheme = null;
+        try {
+            const r = await chrome.storage.local.get(['subscriptionTopics', 'subscriptionChannels', 'theme']);
+            topics = r.subscriptionTopics || [];
+            channels = r.subscriptionChannels || [];
+            savedTheme = r.theme || null;
+        } catch (e) {
+            this.showNotification('Bell Bearer was updated — please refresh this page.', 'warning');
+            return;
+        }
+
+        const ytDark = document.documentElement.hasAttribute('dark') ||
+            getComputedStyle(document.documentElement).getPropertyValue('--yt-spec-base-background').trim() === '#0f0f0f';
+        const dark = savedTheme ? savedTheme === 'dark' : ytDark;
+        // Match Bell Bearer's palette: rose accent in light, Discord blurple in dark.
+        const t = dark
+            ? { panel: '#2f3136', text: '#e3e5e8', sub: '#b5bac1', border: '#26282c', chip: '#36393f', card: '#36393f' }
+            : { panel: '#ffffff', text: '#14171d', sub: '#59626f', border: '#e6e8ef', chip: '#f6f7fb', card: '#f6f7fb' };
+        const accent = dark ? '#7289da' : '#e11d48';
+
+        const overlay = document.createElement('div');
+        overlay.id = 'bb-topics-overlay';
+        overlay.className = 'bb-modal-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;justify-content:center;align-items:flex-start;z-index:2147483647;overflow:auto;padding:48px 16px;';
+
+        const topicChips = topics.length
+            ? topics.map(tp => `<button class="bb-topic-chip" data-topic-id="${tp.id}" style="background:${t.chip};color:${t.text};border:1px solid ${t.border};padding:7px 14px;border-radius:999px;font-size:14px;font-weight:600;cursor:pointer;">${this.escapeHtml(tp.name)}</button>`).join('')
+            : `<p style="color:${t.sub};font-size:14px;margin:0;">No topics yet — add channels to a topic using the button next to Subscribe.</p>`;
+
+        overlay.innerHTML = `
+            <div style="background:${t.panel};color:${t.text};border-radius:16px;width:100%;max-width:780px;box-shadow:0 24px 64px rgba(0,0,0,.5);font-family:'Roboto','Arial',sans-serif;overflow:hidden;">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid ${t.border};">
+                    <h3 style="margin:0;font-size:18px;">Latest by topic</h3>
+                    <button id="bb-overlay-close" title="Close" style="background:none;border:none;color:${t.sub};font-size:26px;line-height:1;cursor:pointer;padding:0 4px;">&times;</button>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;padding:16px 22px;border-bottom:1px solid ${t.border};">${topicChips}</div>
+                <div id="bb-topic-videos" style="padding:18px 22px;min-height:120px;">
+                    <p style="color:${t.sub};font-size:14px;margin:0;">Select a topic to load the latest video from each of its channels.</p>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const close = () => overlay.remove();
+        overlay.querySelector('#bb-overlay-close').addEventListener('click', close);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+        const onKey = (e) => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey, true); } };
+        document.addEventListener('keydown', onKey, true);
+
+        const videosBox = overlay.querySelector('#bb-topic-videos');
+        overlay.querySelectorAll('.bb-topic-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                overlay.querySelectorAll('.bb-topic-chip').forEach(c => {
+                    c.style.background = t.chip; c.style.color = t.text; c.style.borderColor = t.border;
+                });
+                chip.style.background = accent; chip.style.color = '#fff'; chip.style.borderColor = accent;
+                this.loadTopicVideos(chip.dataset.topicId, channels, videosBox, t);
+            });
+        });
+    }
+
+    async loadTopicVideos(topicId, channels, container, t) {
+        const topicChannels = channels.filter(c => c.topicId === topicId);
+        if (topicChannels.length === 0) {
+            container.innerHTML = `<p style="color:${t.sub};font-size:14px;margin:0;">No channels in this topic yet.</p>`;
+            return;
+        }
+        container.innerHTML = `<p style="color:${t.sub};font-size:14px;margin:0;">Loading latest videos…</p>`;
+
+        const videos = [];
+        await Promise.all(topicChannels.map(async (ch) => {
+            const cid = await this.resolveChannelId(ch);
+            if (!cid) return;
+            const latest = await this.fetchLatestVideos(cid);
+            if (latest[0]) videos.push({ ...latest[0], channelName: ch.name });
+        }));
+
+        if (videos.length === 0) {
+            container.innerHTML = `<p style="color:${t.sub};font-size:14px;margin:0;">Couldn't load videos for these channels.</p>`;
+            return;
+        }
+        videos.sort((a, b) => b.published - a.published);
+
+        container.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">` +
+            videos.map(v => `
+                <a href="${v.url}" style="text-decoration:none;color:${t.text};background:${t.card};border:1px solid ${t.border};border-radius:12px;overflow:hidden;display:block;">
+                    <img src="${v.thumb}" loading="lazy" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#000;">
+                    <div style="padding:10px 12px;">
+                        <div style="font-size:13px;font-weight:600;line-height:1.3;max-height:2.6em;overflow:hidden;">${this.escapeHtml(v.title)}</div>
+                        <div style="font-size:12px;color:${t.sub};margin-top:5px;">${this.escapeHtml(v.channelName)}</div>
+                    </div>
+                </a>
+            `).join('') + `</div>`;
+    }
+
+    /**
+     * Resolve a channel's UC… id (needed for the RSS feed). Uses the URL directly
+     * when it's a /channel/UC… link, otherwise fetches the channel page once and
+     * caches the result.
+     */
+    async resolveChannelId(channel) {
+        const url = channel.url || '';
+        const direct = url.match(/\/channel\/(UC[\w-]+)/);
+        if (direct) return direct[1];
+
+        try {
+            const cache = (await chrome.storage.local.get(['bbChannelIdCache'])).bbChannelIdCache || {};
+            if (cache[url]) return cache[url];
+
+            const res = await fetch(url);
+            const html = await res.text();
+            const m = html.match(/"channelId":"(UC[\w-]+)"/) || html.match(/\/channel\/(UC[\w-]+)/);
+            const cid = m ? m[1] : null;
+            if (cid) {
+                cache[url] = cid;
+                chrome.storage.local.set({ bbChannelIdCache: cache });
+            }
+            return cid;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /** Fetch + parse a channel's public RSS feed into a list of recent videos. */
+    async fetchLatestVideos(channelId) {
+        try {
+            const res = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`);
+            const xml = await res.text();
+            const doc = new DOMParser().parseFromString(xml, 'text/xml');
+            return Array.from(doc.getElementsByTagName('entry')).map(en => {
+                const vid = (en.getElementsByTagName('yt:videoId')[0] || {}).textContent || '';
+                const title = (en.getElementsByTagName('title')[0] || {}).textContent || '';
+                const publishedText = (en.getElementsByTagName('published')[0] || {}).textContent || '';
+                const published = publishedText ? new Date(publishedText).getTime() : 0;
+                const thumbEl = en.getElementsByTagName('media:thumbnail')[0];
+                const thumb = (thumbEl && thumbEl.getAttribute('url')) || (vid ? `https://i.ytimg.com/vi/${vid}/mqdefault.jpg` : '');
+                return { id: vid, title, url: `https://www.youtube.com/watch?v=${vid}`, thumb, published };
+            }).filter(v => v.id);
+        } catch (e) {
+            return [];
+        }
+    }
+
+    /**
+     * Build a Markdown link for the current page: [title](url). On a YouTube
+     * watch page it uses the video title + channel name and a clean watch URL.
+     */
+    buildMarkdownLink() {
+        if (this.currentSite === 'youtube') {
+            const videoId = this.getCurrentVideoId();
+            if (videoId) {
+                const title = this.getCurrentVideoTitle();
+                const channel = this.getChannelInfo().channelName;
+                return `[${title} - ${channel}](https://www.youtube.com/watch?v=${videoId})`;
+            }
+        }
+        const title = (document.title || location.href).replace(/\s+/g, ' ').trim();
+        return `[${title}](${location.href})`;
+    }
+
+    /** Copy text to the clipboard (works via the clipboardWrite permission). */
+    copyTextToClipboard(text) {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+            document.body.appendChild(ta);
+            ta.select();
+            const ok = document.execCommand('copy');
+            ta.remove();
+            if (ok) return true;
+        } catch (e) { /* fall through to async API */ }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(() => {});
+        }
+        return false;
     }
 
     setupKeyboardListeners() {
         // Use capture phase to ensure we catch events before YouTube
         document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'b' && !this.isRecording) {
-                // overriding default browser behavior for keypress
-                e.preventDefault();
-                this.startRecording();
+            // Never hijack keystrokes while the user is typing in a field/editor.
+            // (Essential now that the script runs on every site.)
+            if (this.isTypingTarget(e.target)) return;
+
+            // Ctrl + B: start a checkpoint recording (only where we track a video).
+            if (e.ctrlKey && (e.key === 'b' || e.key === 'B') && !this.isRecording) {
+                if (this.videoID) {
+                    e.preventDefault();
+                    this.startRecording();
+                }
+                return;
             }
 
-            // // segment start
-            // // Allow Numpad keys for numbers if applicable (though S is a letter)
-            // if (e.key === 'S' && e.ctrlKey && e.shiftKey && this.segmentStart === null) {
-            //     e.preventDefault();
-            //     this.handleSegmentStart();
-            // }
+            // Every shortcut below acts on a media element. If the page has none,
+            // let the keystroke pass through untouched.
+            if (!this.getVideoElement()) return;
 
-            // Ctrl + Alt + 1-9: skip forward by number of seconds
+            // Alt + 1-9: skip forward by number of seconds
             // Support both Digit (top row) and Numpad keys
             if (this.enableSkipShortcuts && !e.ctrlKey && e.altKey) {
                 const numMatch = e.code.match(/^(?:Digit|Numpad)(\d)$/);
@@ -103,7 +392,7 @@ class YouTubeBookmarker {
                 }
             }
 
-            // Ctrl + Shift + 1-9: skip backward by number of seconds
+            // Shift + 1-9: skip backward by number of seconds
             if (this.enableSkipShortcuts && !e.ctrlKey && e.shiftKey && !e.altKey) {
                 const numMatch = e.code.match(/^(?:Digit|Numpad)(\d)$/);
                 if (numMatch) {
@@ -141,8 +430,8 @@ class YouTubeBookmarker {
                 this.decreasePlaybackSpeed();
             }
 
-            // Shift + + key: reset playback speed to 1
-            if (e.key === '+' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+            // + key (Shift + = on most keyboards, or numpad +): reset playback speed to 1x
+            if (e.key === '+' && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
                 this.resetPlaybackSpeed();
             }
@@ -161,14 +450,55 @@ class YouTubeBookmarker {
         }, true); // Use capture
     }
 
+    /**
+     * True when keyboard focus is in a text field / editable element, so we
+     * should not intercept shortcut keys (avoids breaking typing on any site).
+     */
+    isTypingTarget(el) {
+        if (!el) return false;
+        const tag = el.tagName;
+        return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable === true;
+    }
+
     setupMessageListener() {
         // popup or background script messages
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-            // TODO: FIRST PRIORITY
             if (message.action === 'seekToTime') {
                 this.seekToTime(message.time);
+                sendResponse({ ok: true });
+            } else if (message.action === 'changeSpeed') {
+                // Sent by the popup / dashboard speed buttons.
+                const newRate = this.changeSpeedByDelta(message.delta);
+                sendResponse({ ok: newRate !== null, rate: newRate });
+            } else if (message.action === 'copyMarkdownLink') {
+                // Triggered by the Ctrl+Shift+L command (relayed by background.js).
+                this.copyTextToClipboard(this.buildMarkdownLink());
+                this.showNotification('Copied page as Markdown link', 'success');
+                sendResponse({ ok: true });
             }
+            // Returning a falsy value closes the channel synchronously, which is
+            // what we want here since all responses above are sent synchronously.
         });
+    }
+
+    /**
+     * Adjust the current video's playback rate by `delta`, clamped to a sane
+     * range. Returns the resulting rate, or null if no video was found.
+     * Used by the popup/dashboard "Speed Up / Slow Down" buttons.
+     */
+    changeSpeedByDelta(delta) {
+        const video = this.getVideoElement();
+        if (!video) return null;
+
+        const newRate = Math.max(0.25, Math.min(16, video.playbackRate + delta));
+        video.playbackRate = newRate;
+        this.userSetSpeed = newRate; // Track user intent for enforcement
+
+        // Show the actual resulting rate (read back from the element) so the
+        // notification can never disagree with what is really playing.
+        const actualRate = Math.round(video.playbackRate * 100) / 100;
+        this.showNotification(`Playback speed: ${actualRate}x`, 'info');
+        return actualRate;
     }
 
     detectVideoChange() {
@@ -510,20 +840,18 @@ class YouTubeBookmarker {
             const nextIndex = Math.min(currentIndex + 1, speeds.length - 1);
             const newSpeed = speeds[nextIndex];
 
-            // Set the speed directly on the video element
+            // Set the speed directly on the video element. playbackRate is a
+            // native accessor on HTMLMediaElement; assigning to it is all that's
+            // needed. (Do NOT redefine the property with Object.defineProperty —
+            // that replaces the native setter with a plain value, after which the
+            // video keeps playing at the old rate while reads return the fake
+            // value. That is the "speed up stops working but the popup still
+            // shows the new number" bug.)
             video.playbackRate = newSpeed;
             this.userSetSpeed = newSpeed; // Track user intent for enforcement
 
-            // Force a ratechange event if needed
-            if (video.playbackRate !== newSpeed) {
-                Object.defineProperty(video, 'playbackRate', {
-                    value: newSpeed,
-                    writable: true,
-                    configurable: true
-                });
-            }
-
-            this.showNotification(`Playback speed: ${newSpeed}x`, 'info');
+            // Report the rate the element actually accepted.
+            this.showNotification(`Playback speed: ${video.playbackRate}x`, 'info');
         }
     }
 
@@ -557,20 +885,13 @@ class YouTubeBookmarker {
             const prevIndex = Math.max(currentIndex - 1, 0);
             const newSpeed = speeds[prevIndex];
 
-            // Set the speed directly on the video element
+            // Set the speed directly on the video element. See the note in
+            // increasePlaybackSpeed() — never redefine the property.
             video.playbackRate = newSpeed;
             this.userSetSpeed = newSpeed; // Track user intent for enforcement
 
-            // Force a ratechange event if needed
-            if (video.playbackRate !== newSpeed) {
-                Object.defineProperty(video, 'playbackRate', {
-                    value: newSpeed,
-                    writable: true,
-                    configurable: true
-                });
-            }
-
-            this.showNotification(`Playback speed: ${newSpeed}x`, 'info');
+            // Report the rate the element actually accepted.
+            this.showNotification(`Playback speed: ${video.playbackRate}x`, 'info');
         }
     }
 
@@ -579,17 +900,7 @@ class YouTubeBookmarker {
         if (video) {
             video.playbackRate = 1;
             this.userSetSpeed = 1; // Track user intent for enforcement
-
-            // Force a ratechange event if needed
-            if (video.playbackRate !== 1) {
-                Object.defineProperty(video, 'playbackRate', {
-                    value: 1,
-                    writable: true,
-                    configurable: true
-                });
-            }
-
-            this.showNotification(`Playback speed: 1x`, 'info');
+            this.showNotification(`Playback speed: ${video.playbackRate}x`, 'info');
         }
     }
 
@@ -677,6 +988,7 @@ class YouTubeBookmarker {
     setupSubscribeButton() {
         // Wait for YouTube page to load and find the subscribe button
         const checkForSubscribeButton = () => {
+            if (this.pouchButtonStyle === 'hidden') return; // user turned the button off
             // Try multiple selectors for YouTube's subscribe button container
             const subscribeButtonSelectors = [
                 'ytd-subscribe-button-renderer',
@@ -717,6 +1029,9 @@ class YouTubeBookmarker {
             }
         };
 
+        // Expose for live re-rendering when the pouch-button style setting changes.
+        this._recheckPouchButton = checkForSubscribeButton;
+
         // Check immediately and on interval
         checkForSubscribeButton();
         const intervalId = setInterval(() => {
@@ -751,11 +1066,12 @@ class YouTubeBookmarker {
             document.documentElement.getAttribute('dark') !== null ||
             getComputedStyle(document.documentElement).getPropertyValue('--yt-spec-base-background').trim() === '#0f0f0f';
 
-        // Set colors based on theme
-        const bgColor = isDarkTheme ? '#272727' : '#f0f0f0';
-        const bgHoverColor = isDarkTheme ? '#3f3f3f' : '#e0e0e0';
-        const textColor = isDarkTheme ? '#ffffff' : '#0f0f0f';
-        const borderColor = isDarkTheme ? '#3f3f3f' : '#d0d0d0';
+        // Set colors based on theme, or use the Bell Bearer accent for 'accent' style
+        const accent = this.pouchButtonStyle === 'accent';
+        const bgColor = accent ? '#e11d48' : (isDarkTheme ? '#272727' : '#f0f0f0');
+        const bgHoverColor = accent ? '#c40f3f' : (isDarkTheme ? '#3f3f3f' : '#e0e0e0');
+        const textColor = accent ? '#ffffff' : (isDarkTheme ? '#ffffff' : '#0f0f0f');
+        const borderColor = accent ? '#e11d48' : (isDarkTheme ? '#3f3f3f' : '#d0d0d0');
 
         // Style the button to match YouTube's style - icon only, positioned to the right
         addButton.style.cssText = `
@@ -790,7 +1106,10 @@ class YouTubeBookmarker {
         addButton.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            this.showAddChannelModal();
+            Promise.resolve(this.showAddChannelModal()).catch((err) => {
+                console.error('Bell Bearer: could not open pouch dialog', err);
+                this.showNotification('Could not open the pouch dialog — try refreshing the page.', 'error');
+            });
         });
 
         // Try multiple insertion strategies - insert AFTER subscribe button (to the right)
@@ -928,119 +1247,151 @@ class YouTubeBookmarker {
     }
 
     async showAddChannelModal() {
-        const channelInfo = this.getChannelInfo();
-
-        // Get topics from storage
-        const result = await chrome.storage.local.get(['subscriptionTopics']);
-        const topics = result.subscriptionTopics || [];
-
-        if (topics.length === 0) {
-            const shouldCreateTopic = confirm('No topics found. Would you like to create one first?');
-            if (shouldCreateTopic) {
-                this.showNotification('Please create a topic in the Dashboard first, then try again.', 'info');
-                // Open dashboard
-                chrome.runtime.sendMessage({ action: 'openDashboard' });
-            }
+        // If the extension was reloaded/updated, this content script's context is
+        // dead and any chrome.* call will throw. Tell the user to refresh.
+        if (!chrome.runtime || !chrome.runtime.id) {
+            this.showNotification('Bell Bearer was updated — please refresh this page, then try again.', 'warning');
             return;
         }
+
+        const channelInfo = this.getChannelInfo();
+
+        // Get topics + the saved Bell Bearer theme (so the modal honors it).
+        let topics = [];
+        let savedTheme = null;
+        try {
+            const result = await chrome.storage.local.get(['subscriptionTopics', 'theme']);
+            topics = result.subscriptionTopics || [];
+            savedTheme = result.theme || null;
+        } catch (err) {
+            this.showNotification('Bell Bearer was updated — please refresh this page, then try again.', 'warning');
+            return;
+        }
+
+        // Use the selected Bell Bearer theme if one is saved; otherwise match YouTube's.
+        const ytDark = document.documentElement.hasAttribute('dark') ||
+            getComputedStyle(document.documentElement).getPropertyValue('--yt-spec-base-background').trim() === '#0f0f0f';
+        const isDark = savedTheme ? savedTheme === 'dark' : ytDark;
+        const c = isDark
+            ? { surface: '#212121', text: '#f1f1f1', sub: '#aaaaaa', inputBg: '#121212', border: '#3f3f3f', cancelBg: '#2b2b2b' }
+            : { surface: '#ffffff', text: '#0f0f0f', sub: '#606060', inputBg: '#ffffff', border: '#d0d0d0', cancelBg: '#f0f0f0' };
+        const accent = '#e11d48';
 
         // Create modal
         const modal = document.createElement('div');
         modal.className = 'bb-modal-overlay';
         modal.style.cssText = `
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
             display: flex;
             justify-content: center;
             align-items: center;
-            z-index: 100000;
+            z-index: 2147483647;
         `;
 
         modal.innerHTML = `
             <div class="bb-modal-content" style="
-                background: white;
-                border-radius: 12px;
-                padding: 24px;
-                max-width: 400px;
+                background: ${c.surface};
+                color: ${c.text};
+                border-radius: 14px;
+                padding: 22px;
+                max-width: 380px;
                 width: 90%;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+                font-family: 'Roboto', 'Arial', sans-serif;
             ">
-                <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #0f0f0f;">Add to Subscription Manager</h3>
-                <div style="margin-bottom: 16px;">
-                    <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #606060;">Channel Name:</label>
-                    <input type="text" id="bb-channel-name" value="${this.escapeHtml(channelInfo.channelName)}" style="
-                        width: 100%;
-                        padding: 10px;
-                        border: 1px solid #d0d0d0;
-                        border-radius: 4px;
-                        font-size: 14px;
-                        box-sizing: border-box;
-                    ">
-                </div>
-                <div style="margin-bottom: 16px;">
-                    <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #606060;">Channel URL:</label>
-                    <input type="text" id="bb-channel-url" value="${this.escapeHtml(channelInfo.channelUrl)}" style="
-                        width: 100%;
-                        padding: 10px;
-                        border: 1px solid #d0d0d0;
-                        border-radius: 4px;
-                        font-size: 14px;
-                        box-sizing: border-box;
-                    ">
-                </div>
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-size: 14px; color: #606060;">Select Topic:</label>
-                    <select id="bb-topic-select" style="
-                        width: 100%;
-                        padding: 10px;
-                        border: 1px solid #d0d0d0;
-                        border-radius: 4px;
-                        font-size: 14px;
-                        box-sizing: border-box;
-                    ">
-                        ${topics.map(topic => `<option value="${topic.id}">${this.escapeHtml(topic.name)}</option>`).join('')}
-                    </select>
-                </div>
-                <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                    <button id="bb-save-channel" style="
-                        background: #0f0f0f;
-                        color: white;
-                        border: none;
-                        padding: 10px 24px;
-                        border-radius: 18px;
-                        font-size: 14px;
-                        font-weight: 500;
-                        cursor: pointer;
-                    ">Add</button>
+                <h3 style="margin: 0 0 6px 0; font-size: 17px; color: ${c.text};">Add channel to pouch</h3>
+                <p style="margin: 0 0 18px 0; font-size: 14px; font-weight: 500; color: ${c.sub};">${this.escapeHtml(channelInfo.channelName)}</p>
+
+                <label style="display: block; margin-bottom: 8px; font-size: 13px; color: ${c.sub};">Topic</label>
+                <select id="bb-topic-select" style="
+                    width: 100%;
+                    padding: 10px;
+                    border: 1px solid ${c.border};
+                    border-radius: 8px;
+                    font-size: 14px;
+                    box-sizing: border-box;
+                    background: ${c.inputBg};
+                    color: ${c.text};
+                ">
+                    ${topics.map(topic => `<option value="${topic.id}">${this.escapeHtml(topic.name)}</option>`).join('')}
+                    <option value="__new__">➕ Create new topic…</option>
+                </select>
+                <input type="text" id="bb-new-topic" placeholder="New topic name" style="
+                    display: none;
+                    width: 100%;
+                    margin-top: 10px;
+                    padding: 10px;
+                    border: 1px solid ${c.border};
+                    border-radius: 8px;
+                    font-size: 14px;
+                    box-sizing: border-box;
+                    background: ${c.inputBg};
+                    color: ${c.text};
+                ">
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                     <button id="bb-cancel-channel" style="
-                        background: #f0f0f0;
-                        color: #0f0f0f;
-                        border: 1px solid #d0d0d0;
-                        padding: 10px 24px;
+                        background: ${c.cancelBg};
+                        color: ${c.text};
+                        border: 1px solid ${c.border};
+                        padding: 9px 18px;
                         border-radius: 18px;
                         font-size: 14px;
                         font-weight: 500;
                         cursor: pointer;
                     ">Cancel</button>
+                    <button id="bb-save-channel" style="
+                        background: ${accent};
+                        color: white;
+                        border: none;
+                        padding: 9px 20px;
+                        border-radius: 18px;
+                        font-size: 14px;
+                        font-weight: 600;
+                        cursor: pointer;
+                    ">Add</button>
                 </div>
             </div>
         `;
 
         document.body.appendChild(modal);
 
-        modal.querySelector('#bb-save-channel').addEventListener('click', async () => {
-            const channelName = modal.querySelector('#bb-channel-name').value.trim();
-            const channelUrl = modal.querySelector('#bb-channel-url').value.trim();
-            const topicId = modal.querySelector('#bb-topic-select').value;
+        // Reveal the "new topic" field when "Create new topic" is chosen.
+        const topicSelect = modal.querySelector('#bb-topic-select');
+        const newTopicInput = modal.querySelector('#bb-new-topic');
+        if (topics.length === 0) {
+            topicSelect.value = '__new__';
+            newTopicInput.style.display = 'block';
+        }
+        topicSelect.addEventListener('change', () => {
+            const creating = topicSelect.value === '__new__';
+            newTopicInput.style.display = creating ? 'block' : 'none';
+            if (creating) newTopicInput.focus();
+        });
 
-            if (channelName && channelUrl) {
+        modal.querySelector('#bb-save-channel').addEventListener('click', async () => {
+            const channelName = channelInfo.channelName;
+            const channelUrl = channelInfo.channelUrl;
+
+            try {
+                let topicId = topicSelect.value;
+                if (topicId === '__new__') {
+                    const newName = newTopicInput.value.trim();
+                    if (!newName) {
+                        this.showNotification('Enter a name for the new topic.', 'warning');
+                        newTopicInput.focus();
+                        return;
+                    }
+                    topicId = await this.createTopic(newName);
+                }
                 await this.saveChannelToSubscriptions(channelName, channelUrl, topicId);
                 modal.remove();
-                this.showNotification('Channel added to Subscription Manager!', 'success');
+                this.showNotification('Channel added to pouch!', 'success');
+            } catch (err) {
+                console.error('Bell Bearer: failed to save channel', err);
+                this.showNotification('Bell Bearer was updated — please refresh this page, then try again.', 'warning');
             }
         });
 
@@ -1053,6 +1404,15 @@ class YouTubeBookmarker {
                 modal.remove();
             }
         });
+    }
+
+    async createTopic(name) {
+        const result = await chrome.storage.local.get(['subscriptionTopics']);
+        const topics = result.subscriptionTopics || [];
+        const topic = { id: Date.now().toString(), name: name, createdAt: Date.now() };
+        topics.push(topic);
+        await chrome.storage.local.set({ subscriptionTopics: topics });
+        return topic.id;
     }
 
     async saveChannelToSubscriptions(channelName, channelUrl, topicId) {

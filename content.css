@@ -99,5 +99,37 @@
 }
 
 .bb-modal-overlay {
-    z-index: 100000 !important;
+    z-index: 2147483647 !important;
+}
+
+/* Bell Bearer entry injected into YouTube's left drawer */
+.bb-guide-entry {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    height: 40px;
+    margin: 4px 12px 8px;
+    padding: 0 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--yt-spec-text-primary, #0f0f0f);
+    font-family: "Roboto", "Arial", sans-serif;
+    font-size: 14px;
+}
+
+.bb-guide-entry:hover {
+    background: var(--yt-spec-10-percent-layer, rgba(0, 0, 0, .05));
+}
+
+.bb-guide-ico {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: #e11d48;
+}
+
+.bb-guide-text {
+    font-weight: 500;
 } 

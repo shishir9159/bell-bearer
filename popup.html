@@ -1,57 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bell Bearer</title>
     <link rel="stylesheet" href="popup.css">
 </head>
+
 <body>
     <div class="container">
         <header>
-            <h1>Bell Bearer</h1>
+            <div class="brand">
+                <h1><img class="brand-icon" src="icons/icon128.png" alt="">Bell Bearer</h1>
+            </div>
             <div class="controls">
-                <button id="themeToggle" class="btn-theme" title="Toggle dark theme">🌙</button>
-                <button id="dashboardBtn" class="btn-secondary" title="Open Dashboard">📊 Dashboard</button>
-                <button id="exportBtn" class="btn-secondary" title="Export bookmarks">📤 Export</button>
-                <button id="importBtn" class="btn-secondary" title="Import bookmarks">📥 Import</button>
-                <button id="clearAll" class="btn-secondary">Clear All</button>
+                <button id="dashboardBtn" class="btn-secondary" title="Open Dashboard">Dashboard</button>
+                <button id="exportBtn" class="btn-secondary" title="Export bookmarks">Export</button>
+                <button id="importBtn" class="btn-secondary" title="Import bookmarks">Import</button>
+                <button id="clearAll" class="btn-secondary btn-danger" title="Delete all bookmarks">Clear All</button>
             </div>
         </header>
 
         <div id="speedControlBar" class="speed-control-bar" style="display:none;">
-            <span class="speed-label">⚡ Speed Control</span>
             <div class="speed-buttons">
-                <button id="speedDownBtn" class="btn-speed" title="Decrease speed by 0.5x">− 0.5x</button>
-                <span id="speedDisplay" class="speed-display">1x</span>
-                <button id="speedUpBtn" class="btn-speed" title="Increase speed by 0.5x">+ 0.5x</button>
+                <button id="speedDownBtn" class="btn-speed" title="Slower (−0.5×)">−</button>
+                <span id="speedDisplay" class="speed-display">1×</span>
+                <button id="speedUpBtn" class="btn-speed" title="Faster (+0.5×)">+</button>
             </div>
         </div>
 
         <div class="main-content">
             <div class="video-list" id="videoList">
             </div>
-            
+
             <div class="bookmark-details" id="bookmarkDetails">
                 <div class="no-selection">
                     <p>Select a video to view bookmarks</p>
                 </div>
             </div>
         </div>
-        
-        <div class="instructions">
-            <h3>How to use:</h3>
+
+        <div class="instructions" id="instructions">
+            <h3>How to use</h3>
             <ul>
-                <li>Hold <strong>Ctrl + B</strong> while watching a YouTube video, then release to create a checkpoint</li>
-                <li>Click on a video in the list to view all bookmarks</li>
-                <li>Use <strong>Export</strong> to backup your bookmarks</li>
-                <li>Use <strong>Import</strong> to restore bookmarks from a file</li>
+                <li>Hold <strong>Ctrl + B</strong> while watching a YouTube video, then release to create a checkpoint
+                </li>
             </ul>
+            <div class="instructions-footer">
+                <button id="dismissInstructions" class="btn-okay">Okay</button>
+            </div>
         </div>
     </div>
-    
+
     <input type="file" id="importFile" accept=".json" style="display: none;">
-    
+
     <script src="popup.js"></script>
 </body>
-</html> 
+
+</html>

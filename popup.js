@@ -10,19 +10,39 @@ class BookmarkManager {
         this.setupEventListeners();
         this.setupTheme();
         this.setupSpeedBar();
+        this.setupInstructions();
         this.renderVideoList();
         this.renderBookmarkDetails();
     }
 
+    setupInstructions() {
+        const box = document.getElementById('instructions');
+        if (!box) return;
+
+        // Permanently hide the "How to use" box once dismissed.
+        chrome.storage.local.get(['hideInstructions'], (res) => {
+            if (res.hideInstructions) box.style.display = 'none';
+        });
+
+        const dismiss = document.getElementById('dismissInstructions');
+        if (dismiss) {
+            dismiss.addEventListener('click', () => {
+                box.style.display = 'none';
+                chrome.storage.local.set({ hideInstructions: true });
+            });
+        }
+    }
+
     async loadBookmarks() {
         try {
-            const result = await chrome.storage.local.get(['youtubeBookmarks', 'enableSpeedButtons']);
+            const result = await chrome.storage.local.get(['youtubeBookmarks', 'showSpeedButtonsInPopup']);
             this.videos = result.youtubeBookmarks || [];
-            this.enableSpeedButtons = result.enableSpeedButtons === true;
+            // Speed buttons are hidden in the popup unless turned on in Settings.
+            this.showSpeedButtonsInPopup = result.showSpeedButtonsInPopup === true;
         } catch (error) {
             console.error('Error loading bookmarks:', error);
             this.videos = [];
-            this.enableSpeedButtons = false;
+            this.showSpeedButtonsInPopup = false;
         }
     }
 
@@ -50,13 +70,7 @@ class BookmarkManager {
         // event delegation for bookmark actions
         const bookmarkDetails = document.getElementById('bookmarkDetails');
         bookmarkDetails.addEventListener('click', (e) => {
-            if (e.target.classList.contains('speed-up-half-btn')) {
-                const videoId = e.target.dataset.videoId;
-                this.changeSpeed(videoId, 0.5);
-            } else if (e.target.classList.contains('speed-down-half-btn')) {
-                const videoId = e.target.dataset.videoId;
-                this.changeSpeed(videoId, -0.5);
-            } else if (e.target.classList.contains('seek-btn')) {
+            if (e.target.classList.contains('seek-btn')) {
                 const bookmarkItem = e.target.closest('.bookmark-item');
                 if (bookmarkItem) {
                     const videoId = bookmarkItem.dataset.videoId;
@@ -78,7 +92,7 @@ class BookmarkManager {
         const bar = document.getElementById('speedControlBar');
         if (!bar) return;
 
-        if (!this.enableSpeedButtons) {
+        if (!this.showSpeedButtonsInPopup) {
             bar.style.display = 'none';
             return;
         }
@@ -97,7 +111,7 @@ class BookmarkManager {
                     }
                 });
                 const rate = results?.[0]?.result ?? 1;
-                document.getElementById('speedDisplay').textContent = `${rate}x`;
+                document.getElementById('speedDisplay').textContent = `${rate}×`;
             }
         } catch (_) {
             // Tab may not support scripting — ignore
@@ -129,7 +143,7 @@ class BookmarkManager {
 
             const newRate = results?.[0]?.result;
             if (newRate != null) {
-                document.getElementById('speedDisplay').textContent = `${newRate}x`;
+                document.getElementById('speedDisplay').textContent = `${newRate}×`;
             }
         } catch (error) {
             console.error('Error changing active tab speed:', error);
@@ -142,8 +156,9 @@ class BookmarkManager {
         if (this.videos.length === 0) {
             videoList.innerHTML = `
                 <div class="empty-state">
-                    <h3>No bookmarked videos</h3>
-                    <p>Start watching YouTube videos and use Ctrl+B to create bookmarks</p>
+                    <div class="empty-icon">🔖</div>
+                    <h3>No checkpoints yet</h3>
+                    <p>Hold <strong>Ctrl + B</strong> on any YouTube video to drop your first checkpoint.</p>
                 </div>
             `;
             return;
@@ -154,8 +169,8 @@ class BookmarkManager {
                  data-video-id="${video.id}">
                 <div class="video-title">${this.escapeHtml(video.title)}</div>
                 <div class="video-meta">
-                    ${video.bookmarks.length} bookmark${video.bookmarks.length !== 1 ? 's' : ''}
                     <span class="bookmark-count">${video.bookmarks.length}</span>
+                    checkpoint${video.bookmarks.length !== 1 ? 's' : ''}
                 </div>
             </div>
         `).join('');
@@ -173,7 +188,8 @@ class BookmarkManager {
         if (!this.selectedVideoId) {
             bookmarkDetails.innerHTML = `
                 <div class="no-selection">
-                    <p>Select a video to view bookmarks</p>
+                    <div class="empty-icon">⏱️</div>
+                    <p>Select a video to see its checkpoints</p>
                 </div>
             `;
             return;
@@ -183,38 +199,30 @@ class BookmarkManager {
         if (!video) return;
 
         bookmarkDetails.innerHTML = `
-            <h3>${this.escapeHtml(video.title)}</h3>
-            <p style="color: #666; margin-bottom: 16px; font-size: 12px;">
-                ${video.bookmarks.length} bookmark${video.bookmarks.length !== 1 ? 's' : ''}
-            </p>
-            ${this.enableSpeedButtons ? `
-                <div style="margin-bottom: 16px;">
-                    <button class="btn-small speed-down-half-btn" data-video-id="${video.id}" style="margin-right: 4px;" title="Decrease playback speed by 0.5x">⏩ Slow Down 0.5x</button>
-                    <button class="btn-small speed-up-half-btn" data-video-id="${video.id}" style="margin-right: 4px;" title="Increase playback speed by 0.5x">⏪ Speed Up 0.5x</button>
-                </div>
-            ` : ''}
-            ${video.bookmarks.map((bookmark, index) => {
-                const isSegment = 'start' in bookmark && 'end' in bookmark;
-                const time = isSegment ? bookmark.start : bookmark.time;
-                const timeDisplay = isSegment 
-                    ? `${this.formatTime(bookmark.start)} - ${this.formatTime(bookmark.end)}`
-                    : this.formatTime(bookmark.time);
-                
-                return `
-                <div class="bookmark-item" data-bookmark-index="${index}" data-video-id="${video.id}">
-                    <div class="bookmark-time">${timeDisplay}</div>
-                    ${bookmark.note ? `<div class="bookmark-note">${this.escapeHtml(bookmark.note)}</div>` : ''}
-                    <div class="bookmark-actions">
-                        <button class="btn-small seek-btn" data-time="${time}">
-                            Go to Time
-                        </button>
-                        <button class="btn-small delete delete-btn" data-bookmark-index="${index}">
-                            Delete
-                        </button>
+            <div class="bd-header">
+                <h3>${this.escapeHtml(video.title)}</h3>
+                <span class="bd-count">${video.bookmarks.length} checkpoint${video.bookmarks.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="checkpoint-timeline">
+                ${video.bookmarks.map((bookmark, index) => {
+                    const isSegment = 'start' in bookmark && 'end' in bookmark;
+                    const time = isSegment ? bookmark.start : bookmark.time;
+                    const timeDisplay = isSegment
+                        ? `${this.formatTime(bookmark.start)} - ${this.formatTime(bookmark.end)}`
+                        : this.formatTime(bookmark.time);
+
+                    return `
+                    <div class="bookmark-item" data-bookmark-index="${index}" data-video-id="${video.id}">
+                        <div class="bookmark-time">${timeDisplay}</div>
+                        ${bookmark.note ? `<div class="bookmark-note">${this.escapeHtml(bookmark.note)}</div>` : ''}
+                        <div class="bookmark-actions">
+                            <button class="btn-small seek-btn" data-time="${time}">▶ Go to</button>
+                            <button class="btn-small delete delete-btn" data-bookmark-index="${index}">Delete</button>
+                        </div>
                     </div>
-                </div>
-            `;
-            }).join('')}
+                `;
+                }).join('')}
+            </div>
         `;
     }
 
@@ -841,15 +849,14 @@ class BookmarkManager {
     }
 
     setupTheme() {
-        const themeToggle = document.getElementById('themeToggle');
-        if (!themeToggle) return;
-
-        // Load saved theme preference
+        // Apply the saved theme. The theme toggle now lives on the dashboard,
+        // so the popup just reflects whatever theme is saved (incl. YouTube sync).
         this.loadTheme();
 
-        // Toggle theme on button click
-        themeToggle.addEventListener('click', () => {
-            this.toggleTheme();
+        chrome.storage.onChanged.addListener((changes, area) => {
+            if (area === 'local' && changes.theme) {
+                this.loadTheme();
+            }
         });
     }
 

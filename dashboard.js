@@ -5,14 +5,10 @@ class Dashboard {
         this.channels = [];
         this.newVideos = [];
         this.currentView = 'dashboard';
-        this.enableSpeedButtons = false;
         this.init();
     }
 
     async init() {
-        const settingsResult = await chrome.storage.local.get(['enableSpeedButtons']);
-        this.enableSpeedButtons = settingsResult.enableSpeedButtons === true;
-
         await this.loadBookmarks();
         await this.loadSubscriptions();
         this.setupEventListeners();
@@ -70,11 +66,8 @@ class Dashboard {
             this.switchView('settings');
         });
 
-        // Subscription manager controls
-        document.getElementById('addChannelBtn').addEventListener('click', () => {
-            this.showAddChannelModal();
-        });
-
+        // Subscription manager controls (channels are added from the button next
+        // to Subscribe on YouTube, not here)
         document.getElementById('addTopicBtn').addEventListener('click', () => {
             this.showAddTopicModal();
         });
@@ -116,12 +109,6 @@ class Dashboard {
                     const bookmarkIndex = parseInt(bookmarkItem.dataset.bookmarkIndex);
                     this.deleteBookmark(videoId, bookmarkIndex);
                 }
-            } else if (e.target.classList.contains('speed-up-btn')) {
-                const videoId = e.target.dataset.videoId;
-                this.changeSpeed(videoId, 0.25);
-            } else if (e.target.classList.contains('speed-down-btn')) {
-                const videoId = e.target.dataset.videoId;
-                this.changeSpeed(videoId, -0.25);
             } else if (e.target.classList.contains('open-video-btn')) {
                 const videoCard = e.target.closest('.video-card');
                 if (videoCard) {
@@ -213,10 +200,6 @@ class Dashboard {
                         ${hasSubtitles ? `
                             <button class="btn-small copy-subtitles-with-time" data-video-id="${video.id}" style="margin-right: 4px;" title="Copy all subtitles with timestamps">📋 Copy All (time)</button>
                             <button class="btn-small copy-subtitles-no-time" data-video-id="${video.id}" style="margin-right: 4px;" title="Copy all subtitles without timestamps">📋 Copy All</button>
-                        ` : ''}
-                        ${this.enableSpeedButtons ? `
-                            <button class="btn-small speed-down-btn" data-video-id="${video.id}" style="margin-right: 4px;" title="Decrease playback speed">⏩ Slow Down</button>
-                            <button class="btn-small speed-up-btn" data-video-id="${video.id}" style="margin-right: 4px;" title="Increase playback speed">⏪ Speed Up</button>
                         ` : ''}
                         <button class="open-video-btn btn-small">Open Video</button>
                     </div>
@@ -1184,16 +1167,23 @@ class Dashboard {
     }
 
     setupTheme() {
-        const themeToggle = document.getElementById('themeToggle');
-        if (!themeToggle) return;
-
         // Load saved theme preference
         this.loadTheme();
 
-        // Toggle theme on button click
-        themeToggle.addEventListener('click', () => {
-            this.toggleTheme();
+        // Re-apply when the theme changes elsewhere (e.g. the YouTube theme sync).
+        chrome.storage.onChanged.addListener((changes, area) => {
+            if (area === 'local' && changes.theme) {
+                this.loadTheme();
+            }
         });
+
+        // Toggle theme on button click (dashboard only)
+        const themeToggle = document.getElementById('themeToggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                this.toggleTheme();
+            });
+        }
     }
 
     loadTheme() {
@@ -1228,7 +1218,7 @@ class Dashboard {
 
     setupSettings() {
         // Load settings
-        chrome.storage.local.get(['enableSkipShortcuts', 'preferredSubtitleLanguage'], (result) => {
+        chrome.storage.local.get(['enableSkipShortcuts', 'preferredSubtitleLanguage', 'showSpeedButtonsInPopup', 'pouchButtonStyle', 'openTabNextToCurrent', 'syncThemeWithYouTube'], (result) => {
             const isEnabled = result.enableSkipShortcuts !== false; // Default to true if not set
             const toggle = document.getElementById('enableSkipShortcuts');
             if (toggle) {
@@ -1241,9 +1231,24 @@ class Dashboard {
                 langSelect.value = preferredLang;
             }
 
-            const speedToggle = document.getElementById('enableSpeedButtons');
-            if (speedToggle) {
-                speedToggle.checked = result.enableSpeedButtons === true;
+            const popupSpeedToggle = document.getElementById('showSpeedButtonsInPopup');
+            if (popupSpeedToggle) {
+                popupSpeedToggle.checked = result.showSpeedButtonsInPopup === true;
+            }
+
+            const pouchSelect = document.getElementById('pouchButtonStyle');
+            if (pouchSelect) {
+                pouchSelect.value = result.pouchButtonStyle || 'auto';
+            }
+
+            const tabToggle = document.getElementById('openTabNextToCurrent');
+            if (tabToggle) {
+                tabToggle.checked = result.openTabNextToCurrent === true;
+            }
+
+            const syncThemeToggle = document.getElementById('syncThemeWithYouTube');
+            if (syncThemeToggle) {
+                syncThemeToggle.checked = result.syncThemeWithYouTube === true;
             }
         });
 
@@ -1264,15 +1269,31 @@ class Dashboard {
             });
         }
 
-        const speedToggle = document.getElementById('enableSpeedButtons');
-        if (speedToggle) {
-            speedToggle.addEventListener('change', (e) => {
-                const isEnabled = e.target.checked;
-                chrome.storage.local.set({ enableSpeedButtons: isEnabled });
-                this.enableSpeedButtons = isEnabled;
-                if (this.currentView === 'dashboard') {
-                    this.renderDashboard();
-                }
+        const popupSpeedToggle = document.getElementById('showSpeedButtonsInPopup');
+        if (popupSpeedToggle) {
+            popupSpeedToggle.addEventListener('change', (e) => {
+                chrome.storage.local.set({ showSpeedButtonsInPopup: e.target.checked });
+            });
+        }
+
+        const pouchSelect = document.getElementById('pouchButtonStyle');
+        if (pouchSelect) {
+            pouchSelect.addEventListener('change', (e) => {
+                chrome.storage.local.set({ pouchButtonStyle: e.target.value });
+            });
+        }
+
+        const tabToggle = document.getElementById('openTabNextToCurrent');
+        if (tabToggle) {
+            tabToggle.addEventListener('change', (e) => {
+                chrome.storage.local.set({ openTabNextToCurrent: e.target.checked });
+            });
+        }
+
+        const syncThemeToggle = document.getElementById('syncThemeWithYouTube');
+        if (syncThemeToggle) {
+            syncThemeToggle.addEventListener('change', (e) => {
+                chrome.storage.local.set({ syncThemeWithYouTube: e.target.checked });
             });
         }
     }
