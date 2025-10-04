@@ -31,6 +31,12 @@
         lichess: [
             { id: 'games', label: 'Games', panel: 'lichessGamesPanel' },
         ],
+        twitter: [
+            { id: 'time', label: 'Time', panel: 'twitterTimePanel' },
+        ],
+        reddit: [
+            { id: 'time', label: 'Time', panel: 'redditTimePanel' },
+        ],
     };
 
     /**
@@ -95,6 +101,7 @@
             Plate.mountAll();
             if (window.BB.TrialsView) window.BB.TrialsView.mount(document.getElementById('trialsView'));
             CookieSitesPanel.mount(document.getElementById('cookieSitesPanel'));
+            if (window.BB.TimeLimitView) window.BB.TimeLimitView.mountAll();
             document.querySelectorAll('[data-chess-games]').forEach((panel) => {
                 const site = panel.dataset.chessGames;
                 this.chessViews[site] = ChessStats.mountPanel(panel, {

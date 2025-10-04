@@ -84,6 +84,11 @@
                      (src/page/chess-stats.js) — one view for both sites. -->
                 <div id="chessGamesPanel" class="site-panel" data-site="chess" data-chess-games="chess"></div>
                 <div id="lichessGamesPanel" class="site-panel" data-site="lichess" data-chess-games="lichess"></div>
+
+                <!-- Today against the daily limit, for the two sites that have
+                     one. Drawn by src/page/time-limit-view.js. -->
+                <div id="twitterTimePanel" class="site-panel" data-site="twitter" data-time-limit-view="twitter"></div>
+                <div id="redditTimePanel" class="site-panel" data-site="reddit" data-time-limit-view="reddit"></div>
             </div>
         </div>
 
@@ -251,6 +256,49 @@
                     <!-- Chess sites' settings, drawn by src/page/chess-settings.js. -->
                     <div class="settings-section" id="chessSettingsPanel" data-site-settings="chess" data-chess-settings="chess" hidden></div>
                     <div class="settings-section" id="lichessSettingsPanel" data-site-settings="lichess" data-chess-settings="lichess" hidden></div>
+
+
+                    <div class="settings-section" id="twitterSettingsPanel" data-site-settings="twitter"
+                         data-plate="X" data-plate-proper hidden>
+                        <p class="settings-hint">How long you mean to spend on x.com in a day. Past the limit the site is covered by a sheet until midnight.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="twitterDailyLimit">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="twitterDailyLimit">Hold me to a daily limit on x.com</label>
+                        </div>
+                        <div class="settings-option" style="margin-top: 16px;">
+                            <span class="chess-row-gap"></span>
+                            <label class="setting-label chess-warn-name" for="twitterLimitMinutes">Time a day</label>
+                            <input type="number" id="twitterLimitMinutes" class="text-control chess-warn-seconds"
+                                   min="0" max="1440" step="5" inputmode="numeric">
+                            <span class="setting-label chess-warn-unit">minutes</span>
+                        </div>
+                        <p class="settings-hint">Time counts only while a tab of the site is on screen and this window has focus. The tally is today's and nothing older than today is stored — at midnight it is gone, not archived.</p>
+                        <div data-time-limit-view="twitter"></div>
+                    </div>
+
+                    <div class="settings-section" id="redditSettingsPanel" data-site-settings="reddit"
+                         data-plate="Reddit" data-plate-proper hidden>
+                        <p class="settings-hint">How long you mean to spend on reddit.com in a day. Past the limit the site is covered by a sheet until midnight.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="redditDailyLimit">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="redditDailyLimit">Hold me to a daily limit on reddit.com</label>
+                        </div>
+                        <div class="settings-option" style="margin-top: 16px;">
+                            <span class="chess-row-gap"></span>
+                            <label class="setting-label chess-warn-name" for="redditLimitMinutes">Time a day</label>
+                            <input type="number" id="redditLimitMinutes" class="text-control chess-warn-seconds"
+                                   min="0" max="1440" step="5" inputmode="numeric">
+                            <span class="setting-label chess-warn-unit">minutes</span>
+                        </div>
+                        <p class="settings-hint">Time counts only while a tab of the site is on screen and this window has focus. The tally is today's and nothing older than today is stored — at midnight it is gone, not archived.</p>
+                        <div data-time-limit-view="reddit"></div>
+                    </div>
 
                     <div class="settings-section" id="youtubeSettingsPanel" data-site-settings="youtube"
                          data-plate="YouTube" data-plate-proper hidden>
@@ -420,6 +468,8 @@
     <script src="src/page/keyboard.js"></script>
     <script src="src/page/stats.js"></script>
     <script src="src/page/heat-map.js"></script>
+    <script src="src/shared/time-limits.js"></script>
+    <script src="src/page/time-limit-view.js"></script>
     <script src="src/page/chess-stats.js"></script>
     <script src="src/page/chess-settings.js"></script>
     <script src="src/page/backup-buttons.js"></script>

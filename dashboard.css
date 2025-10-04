@@ -2376,3 +2376,39 @@ body[data-skin="deco"] .bb-plate {
     background: var(--text-faint);
 }
 
+/* ============================================================
+   Daily time limit — today against it, on the site's card and at
+   the foot of its settings panel (src/page/time-limit-view.js).
+   ============================================================ */
+
+.limit-panel { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+
+.limit-figure { display: flex; align-items: baseline; gap: 10px; }
+
+.limit-value {
+    font-family: var(--font-head);
+    font-size: 30px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    color: var(--text);
+}
+
+.limit-note { font-size: 13px; color: var(--text-muted); }
+
+.limit-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    overflow: hidden;
+}
+
+.limit-bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width .3s ease;
+}
+
+/* Spent reads as spent: the bar stops being a measure of progress and
+   becomes the thing standing in the way. */
+.limit-bar.is-spent span { background: var(--danger, var(--accent)); }
