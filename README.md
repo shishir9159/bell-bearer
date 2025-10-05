@@ -25,6 +25,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Skim**: A launcher over any page — find within it, reach a tab, your history or a browser action, and label every link for the keyboard
 - **Skins**: Default, Riso Paint, Medieval and Art Deco, each with its own day and night
 - **Activity**: Opt-in, on-device record of where your screen time goes
+- **Daily time limit**: A budget for x.com and reddit.com, counted while you are actually looking at them
 - **Chess.com and Lichess**: Games, time management and time at the board; a clock warning and moves read aloud while you play
 - **Reward System**: Track watch credits to spend them on popcorn for later
 
@@ -93,8 +94,8 @@ off with **Keep my playback speed** in Settings.
 
 ## Skim
 
-Off until **Settings › Skim** turns it on, because it claims three bare-Shift
-letters on every site.
+Off until **Settings › General** turns it on, because it claims three
+bare-Shift letters on every site.
 
 One window, 600px wide and centred, over whatever page you are on. The key you
 open it with decides which source it opens on — `Shift + F` the page itself,
@@ -154,6 +155,29 @@ there. All are SIL OFL. Only the latin and latin-ext cuts are kept, and
 anything outside them falls back to the stack named in `skins.css`. The same
 faces reach the injected UI, which is why `skin-fonts.css` is a content-script
 stylesheet and `fonts/*.woff2` is in `web_accessible_resources`.
+
+## Daily time limit
+
+x.com and reddit.com get a card on the dashboard and a panel in settings, and
+each can be given a budget for the day. Off by default, and while a site's
+limit is off nothing about it is counted or stored.
+
+Time is counted by the page itself, because the page is the only thing that
+knows whether it is the one being looked at: the tab has to be on screen
+*and* the window has to have the machine's focus. A tab left open behind
+another window is not time spent. Seconds are banked every fifteen, and a
+single credit is capped, so a laptop closed for three hours cannot charge the
+night to the morning.
+
+Past the limit the site is covered by a sheet saying what was spent. It is a
+sheet rather than a redirect — being bounced somewhere else tells you
+nothing, and closing the tab is meant to be the deliberate part.
+
+The tally is one day deep. It is not aged out or archived at midnight, it is
+discarded whole the first time the next day reads it, so the store never
+amounts to a record of what was browsed when: two numbers and the date they
+belong to. The site's card shows today against the limit, live, while the
+counting happens in another tab.
 
 ## Activity
 
@@ -243,6 +267,7 @@ src/shared/     pure logic, used by every surface
   feed.js          channel RSS, cached ten minutes; Refresh asks for fresh
                    resolves /@handle to a UC id by the page's canonical link
   skim.js          where a match comes to rest, and the action table
+  time-limits.js   the day's tally for x.com and reddit.com, and the limit
   time.js dom.js   formatting and escaping
 
 src/content/    injected into every page
@@ -251,6 +276,7 @@ src/content/    injected into every page
   shortcuts.js     the keybinding table
   skim.js          the launcher: page search, the jump, the result list
   link-hints.js    a label on every link and button in view
+  time-limit.js    counts the day on x.com and reddit.com, and covers them
   checkpoints.js   recording and saving checkpoints
   transcripts.js   transcript fetching and caching
   site.js          which site, and which <video> on it
@@ -277,6 +303,7 @@ src/page/       shared by popup.html and dashboard.html
   chess-stats.js   a chess site's Games view, dashboard and popup
   chess-settings.js a chess site's settings panel
   heat-map.js      the calendar heat map
+  time-limit-view.js today against a site's daily limit
   popup-width.js   applies the popup size setting, from popup.html's <head>
 
 skins.css       the token layer for every skin — linked before popup/dashboard css
