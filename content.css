@@ -1024,7 +1024,12 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    margin: 6px 8px;
+    /* The auto on the right is what puts it on the left of the /playlist
+       header: an auto margin eats the free space on the axis it is on and
+       takes precedence over align-self, so in that column it pushes the
+       button to the left edge without disturbing the row case, where the
+       button is the last item and there is nothing after it to displace. */
+    margin: 6px auto 6px 0;
     padding: 0 14px;
     height: 32px;
     /* The /playlist header lays its actions out in a column, and a flex item
