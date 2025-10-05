@@ -1218,7 +1218,7 @@ class Dashboard {
 
     setupSettings() {
         // Load settings
-        chrome.storage.local.get(['enableSkipShortcuts', 'preferredSubtitleLanguage', 'showSpeedButtonsInPopup', 'pouchButtonStyle', 'openTabNextToCurrent', 'syncThemeWithYouTube'], (result) => {
+        chrome.storage.local.get(['enableSkipShortcuts', 'preferredSubtitleLanguage', 'showSpeedButtonsInPopup', 'pouchButtonStyle', 'openTabNextToCurrent', 'syncThemeWithYouTube', 'connectToSowon'], (result) => {
             const isEnabled = result.enableSkipShortcuts !== false; // Default to true if not set
             const toggle = document.getElementById('enableSkipShortcuts');
             if (toggle) {
@@ -1249,6 +1249,11 @@ class Dashboard {
             const syncThemeToggle = document.getElementById('syncThemeWithYouTube');
             if (syncThemeToggle) {
                 syncThemeToggle.checked = result.syncThemeWithYouTube === true;
+            }
+
+            const sowonToggle = document.getElementById('connectToSowon');
+            if (sowonToggle) {
+                sowonToggle.checked = result.connectToSowon === true;
             }
         });
 
@@ -1294,6 +1299,13 @@ class Dashboard {
         if (syncThemeToggle) {
             syncThemeToggle.addEventListener('change', (e) => {
                 chrome.storage.local.set({ syncThemeWithYouTube: e.target.checked });
+            });
+        }
+
+        const sowonToggle = document.getElementById('connectToSowon');
+        if (sowonToggle) {
+            sowonToggle.addEventListener('change', (e) => {
+                chrome.storage.local.set({ connectToSowon: e.target.checked });
             });
         }
     }

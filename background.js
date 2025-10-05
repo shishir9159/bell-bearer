@@ -44,6 +44,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ---------------------------------------------------------------------------
+// Optional sowon integration.
+// When "Connect to sowon" is enabled in Settings, the focused tab's title
+// and tab-group name are POSTed to the sowon timer listening on localhost,
+// so its end-of-timer report can split Chrome time by site and group.
+// Fire-and-forget: if sowon isn't running, the fetch fails silently.
+// The setting is read fresh on every event (MV3 workers lose module state).
+// ---------------------------------------------------------------------------
+const SOWON_FOCUS_URL = 'http://127.0.0.1:41414/focus';
+
+function reportFocusToSowon() {
+    chrome.storage.local.get(['connectToSowon'], (s) => {
+        if (s.connectToSowon !== true) return;
+
+        chrome.tabs.query({ active: true, lastFocusedWindow: true }, async (tabs) => {
+            const tab = tabs && tabs[0];
+            if (!tab || !tab.title) return;
+
+            let group = '';
+            if (chrome.tabGroups && tab.groupId != null && tab.groupId !== -1) {
+                try {
+                    const g = await chrome.tabGroups.get(tab.groupId);
+                    group = (g && g.title) || '';
+                } catch (_) { /* group vanished between events */ }
+            }
+
+            // Body format sowon expects: "<group>\n<title>"
+            fetch(SOWON_FOCUS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: `${group}\n${tab.title}`,
+            }).catch(() => { /* sowon not running — that's fine */ });
+        });
+    });
+}
+
+chrome.tabs.onActivated.addListener(() => reportFocusToSowon());
+chrome.windows.onFocusChanged.addListener(() => reportFocusToSowon());
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    // Title changes on the active tab (navigation, SPA route changes).
+    if (tab && tab.active && (changeInfo.title || changeInfo.status === 'complete')) {
+        reportFocusToSowon();
+    }
+});
+if (chrome.tabGroups) {
+    chrome.tabGroups.onUpdated.addListener(() => reportFocusToSowon());
+}
+
+// ---------------------------------------------------------------------------
 // "Open new tabs next to the current tab" (including Ctrl+T)
 // Robust against MV3 service-worker sleep: the setting is read fresh on every
 // tab creation, and the last-active tab index is kept in chrome.storage.session
