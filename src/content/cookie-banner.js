@@ -118,6 +118,10 @@
                 if (target.isConnected) target.click();
                 notify(`Cookies will be ${decision === 'accept' ? 'accepted' : 'rejected'} on ${host} from now on`, 'success');
             });
+            // The chip sits inside the banner's own button row, and some
+            // managers dismiss on losing the focus they put there.
+            const dom = root.BB && root.BB.Dom;
+            if (dom && dom.holdFocus) dom.holdFocus(button);
             return button;
         }
 

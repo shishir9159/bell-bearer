@@ -79,6 +79,10 @@
 
         overlay.addEventListener('click', onBackdropClick);
         document.addEventListener('keydown', onKeyDown, true);
+        // One listener for every button the dialog will ever draw, wired
+        // before the contents are, so a panel that redraws itself keeps it.
+        const dom = root.BB && root.BB.Dom;
+        if (dom && dom.holdFocus) dom.holdFocus(overlay);
         document.body.appendChild(overlay);
 
         // Any element marked data-bb-close dismisses the dialog.

@@ -43,7 +43,38 @@
         return escapeAttr(safeUrl(url));
     }
 
-    const Dom = { escapeHtml, escapeAttr, safeUrl, safeUrlAttr };
+    /**
+     * Stop a press on a button inside `root` from moving the focus.
+     *
+     * A mousedown's default action is to focus what was pressed. On a page we
+     * own that is harmless; over someone else's page it is not. The focus
+     * leaves whatever had it — the query box of a sheet drawn over the page,
+     * or the page's own field halfway through a sentence — and the host reacts
+     * to losing it: YouTube re-arms its single-key shortcuts, a cookie banner
+     * closes, chess.com drops its menu. The button is then working against the
+     * page it was added to.
+     *
+     * Cancelling the default leaves the focus where it was and costs nothing:
+     * click is a separate event and is not what moves it, so the handler that
+     * does the work still runs, and keyboard activation is untouched.
+     *
+     * One delegated listener per container rather than one per button, so a
+     * panel that redraws its own contents has nothing to re-wire. `root` may
+     * be the button itself — closest() matches the element it starts from.
+     */
+    function holdFocus(root, selector = 'button') {
+        if (!root || !root.addEventListener) return root;
+        root.addEventListener('mousedown', (event) => {
+            // Right and middle presses do not focus anything; leave the
+            // context menu and the middle-click paste alone.
+            if (event.button !== 0) return;
+            const target = event.target.closest && event.target.closest(selector);
+            if (target) event.preventDefault();
+        });
+        return root;
+    }
+
+    const Dom = { escapeHtml, escapeAttr, safeUrl, safeUrlAttr, holdFocus };
 
     root.BB = root.BB || {};
     root.BB.Dom = Dom;
