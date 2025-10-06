@@ -51,8 +51,14 @@
         for (const host of hosts) {
             const site = TimeLimits.get(host.dataset.timeLimitView);
             if (!site) continue;
-            host.classList.add('limit-panel');
-            host.innerHTML = bodyHtml(site, TimeLimits.statusFor(state, settings, site.id));
+            // The figure sits in a wrapper of its own rather than the class
+            // going on the host: on the dashboard the host is a `.site-panel`,
+            // which is display:none until its site is the one open, and a
+            // second class on it setting display:flex won that tie on source
+            // order — so both sites' panels were drawn at once, whichever
+            // card you opened.
+            const body = bodyHtml(site, TimeLimits.statusFor(state, settings, site.id));
+            host.innerHTML = `<div class="limit-panel">${body}</div>`;
         }
     }
 
