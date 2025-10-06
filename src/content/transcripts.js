@@ -48,7 +48,11 @@
                         // No captions / not playable — remember so we stop asking.
                         unavailable.add(videoId);
                     } else {
-                        console.warn('Bell Bearer: could not fetch transcript', error && error.message);
+                        // A transcript is a bonus on a checkpoint and every
+                        // other part of the feature carries on without one, so
+                        // a failed fetch is a note for whoever is debugging,
+                        // not something to raise in the page's console.
+                        console.debug('Bell Bearer: could not fetch transcript', error && error.message);
                     }
                     return null;
                 })
