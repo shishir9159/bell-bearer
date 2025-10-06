@@ -340,16 +340,33 @@
         }
 
         /**
-         * The list shows four rows and scrolls for the rest. Measured rather
-         * than given a height in CSS: a group heading is taller than a row,
-         * so "four rows" is only ever the height of the fourth one.
+         * The list is held at the one height it can ever need — four rows,
+         * each under a group heading of its own — and scrolls for the rest.
+         *
+         * It used to be sized to what was drawn, which made the launcher grow
+         * and shrink on almost every keystroke. That is not only restless to
+         * look at: the panel is placed by its own height, so in the centre
+         * position the box you are typing into slid up the screen as results
+         * came in and back down as they went. Reserving the tallest layout up
+         * front costs some empty space under a short list and buys a window
+         * that does not move while you type. Arrowing through page matches
+         * still moves it — that is `jump()` stepping out of the way of a
+         * match, which is a different thing and deliberate.
+         *
+         * Measured rather than written into the CSS because the row and the
+         * heading are sized in the skin's own fonts.
          */
+        const METRICS = { row: 34, head: 26 };
+
         function fitList() {
-            listBox.style.maxHeight = '';
-            const drawn = listBox.querySelectorAll('.bb-skim-row');
-            if (drawn.length <= Skim.VISIBLE_ROWS) return;
-            const last = drawn[Skim.VISIBLE_ROWS - 1];
-            listBox.style.maxHeight = `${last.offsetTop + last.offsetHeight}px`;
+            const row = listBox.querySelector('.bb-skim-row');
+            const head = listBox.querySelector('.bb-skim-grouphead');
+            if (row && row.offsetHeight) METRICS.row = row.offsetHeight;
+            if (head && head.offsetHeight) METRICS.head = head.offsetHeight;
+
+            const tallest = Skim.VISIBLE_ROWS * METRICS.row
+                + Skim.SOURCES.length * METRICS.head;
+            listBox.style.height = `${tallest}px`;
         }
 
         function setFooter(text) {
