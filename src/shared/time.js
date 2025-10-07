@@ -67,7 +67,39 @@
         return 'just now';
     }
 
-    const Time = { formatTime, parseTimestamp, relativeTime };
+    /**
+     * The same age as "6h", "3d", "1w" — the compact stamp X puts on a post.
+     *
+     * The X pouch stores when a post was made rather than the string X was
+     * showing at the time, because a stored "6h" is wrong by tomorrow. This is
+     * how that number is put back into the shape the design draws.
+     *
+     * Rounds down, like relativeTime and for the same reason, and answers ''
+     * for a missing date rather than dating it to the epoch.
+     */
+    const SHORT_AGES = [
+        ['y', 31536e6],
+        ['w', 6048e5],
+        ['d', 864e5],
+        ['h', 36e5],
+        ['m', 6e4],
+    ];
+
+    function shortAge(timestamp, now = Date.now()) {
+        const at = Number(timestamp);
+        if (!at || !Number.isFinite(at)) return '';
+
+        const elapsed = now - at;
+        if (!Number.isFinite(elapsed) || elapsed < 6e4) return 'now';
+
+        for (const [unit, size] of SHORT_AGES) {
+            const count = Math.floor(elapsed / size);
+            if (count >= 1) return `${count}${unit}`;
+        }
+        return 'now';
+    }
+
+    const Time = { formatTime, parseTimestamp, relativeTime, shortAge };
 
     root.BB = root.BB || {};
     root.BB.Time = Time;
