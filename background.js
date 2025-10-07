@@ -43,15 +43,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// ---------------------------------------------------------------------------
-// Optional sowon integration.
-// When "Connect to sowon" is enabled in Settings, the focused tab's title
-// and tab-group name are POSTed to the sowon timer listening on localhost,
-// so its end-of-timer report can split Chrome time by site and group.
-// Fire-and-forget: if sowon isn't running, the fetch fails silently.
-// The setting is read fresh on every event (MV3 workers lose module state).
-// ---------------------------------------------------------------------------
-const SOWON_FOCUS_URL = 'http://127.0.0.1:41414/focus';
+const SOWON_FOCUS_URL = 'http://127.0.0.1:41414/bellbearer.FocusService/ReportFocus';
+
+function pbStringField(fieldNumber, str) {
+    const data = new TextEncoder().encode(str);
+    const bytes = [(fieldNumber << 3) | 2];
+    let n = data.length;
+    do {
+        bytes.push((n & 0x7f) | (n > 0x7f ? 0x80 : 0));
+        n >>>= 7;
+    } while (n > 0);
+    return [...bytes, ...data];
+}
+
+function encodeFocusUpdateFrame(group, title, domain) {
+    const msg = [
+        ...pbStringField(1, group),
+        ...pbStringField(2, title),
+        ...pbStringField(3, domain || ''),
+    ];
+    const frame = new Uint8Array(5 + msg.length);
+    frame[0] = 0;
+    new DataView(frame.buffer).setUint32(1, msg.length, false);
+    frame.set(msg, 5);
+    return frame;
+}
 
 function reportFocusToSowon() {
     chrome.storage.local.get(['connectToSowon'], (s) => {
@@ -69,11 +85,18 @@ function reportFocusToSowon() {
                 } catch (_) { /* group vanished between events */ }
             }
 
-            // Body format sowon expects: "<group>\n<title>"
+            let domain = '';
+            try {
+                domain = new URL(tab.url || tab.pendingUrl || '').hostname.replace(/^www\./, '');
+            } catch (_) { /* chrome:// pages etc. — no domain */ }
+
             fetch(SOWON_FOCUS_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'text/plain' },
-                body: `${group}\n${tab.title}`,
+                headers: {
+                    'Content-Type': 'application/grpc-web+proto',
+                    'X-Grpc-Web': '1',
+                },
+                body: encodeFocusUpdateFrame(group, tab.title, domain),
             }).catch(() => { /* sowon not running — that's fine */ });
         });
     });
@@ -94,17 +117,26 @@ if (chrome.tabGroups) {
 // ---------------------------------------------------------------------------
 // "Open new tabs next to the current tab" (including Ctrl+T)
 // Robust against MV3 service-worker sleep: the setting is read fresh on every
-// tab creation, and the last-active tab index is kept in chrome.storage.session
+// tab creation, and the active-tab history is kept in chrome.storage.session
 // (which survives worker restarts within the browser session).
 // ---------------------------------------------------------------------------
-const bbActiveIdxKey = (windowId) => `bbActiveIdx_${windowId}`;
+const bbLastActiveKey = (windowId) => `bbLastActive_${windowId}`;
 
-// Remember where the current tab is, per window.
+// Remember the current AND previous active tab id per window. Both are
+// needed: Ctrl+T activates the new tab immediately, so by the time our
+// onCreated callbacks run, the "current" record may already point at the
+// new tab itself — the tab the user was on is then the previous one.
+// Ids are stored instead of indexes because an index goes stale as soon
+// as any tab is moved or closed; the index is resolved at move time.
 chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
-    chrome.tabs.get(tabId, (tab) => {
-        if (!chrome.runtime.lastError && tab) {
-            chrome.storage.session.set({ [bbActiveIdxKey(windowId)]: tab.index });
+    const key = bbLastActiveKey(windowId);
+    chrome.storage.session.get([key], (res) => {
+        const old = res[key];
+        const rec = { tabId };
+        if (old) {
+            rec.prevTabId = old.tabId !== tabId ? old.tabId : old.prevTabId;
         }
+        chrome.storage.session.set({ [key]: rec });
     });
 });
 
@@ -126,22 +158,22 @@ chrome.tabs.onCreated.addListener((tab) => {
     chrome.storage.local.get(['openTabNextToCurrent'], (s) => {
         if (s.openTabNextToCurrent !== true) return;
 
-        const key = bbActiveIdxKey(tab.windowId);
+        const key = bbLastActiveKey(tab.windowId);
         chrome.storage.session.get([key], (res) => {
-            const anchor = res[key];
-            if (anchor != null) {
-                const targetIndex = anchor + 1;
+            const rec = res[key];
+            // The anchor is the tab the user was on. If the new tab's own
+            // activation was recorded already, that's rec.prevTabId; if our
+            // read won the race, it's still rec.tabId. Correct either way.
+            const anchorId = rec ? (rec.tabId === tab.id ? rec.prevTabId : rec.tabId) : null;
+            if (anchorId == null) return;
+
+            // Resolve the anchor's index NOW — stored indexes go stale.
+            chrome.tabs.get(anchorId, (anchorTab) => {
+                if (chrome.runtime.lastError || !anchorTab) return;
+                if (anchorTab.windowId !== tab.windowId) return;
+                const targetIndex = anchorTab.index + 1;
                 if (tab.index !== targetIndex) {
                     chrome.tabs.move(tab.id, { index: targetIndex }, () => { void chrome.runtime.lastError; });
-                }
-                return;
-            }
-            // Fallback (first new tab before any tab switch): place after the
-            // current active tab, unless the new blank tab is already it.
-            chrome.tabs.query({ active: true, windowId: tab.windowId }, (tabs) => {
-                const act = tabs && tabs[0];
-                if (act && act.id !== tab.id) {
-                    chrome.tabs.move(tab.id, { index: act.index + 1 }, () => { void chrome.runtime.lastError; });
                 }
             });
         });
