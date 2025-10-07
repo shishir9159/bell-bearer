@@ -29,6 +29,7 @@
     const Overlay = ns.Overlay || req('./overlay.js');
     const PageInfo = ns.PageInfo || req('./page-info.js');
     const PouchSheet = ns.PouchSheet || req('./pouch-sheet.js');
+    const PouchButton = ns.PouchButton || req('../shared/pouch-button.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const BUTTON_ID = 'bb-add-to-subscriptions-btn';
@@ -36,16 +37,6 @@
     const GUIDE_ID = 'bb-guide-entry';
     const CONTEXT_LOST = 'Bell Bearer was updated — please refresh this page.';
 
-    const POUCH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:24px;height:24px;fill:currentColor;"><path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"></path></svg>';
-
-    /**
-     * The filed state. YouTube turns its own Subscribe button into a flat grey
-     * "Subscribed" pill once you are subscribed, and the pouch button sits
-     * right next to it — so a filed channel gets the same treatment, a tick on
-     * the same grey, rather than going on offering a "+" for something already
-     * done.
-     */
-    const TICK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" style="width:22px;height:22px;fill:currentColor;"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
 
     /**
      * Where the playlist panel on a watch page keeps its header, and where a
@@ -186,19 +177,18 @@
             const anchor = renderer || document.querySelector('yt-button-shape button[aria-label*="Subscribe"]');
             if (!anchor || !anchor.parentElement) return false;
 
-            const button = document.createElement('button');
-            button.id = BUTTON_ID;
-            button.type = 'button';
-            button.className = getPouchButtonStyle() === 'accent' ? 'bb-accent' : '';
-            button.innerHTML = POUCH_ICON;
-            button.title = 'Add channel to Bell Bearer pouch';
-            button.setAttribute('aria-label', 'Add channel to Bell Bearer pouch');
-            button.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (button.classList.contains('bb-in-pouch')) openRemoveChannelDialog();
-                else openAddChannelDialog();
+            const button = PouchButton.create({
+                id: BUTTON_ID,
+                className: getPouchButtonStyle() === 'accent' ? 'bb-accent' : '',
+                label: 'Add channel to Bell Bearer pouch',
+                onClick: () => {
+                    if (button.classList.contains('bb-in-pouch')) openRemoveChannelDialog();
+                    else openAddChannelDialog();
+                },
             });
+            // It sits in YouTube's own subscribe row, and taking the focus
+            // there re-arms the player's single-key shortcuts on the way back.
+            Dom.holdFocus(button);
 
             const smartimation = renderer && renderer.querySelector('yt-smartimation');
             const target = (smartimation && smartimation.parentElement) ? smartimation : anchor;
@@ -226,15 +216,12 @@
             const info = PageInfo.getChannelInfo();
             const filed = (await channels()).some((channel) => sameChannel(channel, info));
 
-            button.classList.toggle('bb-in-pouch', filed);
-            button.innerHTML = filed ? TICK_ICON : POUCH_ICON;
-
-            const label = filed
-                ? `${info.channelName} is in your pouch — click to remove it`
-                : 'Add channel to Bell Bearer pouch';
-            button.title = label;
-            button.setAttribute('aria-label', label);
-            button.setAttribute('aria-pressed', String(filed));
+            PouchButton.mark(button, {
+                filed,
+                label: filed
+                    ? `${info.channelName} is in your pouch — click to remove it`
+                    : 'Add channel to Bell Bearer pouch',
+            });
         }
 
         /**
@@ -312,6 +299,7 @@
                 event.stopPropagation();
                 togglePlaylist(button);
             });
+            Dom.holdFocus(button);
 
             header.appendChild(button);
             markPlaylistButton();
@@ -717,6 +705,10 @@
         // going through the watcher, which only runs on an animation frame.
         return {
             install, onNavigate, refreshPouchButton,
+            // The name the keyboard uses on either site. Both surfaces answer
+            // to it so src/content/main.js can dispatch Shift+P without
+            // knowing which site it is on.
+            openPouch: openTopicsDialog,
             openTopicsDialog, openAddChannelDialog, openRemoveChannelDialog,
             injectGuideEntry, injectPouchButton, injectPlaylistButton,
             markPouchButton, markPlaylistButton,
