@@ -30,6 +30,33 @@
     }
 
     /**
+     * True when the page we are drawing over is dark, for any site that does
+     * not announce it the way YouTube does.
+     *
+     * X has three themes, not two — Default, Dim and Lights out — and names
+     * none of them in an attribute we could read. What it does do is set
+     * `color-scheme` on the root and paint the body, so this asks the two
+     * questions in that order and falls back to the OS preference for a page
+     * that has painted nothing yet.
+     */
+    function isPageDark() {
+        const scheme = getComputedStyle(document.documentElement).colorScheme || '';
+        if (/\bdark\b/.test(scheme) && !/\blight\b/.test(scheme)) return true;
+        if (/\blight\b/.test(scheme) && !/\bdark\b/.test(scheme)) return false;
+
+        const painted = document.body && getComputedStyle(document.body).backgroundColor;
+        const rgb = /rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)/.exec(painted || '');
+        // A transparent body is not a light one — it is a body that has not
+        // been painted, so the question falls to the OS below.
+        if (rgb && (rgb[4] === undefined || Number(rgb[4]) > 0)) {
+            const luma = (0.2126 * +rgb[1] + 0.7152 * +rgb[2] + 0.0722 * +rgb[3]) / 255;
+            return luma < 0.5;
+        }
+
+        return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+
+    /**
      * 'dark' or 'light' for anything drawn on top of the page.
      *
      * Deliberately not the extension's own saved theme. The skin decides the
@@ -39,7 +66,13 @@
      * and the dashboard, which are documents of our own.
      */
     function pageTheme() {
-        return isYouTubeDark() ? 'dark' : 'light';
+        // YouTube is asked directly because it answers directly; everything
+        // else is read off the paint. Checking YouTube's own marker first
+        // matters on a YouTube page that has not laid out yet, where the body
+        // is still unpainted and the generic test would fall through to the
+        // OS preference and flash the wrong state for a frame.
+        if (isYouTubeDark()) return 'dark';
+        return isPageDark() ? 'dark' : 'light';
     }
 
     /**
@@ -84,7 +117,7 @@
         element.dataset.bbSkin = skin;
     }
 
-    const Theme = { pageTheme, isYouTubeDark, installYouTubeSync, appearance, dress };
+    const Theme = { pageTheme, isYouTubeDark, isPageDark, installYouTubeSync, appearance, dress };
 
     root.BB = root.BB || {};
     root.BB.Theme = Theme;
