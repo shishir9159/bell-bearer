@@ -9,12 +9,21 @@ class Dashboard {
     }
 
     async init() {
-        await this.loadBookmarks();
-        await this.loadSubscriptions();
-        this.setupEventListeners();
-        this.setupSettings();
-        this.setupTheme();
-        this.renderDashboard();
+        // Wire the settings UI FIRST and independently of data loading: a
+        // failure while loading bookmarks/subscriptions must never leave the
+        // settings toggles dead (clicking them would then silently do
+        // nothing, so a setting could never be turned on).
+        try { this.setupSettings(); } catch (e) { console.error('setupSettings failed', e); }
+        try { this.setupTheme(); } catch (e) { console.error('setupTheme failed', e); }
+        try { this.setupEventListeners(); } catch (e) { console.error('setupEventListeners failed', e); }
+
+        try {
+            await this.loadBookmarks();
+            await this.loadSubscriptions();
+        } catch (e) {
+            console.error('loading dashboard data failed', e);
+        }
+        try { this.renderDashboard(); } catch (e) { console.error('renderDashboard failed', e); }
     }
 
     async loadBookmarks() {
@@ -1218,7 +1227,7 @@ class Dashboard {
 
     setupSettings() {
         // Load settings
-        chrome.storage.local.get(['enableSkipShortcuts', 'preferredSubtitleLanguage', 'showSpeedButtonsInPopup', 'pouchButtonStyle', 'openTabNextToCurrent', 'syncThemeWithYouTube', 'connectToSowon'], (result) => {
+        chrome.storage.local.get(['enableSkipShortcuts', 'preferredSubtitleLanguage', 'showSpeedButtonsInPopup', 'pouchButtonStyle', 'openTabNextToCurrent', 'syncThemeWithYouTube', 'connectToSowon', 'markdownContextMenu'], (result) => {
             const isEnabled = result.enableSkipShortcuts !== false; // Default to true if not set
             const toggle = document.getElementById('enableSkipShortcuts');
             if (toggle) {
@@ -1254,6 +1263,11 @@ class Dashboard {
             const sowonToggle = document.getElementById('connectToSowon');
             if (sowonToggle) {
                 sowonToggle.checked = result.connectToSowon === true;
+            }
+
+            const mdToggle = document.getElementById('markdownContextMenu');
+            if (mdToggle) {
+                mdToggle.checked = result.markdownContextMenu !== false;
             }
         });
 
@@ -1306,6 +1320,13 @@ class Dashboard {
         if (sowonToggle) {
             sowonToggle.addEventListener('change', (e) => {
                 chrome.storage.local.set({ connectToSowon: e.target.checked });
+            });
+        }
+
+        const mdToggle = document.getElementById('markdownContextMenu');
+        if (mdToggle) {
+            mdToggle.addEventListener('change', (e) => {
+                chrome.storage.local.set({ markdownContextMenu: e.target.checked });
             });
         }
     }

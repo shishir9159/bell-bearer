@@ -43,6 +43,65 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
+// ---------------------------------------------------------------------------
+// "Copy as Markdown" context menus.
+//
+// Markdown conversion is an EXPLICIT action: it happens only when the user
+// right-clicks a link (or the page) and picks the item. An earlier version
+// intercepted Ctrl+C and converted whenever "nothing looked selected", which
+// was wrong — window.getSelection() is empty for selections inside shadow DOM
+// and form fields, so ordinary copies were silently replaced.
+//
+// Note: copying from the browser's address bar cannot be hooked. The omnibox
+// is browser chrome, not page content, and no extension API exposes it.
+// ---------------------------------------------------------------------------
+const MENU_LINK = 'bb-copy-link-markdown';
+const MENU_PAGE = 'bb-copy-page-markdown';
+
+function refreshContextMenus() {
+    chrome.contextMenus.removeAll(() => {
+        void chrome.runtime.lastError;
+        chrome.storage.local.get(['markdownContextMenu'], (s) => {
+            // Enabled unless explicitly turned off.
+            if (s.markdownContextMenu === false) return;
+            chrome.contextMenus.create({
+                id: MENU_LINK,
+                title: 'Copy link as Markdown',
+                contexts: ['link'],
+            }, () => { void chrome.runtime.lastError; });
+            chrome.contextMenus.create({
+                id: MENU_PAGE,
+                title: 'Copy page as Markdown',
+                contexts: ['page'],
+            }, () => { void chrome.runtime.lastError; });
+        });
+    });
+}
+
+// Menus are per-profile and persist, but must be (re)created when the
+// extension installs/updates and when the browser starts a new session.
+chrome.runtime.onInstalled.addListener(refreshContextMenus);
+if (chrome.runtime.onStartup) chrome.runtime.onStartup.addListener(refreshContextMenus);
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.markdownContextMenu) refreshContextMenus();
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (!tab || tab.id == null) return;
+
+    if (info.menuItemId === MENU_LINK && info.linkUrl) {
+        chrome.tabs.sendMessage(tab.id, {
+            action: 'copyLinkAsMarkdown',
+            linkUrl: info.linkUrl,
+            selectionText: info.selectionText || '',
+        }, () => { void chrome.runtime.lastError; });
+    } else if (info.menuItemId === MENU_PAGE) {
+        chrome.tabs.sendMessage(tab.id, {
+            action: 'copyMarkdownLink',
+        }, () => { void chrome.runtime.lastError; });
+    }
+});
+
 const SOWON_FOCUS_URL = 'http://127.0.0.1:41414/bellbearer.FocusService/ReportFocus';
 
 function pbStringField(fieldNumber, str) {
@@ -69,7 +128,19 @@ function encodeFocusUpdateFrame(group, title, domain) {
     return frame;
 }
 
+// Backoff so that, with "Connect to sowon" enabled but no timer
+// running, we don't fire a doomed localhost fetch on every tab switch
+// all day. After a few consecutive failures we retry at most once a
+// minute; the first success clears it. State is in-memory only — an
+// MV3 worker restart resets it, which just means one probe on wake.
+let sowonFailures = 0;
+let sowonNextAttempt = 0;
+const SOWON_MAX_FAILURES = 3;
+const SOWON_BACKOFF_MS = 60000;
+
 function reportFocusToSowon() {
+    if (sowonFailures >= SOWON_MAX_FAILURES && Date.now() < sowonNextAttempt) return;
+
     chrome.storage.local.get(['connectToSowon'], (s) => {
         if (s.connectToSowon !== true) return;
 
@@ -97,7 +168,13 @@ function reportFocusToSowon() {
                     'X-Grpc-Web': '1',
                 },
                 body: encodeFocusUpdateFrame(group, tab.title, domain),
-            }).catch(() => { /* sowon not running — that's fine */ });
+            }).then(() => {
+                sowonFailures = 0; // sowon is up — resume normal cadence
+            }).catch(() => {
+                // sowon not running — count toward backoff.
+                sowonFailures++;
+                sowonNextAttempt = Date.now() + SOWON_BACKOFF_MS;
+            });
         });
     });
 }
@@ -116,64 +193,113 @@ if (chrome.tabGroups) {
 
 // ---------------------------------------------------------------------------
 // "Open new tabs next to the current tab" (including Ctrl+T)
-// Robust against MV3 service-worker sleep: the setting is read fresh on every
-// tab creation, and the active-tab history is kept in chrome.storage.session
-// (which survives worker restarts within the browser session).
+//
+// Modeled on sblask/webextension-open-tabs-next-to-current. The core ideas
+// that make it reliable:
+//  - Keep a most-recently-used list of tab ids per window (unshift on
+//    activate, forget on remove). The "anchor" — the tab the user was on —
+//    is simply the most recent id that isn't the new tab. This sidesteps the
+//    onCreated/onActivated ordering race entirely: whether or not the new
+//    tab's own activation has been recorded yet, the previous tab is next.
+//  - Do NOT gate on the new tab's URL. A brittle "is this a blank new tab?"
+//    URL check was the bug: Ctrl+T tabs whose URL didn't match were skipped.
+//    Instead, move any newly created tab that has no opener; tabs opened from
+//    a link carry openerTabId and are already positioned by the browser, and
+//    a tab already in the right place is left alone.
+//  - State lives in chrome.storage.session so it survives MV3 worker sleep.
+//  - chrome.tabs.move on a just-created tab can be transiently rejected, so
+//    the move is retried rather than swallowed.
+//
+// Diagnostic logging goes to the service-worker console (chrome://extensions
+// -> Inspect views: service worker). Silence it with
+// chrome.storage.local.set({ bbTabMoveDebug: false }) there.
 // ---------------------------------------------------------------------------
-const bbLastActiveKey = (windowId) => `bbLastActive_${windowId}`;
+let bbDebug = true;
+chrome.storage.local.get(['bbTabMoveDebug'], (s) => { if (s.bbTabMoveDebug === false) bbDebug = false; });
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.bbTabMoveDebug) bbDebug = changes.bbTabMoveDebug.newValue === true;
+});
+const bbLog = (...a) => { if (bbDebug) console.log('[bell-bearer tabmove]', ...a); };
 
-// Remember the current AND previous active tab id per window. Both are
-// needed: Ctrl+T activates the new tab immediately, so by the time our
-// onCreated callbacks run, the "current" record may already point at the
-// new tab itself — the tab the user was on is then the previous one.
-// Ids are stored instead of indexes because an index goes stale as soon
-// as any tab is moved or closed; the index is resolved at move time.
+const bbMruKey = (windowId) => `bbMru_${windowId}`; // MRU-first array of tab ids
+
+// Most-recently-active tab id, per window, at the front of the array.
 chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
-    const key = bbLastActiveKey(windowId);
+    const key = bbMruKey(windowId);
     chrome.storage.session.get([key], (res) => {
-        const old = res[key];
-        const rec = { tabId };
-        if (old) {
-            rec.prevTabId = old.tabId !== tabId ? old.tabId : old.prevTabId;
-        }
-        chrome.storage.session.set({ [key]: rec });
+        let mru = (res[key] || []).filter((id) => id !== tabId);
+        mru.unshift(tabId);
+        if (mru.length > 25) mru = mru.slice(0, 25);
+        chrome.storage.session.set({ [key]: mru });
     });
 });
 
+// Drop closed tabs so a stale id is never chosen as the anchor.
+chrome.tabs.onRemoved.addListener((tabId, info) => {
+    const key = bbMruKey(info.windowId);
+    chrome.storage.session.get([key], (res) => {
+        const mru = (res[key] || []).filter((id) => id !== tabId);
+        chrome.storage.session.set({ [key]: mru });
+    });
+});
+
+// Move with retry: a just-created (or being-dragged) tab may be temporarily
+// un-moveable; a few spaced attempts let it settle.
+function bbMoveTab(tabId, index, attempt = 0) {
+    chrome.tabs.move(tabId, { index }, () => {
+        const err = chrome.runtime.lastError;
+        if (err) {
+            bbLog('move failed:', err.message, '(attempt', attempt + ')');
+            if (attempt < 5) setTimeout(() => bbMoveTab(tabId, index, attempt + 1), 60);
+        } else {
+            bbLog('moved tab', tabId, 'to index', index);
+        }
+    });
+}
+
+// Place newTab immediately after anchorTab (resolving the anchor's CURRENT
+// index, which may have shifted), unless it's already there.
+function bbPlaceAfter(newTab, anchorId) {
+    chrome.tabs.get(anchorId, (anchorTab) => {
+        if (chrome.runtime.lastError || !anchorTab) { bbLog('anchor', anchorId, 'gone'); return; }
+        if (anchorTab.windowId !== newTab.windowId) { bbLog('anchor in another window'); return; }
+        const target = anchorTab.index + 1;
+        if (newTab.index === target) { bbLog('already positioned at', target); return; }
+        bbMoveTab(newTab.id, target);
+    });
+}
+
 chrome.tabs.onCreated.addListener((tab) => {
-    // Tabs opened from a link already sit next to their opener — leave them.
-    if (tab.openerTabId != null) return;
+    bbLog('onCreated', { id: tab.id, index: tab.index, url: tab.url, pendingUrl: tab.pendingUrl, openerTabId: tab.openerTabId, active: tab.active });
 
-    // Only reposition "blank" new tabs (Ctrl+T / the new-tab button), not
-    // restored sessions or tabs that already have a destination.
-    const url = tab.pendingUrl || tab.url || '';
-    const isBlankNewTab = url === '' ||
-        url.startsWith('chrome://newtab') ||
-        url.startsWith('about:newtab') ||
-        url.startsWith('about:blank') ||
-        url.startsWith('edge://newtab');
-    if (!isBlankNewTab) return;
+    // Tabs opened from a link/opener are already placed next to their opener.
+    if (tab.openerTabId != null) { bbLog('skip: has openerTabId'); return; }
 
-    // Read the setting fresh — module-level caches are lost when the worker sleeps.
     chrome.storage.local.get(['openTabNextToCurrent'], (s) => {
+        bbLog('setting openTabNextToCurrent =', s.openTabNextToCurrent);
         if (s.openTabNextToCurrent !== true) return;
 
-        const key = bbLastActiveKey(tab.windowId);
+        const key = bbMruKey(tab.windowId);
         chrome.storage.session.get([key], (res) => {
-            const rec = res[key];
-            // The anchor is the tab the user was on. If the new tab's own
-            // activation was recorded already, that's rec.prevTabId; if our
-            // read won the race, it's still rec.tabId. Correct either way.
-            const anchorId = rec ? (rec.tabId === tab.id ? rec.prevTabId : rec.tabId) : null;
-            if (anchorId == null) return;
+            const mru = res[key] || [];
+            const anchorId = mru.find((id) => id !== tab.id);
+            bbLog('mru', mru, '-> anchorId', anchorId);
 
-            // Resolve the anchor's index NOW — stored indexes go stale.
-            chrome.tabs.get(anchorId, (anchorTab) => {
-                if (chrome.runtime.lastError || !anchorTab) return;
-                if (anchorTab.windowId !== tab.windowId) return;
-                const targetIndex = anchorTab.index + 1;
-                if (tab.index !== targetIndex) {
-                    chrome.tabs.move(tab.id, { index: targetIndex }, () => { void chrome.runtime.lastError; });
+            if (anchorId != null) {
+                bbPlaceAfter(tab, anchorId);
+                return;
+            }
+
+            // No history yet (e.g. first tab action after a cold start).
+            // Query the active tab directly; if it's this new tab, there's
+            // nothing to anchor to, so leave it (typical of session restore).
+            chrome.tabs.query({ windowId: tab.windowId, active: true }, (tabs) => {
+                const active = tabs && tabs[0];
+                if (active && active.id !== tab.id) {
+                    bbLog('fallback: active tab', active.id, 'at index', active.index);
+                    bbPlaceAfter(tab, active.id);
+                } else {
+                    bbLog('fallback: no anchor; leaving at end');
                 }
             });
         });

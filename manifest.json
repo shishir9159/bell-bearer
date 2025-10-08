@@ -9,6 +9,7 @@
     "scripting",
     "tabs",
     "tabGroups",
+    "contextMenus",
     "clipboardWrite"
   ],
   "host_permissions": [

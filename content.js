@@ -38,6 +38,7 @@ class YouTubeBookmarker {
         this.loadSettings();
         this.setupKeyboardListeners();
         this.setupMessageListener();
+        this.setupContextLinkTracking();
 
         // YouTube-specific features
         if (this.currentSite === 'youtube') {
@@ -339,6 +340,78 @@ class YouTubeBookmarker {
         return `[${title}](${location.href})`;
     }
 
+    /**
+     * Remember the anchor the user last right-clicked, so "Copy link as
+     * Markdown" can use the link's visible text as the label. The context
+     * menu API hands us the href but never the anchor text.
+     *
+     * Uses composedPath() so links inside shadow DOM are found too.
+     */
+    setupContextLinkTracking() {
+        document.addEventListener('contextmenu', (e) => {
+            this.lastContextLink = null;
+            const path = (e.composedPath && e.composedPath()) || [];
+            const nodes = path.length ? path : [e.target];
+            for (const node of nodes) {
+                if (node && node.tagName === 'A' && node.href) {
+                    this.lastContextLink = {
+                        url: node.href,
+                        text: (node.textContent || '').replace(/\s+/g, ' ').trim(),
+                        title: node.getAttribute('title') || '',
+                    };
+                    break;
+                }
+            }
+        }, true);
+    }
+
+    /**
+     * Builds `[label](url)` for a right-clicked link. Prefers the anchor's
+     * own text, then any selected text, then the page title for bare URLs,
+     * and finally the URL itself.
+     */
+    buildLinkMarkdown(linkUrl, selectionText) {
+        let label = '';
+        if (this.lastContextLink && this.lastContextLink.url === linkUrl) {
+            label = this.lastContextLink.text || this.lastContextLink.title;
+        }
+        if (!label && selectionText) label = selectionText.replace(/\s+/g, ' ').trim();
+        if (!label) {
+            // A bare/image link: fall back to something readable.
+            try {
+                const u = new URL(linkUrl);
+                label = u.hostname.replace(/^www\./, '') + u.pathname.replace(/\/$/, '');
+            } catch (_) {
+                label = linkUrl;
+            }
+        }
+        return `[${label}](${linkUrl})`;
+    }
+
+    /**
+     * Copy the current page as a Markdown link using the most stable path:
+     * the async Clipboard API, which writes without touching the page's
+     * selection. Falls back to the legacy copy only if it's unavailable.
+     * Returns a promise resolving to true on success.
+     */
+    async copyMarkdownLinkToClipboard() {
+        return this.copyTextToClipboardStable(this.buildMarkdownLink());
+    }
+
+    /**
+     * Writes `text` to the clipboard via the async Clipboard API (which does
+     * not disturb the page's selection), falling back to the legacy path.
+     */
+    async copyTextToClipboardStable(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (e) { /* fall through to legacy path */ }
+        }
+        return this.copyTextToClipboard(text);
+    }
+
     /** Copy text to the clipboard (works via the clipboardWrite permission). */
     copyTextToClipboard(text) {
         try {
@@ -373,6 +446,13 @@ class YouTubeBookmarker {
                 }
                 return;
             }
+
+            // NOTE: Ctrl+C is deliberately NOT intercepted. Guarding on
+            // "is anything selected?" is unreliable — window.getSelection()
+            // is empty for selections inside shadow DOM and form fields, so
+            // a normal copy would silently be replaced by a Markdown link.
+            // Markdown copying is an explicit right-click action instead
+            // (see the context menus in background.js).
 
             // Every shortcut below acts on a media element. If the page has none,
             // let the keystroke pass through untouched.
@@ -471,9 +551,19 @@ class YouTubeBookmarker {
                 const newRate = this.changeSpeedByDelta(message.delta);
                 sendResponse({ ok: newRate !== null, rate: newRate });
             } else if (message.action === 'copyMarkdownLink') {
-                // Triggered by the Ctrl+Shift+L command (relayed by background.js).
-                this.copyTextToClipboard(this.buildMarkdownLink());
-                this.showNotification('Copied page as Markdown link', 'success');
+                // Ctrl+Shift+L command, or the "Copy page as Markdown"
+                // context-menu item (both relayed by background.js).
+                this.copyMarkdownLinkToClipboard().then((ok) => {
+                    if (ok) this.showNotification('Copied page as Markdown link', 'success');
+                });
+                sendResponse({ ok: true });
+            } else if (message.action === 'copyLinkAsMarkdown') {
+                // "Copy link as Markdown" — only ever runs from an explicit
+                // right-click on a link, never from a plain copy.
+                const md = this.buildLinkMarkdown(message.linkUrl, message.selectionText);
+                this.copyTextToClipboardStable(md).then((ok) => {
+                    if (ok) this.showNotification('Copied link as Markdown', 'success');
+                });
                 sendResponse({ ok: true });
             }
             // Returning a falsy value closes the channel synchronously, which is
@@ -523,13 +613,29 @@ class YouTubeBookmarker {
     async fetchTranscript(videoId) {
         if (!this.transcriptApi) return;
 
+        // Videos already known to have no transcript (no captions, not
+        // playable, ...) — don't refetch or log again when the user
+        // navigates back to them.
+        this.transcriptUnavailable = this.transcriptUnavailable || new Set();
+        if (this.transcriptUnavailable.has(videoId)) {
+            this.currentTranscript = null;
+            return;
+        }
+
         try {
             // Fetch preferred language, falling back to English (auto-generated preferred)
             this.currentTranscript = await this.transcriptApi.fetch(videoId, { languages: [this.preferredSubtitleLanguage, 'en'] });
             console.log('Transcript fetched:', this.currentTranscript.language, this.currentTranscript.snippets.length, 'snippets');
         } catch (error) {
-            console.warn('Failed to fetch transcript:', error.message);
             this.currentTranscript = null;
+            if (error && error.expected) {
+                // A normal state of the video, not a failure: checkpoints
+                // still work, they just won't carry subtitle text.
+                this.transcriptUnavailable.add(videoId);
+                console.info(`Transcript not available for ${videoId} (${error.code}); checkpoints will be saved without subtitles.`);
+            } else {
+                console.warn('Failed to fetch transcript:', error.message);
+            }
         }
     }
 
@@ -604,8 +710,10 @@ class YouTubeBookmarker {
         // Get subtitles from start to end time range
         const subtitle = this.getSubtitlesInRange(startTime, endTime);
 
-        // Check if preferred subtitle language is missing and show warning
-        if (!this.currentTranscript || (this.currentTranscript.languageCode && !this.currentTranscript.languageCode.startsWith(this.preferredSubtitleLanguage))) {
+        // Warn only when a transcript exists but not in the preferred
+        // language. Videos with no captions at all are a normal case:
+        // the checkpoint is simply saved without subtitle text.
+        if (this.currentTranscript && this.currentTranscript.languageCode && !this.currentTranscript.languageCode.startsWith(this.preferredSubtitleLanguage)) {
             this.showNotification(`Warning: Preferred subtitles language not found`, 'warning');
         }
 

@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>bell-bearer tests</title>
+<style>
+    body { font: 13px/1.5 Consolas, ui-monospace, monospace; background: #1b1b1b; color: #ddd; margin: 0; padding: 24px; }
+    h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+    .sub { color: #888; margin-bottom: 16px; }
+    #out { white-space: pre; padding: 16px; border-radius: 6px; background: #141414; border: 1px solid #333; overflow-x: auto; }
+    #out.passed { border-color: #2d7d46; }
+    #out.failed { border-color: #a33; }
+    #banner { margin-top: 14px; padding: 10px 14px; border-radius: 6px; font-weight: 600; }
+    .ok { background: #16341f; color: #7ee2a0; }
+    .bad { background: #3a1717; color: #ff9b9b; }
+</style>
+
+<h1>bell-bearer test suite</h1>
+<div class="sub">No build step, no npm. Open this file in Chrome, or serve the folder and load it.</div>
+<pre id="out">running…</pre>
+<div id="banner"></div>
+
+<!-- 1. Test framework -->
+<script src="harness.js"></script>
+
+<!-- 2. Mock the chrome.* API BEFORE the extension scripts load, since they
+        register their listeners at load time. -->
+<script src="mock-chrome.js"></script>
+
+<!-- 3. The extension code under test, loaded unmodified. -->
+<script src="../background.js"></script>
+<script src="../transcript.js"></script>
+
+<!-- 4. Specs -->
+<script src="background.test.js"></script>
+<script src="transcript.test.js"></script>
+
+<script>
+    (async () => {
+        const out = document.getElementById('out');
+        const banner = document.getElementById('banner');
+        try {
+            const r = await runAllTests(out);
+            banner.className = r.failed ? 'bad' : 'ok';
+            banner.textContent = r.failed
+                ? `${r.failed} test(s) failing`
+                : `all ${r.passed} tests passing`;
+        } catch (e) {
+            out.className = 'failed';
+            out.textContent = 'HARNESS ERROR\n\n' + (e && e.stack ? e.stack : e);
+            banner.className = 'bad';
+            banner.textContent = 'suite crashed';
+        }
+    })();
+</script>

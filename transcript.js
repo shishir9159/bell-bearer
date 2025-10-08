@@ -16,6 +16,28 @@ const INNERTUBE_CONTEXT = {
 };
 
 /**
+ * Error with a machine-readable `code` so callers can tell expected
+ * conditions apart from real failures.
+ *
+ * `expected` codes describe normal states of a video (no captions,
+ * not playable, no matching language) that callers should degrade on
+ * silently, not report as errors.
+ */
+class TranscriptError extends Error {
+    constructor(code, message, expected = false) {
+        super(message);
+        this.name = 'TranscriptError';
+        this.code = code;
+        this.expected = expected;
+    }
+}
+TranscriptError.NO_CAPTIONS = 'NO_CAPTIONS';
+TranscriptError.NOT_PLAYABLE = 'NOT_PLAYABLE';
+TranscriptError.NO_LANGUAGE = 'NO_LANGUAGE';
+TranscriptError.IP_BLOCKED = 'IP_BLOCKED';
+TranscriptError.FETCH_FAILED = 'FETCH_FAILED';
+
+/**
  * Represents a single transcript snippet with text and timing
  */
 class FetchedTranscriptSnippet {
@@ -291,7 +313,11 @@ class YouTubeTranscriptApi {
             track = tracks[0]; // Fallback to first available
         }
         if (!track) {
-            throw new Error(`No transcript found for video ${videoId}`);
+            throw new TranscriptError(
+                TranscriptError.NO_LANGUAGE,
+                `No transcript found for video ${videoId}`,
+                true,
+            );
         }
 
         // Build URL with optional translation
@@ -303,7 +329,10 @@ class YouTubeTranscriptApi {
         // Fetch and parse transcript XML
         const response = await fetch(url);
         if (!response.ok) {
-            throw new Error(`Failed to fetch transcript: ${response.status}`);
+            throw new TranscriptError(
+                TranscriptError.FETCH_FAILED,
+                `Failed to fetch transcript: ${response.status}`,
+            );
         }
 
         const xml = await response.text();
@@ -349,7 +378,7 @@ class YouTubeTranscriptApi {
         });
 
         if (!response.ok) {
-            throw new Error(`Failed to fetch video page: ${response.status}`);
+            throw new TranscriptError(TranscriptError.FETCH_FAILED, `Failed to fetch video page: ${response.status}`);
         }
 
         const html = await response.text();
@@ -357,9 +386,9 @@ class YouTubeTranscriptApi {
 
         if (!match) {
             if (html.includes('class="g-recaptcha"')) {
-                throw new Error('IP blocked by YouTube');
+                throw new TranscriptError(TranscriptError.IP_BLOCKED, 'IP blocked by YouTube');
             }
-            throw new Error('Could not extract API key from video page');
+            throw new TranscriptError(TranscriptError.FETCH_FAILED, 'Could not extract API key from video page');
         }
 
         return match[1];
@@ -382,7 +411,7 @@ class YouTubeTranscriptApi {
         );
 
         if (!response.ok) {
-            throw new Error(`Innertube API request failed: ${response.status}`);
+            throw new TranscriptError(TranscriptError.FETCH_FAILED, `Innertube API request failed: ${response.status}`);
         }
 
         const data = await response.json();
@@ -390,12 +419,20 @@ class YouTubeTranscriptApi {
         // Check playability
         const status = data.playabilityStatus?.status;
         if (status && status !== 'OK') {
-            throw new Error(`Video not playable: ${data.playabilityStatus?.reason || status}`);
+            throw new TranscriptError(
+                TranscriptError.NOT_PLAYABLE,
+                `Video not playable: ${data.playabilityStatus?.reason || status}`,
+                true,
+            );
         }
 
         const captions = data.captions?.playerCaptionsTracklistRenderer;
         if (!captions?.captionTracks) {
-            throw new Error('No captions available for this video');
+            throw new TranscriptError(
+                TranscriptError.NO_CAPTIONS,
+                'No captions available for this video',
+                true,
+            );
         }
 
         return captions;

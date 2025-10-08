@@ -145,11 +145,30 @@ Full list available via `track.translationLanguages` from `listTranscripts()`.
 
 ## Error Handling
 
-| Error | Cause |
-|-------|-------|
-| `IP blocked by YouTube` | Too many requests; use proxy |
-| `No captions available` | Video has no transcripts |
-| `Video not playable` | Private/deleted/region-locked |
+All failures throw `TranscriptError`, which carries a machine-readable
+`code` and an `expected` flag. `expected: true` marks normal states of a
+video (not failures) — callers should degrade silently on those instead
+of logging warnings.
+
+| `code` | `expected` | Cause |
+|--------|------------|-------|
+| `NO_CAPTIONS` | yes | Video has no transcripts |
+| `NOT_PLAYABLE` | yes | Private/deleted/region-locked |
+| `NO_LANGUAGE` | yes | No track matches the requested languages |
+| `IP_BLOCKED` | no | Too many requests; use proxy |
+| `FETCH_FAILED` | no | Network/HTTP error talking to YouTube |
+
+```javascript
+try {
+    transcript = await api.fetch(videoId);
+} catch (e) {
+    if (e.expected) {
+        // normal — e.g. video simply has no captions
+    } else {
+        console.warn('Transcript fetch failed:', e.message);
+    }
+}
+```
 
 ---
 
