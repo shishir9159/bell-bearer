@@ -786,3 +786,94 @@ header h1 {
         width: 100%;
     }
 }
+
+/* --------------------------------------------------------------------------
+   Shared page chrome (src/page/ui.js)
+
+   Toasts replace the inline .import-export-* messages the popup used to splice
+   into the checkpoint list, and the blocking alert()/confirm() the dashboard
+   used. One element, reused, so a burst of messages never stacks.
+   -------------------------------------------------------------------------- */
+
+.bb-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 16px;
+    transform: translate(-50%, 12px);
+    max-width: calc(100% - 32px);
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: #24272e;
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.4;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+    z-index: 10001;
+}
+
+.bb-toast.is-visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.bb-toast-error   { background: #b3261e; }
+.bb-toast-warning { background: #a8630a; }
+
+@media (prefers-reduced-motion: reduce) {
+    .bb-toast { transition: none; }
+}
+
+/* Fields inside the shared confirm/prompt dialogs. */
+.modal-message {
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 16px;
+}
+
+.modal-label {
+    display: block;
+    font-size: 12px;
+    margin-bottom: 6px;
+    opacity: .75;
+}
+
+.modal-input,
+.modal-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(128, 128, 128, .35);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    background: transparent;
+    color: inherit;
+}
+
+.modal-textarea {
+    font-family: ui-monospace, Consolas, monospace;
+    resize: vertical;
+}
+
+.modal-input:focus,
+.modal-textarea:focus {
+    outline: none;
+    border-color: #e11d48;
+}
+
+/* The reset button sits alongside the +/- steppers. */
+.btn-speed-reset {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Optional per-checkpoint name, shown above the auto-generated note. */
+.bookmark-name {
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 2px;
+}

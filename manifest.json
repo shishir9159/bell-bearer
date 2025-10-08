@@ -26,7 +26,27 @@
       ],
       "js": [
         "transcript.js",
-        "content.js"
+        "src/shared/time.js",
+        "src/shared/dom.js",
+        "src/shared/speed.js",
+        "src/shared/settings.js",
+        "src/shared/youtube.js",
+        "src/shared/bookmarks.js",
+        "src/shared/subscriptions.js",
+        "src/shared/feed.js",
+        "src/content/site.js",
+        "src/content/notify.js",
+        "src/content/overlay.js",
+        "src/content/dom-watch.js",
+        "src/content/theme.js",
+        "src/content/page-info.js",
+        "src/content/player.js",
+        "src/content/shortcuts.js",
+        "src/content/transcripts.js",
+        "src/content/checkpoints.js",
+        "src/content/markdown.js",
+        "src/content/youtube-ui.js",
+        "src/content/main.js"
       ],
       "css": [
         "content.css"

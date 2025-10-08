@@ -1049,3 +1049,87 @@ header h1 {
         margin-left: 0;
     }
 }
+
+/* --------------------------------------------------------------------------
+   Shared page chrome (src/page/ui.js)
+
+   The dashboard used to report every result through a blocking alert() and ask
+   every question through confirm(), which freezes the whole tab. Those are now
+   toasts and in-page dialogs; these are their styles.
+   -------------------------------------------------------------------------- */
+
+.bb-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translate(-50%, 12px);
+    max-width: min(560px, calc(100% - 48px));
+    padding: 12px 18px;
+    border-radius: 10px;
+    background: #24272e;
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.45;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+    z-index: 10001;
+}
+
+.bb-toast.is-visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.bb-toast-error   { background: #b3261e; }
+.bb-toast-warning { background: #a8630a; }
+
+@media (prefers-reduced-motion: reduce) {
+    .bb-toast { transition: none; }
+}
+
+.modal-message {
+    font-size: 14px;
+    line-height: 1.55;
+    margin-bottom: 18px;
+}
+
+.modal-label {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 6px;
+    opacity: .75;
+}
+
+.modal-input,
+.modal-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 11px 13px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(128, 128, 128, .35);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: transparent;
+    color: inherit;
+}
+
+.modal-textarea {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+    resize: vertical;
+}
+
+.modal-input:focus,
+.modal-textarea:focus {
+    outline: none;
+    border-color: #e11d48;
+}
+
+/* Buttons disabled while an action is in flight (e.g. refreshing feeds). */
+.dashboard-container button[disabled] {
+    opacity: .6;
+    cursor: default;
+}

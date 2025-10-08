@@ -6,7 +6,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "bell-bearer@example.com",
-      "strict_min_version": "109.0"
+      "strict_min_version": "115.0"
     }
   },
   "permissions": [
@@ -14,6 +14,7 @@
     "activeTab",
     "scripting",
     "tabs",
+    "contextMenus",
     "clipboardWrite"
   ],
   "host_permissions": [
@@ -30,7 +31,27 @@
       ],
       "js": [
         "transcript.js",
-        "content.js"
+        "src/shared/time.js",
+        "src/shared/dom.js",
+        "src/shared/speed.js",
+        "src/shared/settings.js",
+        "src/shared/youtube.js",
+        "src/shared/bookmarks.js",
+        "src/shared/subscriptions.js",
+        "src/shared/feed.js",
+        "src/content/site.js",
+        "src/content/notify.js",
+        "src/content/overlay.js",
+        "src/content/dom-watch.js",
+        "src/content/theme.js",
+        "src/content/page-info.js",
+        "src/content/player.js",
+        "src/content/shortcuts.js",
+        "src/content/transcripts.js",
+        "src/content/checkpoints.js",
+        "src/content/markdown.js",
+        "src/content/youtube-ui.js",
+        "src/content/main.js"
       ],
       "css": [
         "content.css"
@@ -47,7 +68,13 @@
     }
   },
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "src/background/proto.js",
+      "src/background/sowon.js",
+      "src/background/context-menus.js",
+      "src/background/tab-placement.js",
+      "src/background/commands.js"
+    ]
   },
   "icons": {
     "16": "icons/icon16.png",

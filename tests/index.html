@@ -25,13 +25,36 @@
         register their listeners at load time. -->
 <script src="mock-chrome.js"></script>
 
-<!-- 3. The extension code under test, loaded unmodified. -->
-<script src="../background.js"></script>
+<!-- 3. The extension code under test, loaded unmodified.
+        background.js itself is only an importScripts() shim for the service
+        worker, so the parts are listed here the same way manifest.firefox.json
+        lists them. Keep the three lists in step. -->
+<script src="../src/background/proto.js"></script>
+<script src="../src/background/sowon.js"></script>
+<script src="../src/background/context-menus.js"></script>
+<script src="../src/background/tab-placement.js"></script>
+<script src="../src/background/commands.js"></script>
 <script src="../transcript.js"></script>
+
+<!-- Shared modules, loaded in dependency order (as the manifest loads them). -->
+<script src="../src/shared/time.js"></script>
+<script src="../src/shared/dom.js"></script>
+<script src="../src/shared/speed.js"></script>
+<script src="../src/shared/settings.js"></script>
+<script src="../src/shared/youtube.js"></script>
+<script src="../src/shared/bookmarks.js"></script>
+<script src="../src/content/site.js"></script>
+<script src="../src/content/notify.js"></script>
+<script src="../src/content/player.js"></script>
+<script src="../src/content/shortcuts.js"></script>
 
 <!-- 4. Specs -->
 <script src="background.test.js"></script>
 <script src="transcript.test.js"></script>
+<script src="speed.test.js"></script>
+<script src="player.test.js"></script>
+<script src="bookmarks.test.js"></script>
+<script src="shortcuts.test.js"></script>
 
 <script>
     (async () => {

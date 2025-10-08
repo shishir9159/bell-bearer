@@ -110,6 +110,14 @@
                         <span class="setting-label">Show speed buttons in popup (Default: Off) — speed also works on any site via the &gt; &lt; + keys</span>
                     </div>
 
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="rememberPlaybackSpeed">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Keep my playback speed — re-apply the speed you chose when a site resets it (new video, ad break)</span>
+                    </div>
+
                     <div class="settings-option" style="margin-top: 16px; display: flex; align-items: center; gap: 12px;">
                         <span class="setting-label">Preferred Subtitles</span>
                         <select id="preferredSubtitleLanguage" style="padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-color, #ddd); background: var(--bg-secondary, #fff); color: var(--text-color, #333); font-size: 14px; min-width: 200px;">
@@ -260,9 +268,23 @@
             </div>
         </div>
 
-        <input type="file" id="importFile" accept=".json" style="display: none;">
+        <input type="file" id="importFile" accept=".json" hidden>
     </div>
 
+    <!-- Shared modules, in dependency order. Classic scripts sharing a `BB`
+         namespace: the extension has no build step by design. -->
+    <script src="src/shared/time.js"></script>
+    <script src="src/shared/dom.js"></script>
+    <script src="src/shared/speed.js"></script>
+    <script src="src/shared/settings.js"></script>
+    <script src="src/shared/youtube.js"></script>
+    <script src="src/shared/bookmarks.js"></script>
+    <script src="src/shared/subscriptions.js"></script>
+    <script src="src/shared/feed.js"></script>
+    <script src="src/page/ui.js"></script>
+    <script src="src/page/settings-form.js"></script>
+    <script src="src/page/transfer.js"></script>
+    <script src="src/page/tab-actions.js"></script>
     <script src="dashboard.js"></script>
 </body>
 

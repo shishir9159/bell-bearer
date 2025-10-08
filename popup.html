@@ -16,17 +16,18 @@
             </div>
             <div class="controls">
                 <button id="dashboardBtn" class="btn-secondary" title="Open Dashboard">Dashboard</button>
-                <button id="exportBtn" class="btn-secondary" title="Export bookmarks">Export</button>
-                <button id="importBtn" class="btn-secondary" title="Import bookmarks">Import</button>
-                <button id="clearAll" class="btn-secondary btn-danger" title="Delete all bookmarks">Clear All</button>
+                <button id="exportBtn" class="btn-secondary" title="Export checkpoints">Export</button>
+                <button id="importBtn" class="btn-secondary" title="Import checkpoints">Import</button>
+                <button id="clearAll" class="btn-secondary btn-danger" title="Delete all checkpoints">Clear All</button>
             </div>
         </header>
 
-        <div id="speedControlBar" class="speed-control-bar" style="display:none;">
+        <div id="speedControlBar" class="speed-control-bar" hidden>
             <div class="speed-buttons">
-                <button id="speedDownBtn" class="btn-speed" title="Slower (−0.5×)">−</button>
-                <span id="speedDisplay" class="speed-display">1×</span>
-                <button id="speedUpBtn" class="btn-speed" title="Faster (+0.5×)">+</button>
+                <button id="speedDownBtn" class="btn-speed" title="Slower (previous step)" aria-label="Slower">−</button>
+                <span id="speedDisplay" class="speed-display" aria-live="polite">1x</span>
+                <button id="speedUpBtn" class="btn-speed" title="Faster (next step)" aria-label="Faster">+</button>
+                <button id="speedResetBtn" class="btn-speed btn-speed-reset" title="Reset to 1x" aria-label="Reset speed">1x</button>
             </div>
         </div>
 
@@ -36,7 +37,7 @@
 
             <div class="bookmark-details" id="bookmarkDetails">
                 <div class="no-selection">
-                    <p>Select a video to view bookmarks</p>
+                    <p>Select a video to view its checkpoints</p>
                 </div>
             </div>
         </div>
@@ -44,8 +45,8 @@
         <div class="instructions" id="instructions">
             <h3>How to use</h3>
             <ul>
-                <li>Hold <strong>Ctrl + B</strong> while watching a YouTube video, then release to create a checkpoint
-                </li>
+                <li>Hold <strong>Ctrl + B</strong> while watching, then release to create a checkpoint</li>
+                <li><strong>&gt;</strong> / <strong>&lt;</strong> step playback speed, <strong>+</strong> resets it</li>
             </ul>
             <div class="instructions-footer">
                 <button id="dismissInstructions" class="btn-okay">Okay</button>
@@ -53,8 +54,19 @@
         </div>
     </div>
 
-    <input type="file" id="importFile" accept=".json" style="display: none;">
+    <input type="file" id="importFile" accept=".json" hidden>
 
+    <!-- Shared modules, in dependency order. Classic scripts sharing a `BB`
+         namespace: the extension has no build step by design. -->
+    <script src="src/shared/time.js"></script>
+    <script src="src/shared/dom.js"></script>
+    <script src="src/shared/speed.js"></script>
+    <script src="src/shared/settings.js"></script>
+    <script src="src/shared/youtube.js"></script>
+    <script src="src/shared/bookmarks.js"></script>
+    <script src="src/page/ui.js"></script>
+    <script src="src/page/transfer.js"></script>
+    <script src="src/page/tab-actions.js"></script>
     <script src="popup.js"></script>
 </body>
 

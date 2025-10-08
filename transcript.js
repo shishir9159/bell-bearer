@@ -287,6 +287,10 @@ class FetchedTranscript {
 }
 
 class YouTubeTranscriptApi {
+    /** Cached Innertube key (per client, not per video) and its in-flight fetch. */
+    static _apiKey = null;
+    static _apiKeyRequest = null;
+
     /**
      * Fetch transcript for a video, optionally translated
      * @param {string} videoId - YouTube video ID
@@ -370,9 +374,27 @@ class YouTubeTranscriptApi {
     }
 
     /**
-     * Extract Innertube API key from video page
+     * Extract the Innertube API key from a video page.
+     *
+     * The key belongs to the web client, not to the video, so it is cached for
+     * the life of the page: this fetch pulls down a full watch page — roughly a
+     * megabyte of HTML — and it used to run once per transcript lookup.
      */
     async _getInnertubeApiKey(videoId) {
+        if (YouTubeTranscriptApi._apiKey) return YouTubeTranscriptApi._apiKey;
+        if (YouTubeTranscriptApi._apiKeyRequest) return YouTubeTranscriptApi._apiKeyRequest;
+
+        YouTubeTranscriptApi._apiKeyRequest = this._fetchInnertubeApiKey(videoId)
+            .then((key) => {
+                YouTubeTranscriptApi._apiKey = key;
+                return key;
+            })
+            .finally(() => { YouTubeTranscriptApi._apiKeyRequest = null; });
+
+        return YouTubeTranscriptApi._apiKeyRequest;
+    }
+
+    async _fetchInnertubeApiKey(videoId) {
         const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
             headers: { 'Accept-Language': 'en-US' }
         });
