@@ -64,12 +64,21 @@
         // alone — `enabled` false means the key goes back to the page, which
         // is what a bare Shift+F must do when Skim is not turned on.
         const feature = (name) => () => !!(actions.featureOn && actions.featureOn(name));
+        const hasPouch = () => !!(actions.canOpenPouch && actions.canOpenPouch());
 
         const rows = [
             ['skim-find', { enabled: feature('skimMode'), run: () => actions.openSkim('page') }],
             ['skim-history', { enabled: feature('skimMode'), run: () => actions.openSkim('history') }],
             ['skim-actions', { enabled: feature('skimMode'), run: () => actions.openSkim('actions') }],
             ['link-hints', { enabled: feature('linkHints'), run: () => actions.openHints() }],
+            // Also gated on there being a pouch to open: the binding is
+            // `general` scope, so it is matched on every site, and on a site
+            // with no pouch surface the key has to go back to the page —
+            // a bare Shift+P must stay a capital P on a site we do nothing on.
+            ['open-pouch', {
+                enabled: () => feature('pouchShortcut')() && hasPouch(),
+                run: () => actions.openPouch(),
+            }],
 
             ['record-checkpoint', { noRepeat: true, enabled: canRecord, run: () => actions.startRecording() }],
             ['segment-toggle', { noRepeat: true, enabled: canRecord, run: () => actions.toggleSegment() }],
