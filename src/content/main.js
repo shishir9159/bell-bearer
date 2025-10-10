@@ -31,7 +31,7 @@
     const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown,
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
         CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
-        Keybindings, SkimContent, LinkHints, TimeLimitContent } = BB;
+        Keybindings, SkimContent, LinkHints, TimeLimitContent, TwitterUi, TwitterAds } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -123,6 +123,11 @@
         toggleSegment: () => recorder.toggleSegment(),
         openSkim: (source) => skim.show(source),
         openHints,
+        // Two sites draw a pouch, and the shortcut opens whichever one this
+        // page has. Resolved on each press rather than bound once: both are
+        // built further down this file, after the keyboard is installed.
+        openPouch: () => pouchUi() && pouchUi().openPouch(),
+        canOpenPouch: () => !!pouchUi(),
         featureOn: (key) => settings[key] === true,
     }, {
         canRecord: () => !!getVideo(),
@@ -185,6 +190,13 @@
     // ------------------------------------------------------ YouTube extras
 
     let youtubeUi = null;
+    let twitterUi = null;
+    let twitterAds = null;
+
+    /** Whichever site's pouch surface this page has, or null for the rest. */
+    function pouchUi() {
+        return youtubeUi || twitterUi;
+    }
 
     if (site === 'youtube') {
         const watcher = DomWatch.createWatcher();
@@ -217,6 +229,39 @@
 
         installWatchedTracking();
         warmPouchInBackground();
+    }
+
+    // ------------------------------------------------------------ X extras
+
+    if (site === 'twitter') {
+        const watcher = DomWatch.createWatcher();
+
+        twitterUi = TwitterUi.createTwitterUi({ watcher, notify });
+        twitterUi.install();
+
+        twitterAds = TwitterAds.createTwitterAds({
+            watcher,
+            isEnabled: () => settings.twitterHideAds === true,
+        });
+        twitterAds.install();
+
+        // X is a single-page app and announces nothing — there is no
+        // equivalent of YouTube's yt-navigate-finish, and patching pushState
+        // would mean reaching into the page's own world. So the URL is
+        // watched instead of listened for, and on the shared observer rather
+        // than a timer of its own: a navigation always rebuilds the timeline,
+        // so the mutation that tells us the page changed has already fired by
+        // the time the path differs.
+        let lastPath = location.pathname;
+        watcher.add('x-route', () => {
+            if (location.pathname !== lastPath) {
+                lastPath = location.pathname;
+                twitterUi.onNavigate();
+                twitterAds.sync();
+            }
+            return false;
+        });
+        window.addEventListener('popstate', () => watcher.schedule());
     }
 
     /**
@@ -356,10 +401,16 @@
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&
             values.pouchButtonStyle !== settings.pouchButtonStyle;
+        const hideAdsChanged = 'twitterHideAds' in values &&
+            values.twitterHideAds !== settings.twitterHideAds;
 
         Object.assign(settings, values);
 
         if (pouchStyleChanged && youtubeUi) youtubeUi.refreshPouchButton();
+        // Both directions matter here: turning it off has to put the hidden
+        // posts back on the page that is already open, or the switch looks
+        // like it did nothing until the next reload.
+        if (hideAdsChanged && twitterAds) twitterAds.sync();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
     }
