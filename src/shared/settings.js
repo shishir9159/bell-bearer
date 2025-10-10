@@ -50,12 +50,22 @@
         skimMode: false,
         linkHints: false,
 
+        // Shift+P for the pouch overlay, on YouTube and on X. Off for the
+        // same reason as the two above: it claims a bare-Shift letter, which
+        // is not something to switch on for someone without being told.
+        pouchShortcut: false,
+
         // Daily time limits on the two sites that take an afternoon without
         // anyone deciding to spend one. Off, and counting nothing, until a
         // limit is set; the tally is kept for the current day only. See
         // src/shared/time-limits.js, which owns the key names below.
         twitterDailyLimit: false,
         twitterLimitMinutes: 30,
+
+        // Strip X's promoted posts and its own Premium upsells out of the
+        // timeline. Off until asked for: this is the extension rewriting
+        // somebody else's page, which is not a default to assume.
+        twitterHideAds: false,
         redditDailyLimit: false,
         redditLimitMinutes: 30,
 
@@ -184,6 +194,14 @@
         // Seconds spent on x.com and reddit.com today, and nothing older
         // than today. shared/time-limits.js owns the shape.
         timeLimits: 'bbTimeLimits',
+
+        // The X pouch. People and posts keep two independent topic lists, so
+        // these are four keys rather than the two the YouTube pouch needs —
+        // see shared/x-pouch.js, which owns all four shapes.
+        xPeopleTopics: 'bbXPeopleTopics',
+        xPostTopics: 'bbXPostTopics',
+        xPeople: 'bbXPeople',
+        xPosts: 'bbXPosts',
     });
 
     function withDefaults(stored, keys) {

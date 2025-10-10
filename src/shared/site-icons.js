@@ -43,7 +43,7 @@
         twitter: {
             id: 'twitter',
             name: 'X',
-            description: 'A daily time limit, and how much of today has gone to it',
+            description: 'People and posts filed into two sets of topics, and a daily time limit',
             // X's mark is black on white, so it takes the page's ink the way
             // Lichess's does rather than a brand colour that vanishes at night.
             color: 'currentColor',
