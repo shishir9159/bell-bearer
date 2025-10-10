@@ -35,10 +35,17 @@
                 });
                 return true; // keep the channel open for the async response
 
-            case 'openDashboard':
-                chrome.tabs.create({ url: chrome.runtime.getURL('dashboard.html') });
+            // The hash is how a caller asks for a particular site's tools
+            // rather than the launcher — `#site/twitter`, the same spelling
+            // the popup and dashboard.js#followHash already use. Anything
+            // that is not one of ours is dropped rather than appended, since
+            // it arrives from a content script on a page we do not own.
+            case 'openDashboard': {
+                const hash = /^#[a-z]+\/[a-z]+$/.test(message.hash || '') ? message.hash : '';
+                chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard.html${hash}`) });
                 sendResponse({ success: true });
                 return false;
+            }
 
             // A chess move read aloud (src/content/chess.js). Queued, so a
             // quick reply is spoken after the move before it, not over it.
