@@ -785,7 +785,10 @@ const dayRecord = (at = T0) =>
         eq(ids({ skimMode: true, linkHints: false }),
             ['skim-find', 'skim-history', 'skim-actions', 'copy-markdown-link']);
         eq(ids({ skimMode: true, linkHints: true }).includes('link-hints'), true);
-        eq(ids(null).length, 5, 'with no settings to check against, the table is the whole table');
+        eq(ids({ pouchShortcut: true }).includes('open-pouch'), true);
+        eq(ids({ pouchShortcut: false }).includes('open-pouch'), false,
+            'Shift+P stays a capital P until the pouch shortcut is asked for');
+        eq(ids(null).length, 6, 'with no settings to check against, the table is the whole table');
     });
 
     check('every feature a binding needs is a setting that exists', () => {
@@ -1675,6 +1678,225 @@ const dayRecord = (at = T0) =>
         for (const action of Skim.ACTIONS) {
             eq(worker.includes(`'${action.id}'`), true, `${action.id} has no branch in the worker`);
         }
+    });
+
+    // ------------------------------------------------------------ X pouch
+
+    console.log('\n# the X pouch — two independent lists');
+
+    const XPouch = require('../src/shared/x-pouch.js');
+
+    /** Wipe the store and seed one topic per side. */
+    async function seedPouch() {
+        Object.keys(store).forEach((k) => delete store[k]);
+        return {
+            people: await XPouch.createTopic('people', 'CUDA'),
+            posts: await XPouch.createTopic('posts', 'CUDA'),
+        };
+    }
+
+    await checkAsync('a people topic and a post topic of the same name are two topics', async () => {
+        const ids = await seedPouch();
+        eq(ids.people !== ids.posts, true, 'same name, different lists, different ids');
+
+        const state = await XPouch.load();
+        eq(state.peopleTopics.length, 1);
+        eq(state.postTopics.length, 1);
+
+        // Renaming one must not touch the other: this is the rule the whole
+        // module is shaped around, and the easiest one to break by reaching
+        // for "the topics".
+        await XPouch.renameTopic('people', ids.people, 'Kernels');
+        const after = await XPouch.load();
+        eq(after.peopleTopics[0].name, 'Kernels');
+        eq(after.postTopics[0].name, 'CUDA');
+    });
+
+    await checkAsync('a topic name already taken on that side is reused, not duplicated', async () => {
+        const ids = await seedPouch();
+        eq(await XPouch.createTopic('people', 'cuda'), ids.people, 'case-insensitive');
+        eq((await XPouch.load()).peopleTopics.length, 1);
+    });
+
+    await checkAsync('a person belongs to exactly one topic, and re-filing moves them', async () => {
+        const ids = await seedPouch();
+        const second = await XPouch.createTopic('people', 'Diffusion');
+
+        await XPouch.filePerson({ handle: '@isorokin', name: 'Ilya Sorokin', avatar: '', topic: ids.people });
+        await XPouch.filePerson({ handle: '@isorokin', name: 'Ilya Sorokin', avatar: '', topic: second });
+
+        const state = await XPouch.load();
+        eq(state.people.length, 1, 'filing again is a move, not a second row');
+        eq(state.people[0].topic, second);
+    });
+
+    await checkAsync('a re-file keeps the note and refreshes the name and avatar', async () => {
+        const ids = await seedPouch();
+        const second = await XPouch.createTopic('people', 'Diffusion');
+
+        await XPouch.filePerson({ handle: '@weitan', name: 'Wei Tan', avatar: 'a.jpg', topic: ids.people });
+        const person = (await XPouch.load()).people[0];
+        await XPouch.setNote(person.id, 'distills papers daily');
+
+        // The note is the user's and must survive; the name and the picture
+        // are X's and may have changed since.
+        await XPouch.filePerson({ handle: '@weitan', name: 'Wei T.', avatar: 'b.jpg', topic: second });
+        const after = (await XPouch.load()).people[0];
+        eq(after.note, 'distills papers daily');
+        eq(after.name, 'Wei T.');
+        eq(after.avatar, 'b.jpg');
+        eq(after.id, person.id, 'the same row, not a replacement');
+    });
+
+    await checkAsync('a post is keyed by its status id, so the same post files once', async () => {
+        const ids = await seedPouch();
+        const post = { statusId: '1770', handle: '@lenaf', name: 'Lena', text: 'one', url: '', postedAt: 5 };
+
+        await XPouch.filePost({ ...post, topic: ids.posts });
+        // The same post met again in a thread, with the text X shows there.
+        await XPouch.filePost({ ...post, text: 'one (edited)', topic: ids.posts });
+
+        const state = await XPouch.load();
+        eq(state.posts.length, 1);
+        eq(state.posts[0].text, 'one (edited)');
+    });
+
+    await checkAsync('deleting a topic takes everything in it and nothing else', async () => {
+        const ids = await seedPouch();
+        const keep = await XPouch.createTopic('people', 'Hardware');
+
+        await XPouch.filePerson({ handle: '@a', name: 'A', topic: ids.people });
+        await XPouch.filePerson({ handle: '@b', name: 'B', topic: keep });
+        await XPouch.filePost({ statusId: '1', handle: '@a', text: 'x', topic: ids.posts });
+
+        await XPouch.deleteTopic('people', ids.people);
+
+        const state = await XPouch.load();
+        eq(state.people.map((p) => p.handle), ['@b'], 'its rows go with it');
+        eq(state.peopleTopics.length, 1);
+        eq(state.postTopics.length, 1, 'the other side is untouched');
+        eq(state.posts.length, 1);
+    });
+
+    await checkAsync('array order is the display order, and a move is a splice', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        const a = await XPouch.createTopic('posts', 'A');
+        const b = await XPouch.createTopic('posts', 'B');
+        const c = await XPouch.createTopic('posts', 'C');
+
+        const names = async () => (await XPouch.load()).postTopics.map((t) => t.name);
+        eq(await names(), ['A', 'B', 'C']);
+
+        await XPouch.moveTopic('posts', c, a);   // C dropped onto A
+        eq(await names(), ['C', 'A', 'B']);
+
+        await XPouch.moveTopic('posts', c, c);   // onto itself: nothing moves
+        eq(await names(), ['C', 'A', 'B']);
+        void b;
+    });
+
+    await checkAsync('a topic id from the wrong side files nothing anywhere', async () => {
+        const ids = await seedPouch();
+        // Not a guard that throws — the two id spaces simply never meet, so a
+        // post filed under a PEOPLE topic id lands in a post topic that does
+        // not exist and shows up in no card. This pins the shape that makes
+        // that impossible to do by accident: the prefixes differ.
+        eq(ids.people.startsWith('xpt_'), true);
+        eq(ids.posts.startsWith('xst_'), true);
+    });
+
+    check('the monogram falls back through name, then handle', () => {
+        eq(XPouch.monogram('Wei Tan', '@weitan'), 'WT');
+        eq(XPouch.monogram('Cher', '@cher'), 'CH', 'one word gives two letters, not one');
+        eq(XPouch.monogram('', '@isorokin'), 'IS');
+    });
+
+    console.log('\n# the X pouch — reading x.com');
+
+    const TwitterPage = require('../src/content/twitter-page.js');
+
+    check('a handle is read off a profile link, and only off a real one', () => {
+        eq(TwitterPage.handleFromHref('/weitan'), '@weitan');
+        eq(TwitterPage.handleFromHref('/weitan/status/1770'), '@weitan');
+        eq(TwitterPage.handleFromHref('https://x.com/weitan'), '@weitan');
+        // X's own pages sit at one-segment paths that look exactly like
+        // handles; filing "@home" as a person is the bug this prevents.
+        eq(TwitterPage.handleFromHref('/home'), '');
+        eq(TwitterPage.handleFromHref('/i/bookmarks'), '');
+        eq(TwitterPage.handleFromHref('/settings'), '');
+        eq(TwitterPage.handleFromHref(''), '');
+    });
+
+    check('an avatar URL is upgraded a size and anything else is left alone', () => {
+        const base = 'https://pbs.twimg.com/profile_images/1/abc';
+        eq(TwitterPage.avatarUrl({ src: `${base}_normal.jpg` }), `${base}_bigger.jpg`);
+        eq(TwitterPage.avatarUrl({ src: `${base}_400x400.png` }), `${base}_400x400.png`);
+        // Never anything but the CDN: this string is written into an <img src>
+        // on the dashboard and in the panel.
+        eq(TwitterPage.avatarUrl({ src: 'https://evil.example/profile_images/x_normal.jpg' }), '');
+        eq(TwitterPage.avatarUrl(null), '');
+    });
+
+    console.log('\n# short ages');
+
+    check('a post age reads the way X writes it', () => {
+        const now = Date.parse('2026-09-21T12:00:00Z');
+        const ago = (ms) => Time.shortAge(now - ms, now);
+        eq(ago(30 * 1000), 'now');
+        eq(ago(6 * 36e5), '6h');
+        eq(ago(2 * 864e5), '2d');
+        eq(ago(9 * 864e5), '1w', 'rounds down, so nothing ever reads older than it is');
+        eq(Time.shortAge(0), '', 'a missing date is not the epoch');
+    });
+
+    // ------------------------------------------------ opening the dashboard
+
+    console.log('\n# opening the dashboard at a site');
+
+    check('only a hash of our own shape survives into the URL', () => {
+        // The worker's openDashboard branch, driven directly. The hash it
+        // appends arrives from a content script — that is, from a page we do
+        // not own — so the guard matters: without it, x.com could ask the
+        // worker to open our own extension URL with a fragment of its
+        // choosing. Everything that is not `#<word>/<word>` is dropped
+        // rather than rejected, so a caller that gets it wrong still lands
+        // on the dashboard.
+        const opened = [];
+        let onMessage = null;
+        const saved = global.chrome;
+        global.chrome = {
+            runtime: {
+                getURL: (p) => 'x/' + p,
+                onMessage: { addListener: (f) => { onMessage = f; } },
+                onInstalled: { addListener() {} },
+                onStartup: { addListener() {} },
+            },
+            tabs: { create: (o) => opened.push(o.url), query: (q, cb) => cb && cb([]), sendMessage() {} },
+            storage: { local: { get: (k, cb) => cb && cb({}) }, onChanged: { addListener() {} } },
+            contextMenus: { create() {}, removeAll: (cb) => cb && cb(), onClicked: { addListener() {} } },
+            commands: { onCommand: { addListener() {} } },
+            tts: { speak() {} },
+        };
+
+        delete require.cache[require.resolve('../src/background/commands.js')];
+        require('../src/background/commands.js');
+
+        const send = (hash) => onMessage({ action: 'openDashboard', hash }, {}, () => {});
+        send('#site/twitter');
+        send('#settings/chess');
+        send('javascript:alert(1)');
+        send('#../../evil');
+        send(undefined);
+
+        global.chrome = saved;
+
+        eq(opened, [
+            'x/dashboard.html#site/twitter',
+            'x/dashboard.html#settings/chess',
+            'x/dashboard.html',
+            'x/dashboard.html',
+            'x/dashboard.html',
+        ]);
     });
 
     // ------------------------------------------------------- site detection
