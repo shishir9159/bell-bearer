@@ -1632,3 +1632,469 @@
     text-transform: uppercase;
     color: var(--bb-faint);
 }
+
+/* ============================================================
+   The pouch button, shared by YouTube and X.
+
+   src/shared/pouch-button.js builds one mark for both sites and sizes
+   nothing itself, so the glyph takes its size from whichever row it was
+   dropped into. That is the whole reason the sizing lives here: a width
+   baked into the SVG would be right in YouTube's subscribe row and wrong
+   in X's action row, and would have to be undone twice.
+   ============================================================ */
+
+.bb-pouch-glyph {
+    display: block;
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+#bb-add-to-subscriptions-btn .bb-pouch-glyph { width: 24px; height: 24px; }
+#bb-add-to-subscriptions-btn.bb-in-pouch .bb-pouch-glyph { width: 22px; height: 22px; }
+
+/* ============================================================
+   x.com
+
+   Three surfaces: the Pouch row in X's left navigation, the pouch button
+   on a post and on a profile header, and the panel the nav row opens.
+
+   The panel is deliberately narrow. YouTube's sheet is near-full-screen
+   because it shows a grid of thumbnails; this shows names and one-line
+   notes, so it is drawn at the width of the nav column it covers and the
+   timeline stays readable behind it.
+
+   Everything here is under `.bb-themed`, which carries the palette and
+   the skin — see the token block at the head of this file.
+   ============================================================ */
+
+/* ------------------------------------------------------------- nav row */
+
+/* Metrics measured off X's own rows: 19px label, 15px between icon and
+   text, 10px/12px padding, fully rounded. X's classes are
+   emotion-generated (`css-1jxf684` and the like) and change on every
+   deploy, so none of them are copied — this is our row, matched to theirs
+   by number. */
+.bb-x-nav {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: inherit;
+    font-size: 19px;
+    font-weight: 700;
+    font-family: inherit;
+    user-select: none;
+}
+
+.bb-x-nav:hover { background: rgba(127, 127, 127, .12); }
+.bb-x-nav:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+.bb-x-nav-on { color: var(--bb-accent, #b81808); }
+
+.bb-x-nav-ico {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+}
+
+/* The artwork is a full-bleed square, so it is rounded to read as a mark
+   rather than as a photograph dropped into the icon column by mistake —
+   the same treatment the row in YouTube's drawer gets. */
+.bb-x-nav-ico img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 6px;
+    object-fit: cover;
+}
+
+.bb-x-nav-text { line-height: 1.2; }
+
+/* ------------------------------------------- pouch button on a post */
+
+/* Sized and coloured as one of X's own action glyphs. It stands where the
+   bookmark was, in a row of bare marks — so it is never labelled: a word
+   here would make it the only captioned control in the row and read as
+   something X had added. */
+.bb-x-post-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    opacity: .72;
+    cursor: pointer;
+    transition: background-color .15s, opacity .15s, color .15s;
+}
+
+.bb-x-post-btn .bb-pouch-glyph { width: 18px; height: 18px; }
+.bb-x-post-btn:hover { opacity: 1; background: var(--bb-accent-soft); color: var(--bb-accent); }
+.bb-x-post-btn.bb-in-pouch { opacity: 1; color: var(--bb-accent); }
+
+/* X's own bookmark button, standing down for ours. Hidden rather than
+   removed: X re-renders the action row on every like, and its button
+   coming back into a slot that is still hidden is steadier than it coming
+   back into a layout that has shifted. */
+.bb-x-hidden { display: none !important; }
+
+/* ---------------------------------------- pouch button on a profile */
+
+/* Beside Follow, so it takes X's button metrics rather than the action
+   row's — a 36px pill, not a bare glyph. Still unlabelled, for the same
+   reason, and outlined until it is filed so it never competes with Follow
+   for the eye. */
+.bb-x-profile-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    margin-right: 8px;
+    padding: 0;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background-color .15s, border-color .15s, color .15s;
+}
+
+.bb-x-profile-btn .bb-pouch-glyph { width: 19px; height: 19px; }
+.bb-x-profile-btn:hover { border-color: var(--bb-accent); color: var(--bb-accent); }
+
+.bb-x-profile-btn.bb-in-pouch {
+    background: var(--bb-accent);
+    border-color: var(--bb-accent);
+    color: var(--bb-on-accent);
+}
+
+/* ----------------------------------------------------------- the panel */
+
+/* The scrim never covers the timeline in the sense that matters: it is
+   there to take the click that dismisses the panel and to push the page
+   back a step, not to black it out, so it is far lighter than the
+   backdrop the sheet puts over YouTube. */
+.bb-x-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    background: rgba(0, 0, 0, .18);
+    animation: bb-fade .14s ease-out;
+}
+
+.bb-x-panel {
+    position: fixed;
+    top: 62px;
+    z-index: 2147483001;
+    box-sizing: border-box;
+    width: 274px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    padding: 10px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r);
+    background: var(--bb-panel-solid);
+    box-shadow: var(--bb-shadow);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    animation: bb-rise .16s ease-out;
+}
+
+.bb-x-seg { display: flex; gap: 4px; align-self: flex-start; }
+.bb-x-seg .bb-btn { padding: 5px 13px; font-size: 12px; }
+.bb-x-seg .bb-btn-primary { padding: 6px 14px; }
+
+.bb-x-tiles { display: flex; flex-direction: column; gap: 6px; }
+
+/* One topic. The count sits on the right rather than inside the name, so
+   the names stay in one column and the list reads as a list. */
+.bb-x-tile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-card);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.bb-x-tile:hover { border-color: var(--bb-border-strong); background: var(--bb-chip); }
+
+.bb-x-tile-on {
+    border-color: var(--bb-accent);
+    background: var(--bb-accent-soft);
+    color: var(--bb-accent);
+    cursor: default;
+    font-weight: 600;
+}
+
+.bb-x-tile-name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bb-x-tile-n { flex: 0 0 auto; font-size: 11px; color: var(--bb-faint); }
+.bb-x-tile-on .bb-x-tile-n { color: inherit; }
+
+.bb-x-close {
+    display: grid;
+    place-items: center;
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.bb-x-close svg { width: 12px; height: 12px; }
+.bb-x-close:hover { background: var(--bb-accent-soft); }
+
+/* Indented under the open topic, so the two levels read as one path
+   rather than as two lists that replaced each other. */
+.bb-x-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 16px;
+}
+
+.bb-x-person {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-card);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.bb-x-person:hover { border-color: var(--bb-accent); }
+
+/* The monogram is always in the markup and the picture is stacked over
+   it, so an avatar URL that has gone stale — the person changed their
+   picture, and nothing ever goes back to X to check — uncovers initials
+   instead of leaving a hole. */
+.bb-x-avatar {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--bb-chip);
+    color: var(--bb-sub);
+    font-size: 11px;
+    font-weight: 700;
+    overflow: hidden;
+}
+
+.bb-x-avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.bb-x-person-text { min-width: 0; }
+
+.bb-x-person-name,
+.bb-x-person-note {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bb-x-person-name { font-size: 13px; font-weight: 600; }
+.bb-x-person-note { font-size: 11px; line-height: 1.35; color: var(--bb-accent); }
+
+.bb-x-post {
+    padding: 8px 10px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-card);
+}
+
+.bb-x-post-head { display: flex; gap: 6px; align-items: baseline; }
+.bb-x-post-handle { font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--bb-accent); }
+.bb-x-post-when { font-size: 10px; color: var(--bb-faint); }
+
+/* Four lines and an ellipsis: the panel is for recognising a post you
+   filed, not for reading it again. */
+.bb-x-post-text {
+    margin: 3px 0 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--bb-sub);
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.bb-x-empty {
+    padding: 11px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-card);
+}
+
+.bb-x-empty p { margin: 0 0 9px; font-size: 12px; line-height: 1.45; color: var(--bb-sub); }
+
+/* ----------------------------------------------------- the topic picker */
+
+/* Fixed, and positioned from the button's own rect. X's action row sits
+   inside a stack of transformed and clipped containers, and an absolutely
+   positioned child of any of them is cut off at the edge of the post. */
+.bb-x-picker {
+    position: fixed;
+    z-index: 2147483002;
+    box-sizing: border-box;
+    width: 244px;
+    padding: 11px 12px 12px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r);
+    background: var(--bb-panel-solid);
+    box-shadow: var(--bb-shadow);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    animation: bb-rise .14s ease-out;
+}
+
+.bb-x-picker-head {
+    margin: 0;
+    font-family: var(--bb-font-head);
+    font-size: 11px;
+    letter-spacing: var(--bb-head-track);
+    text-transform: var(--bb-head-case);
+    color: var(--bb-faint);
+}
+
+.bb-x-picker-sub { margin: 2px 0 0; font-size: 12px; color: var(--bb-sub); }
+.bb-x-picker-empty { margin: 8px 0 0; font-size: 12px; color: var(--bb-faint); }
+
+.bb-x-picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 208px;
+    margin-top: 8px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.bb-x-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 5px 7px;
+    border: 0;
+    border-radius: var(--bb-r-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.bb-x-picker-row:hover { background: var(--bb-accent-soft); color: var(--bb-accent); }
+
+/* The dot is the filed state: an outline for every topic, filled for the
+   one this post or person is already in. Single-select, so it is a radio
+   and looks like one. */
+.bb-x-dot {
+    flex: 0 0 11px;
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid var(--bb-accent);
+    border-radius: 999px;
+    background: transparent;
+}
+
+.bb-x-dot.is-on { background: var(--bb-accent); }
+
+.bb-x-picker-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.bb-x-picker-new { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--bb-border); }
+.bb-x-picker-add { color: var(--bb-accent); font-size: 12px; font-weight: 600; }
+.bb-x-picker-add svg { width: 13px; height: 13px; }
+
+.bb-x-picker-form { display: flex; gap: 6px; }
+.bb-x-picker-form .bb-input { flex: 1; min-width: 0; }
+.bb-x-picker-form .bb-btn { padding: 6px 12px; font-size: 12px; }
+
+.bb-x-picker-foot {
+    margin: 9px 0 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--bb-border);
+    font-size: 11px;
+    color: var(--bb-faint);
+}
+
+/* ------------------------------------------------- hidden placements */
+
+/* Promoted posts and X's own upsells, when that setting is on. Hiding
+   rather than removing: X's timeline is virtualised and measures its own
+   rows, so a node deleted out from under that bookkeeping makes the
+   scroll position jump. See src/content/twitter-ads.js. */
+.bb-x-ad-hidden { display: none !important; }
+
+/* The two square-cornered skins square these off too, the way they do
+   every other surface we inject. */
+.bb-themed[data-bb-skin="riso"] .bb-x-panel,
+.bb-themed[data-bb-skin="deco"] .bb-x-panel,
+.bb-themed[data-bb-skin="riso"] .bb-x-tile,
+.bb-themed[data-bb-skin="deco"] .bb-x-tile,
+.bb-themed[data-bb-skin="riso"] .bb-x-person,
+.bb-themed[data-bb-skin="deco"] .bb-x-person,
+.bb-themed[data-bb-skin="riso"] .bb-x-post,
+.bb-themed[data-bb-skin="deco"] .bb-x-post,
+.bb-x-picker.bb-themed[data-bb-skin="riso"],
+.bb-x-picker.bb-themed[data-bb-skin="deco"] { border-radius: 0; }
+
+.bb-themed[data-bb-skin="medieval"] .bb-x-panel,
+.bb-themed[data-bb-skin="medieval"] .bb-x-tile,
+.bb-themed[data-bb-skin="medieval"] .bb-x-person,
+.bb-themed[data-bb-skin="medieval"] .bb-x-post,
+.bb-x-picker.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }
