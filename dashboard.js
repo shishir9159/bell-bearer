@@ -32,6 +32,11 @@
             { id: 'games', label: 'Games', panel: 'lichessGamesPanel' },
         ],
         twitter: [
+            // People and posts are two independent topic lists, not two
+            // filters over one, so they are two panels rather than a toggle
+            // inside one — see src/shared/x-pouch.js.
+            { id: 'people', label: 'People', panel: 'twitterPeoplePanel' },
+            { id: 'posts', label: 'Posts', panel: 'twitterPostsPanel' },
             { id: 'time', label: 'Time', panel: 'twitterTimePanel' },
         ],
         reddit: [
@@ -102,6 +107,7 @@
             if (window.BB.TrialsView) window.BB.TrialsView.mount(document.getElementById('trialsView'));
             CookieSitesPanel.mount(document.getElementById('cookieSitesPanel'));
             if (window.BB.TimeLimitView) window.BB.TimeLimitView.mountAll();
+            if (window.BB.XPouchView) window.BB.XPouchView.mountAll();
             document.querySelectorAll('[data-chess-games]').forEach((panel) => {
                 const site = panel.dataset.chessGames;
                 this.chessViews[site] = ChessStats.mountPanel(panel, {

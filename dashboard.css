@@ -2412,3 +2412,216 @@ body[data-skin="deco"] .bb-plate {
 /* Spent reads as spent: the bar stops being a measure of progress and
    becomes the thing standing in the way. */
 .limit-bar.is-spent span { background: var(--danger, var(--accent)); }
+
+/* ============================================================
+   The X pouch — src/page/x-pouch-view.js
+
+   One panel per side, each a list of topic cards. A card reuses
+   .topic-card so the two pouches read as the same object on the same
+   page; everything below is what a card of PEOPLE or of POSTS has that a
+   card of channels does not — a grip to drag it by, a pen, a trash with
+   a confirmation, and rows carrying an avatar and an editable note.
+
+   The two sides share every rule here. People topics and post topics are
+   independent lists of independent things, but a topic card is a topic
+   card, and the only real difference is what a row looks like.
+   ============================================================ */
+
+.x-pouch-hint {
+    margin: -12px 0 18px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-faint);
+}
+
+.x-topic { padding: 14px 16px; }
+
+/* The card is draggable as a whole rather than by the grip alone: a drag
+   handle that is the only draggable part means a 15px target, and the
+   card has no other drag of its own to conflict with. The grip is there
+   to say so. */
+.x-topic[draggable="true"] { cursor: default; }
+.x-topic[data-x-dragging] { opacity: .45; }
+
+.x-topic-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.x-topic-head h3 {
+    margin: 0;
+    font-family: var(--font-head);
+    font-size: 18px;
+    font-weight: var(--head-weight);
+    letter-spacing: var(--head-track);
+    text-transform: var(--head-case);
+    color: var(--text);
+}
+
+.x-grip {
+    display: grid;
+    place-items: center;
+    cursor: grab;
+    color: var(--text-faint);
+}
+
+.x-grip svg { width: 15px; height: 15px; }
+.x-grip:active { cursor: grabbing; }
+
+.x-tally { font-size: 11px; color: var(--text-faint); }
+
+.x-rename { flex: 0 1 260px; min-width: 0; font-size: 16px; }
+
+/* The pen, the tick and the two crosses. Quiet until hovered: there are
+   up to three of these per row and a dozen per card, and a list of loud
+   little buttons is unreadable. */
+.icon-act {
+    display: grid;
+    place-items: center;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: background-color .14s, color .14s;
+}
+
+.icon-act svg { width: 14px; height: 14px; }
+.icon-act:hover { background: var(--accent-soft); color: var(--accent-ink); }
+.icon-danger:hover { background: var(--accent-soft); color: var(--danger); }
+
+/* Trash sits at the far right of the header, away from the pen — the two
+   are one keystroke apart in intent and should not be one pixel apart on
+   screen. */
+.x-topic-head .icon-danger { margin-left: auto; }
+
+.x-confirm {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 11px;
+    padding: 9px 11px;
+    border: 1px solid var(--accent);
+    border-radius: var(--r-sm);
+    background: var(--accent-soft);
+    font-size: 13px;
+}
+
+.x-confirm-acts { margin-left: auto; display: flex; gap: 6px; }
+.x-confirm-acts .btn-primary,
+.x-confirm-acts .btn-secondary { padding: 6px 12px; font-size: 12px; }
+
+.x-rows { display: flex; flex-direction: column; gap: 3px; margin-top: 12px; }
+
+.x-row {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 7px 8px;
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+}
+
+/* A post's text is the tall part, so its row aligns to the top and the
+   handle beside it reads as a label rather than as a caption. */
+.x-row-post { align-items: flex-start; }
+
+/* The monogram is always in the markup and the picture is stacked over
+   it, so an avatar URL that has gone stale uncovers initials instead of
+   leaving a broken image. Nothing ever goes back to X to check whether a
+   stored URL still resolves — see src/shared/x-pouch.js for why. */
+.x-avatar {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: 0 0 30px;
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    overflow: hidden;
+}
+
+.x-avatar-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.x-who { flex: 0 0 168px; min-width: 0; }
+
+.x-name,
+.x-handle {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.x-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.x-handle { font-size: 11px; color: var(--text-faint); }
+
+/* The note reads as text and edits as a field. It is a button so that the
+   whole strip is the target — a note is three to five words and a click
+   target the width of the words would be a click target you miss. */
+.x-note {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 6px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--accent-ink);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: text;
+}
+
+.x-note:hover { background: var(--surface-3); }
+.x-note-blank { color: var(--text-faint); font-style: italic; }
+.x-note-input { flex: 1; min-width: 0; }
+
+.x-post-handle {
+    flex: 0 0 96px;
+    font-family: var(--font-head);
+    font-size: 11px;
+    letter-spacing: var(--head-track);
+    color: var(--accent-ink);
+    /* Aligns with the first line of the post text beside it, which is set
+       at 13px/1.4 — without this the handle rides above it. */
+    line-height: 1.7;
+}
+
+.x-post-text {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.x-post-when { font-size: 11px; color: var(--text-faint); line-height: 1.7; }
+
+.x-post-link {
+    font-size: 11px;
+    color: var(--text-faint);
+    text-decoration: none;
+    line-height: 1.7;
+}
+
+.x-post-link:hover { color: var(--accent-ink); text-decoration: underline; }
+
+.x-empty-row { margin: 2px 0 0; font-size: 12px; color: var(--text-faint); }

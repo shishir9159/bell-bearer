@@ -85,6 +85,12 @@
                 <div id="chessGamesPanel" class="site-panel" data-site="chess" data-chess-games="chess"></div>
                 <div id="lichessGamesPanel" class="site-panel" data-site="lichess" data-chess-games="lichess"></div>
 
+                <!-- The X pouch: two independent topic lists, one panel each.
+                     Drawn by src/page/x-pouch-view.js, which is also the only
+                     place a topic is made, renamed, reordered or deleted. -->
+                <div id="twitterPeoplePanel" class="site-panel" data-site="twitter" data-x-pouch="people"></div>
+                <div id="twitterPostsPanel" class="site-panel" data-site="twitter" data-x-pouch="posts"></div>
+
                 <!-- Today against the daily limit, for the two sites that have
                      one. Drawn by src/page/time-limit-view.js. -->
                 <div id="twitterTimePanel" class="site-panel" data-site="twitter" data-time-limit-view="twitter"></div>
@@ -188,6 +194,14 @@
 
                     <div class="settings-option" style="margin-top: 16px;">
                         <label class="toggle-switch">
+                            <input type="checkbox" id="pouchShortcut">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Pouch shortcut — <kbd class="kbd-chip">Shift</kbd> <kbd class="kbd-chip">P</kbd> opens the pouch on YouTube and on x.com. It does nothing anywhere else, so the key stays a plain capital P on every other site</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
                             <input type="checkbox" id="trackActivity">
                             <span class="toggle-slider"></span>
                         </label>
@@ -277,6 +291,15 @@
                         </div>
                         <p class="settings-hint">Time counts only while a tab of the site is on screen and this window has focus. The tally is today's and nothing older than today is stored — at midnight it is gone, not archived.</p>
                         <div data-time-limit-view="twitter"></div>
+
+                        <p class="settings-hint">Promoted posts are found by the tracking wrapper X puts around a paid placement, not by the word "Promoted", so this works whatever language the site is in. Nothing is deleted — hidden entries keep their place in X's own bookkeeping, which is what stops the timeline jumping as you scroll.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="twitterHideAds">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="twitterHideAds">Hide promoted posts and Premium upsells</label>
+                        </div>
                     </div>
 
                     <div class="settings-section" id="redditSettingsPanel" data-site-settings="reddit"
@@ -470,6 +493,8 @@
     <script src="src/page/heat-map.js"></script>
     <script src="src/shared/time-limits.js"></script>
     <script src="src/page/time-limit-view.js"></script>
+    <script src="src/shared/x-pouch.js"></script>
+    <script src="src/page/x-pouch-view.js"></script>
     <script src="src/page/chess-stats.js"></script>
     <script src="src/page/chess-settings.js"></script>
     <script src="src/page/backup-buttons.js"></script>
