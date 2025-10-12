@@ -84,6 +84,7 @@ while you are typing in a field.
 | `Shift + H` | Skim: search your browsing history |
 | `Shift + A` | Skim: search the actions it can run |
 | `Shift + L` | Label every link and button in view |
+| `Shift + P` | Open the pouch — the sheet on YouTube, the panel on x.com |
 
 Speed steps through one fixed ladder — 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2,
 2.25, 2.5, 3, 3.5, 4, 5 — and the popup's buttons step the same ladder, so the
@@ -91,6 +92,12 @@ two controls always agree. When a site resets the rate (a new video, an ad
 break) the speed you picked is re-applied; when *you* change it through the
 site's own speed menu, that becomes the new setting instead. Turn the re-apply
 off with **Keep my playback speed** in Settings.
+
+`Shift + P` is off until **Settings › General › Pouch shortcut** turns it on,
+for the same reason Skim and the link hints are: a bare-Shift letter is a large
+claim to make on somebody's keyboard without telling them first. It does nothing
+anywhere but YouTube and x.com, so on every other site the key stays a plain
+capital P.
 
 ## Skim
 
@@ -155,6 +162,70 @@ there. All are SIL OFL. Only the latin and latin-ext cuts are kept, and
 anything outside them falls back to the stack named in `skins.css`. The same
 faces reach the injected UI, which is why `skin-fonts.css` is a content-script
 stylesheet and `fonts/*.woff2` is in `web_accessible_resources`.
+
+## The X pouch
+
+x.com gets a pouch of its own, and it is two pouches rather than one: **people**
+and **posts** keep entirely separate topic lists. A "CUDA" under People and a
+"CUDA" under Posts are different topics with different contents, and renaming or
+deleting one leaves the other alone. Someone whose posts you want to keep and
+someone you want to remember are two different reasons to file, and one list
+serving both ends up serving neither.
+
+An item belongs to exactly one topic. Filing something already filed moves it,
+silently — a person is keyed by their handle and a post by its status id, so the
+same account met on a post and again on their profile is one person, and the
+same post met in the timeline and again in a thread is one post.
+
+**Pouch** sits in X's left navigation under Home, wearing the extension's icon
+the way the row in YouTube's drawer does. It opens a panel over that column and
+nothing else: the timeline stays readable behind it, because the point of the
+panel is remembering who somebody is *while* you are reading, not a place to go
+and sit. Click anywhere outside it to dismiss it. Two levels, People or Posts at
+the top, a topic's contents one click in.
+
+On a post, the pouch button stands where X's bookmark was — the same gesture,
+filed somewhere you can organise. On a profile it sits beside Follow. Neither is
+labelled: both sit in rows of bare glyphs, and a word there would read as
+something X had added. Both open a small picker of that side's topics, with the
+current one dotted; filing a post can make a topic on the spot, because filing a
+post is the moment you find out you need one.
+
+Everything else is the dashboard, under **X › People** and **X › Posts**: making
+a topic, renaming it, dragging it into a different place in the order, deleting
+it and everything in it, writing the three-to-five-word note under someone's
+name, and taking a saved post back out. Those are decisions you make looking at
+the whole pouch, not while reading a post.
+
+### Avatars, and why nothing is ever fetched
+
+A person's picture is stored as the `pbs.twimg.com` URL that was on the page at
+the moment you filed them — about eighty bytes — and never as image data. The
+panel and the dashboard put that URL in an `<img src>` and let the browser fetch
+and cache it, which costs nothing and is not rate-limited.
+
+What is deliberately *not* done is asking X for it. X's own endpoints are
+rate-limited per fifteen minutes against your signed-in session, so a panel that
+refetched fifty profiles every time it opened would spend your own budget and
+eventually 429 your real browsing. Nothing here ever makes a request to X.
+
+The consequence is that a stored URL goes stale the day somebody changes their
+picture, since nothing goes back to check. So every row carries the person's
+initials underneath the image, and a picture that fails to load simply uncovers
+them.
+
+### Hiding promoted posts
+
+**Settings › X › Hide promoted posts and Premium upsells** is off until asked
+for. Promoted posts are found by the tracking wrapper X puts around a paid
+placement rather than by the word "Promoted", so it needs no word list and works
+whatever language the site is in; the upsells are X's own Premium nags, which are
+not third-party ads but are not posts either.
+
+Nothing is deleted. Hidden entries keep their box in the page, because X's
+timeline is virtualised and measures its own rows — a node removed out from under
+that bookkeeping makes the scroll position jump. Turning the setting off puts
+everything back on the page that is already open, without a reload.
 
 ## Daily time limit
 
@@ -268,6 +339,8 @@ src/shared/     pure logic, used by every surface
                    resolves /@handle to a UC id by the page's canonical link
   skim.js          where a match comes to rest, and the action table
   time-limits.js   the day's tally for x.com and reddit.com, and the limit
+  x-pouch.js       the X pouch: two independent topic lists and their items
+  pouch-button.js  the pouch button both YouTube and X inject
   time.js dom.js   formatting and escaping
 
 src/content/    injected into every page
@@ -282,6 +355,10 @@ src/content/    injected into every page
   site.js          which site, and which <video> on it
   chess.js         in a chess game: clock warning, spoken moves, clear arrows
   youtube-ui.js    the pouch button, the drawer entry, the topics sheet, the pouch panel
+  twitter-page.js  every x.com selector, and reading a post or a profile off one
+  twitter-ui.js    the X nav row, the post and profile buttons, the topic picker
+  twitter-panel.js the pouch panel over X's navigation column
+  twitter-ads.js   hides promoted posts and Premium upsells, when asked to
   dom-watch.js     one throttled MutationObserver for all of the above
   overlay.js notify.js theme.js page-info.js markdown.js
 
@@ -304,6 +381,7 @@ src/page/       shared by popup.html and dashboard.html
   chess-settings.js a chess site's settings panel
   heat-map.js      the calendar heat map
   time-limit-view.js today against a site's daily limit
+  x-pouch-view.js  the dashboard's People and Posts panels — where X topics are managed
   popup-width.js   applies the popup size setting, from popup.html's <head>
 
 skins.css       the token layer for every skin — linked before popup/dashboard css
@@ -359,6 +437,30 @@ Chrome's storage API is used with the following data structure format:
   ]
 }
 ```
+
+The X pouch is four keys rather than two, because people and posts keep
+independent topic lists and array order is the display order:
+
+```javascript
+{
+  bbXPeopleTopics: [{ id: "xpt_…", name: "CUDA", createdAt: 0 }],
+  bbXPostTopics:   [{ id: "xst_…", name: "CUDA", createdAt: 0 }],
+  bbXPeople: [
+    { id, topic: "xpt_…", handle: "@isorokin", name: "Ilya Sorokin",
+      avatar: "https://pbs.twimg.com/profile_images/…_bigger.jpg",
+      note: "warp-level tricks", addedAt: 0 }
+  ],
+  bbXPosts: [
+    { id: "<status id>", topic: "xst_…", handle: "@isorokin", name: "Ilya Sorokin",
+      text: "…", url: "https://x.com/isorokin/status/…", postedAt: 0, savedAt: 0 }
+  ]
+}
+```
+
+A person's `id` is ours and their `handle` is the key they are recognised by; a
+post's `id` *is* its status id, which is the only thing about a post that never
+changes. `postedAt` is stored rather than the "6h" X was showing at the time,
+because a stored "6h" is wrong by tomorrow.
 
 ## Tests
 
