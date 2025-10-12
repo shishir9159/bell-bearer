@@ -9,12 +9,14 @@
  * elements go and what they do, which is the part that changes for reasons of
  * ours rather than X's.
  *
- * Two things are shared with YouTube rather than written again:
- *   - the button itself is shared/pouch-button.js, so the glyph and the filed
- *     state are the same mark on both sites and change in one place;
- *   - the nav row carries the extension's own icon, exactly as the row in
- *     YouTube's drawer does, because that row is the one place in either
- *     site's chrome that should be recognisably Bell Bearer.
+ * The button itself is shared with YouTube rather than written again — it is
+ * shared/pouch-button.js, so the glyph and the filed state are the same mark
+ * on both sites and change in one place. The nav row wears that same glyph,
+ * which is where this file parts company with YouTube's drawer entry: that one
+ * carries the extension's artwork, and this one cannot. X's navigation is a
+ * column of outline marks that take their colour from the theme, and a square
+ * of artwork dropped into it reads as an advert — so the row is drawn in
+ * currentColor and takes its type off the rows around it. See dressNavEntry.
  *
  * The button is never labelled. On YouTube it sits in the subscribe row with
  * room for words; here it sits in X's action row between Repost and Like,
@@ -44,12 +46,29 @@
     /** chrome.* throws once the extension reloads; a live id means we are fine. */
     const hasExtensionContext = () => !!(chrome.runtime && chrome.runtime.id);
 
-    function iconUrl() {
-        try {
-            return chrome.runtime.getURL('icons/icon128.png');
-        } catch (_) {
-            return '';
+    /**
+     * The properties the nav row copies off X's own, and nothing more.
+     *
+     * Colour is pointedly not in the list. `color: inherit` in content.css
+     * follows X's theme the instant it changes; a value read once and written
+     * into a style attribute would be the old theme's grey forever.
+     */
+    const NAV_TYPE = ['fontFamily', 'fontSize', 'fontWeight', 'letterSpacing'];
+
+    /**
+     * The text of a nav row — the word, not the unread badge.
+     *
+     * The badge is a span of digits in much smaller type sitting in the same
+     * link, and copying its metrics gave the Pouch row a 12px label.
+     */
+    function navLabel(row) {
+        for (const selector of ['div[dir] > span', 'span']) {
+            for (const span of row.querySelectorAll(selector)) {
+                const text = (span.textContent || '').trim();
+                if (text && !/^\d+\+?$/.test(text)) return span;
+            }
         }
+        return null;
     }
 
     function createTwitterUi({ watcher, notify }) {
@@ -125,8 +144,15 @@
             entry.setAttribute('role', 'link');
             entry.setAttribute('tabindex', '0');
             entry.title = 'Bell Bearer — your pouch';
+            // An inline glyph rather than the extension's artwork. The <img>
+            // that used to be here was run through Dom.safeUrlAttr, which
+            // only passes http(s) and so turned every `chrome-extension://`
+            // src into "#" — a broken image in X's navigation column. Drawing
+            // the mark instead fixes that and is the better row anyway: it
+            // inherits X's colour the way its own nav icons do, so a switch
+            // to Dim or Lights out needs nothing from us.
             entry.innerHTML =
-                '<span class="bb-x-nav-ico"><img src="' + Dom.safeUrlAttr(iconUrl()) + '" alt="" aria-hidden="true"></span>' +
+                '<span class="bb-x-nav-ico">' + PouchButton.ICON + '</span>' +
                 '<span class="bb-x-nav-text">Pouch</span>';
 
             const open = () => togglePanel();
@@ -145,10 +171,52 @@
             if (after && after.parentElement === nav) nav.insertBefore(entry, after.nextSibling);
             else nav.appendChild(entry);
 
+            // After it is in the document, so the metrics below are measured
+            // rather than guessed.
+            dressNavEntry(entry, home);
+
             // The panel may still be open — a rebuild of the nav does not
             // close it — so the new row has to be lit if it is.
             setNavActive(panel.isOpen());
             return false;
+        }
+
+        /**
+         * Match the row to the ones around it.
+         *
+         * content.css carries numbers measured off X's navigation, but they
+         * are one reading of it: X has a display-size setting that scales both
+         * the label and the icons of that column, and at the largest size a
+         * hard 19px/26px row sits visibly small among the others. None of this
+         * can be done by copying a class — every class on that column is
+         * emotion-generated and renamed on each deploy — so the numbers are
+         * read off the Home row instead, and the CSS stays as the fallback for
+         * when Home is not there to read.
+         *
+         * Nothing has to re-run this: X rebuilds the navigation when either
+         * setting changes, and injectNavEntry never retires, so the new column
+         * gets a freshly measured row.
+         */
+        function dressNavEntry(entry, home) {
+            if (!home || typeof getComputedStyle !== 'function') return;
+
+            const label = navLabel(home);
+            const text = entry.querySelector('.bb-x-nav-text');
+            if (label && text) {
+                const style = getComputedStyle(label);
+                for (const property of NAV_TYPE) {
+                    if (style[property]) text.style[property] = style[property];
+                }
+            }
+
+            const glyph = home.querySelector('svg');
+            const size = glyph && Math.round(glyph.getBoundingClientRect().height);
+            const box = entry.querySelector('.bb-x-nav-ico');
+            if (size && box) {
+                box.style.flexBasis = `${size}px`;
+                box.style.width = `${size}px`;
+                box.style.height = `${size}px`;
+            }
         }
 
         async function togglePanel() {

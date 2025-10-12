@@ -97,6 +97,72 @@
 
     const makeUi = () => TwitterUi().createTwitterUi({ watcher: NO_WATCHER, notify() {} });
 
+    /**
+     * X's navigation column, cut down to the one row ours is measured
+     * against. The badge sits in a `div[dir]` of its own ahead of the label
+     * on purpose — that is the arrangement that made the Pouch row come out
+     * in 11px type before navLabel learned to step over a number.
+     */
+    const NAV = `
+        <header role="banner">
+            <nav role="navigation">
+                <a data-testid="AppTabBar_Home_Link" href="/home">
+                    <div dir="ltr"><span style="font-size: 11px">3</span></div>
+                    <svg width="30" height="30" style="width: 30px; height: 30px"></svg>
+                    <div dir="ltr"><span style="font-size: 23px; font-weight: 800">Home</span></div>
+                </a>
+            </nav>
+        </header>`;
+
+    suite('x.com — the Pouch row in the navigation', () => {
+        test('the mark is drawn rather than loaded', () => {
+            stage(NAV);
+            makeUi().injectNavEntry();
+
+            const entry = document.getElementById('bb-x-nav-entry');
+            assert(entry, 'the row goes in');
+            // The <img> this replaced went through Dom.safeUrlAttr, which
+            // passes http(s) and nothing else — so a chrome-extension:// src
+            // came out as "#" and the row wore a broken image.
+            assertEqual(entry.querySelectorAll('img').length, 0, 'nothing to fail to load');
+            assert(entry.querySelector('.bb-pouch-glyph'), 'the shared glyph, in currentColor');
+            teardown();
+        });
+
+        test('it sits under Home', () => {
+            stage(NAV);
+            makeUi().injectNavEntry();
+
+            const home = document.querySelector('[data-testid="AppTabBar_Home_Link"]');
+            assertEqual(home.nextElementSibling.id, 'bb-x-nav-entry');
+            teardown();
+        });
+
+        test('its type and icon are measured off X\'s own row, not the badge', () => {
+            stage(NAV);
+            makeUi().injectNavEntry();
+
+            const entry = document.getElementById('bb-x-nav-entry');
+            const text = entry.querySelector('.bb-x-nav-text');
+            // X scales both with its display-size setting, and content.css
+            // can only carry one reading of it.
+            assertEqual(text.style.fontSize, '23px', 'the label, not the 11px badge beside it');
+            assertEqual(text.style.fontWeight, '800');
+            assertEqual(entry.querySelector('.bb-x-nav-ico').style.height, '30px');
+            teardown();
+        });
+
+        test('a navigation with no Home row still gets a row', () => {
+            stage('<header role="banner"><nav role="navigation"></nav></header>');
+            makeUi().injectNavEntry();
+
+            // Nothing to measure is not a reason to place nothing: content.css
+            // carries the fallback metrics for exactly this.
+            assert(document.getElementById('bb-x-nav-entry'), 'placed anyway');
+            teardown();
+        });
+    });
+
     suite('x.com — the pouch button on a post', () => {
         test('one button goes into the action row of every post', () => {
             timeline();

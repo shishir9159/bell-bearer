@@ -177,12 +177,17 @@ silently — a person is keyed by their handle and a post by its status id, so t
 same account met on a post and again on their profile is one person, and the
 same post met in the timeline and again in a thread is one post.
 
-**Pouch** sits in X's left navigation under Home, wearing the extension's icon
-the way the row in YouTube's drawer does. It opens a panel over that column and
-nothing else: the timeline stays readable behind it, because the point of the
-panel is remembering who somebody is *while* you are reading, not a place to go
-and sit. Click anywhere outside it to dismiss it. Two levels, People or Posts at
-the top, a topic's contents one click in.
+**Pouch** sits in X's left navigation under Home. Unlike the row in YouTube's
+drawer it does not wear the extension's artwork: X's navigation is a column of
+outline marks in the theme's own colour, so the row is drawn in `currentColor`
+and measures its type and icon off the Home row above it — which is how X's
+dark themes and its display-size setting reach it without anything from us.
+
+It opens a panel over that column and nothing else: the timeline stays readable
+behind it, because the point of the panel is remembering who somebody is
+*while* you are reading, not a place to go and sit. Click anywhere outside it
+to dismiss it. Two levels, People or Posts at the top, a topic's contents one
+click in.
 
 On a post, the pouch button stands where X's bookmark was — the same gesture,
 filed somewhere you can organise. On a profile it sits beside Follow. Neither is

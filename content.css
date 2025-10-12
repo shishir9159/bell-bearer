@@ -1674,7 +1674,12 @@
    text, 10px/12px padding, fully rounded. X's classes are
    emotion-generated (`css-1jxf684` and the like) and change on every
    deploy, so none of them are copied — this is our row, matched to theirs
-   by number. */
+   by number.
+
+   The type and the icon box below are the fallback rather than the last
+   word: X scales both with its own display-size setting, so dressNavEntry
+   in twitter-ui.js measures the Home row and writes what it finds over
+   these. They are what the row looks like when Home is not there to read. */
 .bb-x-nav {
     display: flex;
     align-items: center;
@@ -1703,16 +1708,11 @@
     height: 26px;
 }
 
-/* The artwork is a full-bleed square, so it is rounded to read as a mark
-   rather than as a photograph dropped into the icon column by mistake —
-   the same treatment the row in YouTube's drawer gets. */
-.bb-x-nav-ico img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    border-radius: 6px;
-    object-fit: cover;
-}
+/* No rule for the glyph itself: it is the shared `.bb-pouch-glyph`, which
+   is already full-bleed and already filled with currentColor — which is
+   the whole point of drawing the mark here instead of loading the
+   extension's artwork. The row's colour is X's, so switching to Dim or
+   Lights out repaints the icon with everything else in that column. */
 
 .bb-x-nav-text { line-height: 1.2; }
 
