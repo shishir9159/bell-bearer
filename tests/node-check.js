@@ -99,6 +99,29 @@ check('non-watch pages have no id', () => {
     eq(YouTube.extractVideoId('https://www.youtube.com/feed/subscriptions'), null);
 });
 
+const PageInfo = require('../src/content/page-info.js');
+
+console.log('\n# youtube channel pages');
+check('a channel page is recognised in all four spellings', () => {
+    eq(PageInfo.channelPagePath('/@mathwithming'), '/@mathwithming');
+    eq(PageInfo.channelPagePath('/channel/UCabcdefghijklmnopqrstuv'), '/channel/UCabcdefghijklmnopqrstuv');
+    eq(PageInfo.channelPagePath('/c/mathwithming'), '/c/mathwithming');
+    eq(PageInfo.channelPagePath('/user/mathwithming'), '/user/mathwithming');
+});
+check('every tab of a channel answers with the same root', () => {
+    // Otherwise the same channel files twice — once from /videos and once
+    // from the home tab — and the tick never comes back on either.
+    eq(PageInfo.channelPagePath('/@mathwithming/videos'), '/@mathwithming');
+    eq(PageInfo.channelPagePath('/@mathwithming/streams?view=0'), '/@mathwithming');
+    eq(PageInfo.channelPagePath('/@mathwithming/'), '/@mathwithming');
+});
+check('a watch page is not a channel page', () => {
+    eq(PageInfo.channelPagePath('/watch'), '');
+    eq(PageInfo.channelPagePath('/feed/subscriptions'), '');
+    eq(PageInfo.channelPagePath('/playlist'), '');
+    eq(PageInfo.channelPagePath('/'), '');
+});
+
 // ----------------------------------------------------------- bookmarks
 
 const Bookmarks = require('../src/shared/bookmarks.js');

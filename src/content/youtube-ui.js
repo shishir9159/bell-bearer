@@ -37,6 +37,22 @@
     const GUIDE_ID = 'bb-guide-entry';
     const CONTEXT_LOST = 'Bell Bearer was updated — please refresh this page.';
 
+    /**
+     * Whatever YouTube is calling its Subscribe control today, newest first.
+     *
+     * Two layouts rather than one: a watch page still renders the old
+     * `ytd-subscribe-button-renderer`, while a channel's own page — the one the
+     * button was missing from — has been rebuilt around `yt-page-header-renderer`
+     * and carries a bare view-model with no renderer anywhere above it. Looking
+     * for the renderer alone is why /@handle had no pouch button while every
+     * video by that channel did.
+     */
+    const SUBSCRIBE_SELECTORS = [
+        'ytd-subscribe-button-renderer',
+        'yt-page-header-renderer yt-subscribe-button-view-model',
+        'yt-subscribe-button-view-model',
+        'yt-button-shape button[aria-label*="Subscribe"]',
+    ];
 
     /**
      * Where the playlist panel on a watch page keeps its header, and where a
@@ -162,19 +178,24 @@
         // ------------------------------------------------------ pouch button
 
         /**
-         * Insert the button after YouTube's Subscribe button.
+         * Insert the button after YouTube's Subscribe button, on a watch page
+         * and on a channel's own page alike.
          *
          * Two strategies, not the previous five: sit next to the animation
-         * wrapper inside the subscribe renderer if it is there, otherwise
-         * directly after the renderer. The extra fallbacks all resolved to
+         * wrapper inside the subscribe control if it is there, otherwise
+         * directly after the control. The extra fallbacks all resolved to
          * containers that put the button on its own line anyway.
+         *
+         * firstMatch rather than querySelector because a channel page has a
+         * second, hidden Subscribe in the sticky header that has not been
+         * scrolled into place yet, and the button would go in there — present
+         * in the DOM, invisible on the page.
          */
         function injectPouchButton() {
             if (getPouchButtonStyle() === 'hidden') return true;
             if (document.getElementById(BUTTON_ID)) return true;
 
-            const renderer = document.querySelector('ytd-subscribe-button-renderer');
-            const anchor = renderer || document.querySelector('yt-button-shape button[aria-label*="Subscribe"]');
+            const anchor = firstMatch(SUBSCRIBE_SELECTORS);
             if (!anchor || !anchor.parentElement) return false;
 
             const button = PouchButton.create({
@@ -190,7 +211,7 @@
             // there re-arms the player's single-key shortcuts on the way back.
             Dom.holdFocus(button);
 
-            const smartimation = renderer && renderer.querySelector('yt-smartimation');
+            const smartimation = anchor.querySelector && anchor.querySelector('yt-smartimation');
             const target = (smartimation && smartimation.parentElement) ? smartimation : anchor;
             const parent = target.parentElement;
 
@@ -717,7 +738,7 @@
 
     const YouTubeUi = {
         createYouTubeUi,
-        firstMatch, isVisible, PLAYLIST_HEADER_SELECTORS,
+        firstMatch, isVisible, PLAYLIST_HEADER_SELECTORS, SUBSCRIBE_SELECTORS,
         BUTTON_ID, GUIDE_ID, PLAYLIST_BUTTON_ID,
         RANGES: PouchSheet.RANGES, SORTS: PouchSheet.SORTS,
         ALL_TOPICS: PouchSheet.ALL_TOPICS, PER_CHANNEL: PouchSheet.PER_CHANNEL,
