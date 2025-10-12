@@ -30,6 +30,13 @@ through one. Visible, the suite is done in seconds; hidden, the same tests
 legitimately take minutes. The per-test timeout moves with `document.hidden`
 for exactly that reason, so a hidden run is slow rather than falsely red.
 
+**While changing the x.com code**, open `tests/x-only.html` instead. It runs
+`x-pouch.test.js` against only the modules that file touches, which takes a
+second even in a hidden tab — the full suite spends minutes in the
+background-worker and player sections, whose timers a hidden tab throttles to
+about one a second. It is a fast gate, not a substitute: run `index.html`
+before committing.
+
 **Without a browser**, for the parts that are pure logic:
 
 ```bash
@@ -62,6 +69,8 @@ that code, not a replacement — it cannot press a key or play a video.
 | `activity.test.js` | The activity store, and the relative-time labels on video cards |
 | `youtube-ui.test.js` | Where the "Pouch" row lands in YouTube's left drawer |
 | `pouch.test.js` | The filed/followed state of the injected pouch and playlist buttons |
+| `x-pouch.test.js` | x.com: where the pouch button lands, what a post reads as, what the ad sweep hides |
+| `x-only.html` | The X specs alone — the same file, minus everything slow (see below) |
 | `node-check.js` | The Node gate — pure logic only, no DOM, no timers |
 
 ## How it works
