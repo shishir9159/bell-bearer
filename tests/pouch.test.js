@@ -33,7 +33,14 @@ function pouchUi(style) {
     });
 }
 
-/** A stand-in watch page: a channel link, a subscribe renderer, a queue panel. */
+/**
+ * A stand-in watch page: a channel link, a subscribe renderer, a queue panel.
+ *
+ * The renderer is given a box on purpose. It is an unknown element here, so it
+ * would otherwise be zero-sized — and the injector now steps over a Subscribe
+ * that is not on screen, because a channel page keeps a second, hidden one in
+ * its sticky header and the button was landing in that.
+ */
 function watchPage(channelHref) {
     const host = document.createElement('div');
     host.id = 'bb-test-page';
@@ -41,7 +48,8 @@ function watchPage(channelHref) {
         <div id="owner">
             <ytd-channel-name><a href="${channelHref}">A Channel</a></ytd-channel-name>
         </div>
-        <ytd-subscribe-button-renderer></ytd-subscribe-button-renderer>
+        <ytd-subscribe-button-renderer style="display: block; width: 105px; height: 36px">
+        </ytd-subscribe-button-renderer>
         <ytd-playlist-panel-renderer>
             <div id="container"><div class="header style-scope ytd-playlist-panel-renderer"></div></div>
         </ytd-playlist-panel-renderer>`;
