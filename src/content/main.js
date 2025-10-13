@@ -236,7 +236,7 @@
     if (site === 'twitter') {
         const watcher = DomWatch.createWatcher();
 
-        twitterUi = TwitterUi.createTwitterUi({ watcher, notify });
+        twitterUi = TwitterUi.createTwitterUi({ watcher, notify, getSettings: () => settings });
         twitterUi.install();
 
         twitterAds = TwitterAds.createTwitterAds({
@@ -398,11 +398,16 @@
 
     // --------------------------------------------------------- settings
 
+    /** What Bell Bearer puts into x.com's own chrome, each switchable. */
+    const X_SURFACES = ['twitterPouchPosts', 'twitterPouchPeople', 'twitterHideBookmark'];
+
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&
             values.pouchButtonStyle !== settings.pouchButtonStyle;
         const hideAdsChanged = 'twitterHideAds' in values &&
             values.twitterHideAds !== settings.twitterHideAds;
+        const xSurfacesChanged = X_SURFACES.some((key) =>
+            key in values && values[key] !== settings[key]);
 
         Object.assign(settings, values);
 
@@ -411,6 +416,8 @@
         // posts back on the page that is already open, or the switch looks
         // like it did nothing until the next reload.
         if (hideAdsChanged && twitterAds) twitterAds.sync();
+        // And the same for the three X surfaces, for the same reason.
+        if (xSurfacesChanged && twitterUi) twitterUi.refreshSurfaces();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
     }

@@ -99,6 +99,11 @@
         if (!model || typeof getComputedStyle !== 'function') return holder;
 
         const style = getComputedStyle(model);
+        // A cell that has been taken out of the row reports none of the layout
+        // we came for — which is what the bookmark's is, the moment
+        // twitterHideBookmark has hidden it.
+        if (style.display === 'none') return holder;
+
         for (const property of SLOT_LAYOUT) {
             if (style[property]) holder.style[property] = style[property];
         }
@@ -170,7 +175,15 @@
         return actions;
     }
 
-    function createTwitterUi({ watcher, notify }) {
+    /**
+     * `getSettings` reads the content script's settings mirror. It defaults to
+     * the schema's own defaults, which have all three surfaces off — so a
+     * caller that does not pass one gets the extension at rest rather than a
+     * quietly different set of defaults to keep in step with settings.js.
+     */
+    function createTwitterUi({ watcher, notify, getSettings = () => Settings.DEFAULTS }) {
+        const on = (key) => getSettings()[key] === true;
+
         /**
          * The pouch, held here so that deciding whether a post is already
          * filed does not read storage once per post on a timeline that is
@@ -338,7 +351,13 @@
         // ---------------------------------------------------- post buttons
 
         /**
-         * One pouch button per post, in place of X's bookmark.
+         * One pouch button per post, and X's own bookmark stood down — two
+         * settings rather than one, and both off until they are asked for.
+         *
+         * The order inside the loop is not arbitrary. Our button is placed
+         * first and the bookmark hidden after, because the cell our button
+         * copies its layout from is usually the bookmark's, and a cell that
+         * has already been hidden has no layout left to read.
          *
          * Never returns true: unlike YouTube's subscribe button, which exists
          * once per page, posts arrive for as long as the timeline is
@@ -353,12 +372,34 @@
          * every frame forever.
          */
         function injectPostButtons() {
+            const wanted = on('twitterPouchPosts');
+            const hide = on('twitterHideBookmark');
+            if (!wanted && !hide) return false;
+
             for (const article of TwitterPage.findAll('post')) {
-                if (article.querySelector('.bb-x-post-btn')) continue;
-                if (article.hasAttribute('data-bb-unfilable')) continue;
-                if (!addPostButton(article)) article.setAttribute('data-bb-unfilable', '1');
+                if (wanted && !article.querySelector('.bb-x-post-btn') &&
+                    !article.hasAttribute('data-bb-unfilable')) {
+                    if (!addPostButton(article)) article.setAttribute('data-bb-unfilable', '1');
+                }
+                if (hide) setBookmarkHidden(article, true);
             }
             return false;
+        }
+
+        /**
+         * X's own bookmark, out of a row — or back into it.
+         *
+         * Hidden rather than removed, so that if X re-renders the row (it
+         * does, on every like) its own button comes back into a cell that is
+         * still hidden instead of into a layout that has shifted. It is also
+         * what makes the setting reversible without a reload.
+         */
+        function setBookmarkHidden(scope, hidden) {
+            const marks = scope.querySelectorAll('[data-testid="bookmark"], [data-testid="removeBookmark"]');
+            for (const mark of marks) {
+                const slot = mark.closest('[role="group"] > *') || mark;
+                slot.classList.toggle('bb-x-hidden', hidden);
+            }
         }
 
         /** True when a button went in; false when this post cannot carry one. */
@@ -377,23 +418,16 @@
             button.setAttribute(KEEP, '1');
             button.dataset.bbStatus = post.statusId;
 
-            // X's bookmark is the control this stands in for — the same
-            // gesture, filed somewhere we can organise. Hidden rather than
-            // removed, so that if X re-renders the row (it does, on every
-            // like) its own button comes back into a slot that is still
-            // hidden instead of into a layout that has shifted.
+            // Where X's bookmark is, which is the gesture this stands in for —
+            // the same reach, filed somewhere you can organise. Whether that
+            // bookmark is still beside ours afterwards is twitterHideBookmark's
+            // business and not this function's.
             const bookmark = actions.querySelector('[data-testid="bookmark"], [data-testid="removeBookmark"]');
             const slot = bookmark && bookmark.closest('[role="group"] > *');
 
-            // Measured before the bookmark's cell is hidden: a `display: none`
-            // element reports none of the layout we are copying off it.
             const holder = slotFor(button, rowModel(actions, slot));
-            if (slot) {
-                slot.classList.add('bb-x-hidden');
-                slot.parentElement.insertBefore(holder, slot);
-            } else {
-                actions.appendChild(holder);
-            }
+            if (slot) slot.parentElement.insertBefore(holder, slot);
+            else actions.appendChild(holder);
 
             markPost(button, post.statusId);
             return true;
@@ -423,7 +457,9 @@
          * cheap, and off a profile readProfile answers from the path alone.
          */
         function injectProfileButton() {
-            const person = TwitterPage.readProfile();
+            // Off, or not a profile — the same answer either way, and the same
+            // tidying up after whichever page we were on before.
+            const person = on('twitterPouchPeople') ? TwitterPage.readProfile() : null;
             if (!person) {
                 // Left over from the profile we navigated away from.
                 const stale = document.getElementById(PROFILE_BUTTON_ID);
@@ -718,13 +754,39 @@
             closePicker();
         }
 
+        /**
+         * One of the three surfaces was switched on or off in the dashboard.
+         *
+         * Both directions are handled, and on the page that is already open: a
+         * switch that only takes effect on the next reload reads as a switch
+         * that did nothing. Turning something off is the half that needs code —
+         * turning it on is just letting the injector run again.
+         */
+        function refreshSurfaces() {
+            if (!on('twitterPouchPosts')) {
+                document.querySelectorAll('.bb-x-post-slot, .bb-x-post-btn')
+                    .forEach((element) => element.remove());
+            }
+            if (!on('twitterPouchPeople')) {
+                const placed = document.getElementById(PROFILE_BUTTON_ID);
+                if (placed) placed.remove();
+            }
+            if (!on('twitterHideBookmark')) setBookmarkHidden(document, false);
+
+            // Anchored to a button that may have just been taken off the page.
+            closePicker();
+
+            injectPostButtons();
+            injectProfileButton();
+        }
+
         /** Shift+P, and the only way in besides the nav row. */
         function openPouch() {
             return togglePanel();
         }
 
         return {
-            install, onNavigate, openPouch, panel,
+            install, onNavigate, openPouch, panel, refreshSurfaces,
             injectNavEntry, injectPostButtons, injectProfileButton,
         };
     }

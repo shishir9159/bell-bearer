@@ -1850,6 +1850,18 @@ const dayRecord = (at = T0) =>
         eq(TwitterPage.handleFromHref(''), '');
     });
 
+    check('the three X surfaces are settings, and all three are off', () => {
+        const { DEFAULTS } = require('../src/shared/settings.js');
+        // Each of them reaches into a page somebody else designed, which is
+        // not a default to assume for anyone — and the dashboard binds a
+        // control by giving it the key's own id, so a typo here is a toggle
+        // that silently does nothing.
+        for (const key of ['twitterHideBookmark', 'twitterPouchPeople', 'twitterPouchPosts']) {
+            eq(key in DEFAULTS, true, key);
+            eq(DEFAULTS[key], false, key);
+        }
+    });
+
     check('an avatar URL is upgraded a size and anything else is left alone', () => {
         const base = 'https://pbs.twimg.com/profile_images/1/abc';
         eq(TwitterPage.avatarUrl({ src: `${base}_normal.jpg` }), `${base}_bigger.jpg`);

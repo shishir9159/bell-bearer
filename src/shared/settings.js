@@ -66,6 +66,22 @@
         // timeline. Off until asked for: this is the extension rewriting
         // somebody else's page, which is not a default to assume.
         twitterHideAds: false,
+
+        // The three things Bell Bearer puts into x.com's own chrome, each off
+        // until it is asked for. The pouch itself is always there — the row in
+        // the navigation, the panel it opens, the dashboard behind it — and
+        // what these govern is the extension reaching into somebody else's
+        // page, which is not a default to assume for anyone.
+        //
+        // Standing X's bookmark down is a setting of its own rather than
+        // something the post button does on its way in. The two used to be one
+        // decision, and either half is a reasonable thing to want without the
+        // other: a pouch button beside the bookmark, or the bookmark gone with
+        // nothing put in its place.
+        twitterHideBookmark: false,
+        twitterPouchPeople: false,
+        twitterPouchPosts: false,
+
         redditDailyLimit: false,
         redditLimitMinutes: 30,
 

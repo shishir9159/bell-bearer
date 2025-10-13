@@ -95,7 +95,25 @@
         return host;
     }
 
-    const makeUi = () => TwitterUi().createTwitterUi({ watcher: NO_WATCHER, notify() {} });
+    /**
+     * All three X surfaces are off in the schema, so a spec about where a
+     * button lands has to ask for it. Pass an override to turn one back off:
+     * `makeUi({ twitterHideBookmark: false })`.
+     */
+    const ALL_ON = {
+        twitterPouchPosts: true,
+        twitterPouchPeople: true,
+        twitterHideBookmark: true,
+    };
+
+    const makeUi = (settings) => TwitterUi().createTwitterUi({
+        watcher: NO_WATCHER,
+        notify() {},
+        getSettings: () => ({ ...ALL_ON, ...settings }),
+    });
+
+    /** The factory with no settings at all — the extension as it ships. */
+    const defaultUi = () => TwitterUi().createTwitterUi({ watcher: NO_WATCHER, notify() {} });
 
     /**
      * X's navigation column, cut down to the one row ours is measured
@@ -242,6 +260,74 @@
      * injectProfileButton would mean moving the address bar to /<handle>,
      * which is the one thing a page opened over file:// cannot do.
      */
+    suite('x.com — the X surfaces are off until asked for', () => {
+        test('a post gets nothing, and keeps its bookmark, by default', () => {
+            timeline();
+            // No settings passed at all: the factory falls back to the schema,
+            // rather than to a second set of defaults of its own to keep in
+            // step with settings.js.
+            defaultUi().injectPostButtons();
+
+            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-post-btn').length, 0);
+            assert(!document.querySelector('#bb-x-test [data-testid="bookmark"]')
+                .parentElement.classList.contains('bb-x-hidden'), 'X\'s own button is left alone');
+            teardown();
+        });
+
+        test('the pouch button can go in with the bookmark left standing', () => {
+            timeline();
+            makeUi({ twitterHideBookmark: false }).injectPostButtons();
+
+            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-post-btn').length, 1);
+            assert(!document.querySelector('#bb-x-test [data-testid="bookmark"]')
+                .parentElement.classList.contains('bb-x-hidden'),
+                'the two settings are independent — either half is a reasonable thing to want');
+            teardown();
+        });
+
+        test('the bookmark can go with nothing put in its place', () => {
+            timeline();
+            makeUi({ twitterPouchPosts: false }).injectPostButtons();
+
+            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-post-btn').length, 0);
+            assert(document.querySelector('#bb-x-test [data-testid="bookmark"]')
+                .parentElement.classList.contains('bb-x-hidden'));
+            teardown();
+        });
+
+        test('switching them off puts the page that is open back', () => {
+            timeline();
+            let settings = { ...ALL_ON };
+            const ui = TwitterUi().createTwitterUi({
+                watcher: NO_WATCHER, notify() {}, getSettings: () => settings,
+            });
+            ui.injectPostButtons();
+
+            // A switch that only takes effect on the next reload reads as a
+            // switch that did nothing.
+            settings = { twitterPouchPosts: false, twitterPouchPeople: false, twitterHideBookmark: false };
+            ui.refreshSurfaces();
+
+            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-post-btn').length, 0, 'ours is gone');
+            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-post-slot').length, 0,
+                'and so is the cell it sat in, which would otherwise be a gap in the row');
+            assert(!document.querySelector('#bb-x-test [data-testid="bookmark"]')
+                .parentElement.classList.contains('bb-x-hidden'), 'and X\'s is back');
+            teardown();
+        });
+
+        test('the bookmark is hidden after ours is measured against it', () => {
+            timeline();
+            makeUi().injectPostButtons();
+
+            // Hiding it first leaves nothing to copy: a display:none cell
+            // reports no layout at all, and the button lands unaligned.
+            const slot = document.querySelector('#bb-x-test .bb-x-post-slot');
+            assertEqual(slot.style.display, 'flex', 'it was measured while the row was whole');
+            teardown();
+        });
+    });
+
     suite('x.com — copying X\'s own layout', () => {
         test('a cell of an opened post\'s row is copied, not guessed at', () => {
             // Each cell there is a growing flex box; ours has to grow with

@@ -190,11 +190,28 @@ to dismiss it. Two levels, People or Posts at the top, a topic's contents one
 click in.
 
 On a post, the pouch button stands where X's bookmark was — the same gesture,
-filed somewhere you can organise. On a profile it sits beside Follow. Neither is
-labelled: both sit in rows of bare glyphs, and a word there would read as
-something X had added. Both open a small picker of that side's topics, with the
-current one dotted; filing a post can make a topic on the spot, because filing a
-post is the moment you find out you need one.
+filed somewhere you can organise. On a profile it sits beside Follow, wearing
+the same ring as the More button next to it, at whatever size and in whatever
+grey X is currently drawing those. Neither is labelled: both sit in rows of bare
+glyphs, and a word there would read as something X had added. Both open a small
+picker of that side's topics, with the current one dotted; filing a post can
+make a topic on the spot, because filing a post is the moment you find out you
+need one.
+
+Both buttons are **off until you ask for them**, under **Settings › X**, and so
+is taking X's own bookmark out of the row:
+
+| Setting | What it adds |
+| --- | --- |
+| Remove X's bookmark button from posts | Hides X's bookmark. Hidden, not deleted — nothing already bookmarked on X is touched, and turning it back off puts the button back |
+| Add to pouch from a profile | The ring beside Follow, for filing people |
+| Add to pouch from a post | The button in the action row, for filing posts |
+
+They are separate switches because either half is a reasonable thing to want
+without the other, and because all three are the extension reaching into a page
+somebody else designed — which is not a default to assume for anyone. The pouch
+itself is always there: the row in X's navigation, the panel it opens, and the
+People and Posts tabs on the dashboard.
 
 Everything else is the dashboard, under **X › People** and **X › Posts**: making
 a topic, renaming it, dragging it into a different place in the order, deleting
