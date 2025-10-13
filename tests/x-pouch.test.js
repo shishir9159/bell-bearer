@@ -196,7 +196,21 @@
             const theirs = document.querySelector('#bb-x-test [data-testid="bookmark"]').parentElement;
 
             assert(theirs.classList.contains('bb-x-hidden'), 'X\'s bookmark is hidden, not removed');
-            assertEqual(ours.nextElementSibling, theirs, 'ours takes its place in the row');
+            assertEqual(ours.parentElement.nextElementSibling, theirs, 'ours takes its place in the row');
+            teardown();
+        });
+
+        test('the button goes in wrapped, as one of the row\'s own cells', () => {
+            timeline();
+            makeUi().injectPostButtons();
+
+            const slot = document.querySelector('#bb-x-test .bb-x-post-btn').parentElement;
+
+            // A bare <button> as a sibling is right in a timeline row and half
+            // a line low in an opened post's, where every cell is a growing
+            // flex box with the glyph centred inside it.
+            assert(slot.classList.contains('bb-x-post-slot'), 'wrapped, not bare');
+            assert(slot.closest('[role="group"]'), 'and still inside X\'s action row');
             teardown();
         });
 
@@ -205,8 +219,9 @@
             makeUi().injectPostButtons();
 
             const group = document.querySelector('#bb-x-test [role="group"]');
-            assert(group.lastElementChild.classList.contains('bb-x-post-btn'),
+            assert(group.lastElementChild.classList.contains('bb-x-post-slot'),
                 'no bookmark to replace, so it goes on the end rather than nowhere');
+            assert(group.lastElementChild.querySelector('.bb-x-post-btn'), 'with the button in it');
             teardown();
         });
 
@@ -215,6 +230,70 @@
             makeUi().injectPostButtons();
 
             assertEqual(document.querySelector('#bb-x-test .bb-x-post-btn').dataset.bbStatus, '1770');
+            teardown();
+        });
+    });
+
+    /*
+     * The two helpers below are tested straight off the module rather than
+     * through an injector. Both answer the same question — what does the
+     * control X put here look like, so ours can look like it too — and both
+     * are read off elements the specs can build, where driving them through
+     * injectProfileButton would mean moving the address bar to /<handle>,
+     * which is the one thing a page opened over file:// cannot do.
+     */
+    suite('x.com — copying X\'s own layout', () => {
+        test('a cell of an opened post\'s row is copied, not guessed at', () => {
+            // Each cell there is a growing flex box; ours has to grow with
+            // them or the row comes out lopsided.
+            const host = stage('<div style="display: block; flex-grow: 1; justify-content: center"></div>');
+            const button = document.createElement('button');
+            const slot = TwitterUi().slotFor(button, host.firstElementChild);
+
+            assertEqual(slot.style.flexGrow, '1', 'grows with the cells beside it');
+            assertEqual(slot.style.justifyContent, 'center');
+            assertEqual(slot.style.alignItems, 'center', 'which is what centres the glyph');
+            assertEqual(slot.style.display, 'flex', "a copied 'block' drops the glyph to the baseline");
+            assertEqual(slot.firstElementChild, button, 'and the button is in it');
+            teardown();
+        });
+
+        test('a cell with nothing to copy is still a cell', () => {
+            const slot = TwitterUi().slotFor(document.createElement('button'), null);
+            assert(slot.classList.contains('bb-x-post-slot'), 'content.css carries the fallback');
+            assertEqual(slot.getAttribute('style'), null, 'and nothing is written over it');
+        });
+
+        test('a profile button wears X\'s ring rather than one of its own', () => {
+            const host = stage(`
+                <button data-testid="userActions"
+                        style="width: 34px; height: 34px; border: 1px solid rgb(83, 100, 113);
+                               margin-left: 0px; margin-right: 0px"></button>`);
+            const more = host.firstElementChild;
+            const button = document.createElement('button');
+
+            TwitterUi().wearRing(button, TwitterUi().ringModel(more));
+
+            // Our own 36px ring in currentColor was both a shade too dark and
+            // two pixels too tall, which is what put it below their line.
+            assertEqual(button.style.getPropertyValue('--bb-x-ring-size'), '34px');
+            assertEqual(button.style.getPropertyValue('--bb-x-ring'), 'rgb(83, 100, 113)');
+            assertEqual(button.style.getPropertyValue('--bb-x-ring-width'), '1px');
+            // A guessed 8px is wrong wherever X spaces that row with a gap.
+            assertEqual(button.style.marginRight, '0px');
+            teardown();
+        });
+
+        test('the ring is found when X has moved the border inside', () => {
+            const host = stage(`
+                <div data-testid="userActions">
+                    <div style="border: 2px solid rgb(1, 2, 3); width: 40px; height: 40px"></div>
+                </div>`);
+            const model = TwitterUi().ringModel(host.firstElementChild);
+
+            // Reading the outer element would have given a zero border and
+            // left the button in currentColor, which is the bug in miniature.
+            assertEqual(model, host.firstElementChild.firstElementChild);
             teardown();
         });
     });

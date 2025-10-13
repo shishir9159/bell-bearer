@@ -71,6 +71,105 @@
         return null;
     }
 
+    /**
+     * What a cell of X's action row is copied by, when ours goes in beside it.
+     *
+     * `display` is handled separately in slotFor — everything here is a value
+     * that can be carried across as it stands.
+     */
+    const SLOT_LAYOUT = ['flexGrow', 'flexShrink', 'flexBasis', 'justifyContent',
+        'minWidth', 'maxWidth', 'marginLeft', 'marginRight'];
+
+    /**
+     * Our button, wrapped the way X wraps its own.
+     *
+     * The action row is laid out differently in a post in the timeline and in
+     * a post opened on its own page. In the timeline the cells are bare and
+     * evenly spaced; on a post's own page each one is a growing flex cell with
+     * the glyph centred inside it. A bare <button> inserted as a sibling is
+     * right in the first case and sits half a line low in the second, which is
+     * exactly what it did — so the cell beside it is measured rather than
+     * guessed at.
+     */
+    function slotFor(button, model) {
+        const holder = document.createElement('div');
+        holder.className = 'bb-x-post-slot';
+        holder.setAttribute(KEEP, '1');
+        holder.appendChild(button);
+        if (!model || typeof getComputedStyle !== 'function') return holder;
+
+        const style = getComputedStyle(model);
+        for (const property of SLOT_LAYOUT) {
+            if (style[property]) holder.style[property] = style[property];
+        }
+        // Whatever the cell beside us is, ours centres its one child. A
+        // `block` or `inline` carried straight across would put the glyph on
+        // the row's text baseline, which is the drop this is here to fix.
+        holder.style.display = /flex/.test(style.display) ? style.display : 'flex';
+        holder.style.alignItems = 'center';
+        return holder;
+    }
+
+    /**
+     * A cell of X's own action row to copy, when the bookmark's is not there
+     * to use — a post whose bookmark X has not rendered still has a Reply and
+     * a Like, and either is the same cell.
+     */
+    function rowModel(actions, preferred) {
+        if (preferred) return preferred;
+        for (const id of ['like', 'unlike', 'retweet', 'unretweet', 'reply']) {
+            const control = actions.querySelector(`[data-testid="${id}"]`);
+            const slot = control && control.closest('[role="group"] > *');
+            if (slot) return slot;
+        }
+        return null;
+    }
+
+    /**
+     * Dress our profile button as one of X's own header rings.
+     *
+     * The row beside Follow is More / notify / message, and all three are the
+     * same circle: X's border grey, which is a good deal lighter than the text
+     * next to it, at whatever size X's display setting is currently drawing
+     * them. Ours was a hard 36px ring in `currentColor`, so it was both a
+     * shade too dark and two pixels too tall — which is what pushed it off the
+     * line the others sit on.
+     *
+     * Written as custom properties rather than as `width` and `border-color`
+     * so that content.css keeps the last word: the filed state fills the ring
+     * with the accent, and an inline colour would win over it forever.
+     */
+    function wearRing(button, model) {
+        if (!model || typeof getComputedStyle !== 'function') return;
+        const style = getComputedStyle(model);
+
+        const size = Math.round(model.getBoundingClientRect().height);
+        if (size) button.style.setProperty('--bb-x-ring-size', `${size}px`);
+        if (parseFloat(style.borderTopWidth) > 0) {
+            button.style.setProperty('--bb-x-ring', style.borderTopColor);
+            button.style.setProperty('--bb-x-ring-width', style.borderTopWidth);
+        }
+        // X spaces this row with its own margins in one layout and with a gap
+        // in another. Copying the model's means we are spaced the way it is,
+        // and a zero here is an answer rather than a gap to fill in.
+        button.style.marginLeft = style.marginLeft;
+        button.style.marginRight = style.marginRight;
+    }
+
+    /**
+     * The ring in a profile header to measure. The More button itself, unless
+     * X has moved the border onto something inside it.
+     */
+    function ringModel(actions) {
+        if (typeof getComputedStyle !== 'function') return actions;
+        const bordered = (element) => parseFloat(getComputedStyle(element).borderTopWidth) > 0;
+        if (bordered(actions)) return actions;
+        for (const inner of actions.querySelectorAll('div')) {
+            if (bordered(inner)) return inner;
+        }
+        return actions;
+    }
+
     function createTwitterUi({ watcher, notify }) {
         /**
          * The pouch, held here so that deciding whether a post is already
@@ -285,11 +384,15 @@
             // hidden instead of into a layout that has shifted.
             const bookmark = actions.querySelector('[data-testid="bookmark"], [data-testid="removeBookmark"]');
             const slot = bookmark && bookmark.closest('[role="group"] > *');
+
+            // Measured before the bookmark's cell is hidden: a `display: none`
+            // element reports none of the layout we are copying off it.
+            const holder = slotFor(button, rowModel(actions, slot));
             if (slot) {
                 slot.classList.add('bb-x-hidden');
-                slot.parentElement.insertBefore(button, slot);
+                slot.parentElement.insertBefore(holder, slot);
             } else {
-                actions.appendChild(button);
+                actions.appendChild(holder);
             }
 
             markPost(button, post.statusId);
@@ -313,9 +416,11 @@
         /**
          * The add-to-pouch button in a profile header, beside Follow.
          *
-         * Returns false while the header is missing rather than true, because
-         * on X a profile is reached without a page load and the header is
-         * built a beat after the URL changes.
+         * Never reports itself done, for the same reason the nav row does not:
+         * X rebuilds this header on its own schedule — changing the theme is
+         * enough — and a task that retired after placing the button once would
+         * leave it gone until the next navigation. getElementById keeps that
+         * cheap, and off a profile readProfile answers from the path alone.
          */
         function injectProfileButton() {
             const person = TwitterPage.readProfile();
@@ -323,7 +428,7 @@
                 // Left over from the profile we navigated away from.
                 const stale = document.getElementById(PROFILE_BUTTON_ID);
                 if (stale) stale.remove();
-                return true;
+                return false;
             }
 
             const actions = TwitterPage.find('profileActions');
@@ -338,7 +443,7 @@
                     placed.dataset.bbHandle = person.handle;
                     markProfile(placed, person);
                 }
-                return true;
+                return false;
             }
 
             const button = PouchButton.create({
@@ -351,8 +456,9 @@
             button.dataset.bbHandle = person.handle;
 
             actions.parentElement.insertBefore(button, actions.nextSibling);
+            wearRing(button, ringModel(actions));
             markProfile(button, person);
-            return true;
+            return false;
         }
 
         async function markProfile(button, person) {
@@ -602,15 +708,14 @@
         /**
          * X navigated without a page load.
          *
-         * Only the profile button is re-armed: the nav row and the post
-         * buttons are both on tasks that never retire, so they are still
-         * registered. The profile one does retire — a page that is not a
-         * profile has nothing to inject, and that is a finished answer, not
-         * a wait — so landing on a profile is the cue to look again.
+         * Nothing is re-armed: all three tasks never retire, because X rebuilds
+         * the navigation column, a post's action row and a profile header on
+         * its own schedule rather than only on a navigation. What is left to do
+         * here is shut the picker, which was anchored to a button on the page
+         * we have just left.
          */
         function onNavigate() {
             closePicker();
-            watcher.add('x-profile', injectProfileButton);
         }
 
         /** Shift+P, and the only way in besides the nav row. */
@@ -624,7 +729,14 @@
         };
     }
 
-    const TwitterUi = { createTwitterUi, NAV_ID, PROFILE_BUTTON_ID, PICKER_ID };
+    // slotFor, rowModel, wearRing and ringModel are exported so the specs can
+    // read them off elements they build. Driving them through the injectors
+    // would mean moving the address bar to /<handle>, which is the one thing a
+    // page opened over file:// cannot do.
+    const TwitterUi = {
+        createTwitterUi, NAV_ID, PROFILE_BUTTON_ID, PICKER_ID,
+        navLabel, slotFor, rowModel, wearRing, ringModel,
+    };
 
     root.BB = root.BB || {};
     root.BB.TwitterUi = TwitterUi;

@@ -1718,6 +1718,17 @@
 
 /* ------------------------------------------- pouch button on a post */
 
+/* The cell our button sits in, so X's row can lay ours out the way it lays
+   out its own. Its flex properties are written inline from the cell beside
+   it — see slotFor in twitter-ui.js — because a post in the timeline and a
+   post on its own page do not share a layout. What is left here is what
+   holds when there was no cell to read. */
+.bb-x-post-slot {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
 /* Sized and coloured as one of X's own action glyphs. It stands where the
    bookmark was, in a row of bare marks — so it is never labelled: a word
    here would make it the only captioned control in the row and read as
@@ -1751,18 +1762,31 @@
 /* ---------------------------------------- pouch button on a profile */
 
 /* Beside Follow, so it takes X's button metrics rather than the action
-   row's — a 36px pill, not a bare glyph. Still unlabelled, for the same
-   reason, and outlined until it is filed so it never competes with Follow
-   for the eye. */
+   row's — a ring, not a bare glyph. Still unlabelled, for the same reason,
+   and outlined until it is filed so it never competes with Follow for the
+   eye.
+
+   The three custom properties are written by wearRing in twitter-ui.js off
+   X's own More button, which is the ring beside ours: its size, its border
+   width and the grey it is drawn in, which is several shades lighter than
+   the text around it. The values below are the fallback for a header with
+   no ring to read — and they are declared as properties rather than as
+   plain width and border-color so that the filed state further down still
+   wins, which an inline colour never would.
+
+   align-self, because X's header row does not centre what it holds, and a
+   ring two pixels taller than its neighbours then sits below their line. */
 .bb-x-profile-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    align-self: center;
+    flex: 0 0 auto;
+    width: var(--bb-x-ring-size, 34px);
+    height: var(--bb-x-ring-size, 34px);
     margin-right: 8px;
     padding: 0;
-    border: 1px solid currentColor;
+    border: var(--bb-x-ring-width, 1px) solid var(--bb-x-ring, currentColor);
     border-radius: 999px;
     background: transparent;
     color: inherit;
