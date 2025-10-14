@@ -1,11 +1,10 @@
 For the low-time warning sound: Chess.com plays that sound through its own audio pipeline, which an extension can only hook into unreliably (the hook breaks whenever they change their bundler). How should I make it adjustable?
 
-
+Vomnibar
 
 known limitations at the moment: chess board flip is not detected
 
 let's migrate to <button onClick={} onMouseDown>   </button>
-https://developer.chrome.com/docs/extensions/reference/api/tabs
 https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/functional-samples/tutorial.tabs-manager
 # Bell Bearer
 
@@ -22,10 +21,12 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Persistent Storage**: Persist Bookmarks across browser sessions
 - **Import/Export**: One file with every setting and all saved data, from the dashboard header
 - **Topics overlay**: A frosted sheet over YouTube — topic rail, thumbnail grid, time range and sort
+- **X pouch**: People and posts filed into two independent sets of topics, from x.com and managed on the dashboard
 - **Skim**: A launcher over any page — find within it, reach a tab, your history or a browser action, and label every link for the keyboard
 - **Skins**: Default, Riso Paint, Medieval and Art Deco, each with its own day and night
 - **Activity**: Opt-in, on-device record of where your screen time goes
-- **Daily time limit**: A budget for x.com and reddit.com, counted while you are actually looking at them
+- **Daily time limit**: A budget, or a window of hours, on any site you name — counted while you are actually looking at it, snoozable ten minutes at a time
+- **Rosters**: Who you follow on Twitter and the subreddits you have joined, out to a text file and back in again, slowly
 - **Chess.com and Lichess**: Games, time management and time at the board; a clock warning and moves read aloud while you play
 - **Reward System**: Track watch credits to spend them on popcorn for later
 
@@ -177,11 +178,20 @@ silently — a person is keyed by their handle and a post by its status id, so t
 same account met on a post and again on their profile is one person, and the
 same post met in the timeline and again in a thread is one post.
 
-**Pouch** sits in X's left navigation under Home. Unlike the row in YouTube's
-drawer it does not wear the extension's artwork: X's navigation is a column of
-outline marks in the theme's own colour, so the row is drawn in `currentColor`
-and measures its type and icon off the Home row above it — which is how X's
-dark themes and its display-size setting reach it without anything from us.
+**Pouch** sits in X's left navigation under Home, wearing the extension's own
+artwork exactly as the row in YouTube's drawer does, with the outline pouch mark
+stacked underneath it so a picture that cannot be loaded uncovers a glyph in
+`currentColor` rather than leaving a hole.
+
+It takes its type and its icon size off X's own rows, which is how X's dark
+themes and its display-size setting reach it without anything from us — and off
+*two* of them, not one. X draws the row you are on heavier than the rest, and
+the row this used to measure was Home, which is the row you are on nearly
+always: so the Pouch row wore the selected weight permanently and read as a tab
+that would not let go. It now rests in the body weight like every other row in
+the column, and goes bold, a little larger and into the accent while the panel
+is open. Where the word starts is measured too, so the label lines up with the
+words above and below it rather than sitting a couple of pixels left of them.
 
 It opens a panel over that column and nothing else: the timeline stays readable
 behind it, because the point of the panel is remembering who somebody is
@@ -190,7 +200,15 @@ to dismiss it. Two levels, People or Posts at the top, a topic's contents one
 click in.
 
 On a post, the pouch button stands where X's bookmark was — the same gesture,
-filed somewhere you can organise. On a profile it sits beside Follow, wearing
+filed somewhere you can organise — and where it *would* be on the rows X leaves
+a bookmark off, which is immediately after Like rather than out past Share. Its
+place used to depend on whether that row happened to have a bookmark in it, so
+it moved between a post opened on its own page and the same post in the
+timeline. Adding a cell to that row also lifts the fixed width cap X puts on it,
+but only where the post is wider than the cap: otherwise the marks stay bunched
+into the left half with empty page beside them.
+
+On a profile the button sits beside Follow, wearing
 the same ring as the More button next to it, at whatever size and in whatever
 grey X is currently drawing those. Neither is labelled: both sit in rows of bare
 glyphs, and a word there would read as something X had added. Both open a small
@@ -203,7 +221,7 @@ is taking X's own bookmark out of the row:
 
 | Setting | What it adds |
 | --- | --- |
-| Remove X's bookmark button from posts | Hides X's bookmark. Hidden, not deleted — nothing already bookmarked on X is touched, and turning it back off puts the button back |
+| Remove Twitter's bookmark button from posts | Hides X's bookmark. Hidden, not deleted — nothing already bookmarked on X is touched, and turning it back off puts the button back |
 | Add to pouch from a profile | The ring beside Follow, for filing people |
 | Add to pouch from a post | The button in the action row, for filing posts |
 
@@ -213,11 +231,23 @@ somebody else designed — which is not a default to assume for anyone. The pouc
 itself is always there: the row in X's navigation, the panel it opens, and the
 People and Posts tabs on the dashboard.
 
-Everything else is the dashboard, under **X › People** and **X › Posts**: making
-a topic, renaming it, dragging it into a different place in the order, deleting
-it and everything in it, writing the three-to-five-word note under someone's
-name, and taking a saved post back out. Those are decisions you make looking at
-the whole pouch, not while reading a post.
+Everything else is the dashboard, under **Twitter › People** and
+**Twitter › Posts**: making a topic, renaming it, dragging it into a different
+place in the order, deleting it and everything in it, writing the
+three-to-five-word note under someone's name, and taking a saved post back out.
+Those are decisions you make looking at the whole pouch, not while reading a
+post.
+
+A saved post opens from either side. In the panel the whole card is the target;
+in the dashboard the handle and the body are one link. That was not true for a
+while, and a pouch of posts you cannot get back to is a pouch with no point:
+posts filed before the URL was recorded have theirs rebuilt from the status id,
+so the old ones open too.
+
+The dashboard calls the site **Twitter** throughout, not **X**. The site renamed
+itself; nobody who uses it did, and a single letter sitting in a row of proper
+nouns reads as a rendering fault rather than as a name. The internal id stays
+`twitter`, which is what it always was.
 
 ### Avatars, and why nothing is ever fetched
 
@@ -251,9 +281,32 @@ everything back on the page that is already open, without a reload.
 
 ## Daily time limit
 
-x.com and reddit.com get a card on the dashboard and a panel in settings, and
-each can be given a budget for the day. Off by default, and while a site's
-limit is off nothing about it is counted or stored.
+**Any** site can be held to a daily limit. The list is under
+**Settings › General › Hold me to a daily limit on**, beside the remembered
+cookie sites and working the same way: name a host, say how long it gets, and it
+is in. Nothing is in it to begin with, and a host with no row in it is not
+counted, not stored and costs nothing at all.
+
+This used to be two settings per site, spelled out in the schema and wired to a
+toggle inside that site's own panel — which is why only the two sites that had a
+panel could have a limit at all. x.com and reddit.com are now two rows in the
+list like any other, and their **Time** tab shows where today stands rather than
+setting the limit. Anyone who already had one keeps it: the list seeds itself
+once from those old settings the first time it is read.
+
+A row carries one of two kinds of limit:
+
+| What you type | What it means |
+| --- | --- |
+| `30` minutes | a budget for the day: thirty minutes of that site, whenever you like |
+| `7am` to `9am` | an allowance too: the site is yours between those hours and covered the rest of the day |
+
+A pair of times is an *allowance*, not a curfew — the same shape of promise the
+budget makes. It could just as reasonably have meant the two hours the site is
+blocked, and the difference matters rather a lot at 9:01, so the panel says
+which it is in as many words. Times are read the way they are said: `7am`,
+`7:30 pm` and `19:00` are all fine. A window whose end is before its start runs
+over midnight (`22:00` to `02:00`) rather than being empty.
 
 Time is counted by the page itself, because the page is the only thing that
 knows whether it is the one being looked at: the tab has to be on screen
@@ -266,11 +319,64 @@ Past the limit the site is covered by a sheet saying what was spent. It is a
 sheet rather than a redirect — being bounced somewhere else tells you
 nothing, and closing the tab is meant to be the deliberate part.
 
+The sheet has a way through it: **Snooze ten minutes**, as many times as you
+ask. Nothing refuses a fourth one — it just says it is the fourth, on the sheet
+and in the Time tab. A limit with no door is a limit you switch off for good the
+first time it is wrong about your afternoon, and a snooze you have to admit to
+is a better check than one you cannot have. The clock keeps running through it,
+so the ten minutes come out of the same day's allowance rather than on top of
+it, and a snooze is discarded at midnight with everything else.
+
 The tally is one day deep. It is not aged out or archived at midnight, it is
 discarded whole the first time the next day reads it, so the store never
-amounts to a record of what was browsed when: two numbers and the date they
-belong to. The site's card shows today against the limit, live, while the
-counting happens in another tab.
+amounts to a record of what was browsed when: a number per limited host and the
+date they belong to. The site's card shows today against the limit, live, while
+the counting happens in another tab.
+
+## Rosters: your list out to a file, and back
+
+**Twitter › Roster** and **Reddit › Roster** read your own list off the site —
+the accounts you follow, the subreddits you have joined — into a plain text
+file, one name per line, and read a file back in to follow or join what it
+names.
+
+No API, no token, no endpoint. Reading walks the pages you can already see;
+applying opens each name's page and clicks the site's own Follow or Join button.
+That is the whole of the safety argument, and it is why the two directions are
+not offered as one button:
+
+| | Reading | Applying |
+| --- | --- | --- |
+| What it touches | nothing — it changes no state anywhere | your account, at the site's sufferance |
+| Twitter | scrolls `/<you>/following` | 40 a day, 25–55 seconds apart |
+| Reddit | pages through `old.reddit.com/subreddits/mine` | 120 a day, 9–20 seconds apart |
+
+Twitter's numbers are deliberately the slower pair. Reddit rate-limits an
+account and tells you so; Twitter suspends one and does not, the edge of what it
+tolerates is neither documented nor stable, and the way to stay clear of it is
+to stay a long way clear rather than to find it. The gap between two actions is
+jittered inside its range, because a click at exactly the same interval for an
+hour is a signature and a person does not have one.
+
+Before an apply job starts, the panel says how many names it is, how many are
+new since your last read, roughly how long today's sitting will take and how
+many days the whole thing is. A four-hundred account list is eleven days of
+Twitter's cap, which is not something to discover on day three.
+
+A job stops at the first thing it does not understand — a missing Follow button,
+a click that silently did nothing, anything the site puts in the way — and says
+so, rather than trying again or moving on. A click that does nothing is exactly
+what being rate-limited looks like from inside the page, and pressing on from
+there is how an account gets suspended. Anything already followed or joined is
+skipped and costs nothing against the day, so re-running a list you half applied
+yesterday is cheap.
+
+Applying a list *is* a sequence of navigations, so the job lives in storage
+rather than in any page: every page of the site picks it up, does one thing,
+writes down that it did and moves on. That is what makes it survive a page load,
+a closed browser, and the day's cap running out in the middle. One page holds it
+at a time — two tabs would otherwise follow the same account twice — and the
+dashboard can stop it, or carry on where it left off.
 
 ## Activity
 
@@ -360,7 +466,9 @@ src/shared/     pure logic, used by every surface
   feed.js          channel RSS, cached ten minutes; Refresh asks for fresh
                    resolves /@handle to a UC id by the page's canonical link
   skim.js          where a match comes to rest, and the action table
-  time-limits.js   the day's tally for x.com and reddit.com, and the limit
+  limit-sites.js   which sites are held to a daily limit, and what each limit is
+  time-limits.js   the day's tally per limited host, and the snooze
+  roster.js        a site's own roster: the file format, the pace, and the job
   x-pouch.js       the X pouch: two independent topic lists and their items
   pouch-button.js  the pouch button both YouTube and X inject
   time.js dom.js   formatting and escaping
@@ -371,7 +479,8 @@ src/content/    injected into every page
   shortcuts.js     the keybinding table
   skim.js          the launcher: page search, the jump, the result list
   link-hints.js    a label on every link and button in view
-  time-limit.js    counts the day on x.com and reddit.com, and covers them
+  time-limit.js    counts the day on any limited site, and covers it
+  roster.js        reads a roster off the site's pages, and works through one
   checkpoints.js   recording and saving checkpoints
   transcripts.js   transcript fetching and caching
   site.js          which site, and which <video> on it
@@ -403,6 +512,8 @@ src/page/       shared by popup.html and dashboard.html
   chess-settings.js a chess site's settings panel
   heat-map.js      the calendar heat map
   time-limit-view.js today against a site's daily limit
+  limit-sites-panel.js the General list: which sites have a limit, and what it is
+  roster-view.js   a site's Roster panel: the file out, the file in, the job
   x-pouch-view.js  the dashboard's People and Posts panels — where X topics are managed
   popup-width.js   applies the popup size setting, from popup.html's <head>
 
@@ -483,6 +594,55 @@ A person's `id` is ours and their `handle` is the key they are recognised by; a
 post's `id` *is* its status id, which is the only thing about a post that never
 changes. `postedAt` is stored rather than the "6h" X was showing at the time,
 because a stored "6h" is wrong by tomorrow.
+
+The daily limit is two keys — what the limits are, and what today has gone on —
+both keyed by host, so neither knows anything about which sites have a workspace:
+
+```javascript
+{
+  bbLimitSites: {
+    "x.com":      { minutes: 30, savedAt: 0 },
+    "reddit.com": { from: "07:00", to: "09:00", savedAt: 0 }
+  },
+  bbTimeLimits: {
+    day: "2026-09-24",
+    seconds: { "x.com": 1740 },
+    snoozed: { "x.com": { until: 0, count: 2 } }
+  }
+}
+```
+
+A row has `minutes` or it has `from` and `to`, never both. `bbTimeLimits` is one
+day deep: anything whose `day` is not today is discarded whole rather than aged
+out, which is also what clears a snooze at midnight. An expired snooze keeps its
+row inside the day, with `until` left in the past, so the count stays honest —
+dropping it the moment it lapsed would say "first" again every ten minutes.
+
+A roster is the list last read off a site, and at most one job in flight:
+
+```javascript
+{
+  bbRosters: {
+    twitter: { names: ["isorokin", "…"], readAt: 0 },
+    reddit:  { names: ["rust", "cpp"],   readAt: 0 }
+  },
+  bbRosterJob: {
+    site: "twitter", action: "apply", names: ["…"], found: [],
+    at: 12, done: 11, skipped: 1, failed: 0,
+    day: "2026-09-24", today: 12, status: "running", note: "",
+    nextAt: 0, leaseBy: "k3f9a1", leaseUntil: 0
+  }
+}
+```
+
+`at` is the only thing that moves through the list; `done`, `skipped` and
+`failed` are counts rather than lists, because writing two thousand names back
+on every step is a storage write per action for something nobody reads. `today`
+is against the site's cap and is reset by the `day` turning over, since a job of
+four hundred names runs over days by design. `leaseBy` is the page currently
+holding the job — two tabs would otherwise follow the same account twice — and it
+is handed back before each navigation, with `leaseUntil` covering the case where
+the tab is simply closed.
 
 ## Tests
 

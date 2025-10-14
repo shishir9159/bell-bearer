@@ -116,34 +116,53 @@
     const defaultUi = () => TwitterUi().createTwitterUi({ watcher: NO_WATCHER, notify() {} });
 
     /**
-     * X's navigation column, cut down to the one row ours is measured
-     * against. The badge sits in a `div[dir]` of its own ahead of the label
-     * on purpose — that is the arrangement that made the Pouch row come out
-     * in 11px type before navLabel learned to step over a number.
+     * X's navigation column, cut down to the two rows ours is measured
+     * against: the one you are on, and one you are not.
+     *
+     * Both are needed, and that is the whole point of the fixture. X draws the
+     * current row in its bold weight and the rest in the body weight, and the
+     * row this used to measure was Home — which is the row you are on nearly
+     * always, so the Pouch row wore the selected weight permanently and read
+     * as a tab that would not let go.
+     *
+     * The badge sits in a `div[dir]` of its own ahead of the label on purpose:
+     * that is the arrangement that made the Pouch row come out in 11px type
+     * before navLabel learned to step over a number.
      */
     const NAV = `
         <header role="banner">
             <nav role="navigation">
-                <a data-testid="AppTabBar_Home_Link" href="/home">
+                <a data-testid="AppTabBar_Home_Link" href="/home" aria-current="page">
                     <div dir="ltr"><span style="font-size: 11px">3</span></div>
                     <svg width="30" height="30" style="width: 30px; height: 30px"></svg>
                     <div dir="ltr"><span style="font-size: 23px; font-weight: 800">Home</span></div>
+                </a>
+                <a href="/explore">
+                    <svg width="30" height="30" style="width: 30px; height: 30px"></svg>
+                    <div dir="ltr"><span style="font-size: 23px; font-weight: 400">Explore</span></div>
                 </a>
             </nav>
         </header>`;
 
     suite('x.com — the Pouch row in the navigation', () => {
-        test('the mark is drawn rather than loaded', () => {
+        test('the mark is the extension\'s own, over the glyph as a fallback', () => {
             stage(NAV);
             makeUi().injectNavEntry();
 
             const entry = document.getElementById('bb-x-nav-entry');
             assert(entry, 'the row goes in');
-            // The <img> this replaced went through Dom.safeUrlAttr, which
-            // passes http(s) and nothing else — so a chrome-extension:// src
-            // came out as "#" and the row wore a broken image.
-            assertEqual(entry.querySelectorAll('img').length, 0, 'nothing to fail to load');
-            assert(entry.querySelector('.bb-pouch-glyph'), 'the shared glyph, in currentColor');
+            // Both are in the markup: content.css stacks the picture over the
+            // glyph and twitter-ui.js drops the picture on error, so a src
+            // that cannot load uncovers a mark in currentColor rather than
+            // leaving a hole. An earlier version of this row ran the URL
+            // through Dom.safeUrlAttr, which passes http(s) and nothing else
+            // — so every chrome-extension:// src came out as "#".
+            assert(entry.querySelector('.bb-pouch-glyph'), 'the shared glyph underneath');
+            const art = entry.querySelector('.bb-x-nav-img');
+            // The mock has no chrome.runtime.getURL, so the <img> is removed
+            // rather than left pointing at nothing — which is the same path a
+            // reloaded extension takes.
+            if (art) assertEqual(art.getAttribute('src') === '', false, 'never an empty src');
             teardown();
         });
 
@@ -156,17 +175,50 @@
             teardown();
         });
 
-        test('its type and icon are measured off X\'s own row, not the badge', () => {
+        test('its type and icon are measured off X\'s own rows, not the badge', () => {
             stage(NAV);
             makeUi().injectNavEntry();
 
             const entry = document.getElementById('bb-x-nav-entry');
-            const text = entry.querySelector('.bb-x-nav-text');
+            // Written as custom properties rather than as font-size and
+            // font-weight, because the row has two states and one style
+            // attribute: content.css derives the selected look from the
+            // resting numbers, and an inline font-size would beat it forever.
+            const prop = (name) => entry.style.getPropertyValue(name);
+
             // X scales both with its display-size setting, and content.css
             // can only carry one reading of it.
-            assertEqual(text.style.fontSize, '23px', 'the label, not the 11px badge beside it');
-            assertEqual(text.style.fontWeight, '800');
-            assertEqual(entry.querySelector('.bb-x-nav-ico').style.height, '30px');
+            assertEqual(prop('--bb-x-nav-size'), '23px', 'the label, not the 11px badge beside it');
+            assertEqual(prop('--bb-x-nav-ico'), '30px');
+
+            // The resting weight comes from a row that is not current, and the
+            // bold one from the row that is. Reading only Home gave the Pouch
+            // row the selected weight all day.
+            assertEqual(prop('--bb-x-nav-weight'), '400', 'at rest it is one of the column');
+            assertEqual(prop('--bb-x-nav-weight-on'), '800', "and X's own bold when the panel is open");
+            teardown();
+        });
+
+        test('with only the row you are on to read, that is what is read', () => {
+            // A signed-out column, or one X has cut down: there is no
+            // unselected row to measure, and a row with no metrics at all is
+            // worse than one wearing the current row's.
+            stage(`
+                <header role="banner">
+                    <nav role="navigation">
+                        <a data-testid="AppTabBar_Home_Link" href="/home" aria-current="page">
+                            <svg width="26" height="26" style="width: 26px; height: 26px"></svg>
+                            <div dir="ltr"><span style="font-size: 19px; font-weight: 700">Home</span></div>
+                        </a>
+                    </nav>
+                </header>`);
+            makeUi().injectNavEntry();
+
+            const entry = document.getElementById('bb-x-nav-entry');
+            assertEqual(entry.style.getPropertyValue('--bb-x-nav-weight'), '700');
+            // Not written at all, so content.css's own fallback applies rather
+            // than "bold, the same as at rest", which would be no state change.
+            assertEqual(entry.style.getPropertyValue('--bb-x-nav-weight-on'), '');
             teardown();
         });
 
@@ -218,6 +270,41 @@
             teardown();
         });
 
+        test('with no bookmark in the row it still sits after Like', () => {
+            timeline({ bookmark: false });
+            makeUi({ twitterHideBookmark: false }).injectPostButtons();
+
+            const slot = document.querySelector('#bb-x-test .bb-x-post-slot');
+            const like = document.querySelector('#bb-x-test [data-testid="like"]');
+
+            // Appending was what this did, and X leaves the bookmark off a
+            // good many timeline and profile rows — so the same button landed
+            // between Like and Bookmark on a post's own page and out past
+            // Share in the timeline, for no reason a reader could see.
+            assertEqual(like.closest('[role="group"] > *').nextElementSibling, slot,
+                'the bookmark\'s place, whether or not the bookmark is in it');
+            teardown();
+        });
+
+        test('a row capped narrower than the post it is in is let out', () => {
+            const host = stage('<div style="width: 600px"><div role="group" style="max-width: 425px"></div></div>');
+            const row = host.querySelector('[role="group"]');
+            TwitterUi().stretchRow(row);
+
+            // X caps that row at a fixed width and leaves it left-aligned, so
+            // the marks sit bunched in the left half with empty page beside
+            // them — and a sixth cell squeezes the five already there instead
+            // of taking any of the room going spare.
+            assertEqual(row.style.maxWidth, 'none');
+            assertEqual(row.dataset.bbStretched, '1', 'and not measured again on the next render');
+
+            const tight = stage('<div style="width: 300px"><div role="group" style="max-width: 425px"></div></div>');
+            const narrow = tight.querySelector('[role="group"]');
+            TwitterUi().stretchRow(narrow);
+            assertEqual(narrow.style.maxWidth, '425px', 'nothing to let it out into, so nothing is changed');
+            teardown();
+        });
+
         test('the button goes in wrapped, as one of the row\'s own cells', () => {
             timeline();
             makeUi().injectPostButtons();
@@ -232,14 +319,18 @@
             teardown();
         });
 
-        test('a row with no bookmark still gets the button, at the end', () => {
+        test('a row with no bookmark still gets the button, not at the end', () => {
             timeline({ bookmark: false });
             makeUi().injectPostButtons();
 
             const group = document.querySelector('#bb-x-test [role="group"]');
-            assert(group.lastElementChild.classList.contains('bb-x-post-slot'),
-                'no bookmark to replace, so it goes on the end rather than nowhere');
-            assert(group.lastElementChild.querySelector('.bb-x-post-btn'), 'with the button in it');
+            const slot = group.querySelector('.bb-x-post-slot');
+            assert(slot, 'no bookmark to replace is not a reason to place nothing');
+            assert(slot.querySelector('.bb-x-post-btn'), 'with the button in it');
+            // This used to assert the opposite, and the opposite was the bug:
+            // appending put the button past Share on the rows X leaves a
+            // bookmark off, so its place moved between one screen and the next.
+            assertEqual(group.lastElementChild === slot, false, 'the end is where it was, and where it was wrong');
             teardown();
         });
 

@@ -1633,6 +1633,35 @@
     color: var(--bb-faint);
 }
 
+/* The way through. Drawn as the quiet, outlined control on the card rather
+   than as its one filled button: a limit needs a door, and a door is not the
+   thing the card is asking you to do. A limit with no way past it is a limit
+   you switch off for good the first time it is wrong about your afternoon. */
+.bb-limit-snooze {
+    margin: 16px 0 0;
+    padding: 9px 18px;
+    border: 1px solid var(--bb-border-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--bb-sub);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s, background-color .15s;
+}
+
+.bb-limit-snooze:hover {
+    border-color: var(--bb-accent);
+    background: var(--bb-accent-soft);
+    color: var(--bb-accent);
+}
+
+.bb-limit-snooze:focus-visible { outline: 2px solid var(--bb-accent); outline-offset: 2px; }
+
+/* Said out loud, because a snooze count you cannot see is not a check on
+   anything. Nothing here refuses a fourth one; it just says it is the fourth. */
+.bb-limit-tally { margin: 10px 0 0; font-size: 11.5px; color: var(--bb-faint); }
+
 /* ============================================================
    The pouch button, shared by YouTube and X.
 
@@ -1676,45 +1705,77 @@
    deploy, so none of them are copied — this is our row, matched to theirs
    by number.
 
-   The type and the icon box below are the fallback rather than the last
-   word: X scales both with its own display-size setting, so dressNavEntry
-   in twitter-ui.js measures the Home row and writes what it finds over
-   these. They are what the row looks like when Home is not there to read. */
+   Every number here is a fallback rather than the last word: X scales the
+   label, the icons and the space between them with its own display-size
+   setting, so dressNavEntry in twitter-ui.js measures two of X's own rows
+   and writes what it finds into the custom properties below. These are
+   what the row looks like when there is nothing to read.
+
+   The row has a rest state and a selected state, which is why the type is
+   held in properties rather than set directly: the label is written once,
+   and `.bb-x-nav-on` derives the larger, heavier version from it. An
+   inline font-size from dressNavEntry would win over that forever, which
+   is the mistake the properties exist to avoid. */
 .bb-x-nav {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: var(--bb-x-nav-gap, 15px);
     box-sizing: border-box;
-    padding: 10px 12px;
+    padding: 10px var(--bb-x-nav-pad, 12px);
     border-radius: 999px;
     cursor: pointer;
     color: inherit;
-    font-size: 19px;
-    font-weight: 700;
     font-family: inherit;
     user-select: none;
 }
 
 .bb-x-nav:hover { background: rgba(127, 127, 127, .12); }
 .bb-x-nav:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+
+/* Selected: X's own bold weight, a slightly larger word and a slightly
+   larger mark, in the accent. At rest the row is one of the column — the
+   body weight, the same size as Home and Explore — because it is not a
+   tab you are on, it is a drawer you can open, and a row that is always
+   bold reads as a page you cannot leave. */
 .bb-x-nav-on { color: var(--bb-accent, #b81808); }
+.bb-x-nav-on .bb-x-nav-text {
+    font-weight: var(--bb-x-nav-weight-on, 800);
+    font-size: calc(var(--bb-x-nav-size, 19px) * 1.06);
+}
 
 .bb-x-nav-ico {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    flex: 0 0 26px;
-    width: 26px;
-    height: 26px;
+    flex: 0 0 var(--bb-x-nav-ico, 26px);
+    width: var(--bb-x-nav-ico, 26px);
+    height: var(--bb-x-nav-ico, 26px);
+    transition: transform .15s;
 }
 
-/* No rule for the glyph itself: it is the shared `.bb-pouch-glyph`, which
-   is already full-bleed and already filled with currentColor — which is
-   the whole point of drawing the mark here instead of loading the
-   extension's artwork. The row's colour is X's, so switching to Dim or
-   Lights out repaints the icon with everything else in that column. */
+.bb-x-nav-on .bb-x-nav-ico { transform: scale(1.12); }
 
-.bb-x-nav-text { line-height: 1.2; }
+/* The extension's artwork over the shared glyph, the same stacking the
+   panel uses for an avatar over a monogram: the <img> is dropped on error
+   in twitter-ui.js, and what that uncovers is a mark in currentColor —
+   which follows X's theme, so Dim and Lights out need nothing from us. */
+.bb-x-nav-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 6px;
+    object-fit: contain;
+}
+
+.bb-x-nav-text {
+    line-height: 1.2;
+    font-family: var(--bb-x-nav-font, inherit);
+    font-size: var(--bb-x-nav-size, 19px);
+    font-weight: var(--bb-x-nav-weight, 400);
+    letter-spacing: var(--bb-x-nav-track, normal);
+}
 
 /* ------------------------------------------- pouch button on a post */
 
@@ -1782,6 +1843,12 @@
     justify-content: center;
     align-self: center;
     flex: 0 0 auto;
+    /* border-box, because the size written into --bb-x-ring-size is the
+       height of X's own ring as measured — and a content-box ring wearing
+       that number plus a 1px border either side comes out two pixels
+       taller than the button beside it, which is half of why it sat below
+       their line. centreRing in twitter-ui.js is the other half. */
+    box-sizing: border-box;
     width: var(--bb-x-ring-size, 34px);
     height: var(--bb-x-ring-size, 34px);
     margin-right: 8px;
@@ -1977,6 +2044,23 @@
     border-radius: var(--bb-r-sm);
     background: var(--bb-card);
 }
+
+/* The same card, as a button: the panel used to show you what you had
+   saved and give you no way back to it. `text-align: left` and the font
+   reset are what a <button> needs to keep reading as a card. */
+.bb-x-post-open {
+    display: block;
+    width: 100%;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .15s, background-color .15s;
+}
+
+.bb-x-post-open:hover { border-color: var(--bb-accent); }
+.bb-x-post-open:hover .bb-x-post-text { color: var(--bb-text); }
+.bb-x-post-open:focus-visible { outline: 2px solid var(--bb-accent); outline-offset: 1px; }
 
 .bb-x-post-head { display: flex; gap: 6px; align-items: baseline; }
 .bb-x-post-handle { font-size: 10px; font-weight: 700; letter-spacing: .04em; color: var(--bb-accent); }

@@ -48,7 +48,7 @@
      * open picker would take the whole panel down and leave the picker
      * standing on a page with nothing behind it.
      */
-    function createPanel({ openDashboard, goToProfile, onClose, isCovered }) {
+    function createPanel({ openDashboard, goToProfile, goToPost, onClose, isCovered }) {
         let side = 'people';
         let openTopic = null;
         let state = null;
@@ -254,16 +254,34 @@
                 src="${Dom.safeUrlAttr(person.avatar)}" alt="" loading="lazy"></span>`;
         }
 
+        /**
+         * A saved post, as a row that opens it.
+         *
+         * It used to be a plain <div>: the panel showed you what you had
+         * saved and gave you no way to get to it, which made the Posts side a
+         * list of things you had to go and find again by hand. A button
+         * rather than an <a>, for the same reason the person rows are — X is
+         * a single-page app and going there is a navigation it has to be told
+         * about, not a link the browser follows.
+         *
+         * The url comes from XPouch.postUrl rather than off the record, so a
+         * post filed before that field existed still opens.
+         */
         function postHtml(post) {
             const when = Time.shortAge(post.postedAt || post.savedAt);
+            const url = XPouch.postUrl(post);
+            const head = `
+                <div class="bb-x-post-head">
+                    <span class="bb-x-post-handle">${esc(post.handle)}</span>
+                    ${when ? `<span class="bb-x-post-when">${esc(when)}</span>` : ''}
+                </div>
+                ${post.text ? `<p class="bb-x-post-text">${esc(post.text)}</p>` : ''}`;
+
+            if (!url) return `<div class="bb-x-post">${head}</div>`;
             return `
-                <div class="bb-x-post">
-                    <div class="bb-x-post-head">
-                        <span class="bb-x-post-handle">${esc(post.handle)}</span>
-                        ${when ? `<span class="bb-x-post-when">${esc(when)}</span>` : ''}
-                    </div>
-                    ${post.text ? `<p class="bb-x-post-text">${esc(post.text)}</p>` : ''}
-                </div>`;
+                <button type="button" class="bb-x-post bb-x-post-open"
+                        data-bb-post="${Dom.escapeAttr(url)}"
+                        title="Open this post">${head}</button>`;
         }
 
         // --------------------------------------------------------- wiring
@@ -305,6 +323,14 @@
                     const handle = button.dataset.bbHandle;
                     close();
                     goToProfile(handle);
+                });
+            });
+
+            host.querySelectorAll('[data-bb-post]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const url = button.dataset.bbPost;
+                    close();
+                    if (goToPost) goToPost(url);
                 });
             });
         }

@@ -92,9 +92,17 @@
                 <div id="twitterPostsPanel" class="site-panel" data-site="twitter" data-x-pouch="posts"></div>
 
                 <!-- Today against the daily limit, for the two sites that have
-                     one. Drawn by src/page/time-limit-view.js. -->
+                     a workspace. What the limit is lives in one list under
+                     Settings → General. Drawn by src/page/time-limit-view.js. -->
                 <div id="twitterTimePanel" class="site-panel" data-site="twitter" data-time-limit-view="twitter"></div>
                 <div id="redditTimePanel" class="site-panel" data-site="reddit" data-time-limit-view="reddit"></div>
+
+                <!-- Your own list on the site — accounts followed, subreddits
+                     joined — out to a text file and back in again. Drawn by
+                     src/page/roster-view.js; the work happens on the site's
+                     own pages, in src/content/roster.js. -->
+                <div id="twitterRosterPanel" class="site-panel" data-site="twitter" data-roster="twitter"></div>
+                <div id="redditRosterPanel" class="site-panel" data-site="reddit" data-roster="reddit"></div>
             </div>
         </div>
 
@@ -243,6 +251,12 @@
 
                     <!-- Remembered sites: src/page/cookie-sites-panel.js. -->
                     <div class="cookie-sites" id="cookieSitesPanel"></div>
+
+                    <!-- Sites held to a daily limit, and what each limit is.
+                         Drawn by src/page/limit-sites-panel.js. This used to
+                         be two settings inside x.com's and reddit.com's own
+                         panels, which is why only those two could have one. -->
+                    <div class="cookie-sites" id="limitSitesPanel"></div>
                 </div>
 
                 <div class="settings-section" data-plate="Site-specific">
@@ -273,26 +287,11 @@
 
 
                     <div class="settings-section" id="twitterSettingsPanel" data-site-settings="twitter"
-                         data-plate="X" data-plate-proper hidden>
-                        <p class="settings-hint">How long you mean to spend on x.com in a day. Past the limit the site is covered by a sheet until midnight.</p>
-                        <div class="settings-option">
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="twitterDailyLimit">
-                                <span class="toggle-slider"></span>
-                            </label>
-                            <label class="setting-label" for="twitterDailyLimit">Hold me to a daily limit on x.com</label>
-                        </div>
-                        <div class="settings-option" style="margin-top: 16px;">
-                            <span class="chess-row-gap"></span>
-                            <label class="setting-label chess-warn-name" for="twitterLimitMinutes">Time a day</label>
-                            <input type="number" id="twitterLimitMinutes" class="text-control chess-warn-seconds"
-                                   min="0" max="1440" step="5" inputmode="numeric">
-                            <span class="setting-label chess-warn-unit">minutes</span>
-                        </div>
-                        <p class="settings-hint">Time counts only while a tab of the site is on screen and this window has focus. The tally is today's and nothing older than today is stored — at midnight it is gone, not archived.</p>
+                         data-plate="Twitter" data-plate-proper hidden>
+                        <p class="settings-hint">How long you mean to spend on x.com in a day is set in the one list that covers every site — Settings &rarr; General, "Hold me to a daily limit on". Time counts only while a tab of the site is on screen and this window has focus. The tally is today's and nothing older than today is stored — at midnight it is gone, not archived.</p>
                         <div data-time-limit-view="twitter"></div>
 
-                        <p class="settings-hint">Promoted posts are found by the tracking wrapper X puts around a paid placement, not by the word "Promoted", so this works whatever language the site is in. Nothing is deleted — hidden entries keep their place in X's own bookkeeping, which is what stops the timeline jumping as you scroll.</p>
+                        <p class="settings-hint">Promoted posts are found by the tracking wrapper Twitter puts around a paid placement, not by the word "Promoted", so this works whatever language the site is in. Nothing is deleted — hidden entries keep their place in the site's own bookkeeping, which is what stops the timeline jumping as you scroll.</p>
                         <div class="settings-option">
                             <label class="toggle-switch">
                                 <input type="checkbox" id="twitterHideAds">
@@ -301,13 +300,13 @@
                             <label class="setting-label" for="twitterHideAds">Hide promoted posts and Premium upsells</label>
                         </div>
 
-                        <p class="settings-hint">What Bell Bearer adds to X's own rows, each off until you ask for it. The pouch itself is always there — the Pouch row in X's left navigation, the panel it opens, and the People and Posts tabs here.</p>
+                        <p class="settings-hint">What Bell Bearer adds to Twitter's own rows, each off until you ask for it. The pouch itself is always there — the Pouch row in Twitter's left navigation, the panel it opens, and the People and Posts tabs here.</p>
                         <div class="settings-option">
                             <label class="toggle-switch">
                                 <input type="checkbox" id="twitterHideBookmark">
                                 <span class="toggle-slider"></span>
                             </label>
-                            <label class="setting-label" for="twitterHideBookmark">Remove X's bookmark button from posts</label>
+                            <label class="setting-label" for="twitterHideBookmark">Remove Twitter's bookmark button from posts</label>
                         </div>
                         <div class="settings-option">
                             <label class="toggle-switch">
@@ -323,27 +322,12 @@
                             </label>
                             <label class="setting-label" for="twitterPouchPosts">Add to pouch from a post, to capture posts</label>
                         </div>
-                        <p class="settings-hint">The bookmark is hidden rather than deleted, so nothing you have already bookmarked on X is touched and turning this back off puts the button where it was. The pouch button stands in the bookmark's place when both are on.</p>
+                        <p class="settings-hint">The bookmark is hidden rather than deleted, so nothing you have already bookmarked on Twitter is touched and turning this back off puts the button where it was. The pouch button stands in the bookmark's place when both are on.</p>
                     </div>
 
                     <div class="settings-section" id="redditSettingsPanel" data-site-settings="reddit"
                          data-plate="Reddit" data-plate-proper hidden>
-                        <p class="settings-hint">How long you mean to spend on reddit.com in a day. Past the limit the site is covered by a sheet until midnight.</p>
-                        <div class="settings-option">
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="redditDailyLimit">
-                                <span class="toggle-slider"></span>
-                            </label>
-                            <label class="setting-label" for="redditDailyLimit">Hold me to a daily limit on reddit.com</label>
-                        </div>
-                        <div class="settings-option" style="margin-top: 16px;">
-                            <span class="chess-row-gap"></span>
-                            <label class="setting-label chess-warn-name" for="redditLimitMinutes">Time a day</label>
-                            <input type="number" id="redditLimitMinutes" class="text-control chess-warn-seconds"
-                                   min="0" max="1440" step="5" inputmode="numeric">
-                            <span class="setting-label chess-warn-unit">minutes</span>
-                        </div>
-                        <p class="settings-hint">Time counts only while a tab of the site is on screen and this window has focus. The tally is today's and nothing older than today is stored — at midnight it is gone, not archived.</p>
+                        <p class="settings-hint">How long you mean to spend on reddit.com in a day is set in the one list that covers every site — Settings &rarr; General, "Hold me to a daily limit on". Time counts only while a tab of the site is on screen and this window has focus. The tally is today's and nothing older than today is stored — at midnight it is gone, not archived.</p>
                         <div data-time-limit-view="reddit"></div>
                     </div>
 
@@ -501,6 +485,7 @@
     <script src="src/shared/site-icons.js"></script>
     <script src="src/shared/feather-icons.js"></script>
     <script src="src/shared/cookie-sites.js"></script>
+    <script src="src/shared/limit-sites.js"></script>
     <script src="src/shared/chess.js"></script>
     <script src="src/shared/lichess.js"></script>
     <script src="src/shared/chess-sites.js"></script>
@@ -508,6 +493,7 @@
     <script src="src/page/settings-form.js"></script>
     <script src="src/page/skin-picker.js"></script>
     <script src="src/page/cookie-sites-panel.js"></script>
+    <script src="src/page/limit-sites-panel.js"></script>
     <script src="src/page/shortcut-list.js"></script>
     <script src="src/page/plate.js"></script>
     <script src="src/shared/trials.js"></script>
@@ -519,6 +505,8 @@
     <script src="src/page/time-limit-view.js"></script>
     <script src="src/shared/x-pouch.js"></script>
     <script src="src/page/x-pouch-view.js"></script>
+    <script src="src/shared/roster.js"></script>
+    <script src="src/page/roster-view.js"></script>
     <script src="src/page/chess-stats.js"></script>
     <script src="src/page/chess-settings.js"></script>
     <script src="src/page/backup-buttons.js"></script>

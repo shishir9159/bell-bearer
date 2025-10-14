@@ -1521,7 +1521,107 @@ const dayRecord = (at = T0) =>
 
     // ------------------------------------------------- daily time limits
 
-    console.log('\n# daily time limits');
+    console.log('\n# the list of sites held to a limit');
+
+    const LimitSites = require('../src/shared/limit-sites.js');
+
+    check('a host is reduced to a host, however it was typed', () => {
+        eq(LimitSites.normalizeHost('https://www.News.YCombinator.com/item?id=1'), 'news.ycombinator.com');
+        eq(LimitSites.normalizeHost('  X.com/  '), 'x.com');
+        eq(LimitSites.isHost('x.com'), true);
+        eq(LimitSites.isHost('com'), false, 'one label is a TLD, not a site');
+        eq(LimitSites.isHost(''), false);
+    });
+
+    check('a clock time is read the way it is said', () => {
+        // A field that only takes "07:00" is a field that rejects what
+        // everybody types first.
+        eq(LimitSites.parseClock('7am'), 420);
+        eq(LimitSites.parseClock('7 AM'), 420);
+        eq(LimitSites.parseClock('7:30 pm'), 1170);
+        eq(LimitSites.parseClock('19:00'), 1140);
+        eq(LimitSites.parseClock('12am'), 0, 'midnight, not noon');
+        eq(LimitSites.parseClock('12pm'), 720, 'noon, not midnight');
+        eq(LimitSites.parseClock('25:00'), null);
+        eq(LimitSites.parseClock('7:75'), null);
+        eq(LimitSites.parseClock('13pm'), null, 'no such hour on a 12-hour clock');
+        eq(LimitSites.parseClock('elevenish'), null);
+    });
+
+    check('a stored window reads back in twelve hours', () => {
+        eq(LimitSites.clockKey(420), '07:00');
+        eq(LimitSites.clockText('19:30'), '7:30 pm');
+        eq(LimitSites.clockText('00:05'), '12:05 am');
+    });
+
+    check('a row is a budget or a window, never neither', () => {
+        eq(LimitSites.modeOf({ minutes: 30 }), 'budget');
+        eq(LimitSites.modeOf({ from: '07:00', to: '09:00' }), 'window');
+        eq(LimitSites.modeOf({ minutes: 0 }), 'none',
+            'zero reads as no limit, not as blocked from the first second');
+        eq(LimitSites.modeOf({ from: '07:00' }), 'none', 'half a window is not one');
+        eq(LimitSites.modeOf(null), 'none');
+        eq(LimitSites.allowanceOf({ minutes: 30 }), 1800);
+        eq(LimitSites.allowanceOf({ from: '07:00', to: '09:00' }), null);
+    });
+
+    check('a window that crosses midnight is a window, not an empty one', () => {
+        const at = (clock) => new Date(`2026-03-14T${clock}`).getTime();
+        const night = { from: '22:00', to: '02:00' };
+        // Read as from <= to this would block the site all day, which is the
+        // sort of bug nobody reports because they assume they typed it wrong.
+        eq(LimitSites.windowOpen(night, at('23:30')), true);
+        eq(LimitSites.windowOpen(night, at('01:30')), true);
+        eq(LimitSites.windowOpen(night, at('12:00')), false);
+
+        const morning = { from: '07:00', to: '09:00' };
+        eq(LimitSites.windowOpen(morning, at('07:00')), true, 'the start is inside');
+        eq(LimitSites.windowOpen(morning, at('09:00')), false, 'the end is not');
+        eq(LimitSites.windowOpen({ minutes: 30 }, at('12:00')), true,
+            'a budget is not stopping you at any hour');
+    });
+
+    check('a row is only made from fields that describe a limit', () => {
+        const then = 1000;
+        eq(LimitSites.rowFrom({ host: 'x.com', minutes: '45' }, then),
+            { host: 'x.com', entry: { minutes: 45, savedAt: then } });
+        eq(LimitSites.rowFrom({ host: 'x.com', from: '7am', to: '9am' }, then),
+            { host: 'x.com', entry: { from: '07:00', to: '09:00', savedAt: then } });
+        // Minutes win, so a half-filled window beside a budget cannot make a
+        // row that says one thing and behaves as the other.
+        eq(LimitSites.rowFrom({ host: 'x.com', minutes: 20, from: 'nonsense' }, then).entry.minutes, 20);
+        eq(LimitSites.rowFrom({ host: 'com', minutes: 20 }, then), null);
+        eq(LimitSites.rowFrom({ host: 'x.com' }, then), null, 'no limit at all is not a row');
+        eq(LimitSites.rowFrom({ host: 'x.com', from: '7am', to: '7am' }, then), null,
+            'a window of no length is not a limit');
+    });
+
+    check('a row answers for its subdomains but never for a bare TLD', () => {
+        const sites = { 'reddit.com': { minutes: 30 } };
+        eq(LimitSites.entryFor(sites, 'old.reddit.com').host, 'reddit.com');
+        eq(LimitSites.entryFor(sites, 'www.reddit.com').host, 'reddit.com');
+        eq(LimitSites.entryFor(sites, 'x.com'), null);
+        eq(LimitSites.entryFor({ com: { minutes: 1 } }, 'x.com'), null,
+            'a row for a TLD would answer for the web');
+    });
+
+    check('a row says what it allows in one line', () => {
+        eq(LimitSites.describe({ minutes: 30 }), '30 minutes a day');
+        eq(LimitSites.describe({ minutes: 90 }), '1h 30m a day');
+        eq(LimitSites.describe({ minutes: 120 }), '2h a day');
+        eq(LimitSites.describe({ from: '07:00', to: '09:00' }), 'only 7:00 am to 9:00 am');
+        eq(LimitSites.describe(null), 'no limit');
+    });
+
+    check('the keys the list seeds itself from are settings that exist', () => {
+        const Settings = require('../src/shared/settings.js');
+        for (const old of LimitSites.LEGACY) {
+            eq(old.onKey in Settings.DEFAULTS, true, old.onKey);
+            eq(old.minutesKey in Settings.DEFAULTS, true, old.minutesKey);
+        }
+    });
+
+    console.log('\n# what today has gone on, against the limit');
 
     const TimeLimits = require('../src/shared/time-limits.js');
 
@@ -1530,68 +1630,110 @@ const dayRecord = (at = T0) =>
 
     // A tally straight into the store. add() caps a single credit, which is
     // the right thing for a real one and no way to set up an afternoon.
-    const spent = (siteId, seconds, when = noon) => ({
+    const spent = (host, seconds, when = noon) => ({
         day: TimeLimits.dayKey(when),
-        seconds: { twitter: 0, reddit: 0, [siteId]: seconds },
+        seconds: { [host]: seconds },
+        snoozed: {},
     });
 
-    check('the two sites are the ones detectSite already names', () => {
+    check('the two named sites are the ones detectSite already names', () => {
+        // Not "the sites a limit can be set on" — that is whatever is in the
+        // list. These two are the ones with a workspace, so a card can say
+        // "Twitter" rather than "x.com".
         eq(TimeLimits.ids(), ['twitter', 'reddit']);
         eq(TimeLimits.get('twitter').host, 'x.com');
-        eq(TimeLimits.get('youtube'), null, 'no limit is offered on a site that has no row');
+        eq(TimeLimits.get('twitter').name, 'Twitter', 'the site renamed itself; nobody else did');
+        eq(TimeLimits.get('youtube'), null);
     });
 
     check('yesterday is discarded whole, not aged out', () => {
-        const yesterday = spent('twitter', 600, noon - A_DAY);
-        eq(TimeLimits.forDay(yesterday, noon - A_DAY).seconds.twitter, 600);
+        const yesterday = spent('x.com', 600, noon - A_DAY);
+        eq(TimeLimits.forDay(yesterday, noon - A_DAY).seconds['x.com'], 600);
         const today = TimeLimits.forDay(yesterday, noon);
-        eq(today.seconds.twitter, 0, 'the store is one day deep by design');
+        eq(today.seconds['x.com'], undefined, 'the store is one day deep by design');
         eq(today.day, TimeLimits.dayKey(noon));
     });
 
-    check('time adds up, and a single credit is capped', () => {
+    check('time adds up per host, and a single credit is capped', () => {
         let state = TimeLimits.blank(noon);
-        state = TimeLimits.add(state, 'reddit', 15, noon);
-        state = TimeLimits.add(state, 'reddit', 15, noon);
-        eq(state.seconds.reddit, 30);
+        state = TimeLimits.add(state, 'reddit.com', 15, noon);
+        state = TimeLimits.add(state, 'www.reddit.com', 15, noon);
+        eq(state.seconds['reddit.com'], 30, 'www. is the same site');
         // A laptop lid closed for three hours reports one enormous gap; the
         // cap is what stops the night being charged to the morning.
-        state = TimeLimits.add(state, 'reddit', 3 * 3600, noon);
-        eq(state.seconds.reddit, 30 + TimeLimits.MAX_CREDIT);
-        eq(TimeLimits.add(state, 'reddit', -5, noon).seconds.reddit, 30 + TimeLimits.MAX_CREDIT,
+        state = TimeLimits.add(state, 'reddit.com', 3 * 3600, noon);
+        eq(state.seconds['reddit.com'], 30 + TimeLimits.MAX_CREDIT);
+        eq(TimeLimits.add(state, 'reddit.com', -5, noon).seconds['reddit.com'], 30 + TimeLimits.MAX_CREDIT,
             'a negative gap credits nothing');
     });
 
-    check('a site with the switch off, or no minutes, has no limit at all', () => {
-        const state = spent('twitter', 4000);
-        const off = TimeLimits.statusFor(state, { twitterDailyLimit: false, twitterLimitMinutes: 30 }, 'twitter', noon);
+    check('a host with no row has no limit at all', () => {
+        const state = spent('x.com', 4000);
+        const off = TimeLimits.statusFor(state, null, 'x.com', noon);
         eq(off.on, false);
+        eq(off.mode, 'none');
         eq(off.blocked, false, 'nothing is blocked by a limit nobody set');
         eq(off.spent, 4000, 'but what was spent is still there to show');
 
-        // Zero reads as "no limit", not as "blocked from the first second":
-        // a limit that bites the moment it is switched on looks like a bug.
-        const zero = TimeLimits.statusFor(state, { twitterDailyLimit: true, twitterLimitMinutes: 0 }, 'twitter', noon);
+        const zero = TimeLimits.statusFor(state, { minutes: 0 }, 'x.com', noon);
         eq(zero.on, false);
         eq(zero.blocked, false);
     });
 
     check('the block lands when the day is spent, not before', () => {
-        const settings = { redditDailyLimit: true, redditLimitMinutes: 30 };
-        const under = spent('reddit', 1700);
-        eq(TimeLimits.statusFor(under, settings, 'reddit', noon).blocked, false);
-        eq(TimeLimits.statusFor(under, settings, 'reddit', noon).remaining, 100);
+        const limit = { minutes: 30 };
+        const under = spent('reddit.com', 1700);
+        eq(TimeLimits.statusFor(under, limit, 'reddit.com', noon).blocked, false);
+        eq(TimeLimits.statusFor(under, limit, 'reddit.com', noon).remaining, 100);
 
-        const over = TimeLimits.add(under, 'reddit', 100, noon);
-        const status = TimeLimits.statusFor(over, settings, 'reddit', noon);
+        const over = TimeLimits.add(under, 'reddit.com', 100, noon);
+        const status = TimeLimits.statusFor(over, limit, 'reddit.com', noon);
         eq(status.blocked, true);
         eq(status.remaining, 0);
         eq(status.allowed, 1800);
     });
 
+    check('a window blocks by the clock rather than by the tally', () => {
+        const limit = { from: '07:00', to: '09:00' };
+        const state = spent('x.com', 4000);
+        const inside = TimeLimits.statusFor(state, limit, 'x.com', new Date('2026-03-14T08:00').getTime());
+        eq(inside.blocked, false, 'four thousand seconds inside the window is fine');
+        eq(inside.allowed, null, 'a window has no budget to be a fraction of');
+
+        const outside = TimeLimits.statusFor(state, limit, 'x.com', noon);
+        eq(outside.blocked, true);
+        eq(outside.mode, 'window');
+    });
+
+    check('a snooze stands the block down without stopping the clock', () => {
+        const over = spent('reddit.com', 2000);
+        const limit = { minutes: 30 };
+        eq(TimeLimits.statusFor(over, limit, 'reddit.com', noon).blocked, true);
+
+        const once = TimeLimits.snooze(over, 'reddit.com', noon);
+        const status = TimeLimits.statusFor(once, limit, 'reddit.com', noon);
+        eq(status.blocked, false);
+        eq(status.snoozes, 1);
+        eq(status.snoozedUntil, noon + TimeLimits.SNOOZE_MS);
+        // The tally kept running, so the ten minutes come out of the same
+        // day's allowance rather than being granted on top of it.
+        eq(status.spent, 2000);
+
+        const later = noon + TimeLimits.SNOOZE_MS + 1000;
+        eq(TimeLimits.statusFor(once, limit, 'reddit.com', later).blocked, true, 'ten minutes, not forever');
+        eq(TimeLimits.snoozesOn(once, 'reddit.com', later), 1,
+            'a lapsed snooze still counts, or the sheet says "first" every ten minutes');
+        eq(TimeLimits.snoozesOn(TimeLimits.snooze(once, 'reddit.com', later), 'reddit.com', later), 2);
+    });
+
+    check('a snooze from another day is gone with the tally', () => {
+        const yesterday = TimeLimits.snooze(spent('x.com', 10, noon - A_DAY), 'x.com', noon - A_DAY);
+        eq(TimeLimits.snoozesOn(yesterday, 'x.com', noon), 0);
+    });
+
     check('a tally from another day cannot block today', () => {
-        const yesterday = spent('reddit', 9999, noon - A_DAY);
-        const status = TimeLimits.statusFor(yesterday, { redditDailyLimit: true, redditLimitMinutes: 30 }, 'reddit', noon);
+        const yesterday = spent('reddit.com', 9999, noon - A_DAY);
+        const status = TimeLimits.statusFor(yesterday, { minutes: 30 }, 'reddit.com', noon);
         eq(status.spent, 0);
         eq(status.blocked, false);
     });
@@ -1612,12 +1754,127 @@ const dayRecord = (at = T0) =>
         eq(TimeLimits.human(4500), '1h 15m');
     });
 
-    check('every settings key a site names is a setting that exists', () => {
-        const Settings = require('../src/shared/settings.js');
-        for (const site of TimeLimits.list()) {
-            eq(site.onKey in Settings.DEFAULTS, true, site.onKey);
-            eq(site.minutesKey in Settings.DEFAULTS, true, site.minutesKey);
+    check('a snooze tally reads as a count of times', () => {
+        const TimeLimitContent = require('../src/content/time-limit.js');
+        eq(TimeLimitContent.times(1), 'once');
+        eq(TimeLimitContent.times(2), 'twice');
+        eq(TimeLimitContent.times(5), '5 times');
+    });
+
+    // ------------------------------------------------------- the roster
+
+    console.log('\n# a site roster, out to a file and back');
+
+    const Roster = require('../src/shared/roster.js');
+
+    check('a line becomes a bare name however it was written', () => {
+        // The file is one a person may well have edited by hand, so the way
+        // in is generous; the way out is the site's own alphabet exactly,
+        // because the result ends up in a URL that gets navigated to.
+        eq(Roster.parseName('@alice', 'twitter'), 'alice');
+        eq(Roster.parseName('https://x.com/bob/status/12345', 'twitter'), 'bob');
+        eq(Roster.parseName('  carol,  ', 'twitter'), 'carol');
+        eq(Roster.parseName('# a comment', 'twitter'), '');
+        eq(Roster.parseName('alice # who I met once', 'twitter'), 'alice');
+        eq(Roster.parseName('a_handle_far_too_long', 'twitter'), '',
+            'X handles are fifteen characters, and this is not one');
+        eq(Roster.parseName('someone@example.com', 'twitter'), '', 'an email is not a handle');
+
+        eq(Roster.parseName('r/rust', 'reddit'), 'rust');
+        eq(Roster.parseName('/r/Rust/', 'reddit'), 'Rust');
+        eq(Roster.parseName('https://old.reddit.com/r/cpp/', 'reddit'), 'cpp');
+        eq(Roster.parseName('x', 'reddit'), '', 'too short to be a subreddit');
+    });
+
+    check('a file becomes a list in order, without duplicates', () => {
+        const names = Roster.parseList('@Alice\n# skip me\n/Alice/\n@bob\n\n@Alice\n', 'twitter');
+        // Case is folded for the duplicate check and kept in the name: a list
+        // that comes back with everybody lower-cased looks damaged.
+        eq(names, ['Alice', 'bob']);
+    });
+
+    check('the file written out can be read back in', () => {
+        const names = ['rust', 'cpp', 'Emacs'];
+        const text = Roster.toText('reddit', names, 0);
+        eq(Roster.parseList(text, 'reddit'), names, 'a round trip changes nothing');
+        eq(text.split('\n')[0].startsWith('#'), true, 'and the header is a comment');
+    });
+
+    check('the pace is per site, and Twitter gets the slower one', () => {
+        // Reddit rate-limits an account and says so; Twitter suspends one and
+        // does not. The two deserve different amounts of caution.
+        const x = Roster.siteOf('twitter').pace;
+        const reddit = Roster.siteOf('reddit').pace;
+        eq(x.cap < reddit.cap, true);
+        eq(x.minMs > reddit.minMs, true);
+    });
+
+    check('a delay lands inside the site range and is never the same twice', () => {
+        const { minMs, maxMs } = Roster.siteOf('twitter').pace;
+        eq(Roster.nextDelay('twitter', () => 0), minMs);
+        eq(Roster.nextDelay('twitter', () => 1), maxMs);
+        // Jittered rather than fixed, and not only out of politeness: a click
+        // exactly every forty seconds for an hour is a signature.
+        eq(Roster.nextDelay('twitter', () => 0.5), Math.round((minMs + maxMs) / 2));
+    });
+
+    check('a plan says how many days it is before anything starts', () => {
+        const plan = Roster.plan('twitter', new Array(412).fill('x'));
+        eq(plan.total, 412);
+        eq(plan.cap, 40);
+        eq(plan.days, 11, 'nobody should find out on day three that it is eleven');
+        eq(Roster.plan('twitter', []).total, 0);
+    });
+
+    check('a job is claimed by one page at a time', () => {
+        const job = Roster.newJob({ site: 'twitter', action: 'apply', names: ['a', 'b'], now: 1000 });
+        eq(Roster.canClaim(job, 'page1', 1000), true, 'nobody holds it yet');
+
+        const held = Roster.claim(job, 'page1', 1000);
+        eq(Roster.canClaim(held, 'page2', 1000), false, 'two tabs would follow the same account twice');
+        eq(Roster.canClaim(held, 'page1', 1000), true, 'but the holder may carry on');
+        eq(Roster.canClaim(held, 'page2', 1000 + Roster.LEASE_MS + 1), true,
+            'a tab closed mid-job cannot hold it forever');
+        eq(Roster.canClaim(Roster.release(held), 'page2', 1000), true,
+            'and it is handed back before navigating');
+    });
+
+    check('the cap is a cap per day, because the job outlives the day', () => {
+        const noonJob = { ...Roster.newJob({ site: 'twitter', action: 'apply', names: ['a'], now: noon }), today: 40 };
+        eq(Roster.atCap(noonJob, noon), true);
+        // Tomorrow it carries on rather than being finished at forty.
+        eq(Roster.atCap(noonJob, noon + A_DAY), false);
+        eq(Roster.forDay(noonJob, noon + A_DAY).today, 0);
+    });
+
+    check('progress and the current name walk the list together', () => {
+        const job = Roster.newJob({ site: 'reddit', action: 'apply', names: ['rust', 'cpp', 'go'] });
+        eq(Roster.currentName(job), 'rust');
+        eq(Roster.progress(job), 0);
+        eq(Roster.progress({ ...job, at: 3 }), 100);
+        eq(Roster.currentName({ ...job, at: 3 }), '', 'past the end is done, not a crash');
+        eq(Roster.progress(Roster.newJob({ site: 'reddit', action: 'read' })), 0,
+            'a read job has no total to be a fraction of');
+    });
+
+    check('the dashboard and the content script agree where a read starts', () => {
+        const RosterContent = require('../src/content/roster.js');
+        // Two copies of two URLs, which is two too many — but the page cannot
+        // import the content script's table and vice versa, so the next best
+        // thing is a test that fails the moment they drift.
+        const page = require('fs').readFileSync('src/page/roster-view.js', 'utf8');
+        for (const id of Roster.ids()) {
+            eq(page.includes(RosterContent.START[id]), true, `${id}: ${RosterContent.START[id]}`);
         }
+    });
+
+    check('a handle is read off an href, and a site page is not a handle', () => {
+        const RosterContent = require('../src/content/roster.js');
+        eq(RosterContent.handleFromHref('/alice'), 'alice');
+        eq(RosterContent.handleFromHref('https://x.com/bob/following'), 'bob');
+        eq(RosterContent.handleFromHref('/home'), '', "X's own pages sit at a one-segment path too");
+        eq(RosterContent.subFromHref('https://old.reddit.com/r/rust/'), 'rust');
+        eq(RosterContent.subFromHref('/user/someone'), '');
     });
 
     // ------------------------------------------------------------- skim

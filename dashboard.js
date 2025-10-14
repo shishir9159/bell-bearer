@@ -38,9 +38,11 @@
             { id: 'people', label: 'People', panel: 'twitterPeoplePanel' },
             { id: 'posts', label: 'Posts', panel: 'twitterPostsPanel' },
             { id: 'time', label: 'Time', panel: 'twitterTimePanel' },
+            { id: 'roster', label: 'Roster', panel: 'twitterRosterPanel' },
         ],
         reddit: [
             { id: 'time', label: 'Time', panel: 'redditTimePanel' },
+            { id: 'roster', label: 'Roster', panel: 'redditRosterPanel' },
         ],
     };
 
@@ -106,8 +108,12 @@
             Plate.mountAll();
             if (window.BB.TrialsView) window.BB.TrialsView.mount(document.getElementById('trialsView'));
             CookieSitesPanel.mount(document.getElementById('cookieSitesPanel'));
+            if (window.BB.LimitSitesPanel) {
+                window.BB.LimitSitesPanel.mount(document.getElementById('limitSitesPanel'));
+            }
             if (window.BB.TimeLimitView) window.BB.TimeLimitView.mountAll();
             if (window.BB.XPouchView) window.BB.XPouchView.mountAll();
+            if (window.BB.RosterView) window.BB.RosterView.mountAll();
             document.querySelectorAll('[data-chess-games]').forEach((panel) => {
                 const site = panel.dataset.chessGames;
                 this.chessViews[site] = ChessStats.mountPanel(panel, {

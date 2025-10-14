@@ -55,10 +55,12 @@
         // is not something to switch on for someone without being told.
         pouchShortcut: false,
 
-        // Daily time limits on the two sites that take an afternoon without
-        // anyone deciding to spend one. Off, and counting nothing, until a
-        // limit is set; the tally is kept for the current day only. See
-        // src/shared/time-limits.js, which owns the key names below.
+        // Legacy: the daily limit used to be two settings per site, which is
+        // why only the two sites with a panel of their own could have one. It
+        // is now a list any host can join — DATA.limitSites, kept by
+        // src/shared/limit-sites.js, which reads these four once to seed it
+        // and nothing reads them after that. They stay in the schema so that
+        // seed has something to find; no control is bound to them.
         twitterDailyLimit: false,
         twitterLimitMinutes: 30,
 
@@ -192,6 +194,23 @@
         // Sites whose cookie banner is accepted without asking.
         // shared/cookie-sites.js owns the shape.
         cookieSites: 'bbCookieSites',
+
+        // Your own roster on a site: the accounts followed on Twitter, the
+        // subreddits joined. Read off the site's own pages, and the list a
+        // text file is written from. shared/roster.js owns the shape.
+        rosters: 'bbRosters',
+
+        // The read or apply job in flight, if there is one. It lives in
+        // storage rather than in a page because applying a list *is* a
+        // sequence of navigations, each of which ends the script that
+        // started it. shared/roster.js owns the shape.
+        rosterJob: 'bbRosterJob',
+
+        // Sites held to a daily limit, and what each limit is — a budget in
+        // minutes or a pair of clock times. shared/limit-sites.js owns the
+        // shape, and is also where the four legacy keys below are read from
+        // once, to seed this list for anyone who already had a limit set.
+        limitSites: 'bbLimitSites',
 
         // chess.com monthly game archives, normalized. shared/chess.js.
         chessCache: 'bbChessArchiveCache',

@@ -584,7 +584,22 @@ header h1 {
 
 /* ---------- states ---------- */
 
-.empty-state { text-align: center; padding: 68px 20px; color: var(--text-faint); }
+/* Centred on both axes, not only horizontally. An empty panel is the whole of
+   the view it is in, so a paragraph pinned under the header with the rest of
+   the page blank below it reads as a page that never finished loading. The
+   min-height is what there is to centre within: a panel is an ordinary block
+   with no height of its own, so justify-content would have nothing to work
+   against without one. */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: min(56vh, 460px);
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-faint);
+}
 
 .empty-state h3 {
     font-family: var(--font-head);
@@ -2381,6 +2396,115 @@ body[data-skin="deco"] .bb-plate {
    the foot of its settings panel (src/page/time-limit-view.js).
    ============================================================ */
 
+/* ---------- roster: a site's own list, out and back (src/page/roster-view.js) ---------- */
+
+.roster-lead { margin: 0 0 18px; max-width: 78ch; }
+
+/* Two cards side by side on a wide panel, stacked on a narrow one. They are
+   deliberately the same size despite doing very different-sized things: the
+   reading half is one button and the applying half is a file and a paragraph,
+   and giving the second one twice the room would read as the panel's main
+   business. It is not — it is the half that touches your account. */
+.roster-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+}
+
+.roster-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface-2);
+}
+
+.roster-card h3 { margin: 0; font-size: 14px; }
+.roster-note { margin: 0; font-size: 13px; color: var(--text-muted); }
+.roster-small { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-faint); }
+.roster-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; }
+
+/* The file input is the label, so it can be a button like the one beside it.
+   A bare <input type=file> is styled differently by every browser and cannot
+   be made to match anything. */
+.roster-file { cursor: pointer; }
+
+/* The job in flight. It reuses .limit-bar rather than growing a second
+   progress bar — same shape, same meaning, and .is-spent already paints the
+   one state worth a different colour, which here is a job that stopped. */
+.roster-job {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r);
+    background: var(--surface-2);
+}
+
+.roster-job-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.roster-job-what { font-family: var(--font-head); font-size: 13.5px; color: var(--text); }
+.roster-job-count { margin-left: auto; font-size: 11.5px; color: var(--text-faint); }
+.roster-job-note { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+.roster-job .roster-acts { margin-top: 12px; }
+
+/* ---------- the list of sites held to a limit (src/page/limit-sites-panel.js) ---------- */
+
+/* Wider and taller than the cookie list's menu next to it, which is sized for
+   one host per line. This one has a form at its head, and at the shared
+   max-width of 420px that form wrapped onto three lines. */
+#limitSitesPanel .bb-dropdown-menu {
+    width: min(560px, 92vw);
+    max-width: none;
+    max-height: 440px;
+}
+
+/* The form at the head of the dropdown. One row on a wide menu, wrapping to
+   two on a narrow one — the "or" between the budget and the window is what
+   has to stay beside what it separates, so the two halves are a group of
+   their own rather than five siblings that wrap wherever they run out. */
+.limit-add {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.limit-add-either { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.limit-host { flex: 1 1 150px; min-width: 120px; }
+.limit-minutes { width: 66px; }
+.limit-from,
+.limit-to { width: 74px; }
+.limit-unit { font-size: 12px; color: var(--text-faint); }
+.limit-or { font-size: 11px; font-style: italic; color: var(--text-faint); padding: 0 2px; }
+.limit-save { flex: 0 0 auto; padding: 7px 14px; font-size: 12.5px; }
+
+.limit-hint {
+    margin: 0;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-faint);
+}
+
+/* What the row allows, between the host and the remove button. */
+.limit-what { font-size: 11.5px; color: var(--accent-ink); white-space: nowrap; }
+
+/* ---------- a site's own settings panel: x.com ---------- */
+
+/* .settings-option carries no vertical margin of its own, and the General
+   section spaces each of its rows with an inline style. That is fine for a
+   list written once and wrong here, where the rows come in runs of two and
+   three under a hint apiece — four flush rows read as one control with four
+   labels, which is what this panel looked like. Spaced by being in the panel
+   instead, so a row added later is spaced without being told to be. */
+#twitterSettingsPanel .settings-option { margin-top: 14px; }
+#twitterSettingsPanel p.settings-hint { margin-top: 24px; }
+#twitterSettingsPanel p.settings-hint:first-child { margin-top: 0; }
+
 .limit-panel { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 
 .limit-figure { display: flex; align-items: baseline; gap: 10px; }
@@ -2593,6 +2717,30 @@ body[data-skin="deco"] .bb-plate {
 .x-note-blank { color: var(--text-faint); font-style: italic; }
 .x-note-input { flex: 1; min-width: 0; }
 
+/* The whole post is the link. It used to be the age at the end of the row,
+   in 11px grey, which made a saved post look like a record of something
+   rather than a way back to it — the one thing a saved post has to be. */
+.x-post-open {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    gap: 11px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    border-radius: var(--r-sm);
+    color: inherit;
+    text-decoration: none;
+}
+
+.x-post-open:hover { background: var(--surface-3); }
+.x-post-open:hover .x-post-text { color: var(--text); }
+.x-post-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* A record with no status id to rebuild a link from: still a row, just not
+   a target. Nothing in the pouch should look clickable and do nothing. */
+.x-post-open.is-dead { cursor: default; }
+.x-post-open.is-dead:hover { background: transparent; }
+
 .x-post-handle {
     flex: 0 0 96px;
     font-family: var(--font-head);
@@ -2613,15 +2761,11 @@ body[data-skin="deco"] .bb-plate {
     color: var(--text-muted);
 }
 
-.x-post-when { font-size: 11px; color: var(--text-faint); line-height: 1.7; }
-
-.x-post-link {
+.x-post-when {
+    flex: 0 0 auto;
     font-size: 11px;
     color: var(--text-faint);
-    text-decoration: none;
     line-height: 1.7;
 }
-
-.x-post-link:hover { color: var(--accent-ink); text-decoration: underline; }
 
 .x-empty-row { margin: 2px 0 0; font-size: 12px; color: var(--text-faint); }

@@ -11,12 +11,13 @@
  *
  * The button itself is shared with YouTube rather than written again — it is
  * shared/pouch-button.js, so the glyph and the filed state are the same mark
- * on both sites and change in one place. The nav row wears that same glyph,
- * which is where this file parts company with YouTube's drawer entry: that one
- * carries the extension's artwork, and this one cannot. X's navigation is a
- * column of outline marks that take their colour from the theme, and a square
- * of artwork dropped into it reads as an advert — so the row is drawn in
- * currentColor and takes its type off the rows around it. See dressNavEntry.
+ * on both sites and change in one place. The nav row wears the extension's own
+ * artwork, as YouTube's drawer entry does, with that shared glyph stacked
+ * underneath it so a picture that cannot be loaded uncovers a mark in
+ * currentColor rather than leaving a hole. This file used to draw the glyph
+ * alone on the grounds that a square of artwork in X's column of outline marks
+ * reads as an advert; the ask was for the two sites to carry the same mark, and
+ * they now do. See navIconHtml.
  *
  * The button is never labelled. On YouTube it sits in the subscribe row with
  * room for words; here it sits in X's action row between Repost and Like,
@@ -47,13 +48,24 @@
     const hasExtensionContext = () => !!(chrome.runtime && chrome.runtime.id);
 
     /**
-     * The properties the nav row copies off X's own, and nothing more.
+     * The type properties the nav row copies off X's own, and the custom
+     * property each is written into.
+     *
+     * Custom properties rather than `style.fontSize` and friends, because the
+     * row has two states and only one style attribute: the selected row is
+     * drawn larger and heavier, and content.css derives that from the resting
+     * numbers. An inline `font-size` would win over the rule that grows it.
      *
      * Colour is pointedly not in the list. `color: inherit` in content.css
      * follows X's theme the instant it changes; a value read once and written
      * into a style attribute would be the old theme's grey forever.
      */
-    const NAV_TYPE = ['fontFamily', 'fontSize', 'fontWeight', 'letterSpacing'];
+    const NAV_TYPE = Object.freeze({
+        fontFamily: '--bb-x-nav-font',
+        fontSize: '--bb-x-nav-size',
+        fontWeight: '--bb-x-nav-weight',
+        letterSpacing: '--bb-x-nav-track',
+    });
 
     /**
      * The text of a nav row — the word, not the unread badge.
@@ -69,6 +81,51 @@
             }
         }
         return null;
+    }
+
+    /**
+     * The two rows of X's navigation worth measuring: one at rest and the one
+     * that is selected.
+     *
+     * Only rows with a glyph in them count. X puts a "More" menu button and,
+     * signed in, an account switcher in the same column, and neither is the
+     * shape the icon-plus-word rows are.
+     */
+    function navModels(rows) {
+        const usable = rows.filter((row) => row.querySelector('svg') && navLabel(row));
+        const current = usable.find((row) => row.getAttribute('aria-current') === 'page');
+        const rest = usable.find((row) => row.getAttribute('aria-current') !== 'page');
+        return { rest: rest || current || null, current: current || rest || null };
+    }
+
+    /**
+     * The nav row's mark: the extension's own artwork, with the shared glyph
+     * behind it.
+     *
+     * Both are in the markup and the image is stacked over the glyph by
+     * content.css, exactly as the panel stacks an avatar over a monogram —
+     * the <img> is dropped on error in injectNavEntry, which is what uncovers
+     * the glyph. That matters here because `chrome.runtime.getURL` throws the
+     * moment the extension reloads, and because the artwork is only loadable
+     * at all while `icons/` stays in web_accessible_resources.
+     *
+     * The URL is not run through Dom.safeUrlAttr: that passes http(s) and
+     * nothing else, so it turned this very src into "#" the last time the row
+     * carried an image. It is not user input — it is our own extension id —
+     * and it is written as a property rather than into an HTML string so
+     * there is no markup for it to escape from.
+     */
+    function navIconHtml() {
+        return '<span class="bb-x-nav-ico">' + PouchButton.ICON +
+            '<img class="bb-x-nav-img" alt="" aria-hidden="true"></span>';
+    }
+
+    function navIconUrl() {
+        try {
+            return chrome.runtime.getURL('icons/icon128.png');
+        } catch (_) {
+            return '';
+        }
     }
 
     /**
@@ -131,6 +188,59 @@
     }
 
     /**
+     * Which cell of X's action row ours goes in front of.
+     *
+     * The bookmark's, which is the gesture this stands in for. Failing that,
+     * the cell after Like — pointedly *not* the end of the row, which is
+     * where appending used to put it. X renders a bookmark on a post's own
+     * page and leaves it off a good many timeline and profile rows, so the
+     * same button landed between Like and Bookmark on one screen and out
+     * past Share on the next, for no reason a reader could see.
+     *
+     * `null` means the end, which is the right answer for a row whose last
+     * cell is Like.
+     */
+    function postSlotBefore(actions) {
+        const bookmark = actions.querySelector('[data-testid="bookmark"], [data-testid="removeBookmark"]');
+        const beside = bookmark && bookmark.closest('[role="group"] > *');
+        if (beside) return beside;
+
+        for (const id of ['like', 'unlike']) {
+            const control = actions.querySelector(`[data-testid="${id}"]`);
+            const slot = control && control.closest('[role="group"] > *');
+            if (slot) return slot.nextElementSibling;
+        }
+        return null;
+    }
+
+    /**
+     * Let the action row use the width the post has.
+     *
+     * X caps that row at a fixed pixel width and leaves it left-aligned, so
+     * on a wide timeline the marks sit bunched into the left half with empty
+     * page beside them — and a sixth cell squeezes the five already there
+     * rather than taking any of the room going spare.
+     *
+     * The cap is lifted only when there is somewhere to lift it into, and
+     * only on a row we have put a button in, so a page with the pouch button
+     * switched off is untouched. X re-renders this row on every like, which
+     * drops the inline style and the marker together and is why neither is
+     * treated as permanent.
+     */
+    function stretchRow(actions) {
+        if (!actions || typeof getComputedStyle !== 'function') return;
+        if (actions.dataset.bbStretched) return;
+
+        const parent = actions.parentElement;
+        const cap = parseFloat(getComputedStyle(actions).maxWidth);
+        if (!parent || !Number.isFinite(cap)) return;
+        if (!(parent.getBoundingClientRect().width > cap + 8)) return;
+
+        actions.style.maxWidth = 'none';
+        actions.dataset.bbStretched = '1';
+    }
+
+    /**
      * Dress our profile button as one of X's own header rings.
      *
      * The row beside Follow is More / notify / message, and all three are the
@@ -159,6 +269,32 @@
         // and a zero here is an answer rather than a gap to fill in.
         button.style.marginLeft = style.marginLeft;
         button.style.marginRight = style.marginRight;
+    }
+
+    /**
+     * Nudge the ring onto the line X's own buttons sit on.
+     *
+     * Measured rather than reasoned about, and a translate rather than a
+     * margin. X's header row does not lay its children out the same way in
+     * every variant — a centred flex row in one, an inline run in another —
+     * so there is no single declaration that puts our ring on the same line
+     * as the three beside it, and it sat a couple of pixels below them.
+     * Comparing the two boxes and shifting by the difference is right in
+     * either layout; a margin would not be, because a flex row that centres
+     * its children counts the margin in and absorbs half of any correction.
+     *
+     * `wearRing` has to have run first, or the box measured is the fallback
+     * 34px one rather than the size actually drawn.
+     */
+    function centreRing(button, model) {
+        if (!model || typeof getComputedStyle !== 'function') return;
+        const ours = button.getBoundingClientRect();
+        const theirs = model.getBoundingClientRect();
+        if (!ours.height || !theirs.height) return;
+
+        const drop = (ours.top + ours.height / 2) - (theirs.top + theirs.height / 2);
+        if (Math.abs(drop) < 0.5 || Math.abs(drop) > 24) return;
+        button.style.transform = `translateY(${(-drop).toFixed(2)}px)`;
     }
 
     /**
@@ -214,6 +350,16 @@
                 if (link) link.click();
                 else location.assign(`https://x.com${path}`);
             },
+            // Same trick and the same fallback as goToProfile. A post the
+            // timeline is already showing has a link to it on the page, and
+            // clicking that keeps X's router in charge; anything else is a
+            // navigation, which is fine — you asked to go and read it.
+            goToPost: (url) => {
+                const path = String(url).replace(/^https:\/\/(?:x|twitter)\.com/i, '');
+                const link = path && document.querySelector(`a[href="${CSS.escape(path)}"]`);
+                if (link) link.click();
+                else location.assign(url);
+            },
             onClose: () => setNavActive(false),
             // A picker is drawn over the panel, so it takes Escape first.
             isCovered: () => !!document.getElementById(PICKER_ID),
@@ -256,16 +402,19 @@
             entry.setAttribute('role', 'link');
             entry.setAttribute('tabindex', '0');
             entry.title = 'Bell Bearer — your pouch';
-            // An inline glyph rather than the extension's artwork. The <img>
-            // that used to be here was run through Dom.safeUrlAttr, which
-            // only passes http(s) and so turned every `chrome-extension://`
-            // src into "#" — a broken image in X's navigation column. Drawing
-            // the mark instead fixes that and is the better row anyway: it
-            // inherits X's colour the way its own nav icons do, so a switch
-            // to Dim or Lights out needs nothing from us.
-            entry.innerHTML =
-                '<span class="bb-x-nav-ico">' + PouchButton.ICON + '</span>' +
-                '<span class="bb-x-nav-text">Pouch</span>';
+            entry.innerHTML = navIconHtml() + '<span class="bb-x-nav-text">Pouch</span>';
+
+            // See navIconHtml: the src goes on as a property, and dropping the
+            // image is what uncovers the glyph stacked under it. `once`,
+            // because a src that failed is not going to succeed on a retry.
+            const art = entry.querySelector('.bb-x-nav-img');
+            const url = navIconUrl();
+            if (url) {
+                art.addEventListener('error', () => art.remove(), { once: true });
+                art.src = url;
+            } else {
+                art.remove();
+            }
 
             const open = () => togglePanel();
             entry.addEventListener('click', open);
@@ -285,7 +434,7 @@
 
             // After it is in the document, so the metrics below are measured
             // rather than guessed.
-            dressNavEntry(entry, home);
+            dressNavEntry(entry);
 
             // The panel may still be open — a rebuild of the nav does not
             // close it — so the new row has to be lit if it is.
@@ -302,33 +451,87 @@
          * hard 19px/26px row sits visibly small among the others. None of this
          * can be done by copying a class — every class on that column is
          * emotion-generated and renamed on each deploy — so the numbers are
-         * read off the Home row instead, and the CSS stays as the fallback for
-         * when Home is not there to read.
+         * read off X's own rows instead, and the CSS stays as the fallback for
+         * when there are none to read.
+         *
+         * Two rows are read, not one. X draws the row you are on heavier than
+         * the rest, and the row measured used to be Home — which is the row
+         * you are on nearly always, so Pouch wore the selected weight the
+         * whole time and read as a tab that would not let go. The resting
+         * numbers come from a row that is not current and the selected weight
+         * from the row that is; `--bb-x-nav-weight-on` is what content.css
+         * swaps to while the panel is open.
+         *
+         * The label offset is measured rather than assumed for the same
+         * reason the type is. Our row's padding and the gap after its icon are
+         * two numbers that only matter as a sum — where the word starts — and
+         * X's own sum changes with its display-size setting, which is what
+         * left the Pouch label a couple of pixels left of every other word in
+         * the column. So the sum is read off X's row and split back into the
+         * two, rather than either being a constant.
          *
          * Nothing has to re-run this: X rebuilds the navigation when either
          * setting changes, and injectNavEntry never retires, so the new column
          * gets a freshly measured row.
          */
-        function dressNavEntry(entry, home) {
-            if (!home || typeof getComputedStyle !== 'function') return;
+        function dressNavEntry(entry) {
+            if (typeof getComputedStyle !== 'function') return;
 
-            const label = navLabel(home);
-            const text = entry.querySelector('.bb-x-nav-text');
-            if (label && text) {
+            const { rest, current } = navModels(TwitterPage.findAll('navRows'));
+            if (!rest) return;
+
+            const label = navLabel(rest);
+            if (label) {
                 const style = getComputedStyle(label);
-                for (const property of NAV_TYPE) {
-                    if (style[property]) text.style[property] = style[property];
+                for (const [property, custom] of Object.entries(NAV_TYPE)) {
+                    if (style[property]) entry.style.setProperty(custom, style[property]);
                 }
             }
 
-            const glyph = home.querySelector('svg');
-            const size = glyph && Math.round(glyph.getBoundingClientRect().height);
-            const box = entry.querySelector('.bb-x-nav-ico');
-            if (size && box) {
-                box.style.flexBasis = `${size}px`;
-                box.style.width = `${size}px`;
-                box.style.height = `${size}px`;
+            // The selected row's weight, so "bolder when open" means bolder by
+            // X's own reckoning rather than by a hard 800 that is heavier than
+            // anything the column actually uses.
+            const onLabel = current && current !== rest && navLabel(current);
+            if (onLabel) {
+                const weight = getComputedStyle(onLabel).fontWeight;
+                if (weight) entry.style.setProperty('--bb-x-nav-weight-on', weight);
             }
+
+            const glyph = rest.querySelector('svg');
+            const size = glyph ? Math.round(glyph.getBoundingClientRect().height) : 0;
+            if (size) entry.style.setProperty('--bb-x-nav-ico', `${size}px`);
+
+            alignNavLabel(entry, rest, size);
+        }
+
+        /**
+         * Put our word where X puts its words.
+         *
+         * Measured from our own left edge rather than from X's row's, because
+         * the two are not always the same element depth: X wraps a nav row in
+         * a div of its own in some layouts, and a target read off that row's
+         * box would be off by its wrapper's padding. Our own rect answers the
+         * only question there is — how far in from *our* edge the word belongs.
+         *
+         * A reading that cannot be right is dropped rather than applied: a
+         * column collapsed to icons has no label offset worth copying, and a
+         * row that has not been laid out yet measures zero.
+         */
+        function alignNavLabel(entry, model, iconSize) {
+            const label = navLabel(model);
+            if (!label) return;
+
+            const from = entry.getBoundingClientRect().left;
+            const want = label.getBoundingClientRect().left - from;
+            const icon = iconSize || 26;
+            if (!(want > icon + 2) || want > 140) return;
+
+            // The sum is fixed; how it splits is ours. The pill keeps as much
+            // of it as padding as it can up to 14px, and what is left is the
+            // gap — never under 6px, or the word crowds the mark.
+            const pad = Math.max(0, Math.min(14, Math.round(want - icon - 6)));
+            entry.style.setProperty('--bb-x-nav-pad', `${pad}px`);
+            entry.style.setProperty('--bb-x-nav-gap', `${Math.round(want - icon - pad)}px`);
         }
 
         async function togglePanel() {
@@ -418,16 +621,17 @@
             button.setAttribute(KEEP, '1');
             button.dataset.bbStatus = post.statusId;
 
-            // Where X's bookmark is, which is the gesture this stands in for —
-            // the same reach, filed somewhere you can organise. Whether that
-            // bookmark is still beside ours afterwards is twitterHideBookmark's
-            // business and not this function's.
-            const bookmark = actions.querySelector('[data-testid="bookmark"], [data-testid="removeBookmark"]');
-            const slot = bookmark && bookmark.closest('[role="group"] > *');
+            // Where X's bookmark is, or where it would be — the same reach,
+            // filed somewhere you can organise. Whether that bookmark is still
+            // beside ours afterwards is twitterHideBookmark's business and not
+            // this function's.
+            const before = postSlotBefore(actions);
+            const holder = slotFor(button, rowModel(actions, before));
+            actions.insertBefore(holder, before);
 
-            const holder = slotFor(button, rowModel(actions, slot));
-            if (slot) slot.parentElement.insertBefore(holder, slot);
-            else actions.appendChild(holder);
+            // After the cell is in, so the row is measured at the width it
+            // will actually be asked to hold.
+            stretchRow(actions);
 
             markPost(button, post.statusId);
             return true;
@@ -492,7 +696,10 @@
             button.dataset.bbHandle = person.handle;
 
             actions.parentElement.insertBefore(button, actions.nextSibling);
-            wearRing(button, ringModel(actions));
+            const ring = ringModel(actions);
+            wearRing(button, ring);
+            // After wearRing, so what is measured is the ring as drawn.
+            centreRing(button, ring);
             markProfile(button, person);
             return false;
         }
@@ -766,6 +973,11 @@
             if (!on('twitterPouchPosts')) {
                 document.querySelectorAll('.bb-x-post-slot, .bb-x-post-btn')
                     .forEach((element) => element.remove());
+                // The row was widened to hold a cell that has just gone.
+                document.querySelectorAll('[data-bb-stretched]').forEach((row) => {
+                    row.style.maxWidth = '';
+                    delete row.dataset.bbStretched;
+                });
             }
             if (!on('twitterPouchPeople')) {
                 const placed = document.getElementById(PROFILE_BUTTON_ID);
@@ -797,7 +1009,8 @@
     // page opened over file:// cannot do.
     const TwitterUi = {
         createTwitterUi, NAV_ID, PROFILE_BUTTON_ID, PICKER_ID,
-        navLabel, slotFor, rowModel, wearRing, ringModel,
+        navLabel, navModels, slotFor, rowModel, postSlotBefore, stretchRow,
+        wearRing, ringModel, centreRing,
     };
 
     root.BB = root.BB || {};

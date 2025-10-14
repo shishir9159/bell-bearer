@@ -42,7 +42,11 @@
         },
         twitter: {
             id: 'twitter',
-            name: 'X',
+            // "Twitter", not "X". The site renamed itself; nobody who uses it
+            // did, and a one-letter name in a row of proper nouns reads as a
+            // rendering fault rather than as a brand. The id stays `twitter`,
+            // which is what detectSite has always returned.
+            name: 'Twitter',
             description: 'People and posts filed into two sets of topics, and a daily time limit',
             // X's mark is black on white, so it takes the page's ink the way
             // Lichess's does rather than a brand colour that vanishes at night.

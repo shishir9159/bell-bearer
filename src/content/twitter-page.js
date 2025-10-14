@@ -61,6 +61,22 @@
         /** A nav row to copy the metrics of, and to sit beneath. */
         navHome: ['a[data-testid="AppTabBar_Home_Link"]', 'nav[role="navigation"] a[href="/home"]'],
 
+        /**
+         * Every row of the left navigation, so ours can be matched to the
+         * ones around it.
+         *
+         * Home is not enough on its own. X draws the row you are on in bold
+         * and the rest in the body weight, and Home is the row you are on
+         * most of the time — so a Pouch row that copied Home wore the
+         * selected weight permanently. Both readings are wanted, and
+         * `aria-current` is how X marks which is which.
+         */
+        navRows: [
+            'header[role="banner"] nav[role="navigation"] a[href]',
+            'nav[role="navigation"] a[href]',
+            'header nav a[href]',
+        ],
+
         /** The profile header's action row, where the add-to-pouch button goes. */
         profileActions: ['[data-testid="userActions"]'],
 

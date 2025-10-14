@@ -291,6 +291,30 @@
         return post ? post.topic : null;
     }
 
+    /**
+     * Where a saved post lives on x.com.
+     *
+     * Rebuilt from the handle and the status id when the record has no url of
+     * its own, rather than reported as unopenable. Posts filed before the url
+     * field existed have none, and a saved post you cannot get back to is the
+     * one thing the pouch must not hold — that is the whole point of saving
+     * it. X serves /<anything>/status/<id> for the right id whatever handle
+     * is in front of it, and /i/status/<id> is X's own spelling for the case
+     * where there is no handle to put there.
+     *
+     * The id is digits and the handle is X's own alphabet, both filtered here
+     * rather than trusted: what comes back is interpolated into an href.
+     */
+    function postUrl(post) {
+        if (!post) return '';
+        if (/^https:\/\/(?:x|twitter)\.com\//i.test(post.url || '')) return post.url;
+
+        const id = String(post.id || '').replace(/\D/g, '');
+        if (!id) return '';
+        const handle = String(post.handle || '').replace(/[^A-Za-z0-9_]/g, '');
+        return `https://x.com/${handle || 'i'}/status/${id}`;
+    }
+
     /** Two initials, the fallback when a person has no usable avatar URL. */
     function monogram(name, handle) {
         const source = String(name || '').trim() || String(handle || '').replace(/^@/, '');
@@ -306,7 +330,7 @@
         topicsOf, itemsOf, inTopic,
         createTopic, renameTopic, deleteTopic, moveTopic,
         filePerson, filePost, setNote, remove,
-        topicForHandle, topicForStatus, monogram,
+        topicForHandle, topicForStatus, monogram, postUrl,
         KEYS: [PEOPLE_TOPICS_KEY, POST_TOPICS_KEY, PEOPLE_KEY, POSTS_KEY],
     };
 

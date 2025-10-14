@@ -1,6 +1,6 @@
 /**
- * A daily time limit for the two sites that eat an afternoon without anyone
- * deciding to spend one: x.com and reddit.com.
+ * How long has been spent today on each site held to a daily limit, and how
+ * long a block has been snoozed for.
  *
  * The tally is seconds of *focused* time — the tab on screen, in the window
  * the machine's focus is in — and it is kept for the day it was spent on and
@@ -8,8 +8,15 @@
  * is discarded whole by forDay() the first time today reads it, so nothing
  * here ever amounts to a record of what was browsed when.
  *
- * Nothing is counted while a site's limit is switched off, which is the
- * default for both.
+ * Keyed by host, not by a site id. The limit used to be two settings apiece on
+ * the two sites that had a panel to put them in; it is now a list any host can
+ * join, kept by shared/limit-sites.js, and this store had to stop enumerating
+ * the sites it knew about to follow. SITES below is all that is left of that:
+ * two names, so a card and a tab can say "Twitter" rather than "x.com", and
+ * nothing at all about whether either has a limit.
+ *
+ * Nothing is counted for a host with no limit, which is every host until one
+ * is added.
  *
  * Who counts: src/content/time-limit.js, on the page itself, because the page
  * is the only thing that knows whether it is the one being looked at. The
@@ -27,23 +34,24 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const LimitSites = ns.LimitSites || req('./limit-sites.js');
 
     const KEY = Settings.DATA.timeLimits;
 
+    /** How long the button on the sheet stands a block down for. */
+    const SNOOZE_MS = 10 * 60 * 1000;
+
     /**
-     * The sites a limit can be set on. `id` is what
-     * src/content/site.js#detectSite returns, so the page, the dashboard card
-     * and the settings panel all name a site the same way.
+     * The two sites Bell Bearer has a workspace for, so a card and a Time tab
+     * can name one properly. `id` is what src/content/site.js#detectSite
+     * returns; `host` is how the limit list spells the same site.
+     *
+     * Emphatically not "the sites a limit can be set on" any more — that is
+     * whatever is in the list.
      */
     const SITES = Object.freeze([
-        Object.freeze({
-            id: 'twitter', name: 'X', host: 'x.com',
-            onKey: 'twitterDailyLimit', minutesKey: 'twitterLimitMinutes',
-        }),
-        Object.freeze({
-            id: 'reddit', name: 'Reddit', host: 'reddit.com',
-            onKey: 'redditDailyLimit', minutesKey: 'redditLimitMinutes',
-        }),
+        Object.freeze({ id: 'twitter', name: 'Twitter', host: 'x.com' }),
+        Object.freeze({ id: 'reddit', name: 'Reddit', host: 'reddit.com' }),
     ]);
 
     const byId = Object.freeze(Object.fromEntries(SITES.map((site) => [site.id, site])));
@@ -58,32 +66,42 @@
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
     }
 
-    function zeroes() {
-        const out = {};
-        for (const site of SITES) out[site.id] = 0;
-        return out;
-    }
-
-    const blank = (now = Date.now()) => ({ day: dayKey(now), seconds: zeroes() });
+    const blank = (now = Date.now()) => ({ day: dayKey(now), seconds: {}, snoozed: {} });
 
     /**
      * `state` as it applies to `now`. Anything from another day is gone, not
      * archived — the whole store is one day deep by design. Never mutates
      * what it was given.
+     *
+     * An expired snooze is kept rather than dropped, with its `until` left in
+     * the past. The count is why: the sheet says which snooze of the day this
+     * is, and clearing the row the moment it lapsed would reset that to
+     * "first" every ten minutes.
      */
     function forDay(state, now = Date.now()) {
         const today = dayKey(now);
         if (!state || state.day !== today) return blank(now);
-        const seconds = zeroes();
-        for (const site of SITES) {
-            const value = Number(state.seconds && state.seconds[site.id]);
-            seconds[site.id] = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+
+        const seconds = {};
+        for (const [host, value] of Object.entries(state.seconds || {})) {
+            const at = LimitSites.normalizeHost(host);
+            const spent = Number(value);
+            if (at && Number.isFinite(spent) && spent > 0) seconds[at] = Math.round(spent);
         }
-        return { day: today, seconds };
+
+        const snoozed = {};
+        for (const [host, row] of Object.entries(state.snoozed || {})) {
+            const at = LimitSites.normalizeHost(host);
+            const until = Number(row && row.until);
+            if (!at || !Number.isFinite(until) || until <= 0) continue;
+            snoozed[at] = { until, count: Math.max(1, Math.round(Number(row.count)) || 1) };
+        }
+
+        return { day: today, seconds, snoozed };
     }
 
     /**
-     * `state` with `seconds` more spent on `siteId`.
+     * `state` with `seconds` more spent on `host`.
      *
      * A single credit is capped at MAX_CREDIT. The page adds the gap since
      * its last tick, and a machine waking from sleep, or a tab restored from
@@ -92,41 +110,97 @@
      */
     const MAX_CREDIT = 120;
 
-    function add(state, siteId, seconds, now = Date.now()) {
+    function add(state, host, seconds, now = Date.now()) {
         const next = forDay(state, now);
-        if (!byId[siteId]) return next;
+        const at = LimitSites.normalizeHost(host);
+        if (!at) return next;
         const credit = Math.min(MAX_CREDIT, Math.max(0, Math.round(seconds) || 0));
-        next.seconds[siteId] += credit;
+        next.seconds[at] = (next.seconds[at] || 0) + credit;
         return next;
     }
 
-    /** Today's tally for a site, in seconds, whatever day the state is from. */
-    const spentOn = (state, siteId, now = Date.now()) => forDay(state, now).seconds[siteId] || 0;
+    /** Today's tally for a host, in seconds, whatever day the state is from. */
+    const spentOn = (state, host, now = Date.now()) =>
+        forDay(state, now).seconds[LimitSites.normalizeHost(host)] || 0;
 
     /**
-     * Where a site stands right now.
+     * `state` with the block on `host` stood down for ten minutes.
      *
-     * `allowed` is null when there is no limit — either the switch is off or
-     * the minutes are zero, which reads as "no limit" rather than "blocked
-     * immediately"; nobody sets a limit of nothing on purpose, and a limit
-     * that blocks a site the moment it is enabled looks like a bug.
+     * The count goes up every time, and nothing here refuses. A limit you
+     * cannot get past is a limit you turn off for good the first time it is
+     * wrong, so the sheet has a way through it — and what keeps that honest is
+     * being told it is the fourth time today, not being stopped.
      */
-    function statusFor(state, settings, siteId, now = Date.now()) {
-        const site = byId[siteId];
-        if (!site) return { on: false, spent: 0, allowed: null, remaining: null, blocked: false };
+    function snooze(state, host, now = Date.now(), ms = SNOOZE_MS) {
+        const next = forDay(state, now);
+        const at = LimitSites.normalizeHost(host);
+        if (!at) return next;
+        const before = next.snoozed[at];
+        next.snoozed[at] = {
+            until: now + Math.max(0, Math.round(ms) || 0),
+            count: (before ? before.count : 0) + 1,
+        };
+        return next;
+    }
 
-        const spent = spentOn(state, siteId, now);
-        const minutes = Number(settings && settings[site.minutesKey]);
-        const on = !!(settings && settings[site.onKey]) && Number.isFinite(minutes) && minutes > 0;
-        if (!on) return { on: false, spent, allowed: null, remaining: null, blocked: false };
+    /** How many times today a block on `host` has been snoozed. */
+    const snoozesOn = (state, host, now = Date.now()) => {
+        const row = forDay(state, now).snoozed[LimitSites.normalizeHost(host)];
+        return row ? row.count : 0;
+    };
 
-        const allowed = Math.round(minutes * 60);
+    /**
+     * Where a host stands right now, given the limit list row covering it.
+     *
+     * `mode` is 'none' when there is no limit, 'budget' for minutes a day and
+     * 'window' for a pair of clock times. `blocked` is the only field the page
+     * acts on; the rest is for saying why.
+     *
+     * A snooze suppresses `blocked` and nothing else — the tally keeps
+     * running, so the ten minutes are spent out of the same day's allowance
+     * rather than granted on top of it.
+     *
+     * `allowed` is null for a window, which has no budget to be a fraction of,
+     * and for no limit at all. A budget of zero minutes reads as no limit
+     * rather than as blocked from the first second: nobody sets a limit of
+     * nothing on purpose, and one that bites the moment it is added looks like
+     * a bug. That reading lives in LimitSites.modeOf, so the list and the page
+     * cannot disagree about it.
+     */
+    function statusFor(state, entry, host, now = Date.now()) {
+        const day = forDay(state, now);
+        const at = LimitSites.normalizeHost(host);
+        const spent = day.seconds[at] || 0;
+        const row = day.snoozed[at];
+        const snoozedUntil = row && row.until > now ? row.until : 0;
+        const snoozes = row ? row.count : 0;
+        const mode = LimitSites.modeOf(entry);
+
+        const rest = { spent, snoozedUntil, snoozes, mode, host: at };
+        if (mode === 'none') {
+            return { ...rest, on: false, allowed: null, remaining: null, blocked: false, open: true };
+        }
+
+        if (mode === 'window') {
+            const open = LimitSites.windowOpen(entry, now);
+            return {
+                ...rest,
+                on: true,
+                allowed: null,
+                remaining: null,
+                open,
+                blocked: !open && !snoozedUntil,
+            };
+        }
+
+        const allowed = LimitSites.allowanceOf(entry);
         return {
+            ...rest,
             on: true,
-            spent,
             allowed,
             remaining: Math.max(0, allowed - spent),
-            blocked: spent >= allowed,
+            open: spent < allowed,
+            blocked: spent >= allowed && !snoozedUntil,
         };
     }
 
@@ -172,8 +246,9 @@
     }
 
     const TimeLimits = {
-        KEY, SITES, MAX_CREDIT,
-        get, list, ids, dayKey, blank, forDay, add, spentOn, statusFor, human,
+        KEY, SITES, MAX_CREDIT, SNOOZE_MS,
+        get, list, ids, dayKey, blank, forDay, add, spentOn, snooze, snoozesOn,
+        statusFor, human,
         load, save, update,
     };
 

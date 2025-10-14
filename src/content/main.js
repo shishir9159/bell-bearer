@@ -31,7 +31,8 @@
     const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown,
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
         CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
-        Keybindings, SkimContent, LinkHints, TimeLimitContent, TwitterUi, TwitterAds } = BB;
+        Keybindings, SkimContent, LinkHints, TimeLimitContent, TwitterUi, TwitterAds,
+        RosterContent } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -379,13 +380,40 @@
 
     // ---------------------------------------------------- daily time limit
 
-    // Only the two sites a limit can be set on build one of these, and it
-    // does nothing at all until a limit is actually set.
-    TimeLimitContent.createTimeLimit({
+    /**
+     * Every page builds one of these, because any host can be in the limit
+     * list now. It reads that list itself and does nothing at all — no timer,
+     * no storage — for a host with no row in it, which is nearly every host.
+     *
+     * The reference is kept. It used to be dropped on the floor here, and the
+     * limit was never enforced on a page that was loaded with one already set:
+     * install() reads the settings mirror, the mirror is still the schema's
+     * defaults when this line runs, and the storage watcher inside only fires
+     * on a *change* — so the initial Settings.get() below told it nothing and
+     * nothing ever counted a second. It reads its own store now rather than the
+     * mirror, which closes that hole at the source, and applySettings syncs it
+     * anyway so a page open across a settings change behaves.
+     */
+    const timeLimit = TimeLimitContent.createTimeLimit({
         site,
-        getSettings: () => settings,
         appearance: () => Theme.appearance(),
-    }).install();
+    });
+    timeLimit.install();
+
+    // ------------------------------------------------------------- rosters
+
+    /**
+     * Reading your own list off x.com or reddit.com, and working through one to
+     * follow or join what is in it.
+     *
+     * Started from the dashboard, carried out here, and picked up again on
+     * every page of the site — which is what makes it survive the navigation
+     * between one name and the next. Nothing happens unless there is a job in
+     * storage for this site, so on an ordinary visit this is one storage read.
+     */
+    if (site === 'twitter' || site === 'reddit') {
+        RosterContent.createRoster({ site, notify }).install();
+    }
 
     // ------------------------------------------------------ cookie banners
 
@@ -420,6 +448,7 @@
         if (xSurfacesChanged && twitterUi) twitterUi.refreshSurfaces();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
+        if (timeLimit) timeLimit.sync();
     }
 
     Settings.get().then(applySettings);

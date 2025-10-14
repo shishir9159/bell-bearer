@@ -147,9 +147,15 @@
 
     // --------------------------------------------------------------- files
 
-    /** Offer `data` as a JSON download. Revokes the object URL when done. */
-    function downloadJson(filename, data) {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    /**
+     * Offer `text` as a download of `type`. Revokes the object URL when done.
+     *
+     * The two wrappers below are what callers use; this exists because the
+     * roster lists are plain text and the backup is JSON, and the six lines of
+     * anchor-clicking in the middle are the same either way.
+     */
+    function downloadText(filename, text, type = 'text/plain') {
+        const blob = new Blob([text], { type: `${type};charset=utf-8` });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -160,6 +166,11 @@
         // Give the download a tick to start before the URL is invalidated.
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
+
+    const downloadJson = (filename, data) =>
+        downloadText(filename, JSON.stringify(data, null, 2), 'application/json');
+
+    const saveText = (text, filename) => downloadText(filename, text);
 
     function readFileAsText(file) {
         return new Promise((resolve, reject) => {
@@ -202,7 +213,8 @@
         }
     }
 
-    const Ui = { openModal, confirmDialog, promptDialog, toast, copyText, downloadJson, readFileAsText, installTheme };
+    const Ui = { openModal, confirmDialog, promptDialog, toast, copyText,
+        downloadText, downloadJson, saveText, readFileAsText, installTheme };
 
     root.BB = root.BB || {};
     root.BB.Ui = Ui;

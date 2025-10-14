@@ -145,15 +145,32 @@
             </div>`;
         }
 
+        /**
+         * A saved post, as a row you can open.
+         *
+         * The handle and the body are inside the anchor rather than beside a
+         * separate link, which is what they used to be: the link was the age
+         * ("6h") in small type at the end of the row, so a saved post looked
+         * like a record of something rather than a way back to it. The whole
+         * of the post is now the target, which is how every other list of
+         * posts anywhere behaves.
+         *
+         * The url comes from XPouch.postUrl rather than off the record, so a
+         * post filed before that field existed still opens.
+         */
         function postHtml(post) {
             const when = Time.shortAge(post.postedAt || post.savedAt);
+            const url = XPouch.postUrl(post);
+            const body = `<span class="x-post-handle">${esc(post.handle)}</span>
+                <span class="x-post-text">${esc(post.text) || '<em>No text — an image or video post.</em>'}</span>`;
+
             return `
             <div class="x-row x-row-post" data-x-item="${att(post.id)}">
-                <span class="x-post-handle">${esc(post.handle)}</span>
-                <p class="x-post-text">${esc(post.text) || '<em>No text — an image or video post.</em>'}</p>
-                ${post.url ? `<a class="x-post-link" href="${Dom.safeUrlAttr(post.url)}" target="_blank"
-                                 rel="noopener noreferrer" title="Open on x.com">${when || 'open'}</a>`
-                           : `<span class="x-post-when">${esc(when)}</span>`}
+                ${url
+                    ? `<a class="x-post-open" href="${Dom.safeUrlAttr(url)}" target="_blank"
+                          rel="noopener noreferrer" title="Open this post on x.com">${body}</a>`
+                    : `<span class="x-post-open is-dead" title="This post has no link to open">${body}</span>`}
+                <span class="x-post-when">${esc(when)}</span>
                 <button class="icon-act icon-danger" data-x-act="remove" title="Remove from pouch">${ICONS.cross}</button>
             </div>`;
         }
