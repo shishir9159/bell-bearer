@@ -44,6 +44,13 @@
             { id: 'time', label: 'Time', panel: 'redditTimePanel' },
             { id: 'roster', label: 'Roster', panel: 'redditRosterPanel' },
         ],
+        leetcode: [
+            // Review first: the question the log exists to answer is "what
+            // should I do today", not "what have I done".
+            { id: 'review', label: 'Review', panel: 'leetReviewPanel' },
+            { id: 'heat', label: 'Practice', panel: 'leetHeatPanel' },
+            { id: 'notes', label: 'Notes', panel: 'leetNotesPanel' },
+        ],
     };
 
     /**

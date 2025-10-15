@@ -2551,6 +2551,46 @@ const dayRecord = (at = T0) =>
         eq(Site.detectSite('notlichess.org'), 'other');
     });
 
+    check('leetcode.com is a site of its own', () => {
+        eq(Site.detectSite('leetcode.com'), 'leetcode');
+        eq(Site.detectSite('www.leetcode.com'), 'leetcode');
+        // LeetCode's China site is a different account and a different
+        // problem set; it is not this one.
+        eq(Site.detectSite('leetcode.cn'), 'other');
+        eq(Site.detectSite('notleetcode.com'), 'other');
+    });
+
+    // --------------------------------------------------- the site registry
+
+    console.log('\n# the site registry');
+
+    const SiteIcons = require('../src/shared/site-icons.js');
+
+    check('every site in the order has a card to draw', () => {
+        for (const site of SiteIcons.list()) {
+            assert(site && site.id, 'an id in ORDER with no entry in SITES');
+            assert(site.name && site.description, `${site.id} is missing its plate`);
+            assert(/^M/.test(site.path), `${site.id}'s glyph is not a path`);
+        }
+    });
+    check('leetcode is in the launcher', () => {
+        eq(SiteIcons.get('leetcode').name, 'LeetCode');
+        assert(SiteIcons.list().some((site) => site.id === 'leetcode'), 'not in ORDER');
+        assert(SiteIcons.svg('leetcode').includes('<svg'), 'draws nothing');
+    });
+
+    check('the leetcode shortcuts are bound under their own scope', () => {
+        const Keybindings = require('../src/shared/keybindings.js');
+        eq(Keybindings.SCOPES.leetcode, 'LeetCode');
+        eq(Keybindings.list({}, 'leetcode').map((b) => b.id), ['leet-templates', 'leet-mock']);
+        // Both fire with the caret inside Monaco, so neither may be a bare
+        // letter and neither may collide with anything already bound.
+        for (const binding of Keybindings.list({}, 'leetcode')) {
+            assert(binding.combo.ctrl && binding.combo.alt, `${binding.id} is not modified enough`);
+            eq(Keybindings.conflicts({}, binding.id, binding.combo), []);
+        }
+    });
+
     console.log('\n' + '='.repeat(52));
     console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
     process.exit(failed ? 1 : 0);

@@ -31,6 +31,7 @@
         if (/(^|\.)(twitter|x)\.com$/.test(host)) return 'twitter';
         if (/(^|\.)chess\.com$/.test(host)) return 'chess';
         if (/(^|\.)lichess\.org$/.test(host)) return 'lichess';
+        if (/(^|\.)leetcode\.com$/.test(host)) return 'leetcode';
         return 'other';
     }
 

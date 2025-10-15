@@ -27,7 +27,7 @@
 (function (root) {
     'use strict';
 
-    const SCOPES = Object.freeze({ general: 'General', youtube: 'YouTube', chess: 'Chess.com' });
+    const SCOPES = Object.freeze({ general: 'General', youtube: 'YouTube', chess: 'Chess.com', leetcode: 'LeetCode' });
 
     const BINDINGS = Object.freeze([
         { id: 'skim-find', scope: 'general', kind: 'key', needs: 'skimMode', label: 'Skim — find within this page', combo: { shift: true, code: 'KeyF', key: 'F' } },
@@ -35,10 +35,10 @@
         { id: 'skim-actions', scope: 'general', kind: 'key', needs: 'skimMode', label: 'Skim — search browser actions', combo: { shift: true, code: 'KeyA', key: 'A' } },
         { id: 'link-hints', scope: 'general', kind: 'key', needs: 'linkHints', label: 'Label every link for the keyboard', combo: { shift: true, code: 'KeyL', key: 'L' } },
         // General rather than a scope of its own: it is one key opening the
-        // pouch, which YouTube and X each draw their own way. There is no
-        // scope for "two sites", and hiding it under `youtube` would take it
-        // off the keyboard map for half the places it works.
-        { id: 'open-pouch', scope: 'general', kind: 'key', needs: 'pouchShortcut', label: 'Open the pouch (YouTube and X)', combo: { shift: true, code: 'KeyP', key: 'P' } },
+        // pouch, which YouTube, X and LeetCode each draw their own way. There
+        // is no scope for "three sites", and hiding it under `youtube` would
+        // take it off the keyboard map for two thirds of the places it works.
+        { id: 'open-pouch', scope: 'general', kind: 'key', needs: 'pouchShortcut', label: 'Open the pouch (YouTube, X and LeetCode)', combo: { shift: true, code: 'KeyP', key: 'P' } },
         { id: 'copy-markdown-link', scope: 'general', kind: 'command', label: 'Copy this page as a Markdown link', combo: { ctrl: true, shift: true, code: 'KeyL', key: 'L' } },
 
         { id: 'record-checkpoint', scope: 'youtube', kind: 'key', label: 'Create checkpoint (hold and release)', combo: { ctrl: true, code: 'KeyB', key: 'b' } },
@@ -51,6 +51,12 @@
         { id: 'speed-reset', scope: 'youtube', kind: 'key', label: 'Reset playback speed to 1x', combo: { key: '+', char: true } },
 
         { id: 'chess-clear-arrows', scope: 'chess', kind: 'key', label: 'Clear every arrow drawn on the board', combo: { alt: true, code: 'KeyC', key: 'c' } },
+
+        // Ctrl+Alt rather than the bare-Shift letters the rest of the page
+        // shortcuts use: both of these are meant to work with the caret
+        // inside LeetCode's editor, where a bare letter is a letter.
+        { id: 'leet-templates', scope: 'leetcode', kind: 'key', label: 'Suggest a code template', combo: { ctrl: true, alt: true, code: 'KeyT', key: 't' } },
+        { id: 'leet-mock', scope: 'leetcode', kind: 'key', label: 'Start a mock interview on this problem', combo: { ctrl: true, alt: true, code: 'KeyM', key: 'm' } },
     ]);
 
     const BY_ID = Object.freeze(Object.fromEntries(BINDINGS.map((binding) => [binding.id, binding])));
