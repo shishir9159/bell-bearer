@@ -237,6 +237,14 @@
         xPostTopics: 'bbXPostTopics',
         xPeople: 'bbXPeople',
         xPosts: 'bbXPosts',
+
+        // The LeetCode practice log: one record per problem — its note, its
+        // attempts and its review schedule — and one bucket per day for the
+        // heat map. Two keys because they age differently; a problem is kept
+        // for as long as you care about it and a day bucket for a year.
+        // shared/leetcode.js owns both shapes.
+        leetProblems: 'bbLeetProblems',
+        leetDays: 'bbLeetDays',
     });
 
     function withDefaults(stored, keys) {

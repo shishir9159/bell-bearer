@@ -318,6 +318,212 @@ check('a clean run inside the budget but over half of it is Good', () => {
     eq(Fsrs.suggestGrade({ seconds: 20 * 60, failures: 0, difficulty: 'Medium' }), 3);
 });
 
+// ------------------------------------------------------------- leetcode
+
+const Leet = require('../src/shared/leetcode.js');
+
+// Two in the afternoon today rather than a fixed calendar date, for the same
+// reason the activity suite uses one: the store prunes anything older than
+// KEEP_DAYS on write, so a hard-coded date quietly stops being recorded once
+// the suite is run a year after it was written. Local, and set with setHours
+// so a tester west of UTC lights up the same square as one east of it.
+const L0 = new Date().setHours(14, 0, 0, 0);
+const days = (n) => n * Leet.DAY_MS;
+
+const problemPage = {
+    slug: 'two-sum',
+    title: 'Two Sum',
+    difficulty: 'Easy',
+    tags: ['Array', 'Hash Table'],
+    url: 'https://leetcode.com/problems/two-sum/',
+};
+
+console.log('\n# leetcode — seeing a problem');
+check('the first sighting records what the page says', () => {
+    const state = Leet.seeIn(Leet.blank(), problemPage, L0);
+    const problem = state.problems['two-sum'];
+    eq(problem.title, 'Two Sum');
+    eq(problem.difficulty, 'Easy');
+    eq(problem.tags, ['Array', 'Hash Table']);
+    eq(problem.seenAt, L0);
+    eq(problem.note, '');
+    eq(problem.fsrs, null);
+});
+check('seeing it again keeps the note and the schedule', () => {
+    let state = Leet.seeIn(Leet.blank(), problemPage, L0);
+    state.problems['two-sum'].note = 'two pointers, sorted input only';
+    state.problems['two-sum'].fsrs = { stability: 9, difficulty: 5, due: L0 + days(9) };
+
+    state = Leet.seeIn(state, { ...problemPage, title: 'Two Sum II' }, L0 + days(1));
+    const problem = state.problems['two-sum'];
+    eq(problem.note, 'two pointers, sorted input only', 'the note is the user’s');
+    eq(problem.fsrs.stability, 9, 'and so is the schedule');
+    eq(problem.title, 'Two Sum II', 'the title is LeetCode’s and is refreshed');
+    eq(problem.seenAt, L0 + days(1));
+});
+check('a field the reader could not find does not wipe the stored one', () => {
+    let state = Leet.seeIn(Leet.blank(), problemPage, L0);
+    state = Leet.seeIn(state, { slug: 'two-sum' }, L0 + days(1));
+    eq(state.problems['two-sum'].difficulty, 'Easy');
+    eq(state.problems['two-sum'].tags, ['Array', 'Hash Table']);
+});
+check('a difficulty that is not one of the three is dropped', () => {
+    const state = Leet.seeIn(Leet.blank(), { ...problemPage, difficulty: 'Medium-ish' }, L0);
+    eq(state.problems['two-sum'].difficulty, '');
+});
+check('a page with no slug is not a problem page', () => {
+    eq(Leet.seeIn(Leet.blank(), { title: 'Problems' }, L0).problems, {});
+});
+
+console.log('\n# leetcode — attempts and day buckets');
+check('an attempt buckets into the local day it happened on', () => {
+    const state = Leet.addAttempt(Leet.blank(), {
+        slug: 'two-sum', status: 'Wrong Answer', seconds: 300, at: L0,
+    });
+    eq(state.days[Leet.dayKey(L0)], { submitted: 1, solved: 0, seconds: 300 });
+    eq(state.problems['two-sum'].solvedAt, 0);
+});
+check('an accept counts as solved and sets solvedAt', () => {
+    let state = Leet.addAttempt(Leet.blank(), { slug: 'two-sum', status: 'Wrong Answer', seconds: 200, at: L0 });
+    state = Leet.addAttempt(state, { slug: 'two-sum', status: 'Accepted', seconds: 420, runtime: '52 ms', at: L0 + 60000 });
+    eq(state.days[Leet.dayKey(L0)], { submitted: 2, solved: 1, seconds: 620 });
+    eq(state.problems['two-sum'].solvedAt, L0 + 60000);
+    eq(state.problems['two-sum'].attempts[0].runtime, '52 ms', 'newest first');
+});
+check('a submission either side of midnight lands on its own square', () => {
+    const lastNight = new Date(L0).setHours(23, 50, 0, 0);
+    let state = Leet.addAttempt(Leet.blank(), { slug: 'a', status: 'Accepted', seconds: 60, at: lastNight });
+    state = Leet.addAttempt(state, { slug: 'a', status: 'Accepted', seconds: 60, at: lastNight + days(1) });
+    eq(Object.keys(state.days).length, 2);
+    eq(state.days[Leet.dayKey(lastNight)].submitted, 1);
+    eq(state.days[Leet.dayKey(lastNight + days(1))].submitted, 1);
+});
+check('attempts are capped and the oldest fall off', () => {
+    let state = Leet.blank();
+    for (let i = 0; i < Leet.ATTEMPT_CAP + 6; i++) {
+        state = Leet.addAttempt(state, { slug: 'two-sum', status: 'Wrong Answer', at: L0 + i * 1000 });
+    }
+    const { attempts } = state.problems['two-sum'];
+    eq(attempts.length, Leet.ATTEMPT_CAP);
+    eq(attempts[0].at, L0 + (Leet.ATTEMPT_CAP + 5) * 1000, 'the newest is kept');
+});
+check('an attempt on a problem never seen still records it', () => {
+    const state = Leet.addAttempt(Leet.blank(), { slug: 'ghost', status: 'Accepted', at: L0 });
+    eq(state.problems.ghost.seenAt, L0);
+});
+
+console.log('\n# leetcode — pruning');
+check('prune drops day 401 and keeps day 400', () => {
+    const state = {
+        problems: {},
+        days: {
+            [Leet.dayKey(L0 - days(Leet.KEEP_DAYS - 1))]: { submitted: 1, solved: 1, seconds: 10 },
+            [Leet.dayKey(L0 - days(Leet.KEEP_DAYS))]: { submitted: 9, solved: 9, seconds: 90 },
+        },
+    };
+    const kept = Leet.prune(state.days, L0);
+    eq(Object.keys(kept), [Leet.dayKey(L0 - days(Leet.KEEP_DAYS - 1))]);
+});
+check('prune throws away a key that is not a date', () => {
+    eq(Leet.prune({ yesterday: { submitted: 3 } }, L0), {});
+});
+
+console.log('\n# leetcode — the three rails');
+check('lists splits due, to-solve and solved', () => {
+    let state = Leet.blank();
+    state = Leet.seeIn(state, { slug: 'due-now' }, L0);
+    state = Leet.seeIn(state, { slug: 'never-solved' }, L0);
+    state = Leet.seeIn(state, { slug: 'done' }, L0);
+    state = Leet.addAttempt(state, { slug: 'due-now', status: 'Accepted', at: L0 });
+    state = Leet.addAttempt(state, { slug: 'done', status: 'Accepted', at: L0 });
+    state = Leet.addAttempt(state, { slug: 'never-solved', status: 'Wrong Answer', at: L0 });
+    state.problems['due-now'].fsrs = { stability: 3, difficulty: 5, due: L0 - days(1) };
+    state.problems.done.fsrs = { stability: 30, difficulty: 5, due: L0 + days(30) };
+
+    const { due, toSolve, solved } = Leet.lists(state, L0);
+    eq(due.map((p) => p.slug), ['due-now']);
+    eq(toSolve.map((p) => p.slug), ['never-solved']);
+    eq(solved.map((p) => p.slug), ['done']);
+});
+check('a solved problem that has come round again is due, not solved', () => {
+    let state = Leet.addAttempt(Leet.blank(), { slug: 'x', status: 'Accepted', at: L0 });
+    state.problems.x.fsrs = { stability: 3, difficulty: 5, due: L0 - 1 };
+    eq(Leet.lists(state, L0).solved.length, 0);
+    eq(Leet.lists(state, L0).due.length, 1);
+});
+check('due comes back soonest first', () => {
+    let state = Leet.blank();
+    for (const [slug, when] of [['c', 3], ['a', 1], ['b', 2]]) {
+        state = Leet.addAttempt(state, { slug, status: 'Accepted', at: L0 });
+        state.problems[slug].fsrs = { stability: 3, difficulty: 5, due: L0 - days(when) };
+    }
+    eq(Leet.lists(state, L0).due.map((p) => p.slug), ['c', 'b', 'a']);
+});
+
+console.log('\n# leetcode — grading inputs');
+check('failuresSince counts only what came after the last accept', () => {
+    let state = Leet.blank();
+    state = Leet.addAttempt(state, { slug: 's', status: 'Wrong Answer', at: L0 });
+    state = Leet.addAttempt(state, { slug: 's', status: 'Accepted', at: L0 + 1000 });
+    const solvedBefore = state.problems.s.solvedAt;
+
+    state = Leet.addAttempt(state, { slug: 's', status: 'Wrong Answer', at: L0 + 2000 });
+    state = Leet.addAttempt(state, { slug: 's', status: 'Runtime Error', at: L0 + 3000 });
+    state = Leet.addAttempt(state, { slug: 's', status: 'Accepted', at: L0 + 4000 });
+
+    eq(Leet.failuresSince(state.problems.s, solvedBefore), 2, 'this session only');
+    eq(Leet.failuresSince(state.problems.s, 0), 3, 'every failure on record');
+});
+check('the grade a session suggests follows from its own numbers', () => {
+    let state = Leet.seeIn(Leet.blank(), problemPage, L0);
+    state = Leet.addAttempt(state, { slug: 'two-sum', status: 'Wrong Answer', at: L0 });
+    state = Leet.addAttempt(state, { slug: 'two-sum', status: 'Accepted', seconds: 6 * 60, at: L0 + 1000 });
+    const problem = state.problems['two-sum'];
+    eq(Fsrs.suggestGrade({
+        seconds: Leet.lastAttempt(problem).seconds,
+        failures: Leet.failuresSince(problem, 0),
+        difficulty: problem.difficulty,
+    }), 2, 'quick, but it took two goes');
+});
+
+console.log('\n# leetcode — the heat map');
+check('heatDays colours by the metric it is asked for', () => {
+    let state = Leet.addAttempt(Leet.blank(), { slug: 'a', status: 'Accepted', seconds: 600, at: L0 });
+    state = Leet.addAttempt(state, { slug: 'a', status: 'Wrong Answer', seconds: 90, at: L0 });
+    const key = Leet.dayKey(L0);
+    eq(Leet.heatDays(state, 'submitted', L0)[key].value, 2);
+    eq(Leet.heatDays(state, 'solved', L0)[key].value, 1);
+    eq(Leet.heatDays(state, 'seconds', L0)[key].value, 690);
+    eq(Leet.heatDays(state, 'nonsense', L0)[key].value, 2, 'an unknown metric falls back to submissions');
+});
+check('a square carries all three numbers whichever one it is coloured by', () => {
+    const state = Leet.addAttempt(Leet.blank(), { slug: 'a', status: 'Accepted', seconds: 600, at: L0 });
+    eq(Leet.heatDays(state, 'solved', L0)[Leet.dayKey(L0)],
+        { submitted: 1, solved: 1, seconds: 600, value: 1 });
+});
+check('the heat map levels fall on the steps the panel uses', () => {
+    // heat-map.js is a page module: it hangs itself off BB and exports
+    // nothing, so it is required for the side effect and read off the global.
+    require('../src/page/heat-map.js');
+    const { HeatMap } = globalThis.BB;
+    const steps = [2, 5, 10];
+    eq([0, 1, 2, 3, 5, 6, 10, 11].map((n) => HeatMap.levelOf(n, steps)), [0, 1, 1, 2, 2, 3, 3, 4]);
+});
+check('a streak counts back from today and stops at the first gap', () => {
+    let state = Leet.blank();
+    for (const back of [0, 1, 2, 4]) {
+        state = Leet.addAttempt(state, { slug: 'a', status: 'Accepted', at: L0 - days(back) });
+    }
+    eq(Leet.streak(state, L0), 3);
+});
+check('a day not practised yet does not break yesterday’s streak', () => {
+    let state = Leet.blank();
+    for (const back of [1, 2, 3]) {
+        state = Leet.addAttempt(state, { slug: 'a', status: 'Accepted', at: L0 - days(back) });
+    }
+    eq(Leet.streak(state, L0), 3);
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.
