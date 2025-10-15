@@ -41,6 +41,28 @@ function eq(actual, expected, msg) {
     if (a !== e) throw new Error(`${msg ? msg + ': ' : ''}expected ${e}, got ${a}`);
 }
 
+function assert(condition, msg) {
+    if (!condition) throw new Error(msg || 'expected truthy');
+}
+
+/**
+ * A curve's shape rather than its values. The FSRS formulas are somebody
+ * else's arithmetic and pinning them to constants would only record what this
+ * machine computed today; what actually has to hold is that a more stable card
+ * waits longer and a higher retention target waits less.
+ */
+function assertRising(values, msg) {
+    for (let i = 1; i < values.length; i++) {
+        assert(values[i] > values[i - 1], `${msg}: not rising at ${i} — ${values.join(', ')}`);
+    }
+}
+
+function assertFalling(values, msg) {
+    for (let i = 1; i < values.length; i++) {
+        assert(values[i] < values[i - 1], `${msg}: not falling at ${i} — ${values.join(', ')}`);
+    }
+}
+
 // --------------------------------------------------------------- speed
 
 const Speed = require('../src/shared/speed.js');
@@ -177,6 +199,123 @@ check('a missing date gets no label', () => {
 check('formatTime still works', () => {
     eq(Time.formatTime(65), '1:05');
     eq(Time.formatTime(3725), '1:02:05');
+});
+
+// ---------------------------------------------------------------- fsrs
+
+const Fsrs = require('../src/shared/fsrs.js');
+
+console.log('\n# fsrs — the forgetting curve');
+check('retrievability is 1 on the day and falls from there', () => {
+    eq(Fsrs.retrievability(10, 0), 1);
+    assertFalling([1, 5, 20, 90].map((days) => Fsrs.retrievability(10, days)), 'elapsed days');
+});
+check('stability means "days until 90%"', () => {
+    // The whole point of FACTOR: R(S, S) is 0.9 exactly, for any S. If this
+    // fails, DECAY and FACTOR have drifted apart.
+    for (const S of [0.5, 3.173, 40, 900]) {
+        eq(Math.round(Fsrs.retrievability(S, S) * 1e6) / 1e6, 0.9, `S=${S}`);
+    }
+});
+check('intervalFor rises with stability and falls as retention is raised', () => {
+    assertRising([1, 3, 10, 60, 300].map((S) => Fsrs.intervalFor(S, 0.9)), 'stability');
+    assertFalling([0.7, 0.8, 0.9, 0.97].map((r) => Fsrs.intervalFor(300, r)), 'retention');
+});
+check('intervalFor is clamped to whole days inside the cap', () => {
+    eq(Fsrs.intervalFor(0.01, 0.9), 1, 'never under a day');
+    eq(Fsrs.intervalFor(1e6, 0.9, 365), 365, 'never over the cap');
+});
+
+console.log('\n# fsrs — reviewing');
+check('a first Good matches the published numbers', () => {
+    const card = Fsrs.review(null, 3, 0, { retention: 0.9, now: 0 });
+    // S_0(Good) is w[2] by definition, and at 90% retention the interval is
+    // that many days — the identity checked above, read the other way round.
+    eq(card.stability, Fsrs.W[2]);
+    eq(card.interval, 3);
+    eq(card.due, 3 * Fsrs.DAY_MS);
+    eq(card.reps, 1);
+    eq(card.lapses, 0);
+});
+check('each grade starts a card where its own weight says', () => {
+    eq([1, 2, 3, 4].map((g) => Fsrs.review(null, g, 0, { now: 0 }).stability), Fsrs.W.slice(0, 4));
+});
+/** A card taken through five clean Good reviews — S in the hundreds of days. */
+function matured() {
+    let card = Fsrs.review(null, 3, 0, { now: 0 });
+    for (let i = 0; i < 4; i++) card = Fsrs.review(card, 3, card.interval, { now: 0 });
+    return card;
+}
+
+check('Again after a long gap lapses without falling through the floor', () => {
+    const card = matured();
+    const lapsed = Fsrs.review(card, 1, card.interval, { now: 0 });
+    assert(lapsed.stability < card.stability, 'a lapse has to cost stability');
+    assert(lapsed.stability >= Fsrs.MIN_STABILITY, 'but never all of it');
+    assert(lapsed.difficulty > card.difficulty, 'and the problem is now harder');
+    eq(lapsed.lapses, 1);
+});
+check('a lapse never raises stability, however long the gap', () => {
+    // The lapse curve is not "S times a constant", and on a card that is still
+    // young it genuinely computes a *higher* stability than the card has —
+    // forgetting after 120 days something whose stability is 3 says little.
+    // The cap is what keeps that from reading as a reward for forgetting.
+    const young = Fsrs.review(null, 3, 0, { now: 0 });
+    eq(Fsrs.review(young, 1, 120, { now: 0 }).stability, young.stability);
+});
+check('a lapse keeps more of a long gap than of a short one', () => {
+    // Forgetting what you last saw a year ago says less about the card than
+    // forgetting what you saw on Tuesday.
+    const card = matured();
+    const soon = Fsrs.review(card, 1, 2, { now: 0 }).stability;
+    const late = Fsrs.review(card, 1, 600, { now: 0 }).stability;
+    assert(late > soon, `expected the later lapse to keep more, got ${late} <= ${soon}`);
+});
+check('a same-day re-grade actually moves the card', () => {
+    // Through the long-term formula this is a no-op — elapsed 0 means R is 1
+    // means the growth term is exactly zero — so the dashboard's re-grade
+    // would silently do nothing. FSRS-5's short-term branch is what saves it.
+    const card = Fsrs.review(null, 3, 0, { now: 0 });
+    assert(Fsrs.review(card, 4, 0, { now: 0 }).stability > card.stability, 'Easy should lengthen it');
+    assert(Fsrs.review(card, 1, 0, { now: 0 }).stability < card.stability, 'Again should shorten it');
+});
+check('difficulty stays in [1, 10] across a hundred alternating grades', () => {
+    let card = Fsrs.review(null, 3, 0, { now: 0 });
+    for (let i = 0; i < 100; i++) {
+        card = Fsrs.review(card, i % 2 ? 1 : 4, 7, { now: 0 });
+        assert(card.difficulty >= 1 && card.difficulty <= 10, `drifted to ${card.difficulty}`);
+        assert(card.stability >= Fsrs.MIN_STABILITY, `stability fell to ${card.stability}`);
+    }
+});
+check('a stray grade is clamped rather than poisoning the card', () => {
+    eq(Fsrs.review(null, 9, 0, { now: 0 }).grade, 4);
+    eq(Fsrs.review(null, 0, 0, { now: 0 }).grade, 1);
+    eq(Fsrs.review(null, undefined, 0, { now: 0 }).grade, 3);
+});
+
+console.log('\n# fsrs — suggesting a grade');
+check('a 45-minute Medium with two failures is Hard, not Good', () => {
+    eq(Fsrs.suggestGrade({ seconds: 45 * 60, failures: 2, difficulty: 'Medium' }), 2);
+});
+check('a six-minute Easy with a clean run is Easy', () => {
+    eq(Fsrs.suggestGrade({ seconds: 6 * 60, failures: 0, difficulty: 'Easy' }), 4);
+});
+check('three failures is Again whatever the clock said', () => {
+    eq(Fsrs.suggestGrade({ seconds: 30, failures: 3, difficulty: 'Easy' }), 1);
+    eq(Fsrs.suggestGrade({ seconds: 90 * 60, failures: 3, difficulty: 'Hard' }), 1);
+});
+check('one failure caps it at Hard however fast the accepted one was', () => {
+    eq(Fsrs.suggestGrade({ seconds: 60, failures: 1, difficulty: 'Hard' }), 2);
+});
+check('over twice the budget is Again even with a clean run', () => {
+    eq(Fsrs.suggestGrade({ seconds: 61 * 60, failures: 0, difficulty: 'Medium' }), 1);
+});
+check('an unknown difficulty is budgeted as a Medium', () => {
+    eq(Fsrs.budgetFor(''), Fsrs.BUDGETS.Medium);
+    eq(Fsrs.budgetFor('Impossible'), Fsrs.BUDGETS.Medium);
+});
+check('a clean run inside the budget but over half of it is Good', () => {
+    eq(Fsrs.suggestGrade({ seconds: 20 * 60, failures: 0, difficulty: 'Medium' }), 3);
 });
 
 // ------------------------------------------------------------ activity
