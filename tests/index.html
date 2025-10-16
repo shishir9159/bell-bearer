@@ -76,6 +76,14 @@
 <script src="../src/content/twitter-ui.js"></script>
 <script src="../src/content/twitter-ads.js"></script>
 
+<!-- LeetCode. leet-page.js is deliberately absent: it is the MAIN-world half
+     and it wraps window.fetch, which the mocked chrome.* and the harness's own
+     loads would then be routed through. The specs dispatch the DOM events it
+     would have sent instead. -->
+<script src="../src/shared/fsrs.js"></script>
+<script src="../src/shared/leetcode.js"></script>
+<script src="../src/content/leet-read.js"></script>
+
 <!-- 4. Specs -->
 <script src="background.test.js"></script>
 <script src="transcript.test.js"></script>

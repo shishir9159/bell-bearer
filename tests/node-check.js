@@ -524,6 +524,43 @@ check('a day not practised yet does not break yesterday’s streak', () => {
     eq(Leet.streak(state, L0), 3);
 });
 
+// -------------------------------------------------- reading leetcode.com
+
+const LeetRead = require('../src/content/leet-read.js');
+
+console.log('\n# leetcode — reading the address bar');
+check('a problem page gives up its slug', () => {
+    eq(LeetRead.slugOf('/problems/two-sum/'), 'two-sum');
+    eq(LeetRead.slugOf('/problems/two-sum'), 'two-sum', 'with no trailing slash');
+    eq(LeetRead.slugOf('/problems/longest-substring-without-repeating-characters/description/'),
+        'longest-substring-without-repeating-characters');
+    eq(LeetRead.slugOf('/problems/two-sum/submissions/1234/'), 'two-sum', 'after a submission');
+    eq(LeetRead.slugOf('/problems/two-sum/?envType=daily'), 'two-sum', 'with a query string');
+});
+check('everything else on the site is not a problem page', () => {
+    eq(LeetRead.slugOf('/problemset/all/'), null);
+    eq(LeetRead.slugOf('/contest/weekly-425/'), null);
+    eq(LeetRead.slugOf('/'), null);
+    eq(LeetRead.slugOf('/problems/'), null, 'the list is not a problem');
+    eq(LeetRead.onProblem('/problems/two-sum/'), true);
+    eq(LeetRead.onProblem('/problemset/all/'), false);
+});
+
+console.log('\n# leetcode — reading the stopwatch');
+check('both shapes of clock parse', () => {
+    eq(LeetRead.parseClock('05:30'), 330);
+    eq(LeetRead.parseClock('1:02:05'), 3725, 'an hour in');
+    eq(LeetRead.parseClock('00:00'), 0);
+});
+check('a reading that is not a clock is passed over, not read as zero', () => {
+    // A zero and a "could not read it" have to stay distinguishable: the
+    // first means the timer was just reset, the second means the selector
+    // has stopped matching, and the fallback clock turns on for one of them.
+    eq(LeetRead.parseClock('Start'), null);
+    eq(LeetRead.parseClock(''), null);
+    eq(LeetRead.parseClock(null), null);
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

@@ -76,6 +76,9 @@
         "src/shared/chess-limits.js",
         "src/content/chess.js",
         "src/content/chess-limits.js",
+        "src/shared/fsrs.js",
+        "src/shared/leetcode.js",
+        "src/content/leet-read.js",
         "src/content/main.js"
       ],
       "css": [
@@ -89,6 +92,15 @@
       ],
       "js": [
         "src/content/chess-page.js"
+      ],
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://*.leetcode.com/*"
+      ],
+      "js": [
+        "src/content/leet-page.js"
       ],
       "world": "MAIN"
     }
