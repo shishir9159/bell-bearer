@@ -703,6 +703,42 @@ check('the widget taking over does not stack on the wall clock', () => {
         eq(ui.elapsedSeconds(), 240, 'the widget was running for that time too');
     });
 });
+console.log('\n# leetcode — what the grade card offers');
+check('the four grades are offered with what each would schedule', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui }) => {
+        const fresh = { slug: 'two-sum', difficulty: 'Medium', fsrs: null };
+        const options = ui.previewIntervals(fresh, Date.now());
+        eq(options.map((o) => o.label), ['Again', 'Hard', 'Good', 'Easy']);
+        // Harder answers bring it back sooner. Not *strictly* — on a first
+        // review Again and Hard both round down to tomorrow, which is the
+        // honest answer for both — but it must never invert, or the buttons
+        // are lying about their own consequences.
+        const schedule = options.map((o) => o.days);
+        for (let i = 1; i < schedule.length; i++) {
+            assert(schedule[i] >= schedule[i - 1], `grade: inverted at ${i} — ${schedule.join(', ')}`);
+        }
+        assert(schedule[3] > schedule[0], 'Easy has to buy more than Again');
+    });
+});
+check('the schedule is capped by the longest gap the settings allow', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui }) => {
+        const mature = { slug: 'x', difficulty: 'Easy', fsrs: { stability: 5000, difficulty: 3, reviewedAt: 0, reps: 9, lapses: 0 } };
+        for (const option of ui.previewIntervals(mature, Date.now())) {
+            assert(option.days <= globalThis.BB.Settings.DEFAULTS.leetMaxInterval,
+                `${option.label} scheduled ${option.days} days out`);
+        }
+    });
+});
+check('a schedule is written in words rather than a date', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui }) => {
+        eq(ui.inDays(1), 'tomorrow');
+        eq(ui.inDays(6), 'in 6 days');
+        eq(ui.inDays(30), 'in 30 days');
+        eq(ui.inDays(60), 'in 2 months');
+        eq(ui.inDays(365), 'in 1 year');
+    });
+});
+
 check('human() reads as a stopwatch at every scale', () => {
     withStubbedPage('/problems/two-sum/', ({ ui }) => {
         eq(ui.human(45), '45s');

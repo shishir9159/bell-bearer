@@ -30,11 +30,14 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('../shared/settings.js');
+    const Dom = ns.Dom || req('../shared/dom.js');
     const Fsrs = ns.Fsrs || req('../shared/fsrs.js');
     const Leet = ns.Leet || req('../shared/leetcode.js');
     const LeetRead = ns.LeetRead || req('./leet-read.js');
+    const Theme = ns.Theme || req('./theme.js');
 
     const VERDICT = 'bb:leet:verdict';
+    const CARD_ID = 'bb-leet-grade';
 
     /**
      * A reading this far below the last one is a reset rather than a wobble.
@@ -206,15 +209,149 @@
         }
 
         /**
-         * What happens once an attempt is on record. Split out because the
-         * grade card hangs off exactly this point, and the recording above
-         * must not care whether there is one.
+         * What happens once an attempt is on record.
+         *
+         * A rejected submission says nothing: the page has already told you,
+         * in more detail than a toast could, and a notification per wrong
+         * answer on a problem you are iterating over is noise. An accept
+         * either opens the grade card or, when that is switched off, says so
+         * once and gets out of the way.
          */
-        function afterVerdict({ verdict, accepted, seconds, failures }) {
+        function afterVerdict({ accepted, seconds, failures, problem }) {
             if (!accepted) return;
+            if (on('leetGradePrompt') && problem) {
+                openGradeCard({ problem, seconds, failures });
+                return;
+            }
             const spent = seconds ? ` in ${human(seconds)}` : '';
             const tries = failures ? ` after ${failures} wrong ${failures === 1 ? 'try' : 'tries'}` : '';
             notify(`Accepted${spent}${tries}`, 'success');
+        }
+
+        // ------------------------------------------------------ grade card
+
+        const retention = () => {
+            const percent = Number(getSettings().leetRetention);
+            return Number.isFinite(percent) ? Fsrs.clamp(percent / 100, 0.7, 0.97) : 0.9;
+        };
+
+        const maxInterval = () => {
+            const days = Number(getSettings().leetMaxInterval);
+            return Number.isFinite(days) && days > 0 ? Math.round(days) : 365;
+        };
+
+        /** "tomorrow" / "in 6 days" / "in 3 months" — how a schedule reads. */
+        function inDays(days) {
+            if (days <= 1) return 'tomorrow';
+            if (days < 31) return `in ${days} days`;
+            const months = Math.round(days / 30);
+            if (months < 12) return `in ${months} month${months === 1 ? '' : 's'}`;
+            const years = Math.round(days / 365);
+            return `in ${years} year${years === 1 ? '' : 's'}`;
+        }
+
+        /**
+         * What each of the four grades would schedule, worked out before any
+         * of them is picked.
+         *
+         * The point of showing it is that the four buttons are otherwise four
+         * words with no consequence attached — "Hard" and "Good" mean nothing
+         * until you can see that one brings the problem back on Thursday and
+         * the other in three weeks.
+         */
+        function previewIntervals(problem, now) {
+            const card = problem.fsrs;
+            const elapsed = card && card.reviewedAt ? Math.max(0, (now - card.reviewedAt) / Leet.DAY_MS) : 0;
+            const options = { retention: retention(), maxInterval: maxInterval(), now };
+            return Fsrs.GRADES.map((grade) => ({
+                ...grade,
+                days: Fsrs.review(card, grade.id, elapsed, options).interval,
+            }));
+        }
+
+        function closeGradeCard() {
+            const card = document.getElementById(CARD_ID);
+            if (card) card.remove();
+            document.removeEventListener('keydown', onGradeKey, true);
+        }
+
+        function onGradeKey(event) {
+            if (event.key !== 'Escape') return;
+            event.stopPropagation();
+            closeGradeCard();
+        }
+
+        /**
+         * Ask how it went, with the answer already picked.
+         *
+         * Dismissing is a real answer and leaves the problem ungraded rather
+         * than quietly taking the suggestion: an unscheduled problem shows up
+         * under "Solved" and can be graded from the dashboard later, whereas a
+         * schedule written on the user's behalf is a wrong date they never
+         * agreed to and would have to find to fix.
+         */
+        function openGradeCard({ problem, seconds, failures }) {
+            closeGradeCard();
+            if (!document.body) return;
+
+            const now = Date.now();
+            const suggested = Fsrs.suggestGrade({ seconds, failures, difficulty: problem.difficulty });
+            const options = previewIntervals(problem, now);
+
+            const card = document.createElement('div');
+            card.id = CARD_ID;
+            card.className = 'bb-leet-card';
+            card.setAttribute('role', 'dialog');
+            card.setAttribute('aria-label', 'How did that go?');
+
+            const spent = seconds ? human(seconds) : 'not timed';
+            const tries = failures
+                ? `${failures} wrong ${failures === 1 ? 'try' : 'tries'}`
+                : 'first try';
+
+            card.innerHTML = `
+                <div class="bb-leet-card-head">
+                    <span class="bb-leet-card-title">How did that go?</span>
+                    <button type="button" class="bb-leet-card-x" data-bb-leet-close="1"
+                            title="Leave it ungraded" aria-label="Leave it ungraded">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
+                             stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6 6 18"></path></svg>
+                    </button>
+                </div>
+                <p class="bb-leet-card-sub">${Dom.escapeHtml(problem.title || problem.slug)} · ${Dom.escapeHtml(spent)} · ${Dom.escapeHtml(tries)}</p>
+                <div class="bb-leet-grades" role="group" aria-label="How did that go?">
+                    ${options.map((option) => `
+                        <button type="button" class="bb-leet-grade${option.id === suggested ? ' is-suggested' : ''}"
+                                data-bb-grade="${option.id}" aria-pressed="${option.id === suggested}">
+                            <span class="bb-leet-grade-name">${Dom.escapeHtml(option.label)}</span>
+                            <span class="bb-leet-grade-when">${Dom.escapeHtml(inDays(option.days))}</span>
+                        </button>`).join('')}
+                </div>
+                <p class="bb-leet-card-foot">Suggested from the clock and the failed tries. Dismiss to leave it ungraded.</p>`;
+
+            document.body.appendChild(card);
+            Dom.holdFocus(card);
+            document.addEventListener('keydown', onGradeKey, true);
+
+            // Read after it is on the page, so a skin change between problems
+            // is picked up; the theme half is synchronous off the page itself.
+            Theme.appearance().then((look) => {
+                if (card.isConnected) Theme.dress(card, look);
+            });
+
+            card.addEventListener('click', (event) => {
+                if (event.target.closest('[data-bb-leet-close]')) return closeGradeCard();
+
+                const button = event.target.closest('[data-bb-grade]');
+                if (!button) return;
+                const grade = Number(button.dataset.bbGrade);
+                const chosen = options.find((option) => option.id === grade);
+                closeGradeCard();
+                Leet.gradeProblem(problem.slug, grade, {
+                    retention: retention(), maxInterval: maxInterval(), now: Date.now(),
+                });
+                notify(`Graded ${chosen.label.toLowerCase()} — back ${inDays(chosen.days)}`, 'success');
+            });
         }
 
         /** "6m 30s" — the same shape src/shared/chess.js writes. */
@@ -298,19 +435,25 @@
         }
 
         /**
-         * A setting changed in the dashboard. Nothing to undo yet — the clock
-         * is not a surface — but the contract is the one twitter-ui.js keeps:
-         * both directions, on the page that is already open.
+         * A setting changed in the dashboard.
+         *
+         * Both directions, on the page that is already open — a switch that
+         * only takes effect on the next reload reads as a switch that did
+         * nothing. Turning something off is the half that needs code; turning
+         * it on is just letting the injectors run again.
          */
         function refreshSurfaces() {
+            if (!on('leetGradePrompt')) closeGradeCard();
             watcher.schedule();
         }
 
         return {
             install, onNavigate, refreshSurfaces,
-            elapsedSeconds, human,
-            // For the specs, which drive the clock rather than waiting on it.
+            elapsedSeconds, human, inDays,
+            // For the specs, which drive these rather than waiting on a real
+            // submission to come back from LeetCode.
             clockFor: () => clock,
+            openGradeCard, closeGradeCard, previewIntervals,
         };
     }
 

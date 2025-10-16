@@ -2206,3 +2206,100 @@
 .bb-themed[data-bb-skin="medieval"] .bb-x-person,
 .bb-themed[data-bb-skin="medieval"] .bb-x-post,
 .bb-x-picker.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }
+
+/* =====================================================================
+   LeetCode
+   ===================================================================== */
+
+/* The grade card, after an accepted submission.
+
+   Bottom right rather than centred, and without a scrim: it is a question
+   about something you have just finished, not a modal standing between you
+   and the page. Leaving it alone is a valid answer, so it must not be in
+   the way of reading the result LeetCode is showing behind it. */
+.bb-leet-card {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 2147483000;
+    width: 320px;
+    max-width: calc(100vw - 32px);
+    padding: 14px 15px 12px;
+    box-sizing: border-box;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r);
+    background: var(--bb-panel-solid);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    box-shadow: var(--bb-shadow);
+}
+
+.bb-leet-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.bb-leet-card-title {
+    font-family: var(--bb-font-head);
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: var(--bb-head-case);
+    letter-spacing: var(--bb-head-track);
+}
+
+.bb-leet-card-x {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--bb-faint);
+    cursor: pointer;
+}
+
+.bb-leet-card-x:hover { background: var(--bb-chip); color: var(--bb-text); }
+.bb-leet-card-x svg { width: 13px; height: 13px; }
+
+.bb-leet-card-sub {
+    margin: 4px 0 11px;
+    font-size: 12px;
+    color: var(--bb-sub);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Four across. They are one question with four answers, so they read as one
+   control rather than as four buttons that happen to be adjacent. */
+.bb-leet-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+
+.bb-leet-grade {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px;
+    border: 1px solid var(--bb-border-strong);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-surface);
+    color: var(--bb-text);
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.bb-leet-grade:hover { border-color: var(--bb-accent); }
+
+/* The suggestion, which is a pre-selection and not a decision — an outline
+   in the accent rather than a fill, so it reads as "this one, unless you
+   say otherwise" rather than as an answer already given. */
+.bb-leet-grade.is-suggested {
+    border-color: var(--bb-accent);
+    background: var(--bb-accent-soft);
+}
+
+.bb-leet-grade-name { font-size: 12.5px; font-weight: 600; }
+.bb-leet-grade-when { font-size: 10.5px; color: var(--bb-faint); text-align: center; line-height: 1.25; }
+.bb-leet-grade.is-suggested .bb-leet-grade-when { color: var(--bb-sub); }
+
+.bb-leet-card-foot { margin: 10px 0 0; font-size: 10.5px; color: var(--bb-faint); line-height: 1.35; }
