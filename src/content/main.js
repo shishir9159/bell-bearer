@@ -32,7 +32,7 @@
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
         CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
         Keybindings, SkimContent, LinkHints, TimeLimitContent, TwitterUi, TwitterAds,
-        RosterContent } = BB;
+        RosterContent, LeetUi } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -193,10 +193,11 @@
     let youtubeUi = null;
     let twitterUi = null;
     let twitterAds = null;
+    let leetUi = null;
 
     /** Whichever site's pouch surface this page has, or null for the rest. */
     function pouchUi() {
-        return youtubeUi || twitterUi;
+        return youtubeUi || twitterUi || leetUi;
     }
 
     if (site === 'youtube') {
@@ -259,6 +260,31 @@
                 lastPath = location.pathname;
                 twitterUi.onNavigate();
                 twitterAds.sync();
+            }
+            return false;
+        });
+        window.addEventListener('popstate', () => watcher.schedule());
+    }
+
+    // ----------------------------------------------------- LeetCode extras
+
+    if (site === 'leetcode') {
+        const watcher = DomWatch.createWatcher();
+
+        leetUi = LeetUi.createLeetUi({ watcher, notify, getSettings: () => settings });
+        leetUi.install();
+
+        // Same treatment as X, and for the same reasons: LeetCode is a
+        // single-page app with no navigation event of its own, and patching
+        // pushState would mean reaching into the page's world. Switching
+        // between the description, the editor and the solutions pane all
+        // change the path, and every one of them rebuilds enough of the DOM
+        // that the observer has already fired by the time the path differs.
+        let lastPath = location.pathname;
+        watcher.add('leet-route', () => {
+            if (location.pathname !== lastPath) {
+                lastPath = location.pathname;
+                leetUi.onNavigate();
             }
             return false;
         });
@@ -429,12 +455,17 @@
     /** What Bell Bearer puts into x.com's own chrome, each switchable. */
     const X_SURFACES = ['twitterPouchPosts', 'twitterPouchPeople', 'twitterHideBookmark'];
 
+    /** And the same for LeetCode's. */
+    const LEET_SURFACES = ['leetNoteButton', 'leetMockMode', 'leetMockMinutes', 'leetGradePrompt'];
+
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&
             values.pouchButtonStyle !== settings.pouchButtonStyle;
         const hideAdsChanged = 'twitterHideAds' in values &&
             values.twitterHideAds !== settings.twitterHideAds;
         const xSurfacesChanged = X_SURFACES.some((key) =>
+            key in values && values[key] !== settings[key]);
+        const leetSurfacesChanged = LEET_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
 
         Object.assign(settings, values);
@@ -446,6 +477,9 @@
         if (hideAdsChanged && twitterAds) twitterAds.sync();
         // And the same for the three X surfaces, for the same reason.
         if (xSurfacesChanged && twitterUi) twitterUi.refreshSurfaces();
+        // And the same again for LeetCode's, which additionally has to undo
+        // mock mode on the page that is already open.
+        if (leetSurfacesChanged && leetUi) leetUi.refreshSurfaces();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
         if (timeLimit) timeLimit.sync();

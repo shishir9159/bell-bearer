@@ -561,6 +561,157 @@ check('a reading that is not a clock is passed over, not read as zero', () => {
     eq(LeetRead.parseClock(null), null);
 });
 
+// ---------------------------------------------------- the leetcode clock
+
+const LeetUi = require('../src/content/leet-ui.js');
+
+/**
+ * Drive the clock without a browser.
+ *
+ * Only what createLeetUi actually touches is stubbed — it reads the page's
+ * visibility, registers listeners it is never sent, and asks LeetRead what
+ * the stopwatch says. That last one is the seam: `reads` is the sequence of
+ * readings LeetCode's widget is pretending to show, and null means "no widget
+ * on this page", which is the branch the wall clock covers.
+ */
+function withStubbedPage(path, run) {
+    const saved = {
+        document: global.document, window: global.window,
+        location: global.location, reader: globalThis.BB.LeetRead.timerSeconds,
+        see: globalThis.BB.Leet.see,
+    };
+    global.document = { visibilityState: 'visible', hasFocus: () => true, addEventListener() {} };
+    global.window = { addEventListener() {} };
+    global.location = { pathname: path };
+    // Filing the problem is storage's business and has its own tests.
+    globalThis.BB.Leet.see = () => Promise.resolve(null);
+
+    const tasks = new Map();
+    const watcher = {
+        add: (name, fn) => tasks.set(name, fn),
+        remove: (name) => tasks.delete(name),
+        schedule() {}, has: (name) => tasks.has(name),
+    };
+    const ui = LeetUi.createLeetUi({ watcher, notify: () => {}, getSettings: () => globalThis.BB.Settings.DEFAULTS });
+    // install() is what registers the watcher task the stub drives below, and
+    // it lands on the first problem on its own way in.
+    ui.install();
+
+    /** Show the widget one reading, then let the watcher task run. */
+    const show = (seconds) => {
+        globalThis.BB.LeetRead.timerSeconds = () => seconds;
+        tasks.get('leet-clock')();
+    };
+
+    try {
+        return run({ ui, show, watcher, tasks });
+    } finally {
+        Object.assign(global, { document: saved.document, window: saved.window, location: saved.location });
+        globalThis.BB.LeetRead.timerSeconds = saved.reader;
+        globalThis.BB.Leet.see = saved.see;
+    }
+}
+
+console.log('\n# leetcode — the clock');
+check('elapsed is whatever LeetCode’s own stopwatch reads', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(30);
+        eq(ui.elapsedSeconds(), 30);
+        show(125);
+        eq(ui.elapsedSeconds(), 125);
+    });
+});
+check('a reset closes the segment rather than losing it', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(300);
+        show(4);   // the user pressed reset
+        eq(ui.elapsedSeconds(), 304, 'the first five minutes still count');
+        show(60);
+        eq(ui.elapsedSeconds(), 360);
+    });
+});
+check('a pause costs nothing', () => {
+    // Pausing shows the same number for a while and then carries on. Nothing
+    // about that should bank a segment or lose one.
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(90); show(90); show(90);
+        eq(ui.elapsedSeconds(), 90);
+        show(91);
+        eq(ui.elapsedSeconds(), 91);
+    });
+});
+check('a reading a shade below the last is drift, not a reset', () => {
+    // Our reads are not aligned to LeetCode's ticks, so the two drift past
+    // each other by a second. Treating that as a reset would double the time
+    // every few seconds.
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(120);
+        show(119);
+        eq(ui.elapsedSeconds(), 120);
+    });
+});
+check('a different problem starts a new clock', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(600);
+        eq(ui.elapsedSeconds(), 600);
+
+        global.location.pathname = '/problems/add-two-numbers/';
+        ui.onNavigate();
+        show(5);
+        eq(ui.elapsedSeconds(), 5, 'the last problem’s ten minutes are not this one’s');
+    });
+});
+check('switching panes on the same problem keeps the clock running', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(600);
+        global.location.pathname = '/problems/two-sum/solutions/';
+        ui.onNavigate();
+        show(610);
+        eq(ui.elapsedSeconds(), 610);
+    });
+});
+check('leaving the problem pages stops the clock', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(600);
+        global.location.pathname = '/problemset/all/';
+        ui.onNavigate();
+        eq(ui.elapsedSeconds(), 0);
+    });
+});
+check('with no widget to read, nothing is invented', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(null);
+        show(null);
+        // The wall-clock fallback banks real gaps, and no real time has
+        // passed here — so the answer is zero rather than one per look.
+        eq(ui.elapsedSeconds(), 0, 'ticks are not seconds');
+    });
+});
+check('the widget taking over does not stack on the wall clock', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
+        ui.onNavigate();
+        show(null);
+        show(240);
+        eq(ui.elapsedSeconds(), 240, 'the widget was running for that time too');
+    });
+});
+check('human() reads as a stopwatch at every scale', () => {
+    withStubbedPage('/problems/two-sum/', ({ ui }) => {
+        eq(ui.human(45), '45s');
+        eq(ui.human(90), '1m 30s');
+        eq(ui.human(600), '10m 00s');
+        eq(ui.human(3725), '1h 02m');
+    });
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

@@ -159,6 +159,23 @@
         lichessLimitBullet: 10,
         lichessLimitBlitz: 6,
         lichessLimitRapid: 3,
+
+        // LeetCode. The two that are on by default only watch — the timer is
+        // LeetCode's own, started rather than drawn, and the grade prompt is
+        // the one question the whole review schedule depends on, so a log
+        // that never asked it would collect attempts and schedule nothing.
+        // The three that reach further into the page are off until asked for,
+        // the same rule the X surfaces follow.
+        leetStartTimer: true,
+        leetGradePrompt: true,
+        leetNoteButton: false,
+        // Target retention as a percent. Below 70 the intervals grow faster
+        // than anyone actually remembers at; above 97 they barely grow at all
+        // and every problem comes back tomorrow.
+        leetRetention: 90,
+        leetMaxInterval: 365,
+        leetMockMode: false,
+        leetMockMinutes: 35,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
