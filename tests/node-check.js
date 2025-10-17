@@ -703,6 +703,39 @@ check('the widget taking over does not stack on the wall clock', () => {
         eq(ui.elapsedSeconds(), 240, 'the widget was running for that time too');
     });
 });
+console.log('\n# leetcode — the pouch panel');
+const LeetPanel = require('../src/content/leet-panel.js');
+
+check('the rail is the three lists Leet.lists hands back', () => {
+    // The row's sentinel id is the key on the lists object, so picking a row
+    // is a lookup rather than a switch. If these ever diverge, every rail row
+    // draws an empty pane.
+    const lists = Leet.lists(Leet.blank(), L0);
+    for (const view of LeetPanel.VIEWS) {
+        assert(Array.isArray(lists[view.id]), `no list answers to "${view.id}"`);
+        assert(view.label && view.empty, `${view.id} has nothing to say when empty`);
+    }
+});
+check('a due date reads as how late or how far off it is', () => {
+    const at = (due) => LeetPanel.dueText({ fsrs: { due } }, L0);
+    eq(at(L0 - days(5)), '5 days overdue');
+    eq(at(L0), 'due today');
+    eq(at(L0 + days(1)), 'due tomorrow');
+    eq(at(L0 + days(6)), 'in 6 days');
+    eq(at(L0 + days(90)), 'in 3 months');
+    eq(at(L0 + days(365)), 'in 1 year');
+});
+check('a problem nobody has graded says so rather than showing a date', () => {
+    eq(LeetPanel.dueText({ fsrs: null }, L0), 'not graded yet');
+    eq(LeetPanel.dueText({}, L0), 'not graded yet');
+});
+check('a rail row escapes what it is given', () => {
+    const row = LeetPanel.railRow('<img src=x>', '<b>Due</b>', 3, true);
+    assert(!row.includes('<img'), 'an id went into an attribute unescaped');
+    assert(!row.includes('<b>'), 'a label went into the markup unescaped');
+    assert(row.includes('aria-pressed="true"'), 'the selected row is not marked');
+});
+
 console.log('\n# leetcode — what the grade card offers');
 check('the four grades are offered with what each would schedule', () => {
     withStubbedPage('/problems/two-sum/', ({ ui }) => {

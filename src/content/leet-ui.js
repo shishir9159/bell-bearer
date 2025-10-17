@@ -34,10 +34,13 @@
     const Fsrs = ns.Fsrs || req('../shared/fsrs.js');
     const Leet = ns.Leet || req('../shared/leetcode.js');
     const LeetRead = ns.LeetRead || req('./leet-read.js');
+    const LeetPanel = ns.LeetPanel || req('./leet-panel.js');
+    const PouchButton = ns.PouchButton || req('../shared/pouch-button.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const VERDICT = 'bb:leet:verdict';
     const CARD_ID = 'bb-leet-grade';
+    const NAV_ID = 'bb-leet-nav';
 
     /**
      * A reading this far below the last one is a reset rather than a wobble.
@@ -52,8 +55,32 @@
      * to the schema's own defaults — so a caller that passes none gets the
      * extension at rest rather than a quietly different set to keep in step.
      */
-    function createLeetUi({ watcher, notify, getSettings = () => Settings.DEFAULTS }) {
+    function createLeetUi({ watcher, notify, getSettings = () => Settings.DEFAULTS, openDashboard, goTo }) {
         const on = (key) => getSettings()[key] === true;
+
+        const panel = LeetPanel.createLeetPanel({
+            notify,
+            openDashboard: openDashboard || (() => {
+                try {
+                    chrome.runtime.sendMessage({ action: 'openDashboard', hash: '#site/leetcode' });
+                } catch (_) { /* the extension reloaded out from under this page */ }
+            }),
+            // LeetCode is a single-page app, but unlike X it has no router we
+            // can reach from outside — its problem links are ordinary <a>s
+            // that its own code intercepts, so clicking one on the page is the
+            // way in and a plain assign() is the honest fallback.
+            goTo: goTo || ((url) => {
+                const path = String(url).replace(/^https:\/\/(?:www\.)?leetcode\.com/i, '');
+                const link = path && document.querySelector(`a[href="${CSS.escape(path)}"]`);
+                if (link) link.click();
+                else location.assign(url);
+            }),
+            appearance: () => Theme.appearance(),
+            dress: (element, look) => Theme.dress(element, look),
+        });
+
+        /** The one open panel, or null. */
+        let open = null;
 
         /** The problem the clock is running on, and how it is being kept. */
         let clock = null;
@@ -388,6 +415,56 @@
             return false;
         }
 
+        // -------------------------------------------------------- nav row
+
+        /**
+         * A Pouch row in LeetCode's top navigation.
+         *
+         * Always present, the way X's is — the pouch itself is not one of the
+         * switchable surfaces, only what it reaches into the page to add is.
+         *
+         * Never reports itself done, and for X's reason: LeetCode rebuilds
+         * that bar on its own schedule, not only on a navigation, so a task
+         * that retired after placing the row once would leave it gone for the
+         * rest of the session. getElementById keeps that cheap — it only
+         * finds the row while the row is still in the document, so the
+         * rebuild that took it away is also what puts it back.
+         */
+        function injectNavEntry() {
+            const nav = LeetRead.navSlot();
+            if (!nav) return false;
+            if (document.getElementById(NAV_ID)) return false;
+
+            const entry = document.createElement('button');
+            entry.id = NAV_ID;
+            entry.type = 'button';
+            entry.className = 'bb-leet-nav';
+            entry.title = 'Bell Bearer — your pouch';
+            entry.innerHTML = `${PouchButton.ICON}<span class="bb-leet-nav-text">Pouch</span>`;
+            entry.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openPouch();
+            });
+
+            // At the end of the bar, beside LeetCode's own account cluster,
+            // rather than among the Explore / Problems / Contest links — those
+            // are LeetCode's sections and ours is not one of them.
+            nav.appendChild(entry);
+            return false;
+        }
+
+        /** Shift+P, and the nav row. Toggles, so a second press closes it. */
+        function openPouch() {
+            if (open && open.alive) {
+                open.close();
+                open = null;
+                return null;
+            }
+            open = panel.open();
+            return open;
+        }
+
         // ---------------------------------------------------------- wiring
 
         function install() {
@@ -397,6 +474,14 @@
             window.addEventListener('blur', onVisibility);
 
             watcher.add('leet-clock', tick);
+            watcher.add('leet-nav', injectNavEntry);
+
+            // A write from anywhere — this page, another tab, the dashboard —
+            // repaints whatever of ours is on screen.
+            Settings.watch(Leet.KEYS, () => {
+                if (open && open.alive) open.refresh();
+            });
+
             onNavigate();
         }
 
@@ -448,7 +533,8 @@
         }
 
         return {
-            install, onNavigate, refreshSurfaces,
+            install, onNavigate, openPouch, refreshSurfaces, panel,
+            injectNavEntry,
             elapsedSeconds, human, inDays,
             // For the specs, which drive these rather than waiting on a real
             // submission to come back from LeetCode.
