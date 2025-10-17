@@ -2372,7 +2372,10 @@
     text-transform: var(--bb-head-case);
 }
 
-.bb-leet-sub { margin: 3px 0 0; font-size: 12px; color: var(--bb-sub); }
+/* min-width so the summary line under the title can ellipsize rather than
+   pushing the close button off the end of the header. */
+.bb-leet-heading { min-width: 0; }
+.bb-leet-sub { margin: 3px 0 0; font-size: 12px; color: var(--bb-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .bb-leet-close {
     flex: 0 0 auto;
@@ -2430,6 +2433,7 @@
     cursor: pointer;
 }
 
+.bb-leet-rail-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bb-leet-rail-row:hover { background: var(--bb-chip); }
 .bb-leet-rail-row.is-on { background: var(--bb-accent-soft); color: var(--bb-accent); font-weight: 600; }
 .bb-leet-rail-n { font-size: 11.5px; color: var(--bb-faint); font-variant-numeric: tabular-nums; }
@@ -2479,6 +2483,15 @@
 
 .bb-leet-when { color: var(--bb-sub); }
 
+/* The attempt count is the least of the three and is the first thing to go
+   when the row is narrow — the name and the due date are what the rail is
+   read for. */
+.bb-leet-tries { color: var(--bb-faint); white-space: nowrap; }
+
+@media (max-width: 1100px) {
+    .bb-leet-tries { display: none; }
+}
+
 .bb-leet-note {
     flex: 0 1 44%;
     min-width: 0;
@@ -2508,3 +2521,42 @@
     .bb-leet-row { flex-direction: column; gap: 8px; }
     .bb-leet-note, .bb-leet-note-form { flex: 1 1 auto; width: 100%; }
 }
+
+/* ----------------------------------------------------------- the skins */
+
+/* Almost everything above is already in --bb-r / --bb-r-sm, which each skin
+   sets for itself, so a skin change needs no redraw and nothing here. What
+   is left is the handful of places a literal radius was unavoidable: the
+   sheet's shell, which is deliberately rounder than the cards inside it, and
+   the two pill-shaped buttons. Both skins that square their corners have to
+   square these too, or the panel is round where every other surface we
+   inject is not. Same block, same reason, as the X panel above. */
+.bb-themed[data-bb-skin="riso"] .bb-leet-sheet,
+.bb-themed[data-bb-skin="deco"] .bb-leet-sheet,
+.bb-themed[data-bb-skin="riso"] .bb-leet-close,
+.bb-themed[data-bb-skin="deco"] .bb-leet-close,
+.bb-themed[data-bb-skin="riso"] .bb-leet-card-x,
+.bb-themed[data-bb-skin="deco"] .bb-leet-card-x,
+.bb-themed[data-bb-skin="riso"] .bb-leet-row,
+.bb-themed[data-bb-skin="deco"] .bb-leet-row,
+.bb-leet-card.bb-themed[data-bb-skin="riso"],
+.bb-leet-card.bb-themed[data-bb-skin="deco"] { border-radius: 0; }
+
+.bb-themed[data-bb-skin="medieval"] .bb-leet-sheet,
+.bb-themed[data-bb-skin="medieval"] .bb-leet-row,
+.bb-leet-card.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }
+
+/* Riso draws its borders as hard ink rather than as a tint, so the dashed
+   note field reads as a deliberate dotted rule there instead of the faint
+   grey it is on the default skin. */
+.bb-themed[data-bb-skin="riso"] .bb-leet-note,
+.bb-themed[data-bb-skin="deco"] .bb-leet-note { border-style: dotted; }
+
+/* The difficulty pills keep LeetCode's own three colours on every skin —
+   they are the site's vocabulary, not ours, and a Medium that is pink on one
+   skin and amber on another stops being readable at a glance. What they do
+   need is to stay legible: the light-skin values are tuned for a pale panel
+   and Easy in particular goes muddy on a dark one. */
+.bb-themed[data-bb-theme="dark"] .bb-leet-diff.is-easy { color: #2ccccc; }
+.bb-themed[data-bb-theme="dark"] .bb-leet-diff.is-medium { color: #ffc733; }
+.bb-themed[data-bb-theme="dark"] .bb-leet-diff.is-hard { color: #ff5c5c; }
