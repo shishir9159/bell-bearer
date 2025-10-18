@@ -289,6 +289,10 @@
          */
         function afterVerdict({ accepted, seconds, failures, problem }) {
             if (!accepted) return;
+            // Not during a mock interview. Grading is a conversation about
+            // how it went, and it belongs after the clock has stopped rather
+            // than over the top of one that is still running.
+            if (mock.on) return;
             if (on('leetGradePrompt') && problem) {
                 openGradeCard({ problem, seconds, failures });
                 return;
@@ -455,7 +459,132 @@
          */
         function tick() {
             readWidget();
+            // LeetCode re-renders the description pane as you scroll it and
+            // when you switch tabs, so anything mock mode is hiding has to be
+            // re-marked as it comes back.
+            if (mock.on) markHidden();
             return false;
+        }
+
+        // ---------------------------------------------- mock interview mode
+
+        /**
+         * Mock interview mode: the problem, the editor, a countdown, and
+         * nothing else.
+         *
+         * What it takes away is what an interview does not give you — the
+         * difficulty rating, the topic tags, the hints, the similar
+         * questions and the way through to somebody else's solution. Knowing
+         * a problem is tagged "binary search" is most of the work, which is
+         * exactly the help that makes practice not resemble the thing it is
+         * practice for.
+         *
+         * Hidden by CSS off a class on <html>, never by removing anything.
+         * Two reasons, and both matter: LeetCode re-renders these panes on
+         * its own schedule, so a node deleted now is back in a moment; and
+         * leaving is supposed to put the page back exactly as it was, which
+         * is one class removal rather than a reconstruction of markup we do
+         * not own. The marks left on individual elements are inert on their
+         * own — content.css only acts on them while <html> carries the class.
+         */
+        const MOCK_CLASS = 'bb-leet-mock';
+        const MOCK_MARK = 'data-bb-leet-hidden';
+        const CHIP_ID = 'bb-leet-chip';
+
+        const mock = { on: false, slug: '', endsAt: 0, timer: 0 };
+
+        const mockMinutes = () => {
+            const minutes = Number(getSettings().leetMockMinutes);
+            return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : 35;
+        };
+
+        /** Mark everything mock mode hides, so content.css can act on it. */
+        function markHidden() {
+            for (const element of LeetRead.hideTargets()) {
+                if (element && element.setAttribute) element.setAttribute(MOCK_MARK, '1');
+            }
+        }
+
+        function startMock(slug) {
+            if (!slug) return;
+            mock.on = true;
+            mock.slug = slug;
+            mock.endsAt = Date.now() + mockMinutes() * 60000;
+
+            document.documentElement.classList.add(MOCK_CLASS);
+            markHidden();
+            // The pill is help too, and it is ours.
+            injectNotePill();
+            closeGradeCard();
+
+            if (mock.timer) clearInterval(mock.timer);
+            mock.timer = setInterval(onMockTick, 1000);
+            drawChip();
+        }
+
+        /**
+         * Leave, putting the page back exactly as it was.
+         *
+         * The marks are taken off as well as the class. Leaving them would
+         * work — they do nothing without the class — but a page left
+         * sprinkled with our attributes is a page we did not really give
+         * back, and the next mock run re-marks in a single pass anyway.
+         */
+        function stopMock({ expired = false } = {}) {
+            const wasOn = mock.on;
+            mock.on = false;
+            mock.slug = '';
+            mock.endsAt = 0;
+            if (mock.timer) { clearInterval(mock.timer); mock.timer = 0; }
+
+            document.documentElement.classList.remove(MOCK_CLASS);
+            document.querySelectorAll(`[${MOCK_MARK}]`).forEach((element) => {
+                element.removeAttribute(MOCK_MARK);
+            });
+            const chip = document.getElementById(CHIP_ID);
+            if (chip) chip.remove();
+
+            if (wasOn) injectNotePill();
+            if (expired) notify(`Time — that was ${mockMinutes()} minutes`, 'warning');
+        }
+
+        function onMockTick() {
+            if (!mock.on) return;
+            // Navigating away from the problem ends the interview. Carrying a
+            // countdown onto a different problem would be timing the wrong one.
+            if (LeetRead.slugOf() !== mock.slug) return stopMock();
+            if (Date.now() >= mock.endsAt) return stopMock({ expired: true });
+            drawChip();
+        }
+
+        /** The countdown, as mm:ss. */
+        function drawChip() {
+            if (!mock.on || !document.body) return;
+            let chip = document.getElementById(CHIP_ID);
+            if (!chip) {
+                chip = document.createElement('div');
+                chip.id = CHIP_ID;
+                chip.className = 'bb-leet-chip';
+                chip.innerHTML = '<span class="bb-leet-chip-time"></span>' +
+                    '<button type="button" class="bb-leet-chip-x" title="End the mock interview">End</button>';
+                chip.querySelector('.bb-leet-chip-x').addEventListener('click', () => stopMock());
+                document.body.appendChild(chip);
+                Theme.appearance().then((look) => {
+                    if (chip.isConnected) Theme.dress(chip, look);
+                });
+            }
+
+            const left = Math.max(0, Math.round((mock.endsAt - Date.now()) / 1000));
+            chip.querySelector('.bb-leet-chip-time').textContent =
+                `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+            // The last two minutes are the ones you need to notice.
+            chip.classList.toggle('is-low', left <= 120);
+        }
+
+        /** Ctrl+Alt+M, and the setting that starts every problem this way. */
+        function toggleMock() {
+            if (mock.on) stopMock();
+            else startMock(LeetRead.slugOf());
         }
 
         // ------------------------------------------------- template hotkey
@@ -627,13 +756,23 @@
          * this is not registered through src/content/shortcuts.js.
          */
         function onHotkey(event) {
-            const binding = Keybindings.resolve(getSettings().shortcuts, 'leet-templates');
-            if (!binding || !binding.enabled) return;
-            if (!Keybindings.matches(event, binding.combo, binding.kind)) return;
-            event.preventDefault();
-            event.stopPropagation();
-            if (suggest) closeSuggest();
-            else openSuggest();
+            const fire = (id) => {
+                const binding = Keybindings.resolve(getSettings().shortcuts, id);
+                return binding && binding.enabled && Keybindings.matches(event, binding.combo, binding.kind);
+            };
+
+            if (fire('leet-templates')) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (suggest) closeSuggest();
+                else openSuggest();
+                return;
+            }
+            if (fire('leet-mock')) {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleMock();
+            }
         }
 
         // -------------------------------------------------------- nav row
@@ -703,7 +842,10 @@
          * land on a problem, and answering it should not cost a click.
          */
         function injectNotePill() {
-            if (!on('leetNoteButton')) {
+            // Mock mode takes the pill away too: your own note on a problem
+            // is help, and the point of the mode is to sit the problem
+            // without any.
+            if (!on('leetNoteButton') || mock.on) {
                 const placed = document.getElementById(PILL_ID);
                 if (placed) placed.remove();
                 return false;
@@ -783,9 +925,14 @@
             if (!slug) {
                 bankWallClock();
                 clock = null;
+                if (mock.on) stopMock();
                 return;
             }
             if (!clock || clock.slug !== slug) {
+                // A new problem ends the interview on the old one, and starts
+                // one here if every problem is meant to open that way.
+                if (mock.on) stopMock();
+                if (on('leetMockMode')) startMock(slug);
                 // The toolbar is not up yet on the frame the URL changes, so
                 // the click is deferred to the watcher's next pass.
                 startClock(slug);
@@ -813,6 +960,14 @@
         function refreshSurfaces() {
             if (!on('leetGradePrompt')) closeGradeCard();
             closeSuggest();
+
+            // Switching mock mode off in the dashboard has to give the page
+            // back on the spot — the whole contract of this function. Switching
+            // it on starts one here, so the setting behaves the same way
+            // whether it was changed before or after the problem was opened.
+            if (!on('leetMockMode') && mock.on) stopMock();
+            else if (on('leetMockMode') && !mock.on) startMock(LeetRead.slugOf());
+
             // Turning the pill off is the half that needs code; turning it on
             // is just letting the injector run again, which the schedule does.
             injectNotePill();
@@ -828,6 +983,7 @@
             clockFor: () => clock,
             openGradeCard, closeGradeCard, previewIntervals,
             openSuggest, closeSuggest, askPage,
+            startMock, stopMock, toggleMock, isMock: () => mock.on,
         };
     }
 

@@ -2691,6 +2691,63 @@
     .bb-leet-tpl-list { flex: 1 1 auto; width: 100%; }
 }
 
+/* ------------------------------------------------- mock interview mode */
+
+/* The class is on <html> and the marks are on the elements, and it takes
+   both. That is what makes leaving the mode one class removal rather than a
+   reconstruction of LeetCode's markup: a mark left behind on an element does
+   nothing at all once the class is gone.
+
+   Hidden rather than removed, because LeetCode re-renders these panes on its
+   own schedule and a node deleted now is back in a moment — the same reason
+   the promoted-post rule above hides instead of deleting. */
+html.bb-leet-mock [data-bb-leet-hidden] { display: none !important; }
+
+/* The countdown. Bottom left, opposite the grade card, so the two can never
+   collide — and the grade card is suppressed during a mock run anyway. */
+.bb-leet-chip {
+    position: fixed;
+    left: 22px;
+    bottom: 22px;
+    z-index: 2147483000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--bb-border);
+    border-radius: 999px;
+    background: var(--bb-panel-solid);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    box-shadow: var(--bb-shadow);
+}
+
+.bb-leet-chip-time {
+    font-size: 15px;
+    font-weight: 700;
+    /* Tabular, or the whole chip twitches once a second as the digits change. */
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .02em;
+}
+
+/* The last two minutes. Colour alone would not carry this for everyone, so
+   the weight goes up with it. */
+.bb-leet-chip.is-low .bb-leet-chip-time { color: var(--bb-danger); }
+
+.bb-leet-chip-x {
+    padding: 3px 10px;
+    border: 1px solid var(--bb-border-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--bb-sub);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bb-leet-chip-x:hover { color: var(--bb-text); border-color: var(--bb-accent); }
+
 /* ----------------------------------------------------------- the skins */
 
 /* Almost everything above is already in --bb-r / --bb-r-sm, which each skin
@@ -2711,7 +2768,11 @@
 .bb-leet-card.bb-themed[data-bb-skin="riso"],
 .bb-leet-card.bb-themed[data-bb-skin="deco"],
 .bb-leet-suggest.bb-themed[data-bb-skin="riso"],
-.bb-leet-suggest.bb-themed[data-bb-skin="deco"] { border-radius: 0; }
+.bb-leet-suggest.bb-themed[data-bb-skin="deco"],
+.bb-leet-chip.bb-themed[data-bb-skin="riso"],
+.bb-leet-chip.bb-themed[data-bb-skin="deco"],
+.bb-themed[data-bb-skin="riso"] .bb-leet-chip-x,
+.bb-themed[data-bb-skin="deco"] .bb-leet-chip-x { border-radius: 0; }
 
 .bb-themed[data-bb-skin="medieval"] .bb-leet-sheet,
 .bb-themed[data-bb-skin="medieval"] .bb-leet-row,
