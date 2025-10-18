@@ -2333,6 +2333,38 @@
 .bb-leet-nav .bb-pouch-glyph { width: 16px; height: 16px; fill: currentColor; }
 .bb-leet-nav-text { white-space: nowrap; }
 
+/* --------------------------------------------------------- the note pill */
+
+/* It carries the note rather than an icon, so landing on a problem answers
+   "have I worked this out before" without a click. Capped at a line, since a
+   note that pushed LeetCode's heading onto three rows would be the extension
+   rearranging somebody else's page. */
+.bb-leet-pill {
+    display: inline-block;
+    vertical-align: middle;
+    max-width: 22em;
+    margin-left: 10px;
+    padding: 2px 9px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.6;
+    opacity: .6;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bb-leet-pill:hover { opacity: 1; }
+/* A pill standing for a note that exists reads as filled-in rather than as
+   an invitation, so the two states are told apart at a glance. */
+.bb-leet-pill.has-note { opacity: .85; font-style: italic; }
+
 /* ------------------------------------------------------------- the panel */
 
 .bb-leet-overlay { padding: 40px; align-items: stretch; }

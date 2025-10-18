@@ -45,6 +45,7 @@
     const CODE = 'bb:leet:code';
     const CARD_ID = 'bb-leet-grade';
     const NAV_ID = 'bb-leet-nav';
+    const PILL_ID = 'bb-leet-pill';
     const SUGGEST_ID = 'bb-leet-suggest';
 
     /**
@@ -675,14 +676,73 @@
         }
 
         /** Shift+P, and the nav row. Toggles, so a second press closes it. */
-        function openPouch() {
+        function openPouch(options) {
             if (open && open.alive) {
                 open.close();
                 open = null;
                 return null;
             }
-            open = panel.open();
+            open = panel.open(options);
             return open;
+        }
+
+        // ------------------------------------------------------- note pill
+
+        /**
+         * A pill beside the problem's title that opens the pouch on this
+         * problem, with the caret already in its note.
+         *
+         * Off until asked for, like the X surfaces and for the same reason:
+         * it is the extension putting something into somebody else's heading,
+         * which is not a default to assume for anyone. The pouch itself is
+         * always reachable from the nav row.
+         *
+         * The pill carries the note it is standing for rather than a bare
+         * icon, because the note's whole job is to be read on the way past —
+         * "did I already work this one out" is the question you have when you
+         * land on a problem, and answering it should not cost a click.
+         */
+        function injectNotePill() {
+            if (!on('leetNoteButton')) {
+                const placed = document.getElementById(PILL_ID);
+                if (placed) placed.remove();
+                return false;
+            }
+
+            const slug = LeetRead.slugOf();
+            const slot = slug && LeetRead.titleSlot();
+            if (!slot) return false;
+
+            const existing = document.getElementById(PILL_ID);
+            // A pill left over from the previous problem is worse than none:
+            // it would open the pouch on something you are no longer reading.
+            if (existing && existing.dataset.bbSlug === slug) return false;
+            if (existing) existing.remove();
+
+            const pill = document.createElement('button');
+            pill.id = PILL_ID;
+            pill.type = 'button';
+            pill.className = 'bb-leet-pill';
+            pill.dataset.bbSlug = slug;
+            pill.textContent = 'Note';
+            pill.title = 'Open your note on this problem';
+            pill.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (open && open.alive) { open.close(); open = null; }
+                openPouch({ focus: slug });
+            });
+            slot.appendChild(pill);
+
+            // The note itself, read behind the pill so placing it never waits
+            // on storage. A problem with no note keeps the bare word.
+            Leet.load().then((state) => {
+                const problem = Leet.problemsOf(state)[slug];
+                if (!pill.isConnected || !problem || !problem.note) return;
+                pill.textContent = problem.note;
+                pill.classList.add('has-note');
+            });
+            return false;
         }
 
         // ---------------------------------------------------------- wiring
@@ -697,6 +757,7 @@
 
             watcher.add('leet-clock', tick);
             watcher.add('leet-nav', injectNavEntry);
+            watcher.add('leet-pill', injectNotePill);
 
             // A write from anywhere — this page, another tab, the dashboard —
             // repaints whatever of ours is on screen.
@@ -752,12 +813,15 @@
         function refreshSurfaces() {
             if (!on('leetGradePrompt')) closeGradeCard();
             closeSuggest();
+            // Turning the pill off is the half that needs code; turning it on
+            // is just letting the injector run again, which the schedule does.
+            injectNotePill();
             watcher.schedule();
         }
 
         return {
             install, onNavigate, openPouch, refreshSurfaces, panel,
-            injectNavEntry,
+            injectNavEntry, injectNotePill,
             elapsedSeconds, human, inDays,
             // For the specs, which drive these rather than waiting on a real
             // submission to come back from LeetCode.

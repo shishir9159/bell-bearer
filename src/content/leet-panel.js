@@ -89,8 +89,14 @@
      */
     function createLeetPanel({ notify, openDashboard, goTo, appearance, dress, insertTemplate, currentLang }) {
 
-        /** Open now, fill in behind it. See the file comment. */
-        function open() {
+        /**
+         * Open now, fill in behind it. See the file comment.
+         *
+         * `focus` is a slug to land on — what the note pill beside a problem's
+         * title passes, so that pressing it puts the caret in that problem's
+         * note rather than opening a panel you then have to find it in.
+         */
+        function open({ focus = '' } = {}) {
             const dialog = Overlay.open({ id: OVERLAY_ID, contentHtml: shellHtml() });
             if (!dialog) return null;
 
@@ -103,7 +109,7 @@
             panel.start();
 
             Promise.all([Leet.load(), LeetTemplates.load()]).then(([state, templates]) => {
-                if (panel.alive) panel.hydrate(state, templates);
+                if (panel.alive) panel.hydrate(state, templates, focus);
             });
             return panel;
         }
@@ -164,15 +170,30 @@
             this.render();
         }
 
-        hydrate(state, templates) {
+        hydrate(state, templates, focus) {
             this.state = state;
             this.templates = templates;
-            // Open on whichever rail has something in it. Landing on an empty
-            // "Due" when there are twelve problems waiting to be solved is a
-            // panel that looks broken.
+
             const lists = Leet.lists(state, Date.now());
-            if (!lists.due.length) this.view = lists.toSolve.length ? 'toSolve' : 'solved';
+            // Asked for one problem in particular: go to whichever rail it is
+            // filed under and open its note. Failing to find it falls through
+            // to the ordinary choice rather than showing an empty rail.
+            const landed = focus && VIEWS.find((view) => lists[view.id].some((p) => p.slug === focus));
+            if (landed) {
+                this.view = landed.id;
+                this.editing = focus;
+            } else if (!lists.due.length) {
+                // Open on whichever rail has something in it. Landing on an
+                // empty "Due" when there are twelve problems waiting to be
+                // solved is a panel that looks broken.
+                this.view = lists.toSolve.length ? 'toSolve' : 'solved';
+            }
+
             this.render();
+            if (this.editing) {
+                const input = this.el.pane.querySelector('.bb-leet-note-input');
+                if (input) { input.focus(); input.select(); }
+            }
         }
 
         /** Repaint from storage — the dashboard may have changed it under us. */
