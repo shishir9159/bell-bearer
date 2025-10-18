@@ -2522,6 +2522,143 @@
     .bb-leet-note, .bb-leet-note-form { flex: 1 1 auto; width: 100%; }
 }
 
+/* --------------------------------------------------------- templates */
+
+/* The list and the editor side by side. The list is narrow because a
+   template's name is three words; the editor takes the rest, because what
+   you are editing is code and wrapping it would make it unreadable. */
+.bb-leet-tpl { display: flex; gap: 16px; align-items: flex-start; min-height: 0; }
+.bb-leet-tpl-list { flex: 0 0 210px; min-width: 0; }
+
+.bb-leet-tpl-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--bb-faint);
+}
+
+.bb-leet-tpl-head .bb-btn { padding: 4px 10px; font-size: 11.5px; letter-spacing: 0; text-transform: none; }
+
+.bb-leet-tpl-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.bb-leet-tpl-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--bb-r-sm);
+    background: transparent;
+    color: var(--bb-text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.bb-leet-tpl-row:hover { background: var(--bb-chip); }
+.bb-leet-tpl-row.is-on { background: var(--bb-accent-soft); border-color: var(--bb-accent); }
+.bb-leet-tpl-name { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-leet-tpl-lang { font-size: 10.5px; color: var(--bb-faint); }
+.bb-leet-tpl-none { margin: 0; font-size: 12px; color: var(--bb-sub); line-height: 1.5; }
+
+.bb-leet-tpl-editor { flex: 1; min-width: 0; }
+.bb-leet-tpl-editor.is-empty { padding: 40px 0; color: var(--bb-faint); font-size: 12.5px; text-align: center; }
+.bb-leet-tpl-editor.is-empty p { margin: 0; }
+
+.bb-leet-tpl-fields { display: flex; gap: 8px; margin-bottom: 8px; }
+.bb-leet-tpl-title { flex: 1; min-width: 0; }
+.bb-leet-tpl-select { flex: 0 0 auto; width: auto; }
+
+/* Monospace, because it is code, and nowrap+scroll rather than wrap so the
+   indentation that is part of a template stays readable. */
+.bb-leet-tpl-body {
+    font-family: Consolas, 'SF Mono', ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+    resize: vertical;
+}
+
+.bb-leet-tpl-actions { display: flex; gap: 8px; margin-top: 9px; }
+.bb-leet-tpl-del { margin-left: auto; color: var(--bb-danger); }
+.bb-leet-tpl-actions .bb-btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* ------------------------------------------------------- the suggester */
+
+/* Centred near the top rather than anchored to the caret. Monaco does not
+   expose a caret rectangle to the isolated world, and a list that guessed
+   at one would sit over the code you were about to paste into as often as
+   not. Near the top, where a command palette lives, is both predictable and
+   out of the way of the line you are on. */
+.bb-leet-suggest {
+    position: fixed;
+    top: 14vh;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2147483000;
+    width: 420px;
+    max-width: calc(100vw - 32px);
+    padding: 10px;
+    box-sizing: border-box;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r);
+    background: var(--bb-panel-solid);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    box-shadow: var(--bb-shadow);
+    animation: bb-rise .16s cubic-bezier(.2, .8, .2, 1);
+}
+
+.bb-leet-suggest-q { font-size: 13px; }
+.bb-leet-suggest-list { max-height: 44vh; overflow-y: auto; margin-top: 8px; }
+
+.bb-leet-suggest-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: var(--bb-r-sm);
+    background: transparent;
+    color: var(--bb-text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+/* The keyboard's selection, not the mouse's — this list is driven with the
+   arrows, so the marked row has to be the one Enter will take. */
+.bb-leet-suggest-row.is-on { background: var(--bb-accent-soft); color: var(--bb-accent); }
+.bb-leet-suggest-row.is-save { font-style: italic; }
+.bb-leet-suggest-row .bb-leet-suggest-name { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-leet-suggest-lang { flex: 0 0 auto; font-size: 10.5px; color: var(--bb-faint); }
+.bb-leet-suggest-row.is-on .bb-leet-suggest-lang { color: var(--bb-accent); }
+.bb-leet-suggest-none { margin: 10px; font-size: 12px; color: var(--bb-sub); line-height: 1.5; }
+
+.bb-leet-suggest-foot {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--bb-border);
+    font-size: 10.5px;
+    color: var(--bb-faint);
+}
+
+@media (max-width: 900px) {
+    .bb-leet-tpl { flex-direction: column; }
+    .bb-leet-tpl-list { flex: 1 1 auto; width: 100%; }
+}
+
 /* ----------------------------------------------------------- the skins */
 
 /* Almost everything above is already in --bb-r / --bb-r-sm, which each skin
@@ -2540,11 +2677,14 @@
 .bb-themed[data-bb-skin="riso"] .bb-leet-row,
 .bb-themed[data-bb-skin="deco"] .bb-leet-row,
 .bb-leet-card.bb-themed[data-bb-skin="riso"],
-.bb-leet-card.bb-themed[data-bb-skin="deco"] { border-radius: 0; }
+.bb-leet-card.bb-themed[data-bb-skin="deco"],
+.bb-leet-suggest.bb-themed[data-bb-skin="riso"],
+.bb-leet-suggest.bb-themed[data-bb-skin="deco"] { border-radius: 0; }
 
 .bb-themed[data-bb-skin="medieval"] .bb-leet-sheet,
 .bb-themed[data-bb-skin="medieval"] .bb-leet-row,
-.bb-leet-card.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }
+.bb-leet-card.bb-themed[data-bb-skin="medieval"],
+.bb-leet-suggest.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }
 
 /* Riso draws its borders as hard ink rather than as a tint, so the dashed
    note field reads as a deliberate dotted rule there instead of the faint

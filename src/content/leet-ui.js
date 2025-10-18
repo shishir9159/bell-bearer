@@ -33,14 +33,54 @@
     const Dom = ns.Dom || req('../shared/dom.js');
     const Fsrs = ns.Fsrs || req('../shared/fsrs.js');
     const Leet = ns.Leet || req('../shared/leetcode.js');
+    const Keybindings = ns.Keybindings || req('../shared/keybindings.js');
     const LeetRead = ns.LeetRead || req('./leet-read.js');
     const LeetPanel = ns.LeetPanel || req('./leet-panel.js');
+    const LeetTemplates = ns.LeetTemplates || req('../shared/leet-templates.js');
     const PouchButton = ns.PouchButton || req('../shared/pouch-button.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const VERDICT = 'bb:leet:verdict';
+    const REQUEST = 'bb:leet';
+    const CODE = 'bb:leet:code';
     const CARD_ID = 'bb-leet-grade';
     const NAV_ID = 'bb-leet-nav';
+    const SUGGEST_ID = 'bb-leet-suggest';
+
+    /**
+     * Ask the page world what the editor is showing.
+     *
+     * Synchronous, which looks wrong and is not: DOM dispatch runs the other
+     * world's listener inline, and both worlds share this document, so the
+     * answer has already been dispatched back by the time our own
+     * dispatchEvent returns. chess-page.js leans on exactly this. The
+     * fallback shape is returned when leet-page.js is not there at all —
+     * which is every page outside leetcode.com, and leetcode.com itself for
+     * the moment between the two content scripts loading.
+     */
+    function askPage() {
+        let answer = { lang: '', selection: '', value: '' };
+        const onCode = (event) => {
+            try { answer = JSON.parse(event.detail) || answer; } catch (_) { /* keep the fallback */ }
+        };
+        document.addEventListener(CODE, onCode);
+        try {
+            document.dispatchEvent(new CustomEvent(REQUEST, { detail: JSON.stringify({ type: 'read' }) }));
+        } catch (_) { /* nothing is listening */ } finally {
+            document.removeEventListener(CODE, onCode);
+        }
+        return answer;
+    }
+
+    /** Put text in at the cursor, over in the page's world. */
+    function tellPage(message) {
+        try {
+            document.dispatchEvent(new CustomEvent(REQUEST, { detail: JSON.stringify(message) }));
+            return true;
+        } catch (_) {
+            return false;
+        }
+    }
 
     /**
      * A reading this far below the last one is a reset rather than a wobble.
@@ -77,6 +117,8 @@
             }),
             appearance: () => Theme.appearance(),
             dress: (element, look) => Theme.dress(element, look),
+            insertTemplate: (body) => tellPage({ type: 'insert', text: body }),
+            currentLang: () => askPage().lang,
         });
 
         /** The one open panel, or null. */
@@ -415,6 +457,184 @@
             return false;
         }
 
+        // ------------------------------------------------- template hotkey
+
+        /**
+         * The suggester: a small list over the editor, filtered as you type,
+         * that drops a template in at the cursor.
+         *
+         * It has a keydown listener of its own rather than going through
+         * src/content/shortcuts.js, and that is not an oversight. Monaco's
+         * input is a <textarea>, so Shortcuts.isTypingTarget matches it and
+         * swallows every keystroke there — by design, and rightly, because
+         * every other shortcut in the extension would otherwise fire while
+         * you were typing code. This one has to fire *inside* the editor,
+         * which is the one place that guard is built to cover, so it cannot
+         * go through it. Capture phase, because Monaco stops a great deal of
+         * what happens inside it from reaching the document at all.
+         */
+        let suggest = null;
+
+        function closeSuggest() {
+            if (!suggest) return;
+            suggest.element.remove();
+            document.removeEventListener('keydown', onSuggestKey, true);
+            suggest = null;
+        }
+
+        function openSuggest() {
+            closeSuggest();
+            if (!document.body) return;
+
+            const page = askPage();
+            const host = document.createElement('div');
+            host.id = SUGGEST_ID;
+            host.className = 'bb-leet-suggest';
+            host.setAttribute('role', 'dialog');
+            host.setAttribute('aria-label', 'Insert a code template');
+            host.innerHTML = `
+                <input type="text" class="bb-leet-suggest-q" placeholder="Filter templates…"
+                       aria-label="Filter templates" spellcheck="false">
+                <div class="bb-leet-suggest-list" role="listbox"></div>
+                <div class="bb-leet-suggest-foot"></div>`;
+
+            document.body.appendChild(host);
+            Dom.holdFocus(host);
+            Theme.appearance().then((look) => {
+                if (host.isConnected) Theme.dress(host, look);
+            });
+
+            suggest = {
+                element: host,
+                lang: page.lang,
+                selection: page.selection,
+                rows: [],
+                index: 0,
+                templates: [],
+            };
+
+            const query = host.querySelector('.bb-leet-suggest-q');
+            query.addEventListener('input', () => drawSuggest());
+            host.querySelector('.bb-leet-suggest-list').addEventListener('click', (event) => {
+                const row = event.target.closest('[data-bb-pick]');
+                if (row) pickSuggest(Number(row.dataset.bbPick));
+            });
+            document.addEventListener('keydown', onSuggestKey, true);
+
+            LeetTemplates.load().then((templates) => {
+                if (!suggest) return;
+                suggest.templates = templates;
+                drawSuggest();
+            });
+            drawSuggest();
+            query.focus();
+        }
+
+        /**
+         * The rows on offer: the templates for this language, and — when
+         * there is a selection in the editor — saving that selection as a new
+         * one, which is how the list gets filled in the first place.
+         */
+        function suggestRows() {
+            const text = suggest.element.querySelector('.bb-leet-suggest-q').value;
+            const rows = LeetTemplates.search(suggest.templates, suggest.lang, text)
+                .map((template) => ({ kind: 'insert', template }));
+            if (suggest.selection) rows.unshift({ kind: 'save' });
+            return rows;
+        }
+
+        function drawSuggest() {
+            if (!suggest) return;
+            suggest.rows = suggestRows();
+            suggest.index = Math.min(suggest.index, Math.max(0, suggest.rows.length - 1));
+
+            const list = suggest.element.querySelector('.bb-leet-suggest-list');
+            list.innerHTML = suggest.rows.length
+                ? suggest.rows.map((row, index) => {
+                    const on = index === suggest.index ? ' is-on' : '';
+                    if (row.kind === 'save') {
+                        return `<button type="button" class="bb-leet-suggest-row is-save${on}" data-bb-pick="${index}" role="option">
+                            <span class="bb-leet-suggest-name">Save the selection as a template…</span>
+                        </button>`;
+                    }
+                    return `<button type="button" class="bb-leet-suggest-row${on}" data-bb-pick="${index}" role="option">
+                        <span class="bb-leet-suggest-name">${Dom.escapeHtml(row.template.name)}</span>
+                        <span class="bb-leet-suggest-lang">${Dom.escapeHtml(LeetTemplates.labelFor(row.template.lang))}</span>
+                    </button>`;
+                }).join('')
+                : '<p class="bb-leet-suggest-none">No templates for this language yet. Select some code and press this again to save one.</p>';
+
+            const known = suggest.lang ? LeetTemplates.labelFor(suggest.lang) : 'every language';
+            suggest.element.querySelector('.bb-leet-suggest-foot').textContent =
+                `↑↓ to choose · Enter to insert · showing ${known}`;
+        }
+
+        function onSuggestKey(event) {
+            if (!suggest) return;
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                closeSuggest();
+                return;
+            }
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                event.stopPropagation();
+                const step = event.key === 'ArrowDown' ? 1 : -1;
+                const n = suggest.rows.length;
+                if (n) suggest.index = (suggest.index + step + n) % n;
+                drawSuggest();
+                return;
+            }
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                event.stopPropagation();
+                pickSuggest(suggest.index);
+            }
+        }
+
+        async function pickSuggest(index) {
+            if (!suggest) return;
+            const row = suggest.rows[index];
+            if (!row) return;
+
+            if (row.kind === 'save') {
+                const selection = suggest.selection;
+                const lang = suggest.lang;
+                const name = suggest.element.querySelector('.bb-leet-suggest-q').value.trim();
+                closeSuggest();
+                // The filter box doubles as the name field: whatever was typed
+                // while looking for a template that turned out not to exist is
+                // exactly what that template should be called.
+                if (!name) {
+                    notify('Type a name in the box first, then save the selection', 'warning');
+                    return;
+                }
+                await LeetTemplates.create({ name, lang, body: selection });
+                notify(`Saved “${name}” as a ${LeetTemplates.labelFor(lang)} template`, 'success');
+                return;
+            }
+
+            const { template } = row;
+            closeSuggest();
+            tellPage({ type: 'insert', text: template.body });
+            LeetTemplates.touch(template.id);
+        }
+
+        /**
+         * The capture-phase keydown that opens it. See openSuggest for why
+         * this is not registered through src/content/shortcuts.js.
+         */
+        function onHotkey(event) {
+            const binding = Keybindings.resolve(getSettings().shortcuts, 'leet-templates');
+            if (!binding || !binding.enabled) return;
+            if (!Keybindings.matches(event, binding.combo, binding.kind)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (suggest) closeSuggest();
+            else openSuggest();
+        }
+
         // -------------------------------------------------------- nav row
 
         /**
@@ -473,12 +693,14 @@
             window.addEventListener('focus', onVisibility);
             window.addEventListener('blur', onVisibility);
 
+            document.addEventListener('keydown', onHotkey, true);
+
             watcher.add('leet-clock', tick);
             watcher.add('leet-nav', injectNavEntry);
 
             // A write from anywhere — this page, another tab, the dashboard —
             // repaints whatever of ours is on screen.
-            Settings.watch(Leet.KEYS, () => {
+            Settings.watch([...Leet.KEYS, ...LeetTemplates.KEYS], () => {
                 if (open && open.alive) open.refresh();
             });
 
@@ -529,6 +751,7 @@
          */
         function refreshSurfaces() {
             if (!on('leetGradePrompt')) closeGradeCard();
+            closeSuggest();
             watcher.schedule();
         }
 
@@ -540,6 +763,7 @@
             // submission to come back from LeetCode.
             clockFor: () => clock,
             openGradeCard, closeGradeCard, previewIntervals,
+            openSuggest, closeSuggest, askPage,
         };
     }
 

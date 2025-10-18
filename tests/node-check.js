@@ -703,6 +703,84 @@ check('the widget taking over does not stack on the wall clock', () => {
         eq(ui.elapsedSeconds(), 240, 'the widget was running for that time too');
     });
 });
+// ------------------------------------------------------ leetcode templates
+
+const LeetTemplates = require('../src/shared/leet-templates.js');
+
+/** Templates as stored, without going near storage. */
+const tpl = (name, lang, body = '', usedAt = 0) =>
+    LeetTemplates.clean({ id: `lt_${name}`, name, lang, body, usedAt });
+
+console.log('\n# leetcode — template languages');
+check('monaco’s names are mapped onto LeetCode’s', () => {
+    eq(LeetTemplates.normalize('python'), 'python3', 'monaco has one Python mode');
+    eq(LeetTemplates.normalize('go'), 'golang');
+    eq(LeetTemplates.normalize('CPP'), 'cpp', 'case does not matter');
+    eq(LeetTemplates.normalize('cpp'), 'cpp');
+});
+check('a language nobody recognises files as "any"', () => {
+    eq(LeetTemplates.normalize('brainfuck'), '');
+    eq(LeetTemplates.normalize(''), '');
+    eq(LeetTemplates.normalize(undefined), '');
+    eq(LeetTemplates.labelFor(''), 'Any language');
+    eq(LeetTemplates.labelFor('golang'), 'Go');
+});
+
+console.log('\n# leetcode — offering templates');
+check('forLang puts this language first and the language-free ones after', () => {
+    const state = [tpl('anything', ''), tpl('bisect', 'python3'), tpl('vector', 'cpp')];
+    eq(LeetTemplates.forLang(state, 'python3').map((t) => t.name), ['bisect', 'anything']);
+    eq(LeetTemplates.forLang(state, 'cpp').map((t) => t.name), ['vector', 'anything']);
+});
+check('another language’s templates are not offered at all', () => {
+    const state = [tpl('vector', 'cpp')];
+    eq(LeetTemplates.forLang(state, 'python3').map((t) => t.name), []);
+});
+check('with no language to go on, everything is offered', () => {
+    // The page world could not tell us what the editor is in. Offering
+    // nothing would be worse than offering too much.
+    const state = [tpl('bisect', 'python3'), tpl('vector', 'cpp')];
+    eq(LeetTemplates.forLang(state, '').length, 2);
+});
+check('the one reached for most recently leads', () => {
+    const state = [tpl('old', 'python3', '', 1000), tpl('recent', 'python3', '', 9000)];
+    eq(LeetTemplates.forLang(state, 'python3').map((t) => t.name), ['recent', 'old']);
+});
+check('a list nobody has used yet keeps the order it was arranged in', () => {
+    const state = [tpl('first', 'python3'), tpl('second', 'python3')];
+    eq(LeetTemplates.forLang(state, 'python3').map((t) => t.name), ['first', 'second']);
+});
+check('search matches the name and the body', () => {
+    const state = [
+        tpl('binary search', 'python3', 'while lo < hi:'),
+        tpl('union find', 'python3', 'def find(x):'),
+    ];
+    eq(LeetTemplates.search(state, 'python3', 'binary').map((t) => t.name), ['binary search']);
+    eq(LeetTemplates.search(state, 'python3', 'lo < hi').map((t) => t.name), ['binary search'],
+        'found by what is in it');
+    eq(LeetTemplates.search(state, 'python3', 'FIND').map((t) => t.name), ['union find'], 'case-insensitive');
+    eq(LeetTemplates.search(state, 'python3', '').length, 2, 'an empty filter narrows nothing');
+});
+
+console.log('\n# leetcode — what a template may hold');
+check('a template with no name is not a template', () => {
+    eq(LeetTemplates.templatesOf([{ name: '   ', body: 'x' }]), []);
+});
+check('a body keeps its indentation', () => {
+    // Trimming a template is trimming the thing that makes it paste cleanly.
+    eq(LeetTemplates.clean({ name: 'x', body: '    return 1\n' }).body, '    return 1\n');
+});
+check('a whole solution pasted in as a template is capped', () => {
+    const huge = LeetTemplates.clean({ name: 'x', body: 'y'.repeat(20000) });
+    eq(huge.body.length, LeetTemplates.BODY_CAP);
+});
+check('a stored record that is nonsense does not take the list down', () => {
+    const rows = LeetTemplates.templatesOf(['not an object', null, { name: 'ok', lang: 42, uses: 'many' }]);
+    eq(rows.length, 1);
+    eq(rows[0].lang, '');
+    eq(rows[0].uses, 0);
+});
+
 console.log('\n# leetcode — the pouch panel');
 const LeetPanel = require('../src/content/leet-panel.js');
 

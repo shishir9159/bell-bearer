@@ -27,6 +27,7 @@
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
     const Leet = ns.Leet || req('../shared/leetcode.js');
+    const LeetTemplates = ns.LeetTemplates || req('../shared/leet-templates.js');
     const Overlay = ns.Overlay || req('./overlay.js');
 
     const OVERLAY_ID = 'bb-leet-overlay';
@@ -44,6 +45,14 @@
         Object.freeze({ id: 'toSolve', label: 'To solve', empty: 'Every problem you have opened has been solved.' }),
         Object.freeze({ id: 'solved', label: 'Solved', empty: 'Nothing solved yet.' }),
     ]);
+
+    /**
+     * The templates rail. A sentinel rather than a fourth entry in VIEWS,
+     * because it behaves like a rail row in every way the DOM cares about but
+     * its pane is not a list of problems — the same arrangement pouch-sheet.js
+     * uses for PLAYLISTS_VIEW.
+     */
+    const TEMPLATES_VIEW = '__templates__';
 
     const DAY_MS = 864e5;
 
@@ -71,7 +80,14 @@
         return `in ${years} year${years === 1 ? '' : 's'}`;
     }
 
-    function createLeetPanel({ notify, openDashboard, goTo, appearance, dress }) {
+    /**
+     * `insertTemplate` puts a template's body into LeetCode's editor and
+     * answers whether it landed; `currentLang` is what the page world says
+     * the editor is in. Both are absent off a problem page, which is why the
+     * Insert button is disabled rather than missing there — a button that
+     * comes and goes is harder to find than one that is greyed.
+     */
+    function createLeetPanel({ notify, openDashboard, goTo, appearance, dress, insertTemplate, currentLang }) {
 
         /** Open now, fill in behind it. See the file comment. */
         function open() {
@@ -83,16 +99,16 @@
                 if (dialog.element.isConnected) dress(dialog.element, look);
             });
 
-            const panel = new Panel({ dialog, notify, openDashboard, goTo });
+            const panel = new Panel({ dialog, notify, openDashboard, goTo, insertTemplate, currentLang });
             panel.start();
 
-            Leet.load().then((state) => {
-                if (panel.alive) panel.hydrate(state);
+            Promise.all([Leet.load(), LeetTemplates.load()]).then(([state, templates]) => {
+                if (panel.alive) panel.hydrate(state, templates);
             });
             return panel;
         }
 
-        return { open, VIEWS };
+        return { open, VIEWS, TEMPLATES_VIEW };
     }
 
     function shellHtml() {
@@ -118,16 +134,22 @@
 
     /** One open panel. */
     class Panel {
-        constructor({ dialog, notify, openDashboard, goTo }) {
+        constructor({ dialog, notify, openDashboard, goTo, insertTemplate, currentLang }) {
             this.dialog = dialog;
             this.notify = notify;
             this.openDashboard = openDashboard;
             this.goTo = goTo;
+            this.insertTemplate = insertTemplate;
+            this.currentLang = currentLang || (() => '');
 
             this.state = null;
             this.view = 'due';
             /** The slug whose note is being edited, or null. */
             this.editing = null;
+
+            this.templates = [];
+            /** The template open in the editor: an id, 'new', or null. */
+            this.template = null;
 
             const $ = (selector) => dialog.element.querySelector(selector);
             this.el = { rail: $('.bb-leet-rail'), pane: $('.bb-leet-pane'), sub: $('.bb-leet-sub') };
@@ -142,8 +164,9 @@
             this.render();
         }
 
-        hydrate(state) {
+        hydrate(state, templates) {
             this.state = state;
+            this.templates = templates;
             // Open on whichever rail has something in it. Landing on an empty
             // "Due" when there are twelve problems waiting to be solved is a
             // panel that looks broken.
@@ -155,9 +178,10 @@
         /** Repaint from storage — the dashboard may have changed it under us. */
         async refresh() {
             if (!this.alive) return;
-            const state = await Leet.load();
+            const [state, templates] = await Promise.all([Leet.load(), LeetTemplates.load()]);
             if (!this.alive) return;
             this.state = state;
+            this.templates = templates;
             this.render();
         }
 
@@ -184,7 +208,9 @@
             }
             const lists = this.lists();
             this.el.rail.innerHTML = '<div class="bb-leet-rail-label">Lists</div>' +
-                VIEWS.map((view) => railRow(view.id, view.label, lists[view.id].length, view.id === this.view)).join('');
+                VIEWS.map((view) => railRow(view.id, view.label, lists[view.id].length, view.id === this.view)).join('') +
+                '<div class="bb-leet-rail-label">Code</div>' +
+                railRow(TEMPLATES_VIEW, 'Templates', this.templates.length, this.view === TEMPLATES_VIEW);
 
             const total = lists.due.length + lists.toSolve.length + lists.solved.length;
             this.el.sub.textContent = total
@@ -197,6 +223,8 @@
                 this.el.pane.innerHTML = '<div class="bb-leet-empty">Loading…</div>';
                 return;
             }
+            if (this.view === TEMPLATES_VIEW) return this.renderTemplates();
+
             const view = VIEWS.find((v) => v.id === this.view) || VIEWS[0];
             const rows = this.lists()[view.id];
             if (!rows.length) {
@@ -252,6 +280,132 @@
                 </div>`;
         }
 
+        // ------------------------------------------------------- templates
+
+        /** The template currently open in the editor, or null for none. */
+        openTemplate() {
+            if (this.template === 'new') {
+                return { id: 'new', name: '', lang: this.currentLang(), body: '', uses: 0 };
+            }
+            return this.templates.find((t) => t.id === this.template) || null;
+        }
+
+        renderTemplates() {
+            const lang = this.currentLang();
+            const open = this.openTemplate();
+            // Ordered the way the hotkey's suggester orders them, so the list
+            // you read here is the list you will be offered there.
+            const rows = LeetTemplates.forLang(this.templates, lang);
+
+            this.el.pane.innerHTML = `
+                <div class="bb-leet-tpl">
+                    <div class="bb-leet-tpl-list">
+                        <div class="bb-leet-tpl-head">
+                            <span>${lang ? esc(LeetTemplates.labelFor(lang)) : 'All templates'}</span>
+                            <button type="button" class="bb-btn" data-bb-tpl-new="1">+ New</button>
+                        </div>
+                        ${rows.length
+                            ? `<ul class="bb-leet-tpl-rows">${rows.map((template) => `
+                                <li>
+                                    <button type="button" class="bb-leet-tpl-row${template.id === this.template ? ' is-on' : ''}"
+                                            data-bb-tpl="${att(template.id)}">
+                                        <span class="bb-leet-tpl-name">${esc(template.name)}</span>
+                                        <span class="bb-leet-tpl-lang">${esc(LeetTemplates.labelFor(template.lang))}</span>
+                                    </button>
+                                </li>`).join('')}</ul>`
+                            : `<p class="bb-leet-tpl-none">No templates yet. Select working code in the editor and
+                               press save, or write one here.</p>`}
+                    </div>
+                    ${open ? this.templateFormHtml(open) : `
+                        <div class="bb-leet-tpl-editor is-empty">
+                            <p>Pick a template to edit it, or make a new one.</p>
+                        </div>`}
+                </div>`;
+        }
+
+        templateFormHtml(template) {
+            const langs = LeetTemplates.list();
+            const canInsert = !!this.insertTemplate && template.id !== 'new';
+            return `
+                <div class="bb-leet-tpl-editor">
+                    <div class="bb-leet-tpl-fields">
+                        <input type="text" class="bb-input bb-leet-tpl-title" placeholder="What is it called?"
+                               value="${att(template.name)}" maxlength="${LeetTemplates.NAME_CAP}">
+                        <select class="bb-input bb-leet-tpl-select">
+                            <option value=""${template.lang ? '' : ' selected'}>Any language</option>
+                            ${langs.map((entry) => `
+                                <option value="${att(entry.id)}"${entry.id === template.lang ? ' selected' : ''}>${esc(entry.label)}</option>`).join('')}
+                        </select>
+                    </div>
+                    <textarea class="bb-input bb-leet-tpl-body" rows="12" spellcheck="false"
+                              placeholder="The code to paste in">${esc(template.body)}</textarea>
+                    <div class="bb-leet-tpl-actions">
+                        <button type="button" class="bb-btn bb-btn-primary" data-bb-tpl-save="1">Save</button>
+                        <button type="button" class="bb-btn" data-bb-tpl-insert="1"${canInsert ? '' : ' disabled'}
+                                title="${canInsert ? 'Paste it at the cursor' : 'Open a problem to insert a template'}">Insert</button>
+                        ${template.id === 'new' ? '' : '<button type="button" class="bb-btn bb-leet-tpl-del" data-bb-tpl-delete="1">Delete</button>'}
+                    </div>
+                </div>`;
+        }
+
+        /** What the three controls currently hold. */
+        readTemplateForm() {
+            const $ = (selector) => this.el.pane.querySelector(selector);
+            const name = $('.bb-leet-tpl-title');
+            const lang = $('.bb-leet-tpl-select');
+            const body = $('.bb-leet-tpl-body');
+            if (!name || !lang || !body) return null;
+            return { name: name.value, lang: lang.value, body: body.value };
+        }
+
+        async saveTemplate() {
+            const form = this.readTemplateForm();
+            if (!form) return;
+            if (!form.name.trim()) {
+                this.notify('Give the template a name first', 'warning');
+                return;
+            }
+
+            if (this.template === 'new') {
+                const id = await LeetTemplates.create(form);
+                this.template = id;
+            } else {
+                await LeetTemplates.edit(this.template, form);
+            }
+            if (!this.alive) return;
+            await this.refresh();
+            if (this.alive) this.notify('Template saved', 'success');
+        }
+
+        async deleteTemplate() {
+            const id = this.template;
+            if (!id || id === 'new') return;
+            await LeetTemplates.remove(id);
+            if (!this.alive) return;
+            this.template = null;
+            await this.refresh();
+        }
+
+        /**
+         * Paste it at the cursor and get out of the way.
+         *
+         * Closing the panel is the point: the cursor is in the editor behind
+         * it, and a template inserted under a full-screen sheet is one you
+         * then have to dismiss to see.
+         */
+        async insert() {
+            const template = this.openTemplate();
+            if (!template || !this.insertTemplate) return;
+            // Whatever is in the field wins over what is stored — editing a
+            // template and inserting without saving should insert the edit.
+            const form = this.readTemplateForm();
+            const body = form ? form.body : template.body;
+
+            this.close();
+            const landed = this.insertTemplate(body);
+            if (landed !== false) LeetTemplates.touch(template.id);
+        }
+
         // ---------------------------------------------------------- wiring
 
         /**
@@ -270,6 +424,8 @@
             });
 
             this.el.pane.addEventListener('click', (event) => {
+                if (this.view === TEMPLATES_VIEW) return this.onTemplateClick(event);
+
                 const open = event.target.closest('[data-bb-open]');
                 if (open) {
                     // A real <a> with a real href, so the middle click and the
@@ -316,6 +472,24 @@
             });
         }
 
+        onTemplateClick(event) {
+            if (event.target.closest('[data-bb-tpl-new]')) {
+                this.template = 'new';
+                this.renderTemplates();
+                const field = this.el.pane.querySelector('.bb-leet-tpl-title');
+                if (field) field.focus();
+                return;
+            }
+            if (event.target.closest('[data-bb-tpl-save]')) return void this.saveTemplate();
+            if (event.target.closest('[data-bb-tpl-delete]')) return void this.deleteTemplate();
+            if (event.target.closest('[data-bb-tpl-insert]')) return void this.insert();
+
+            const row = event.target.closest('[data-bb-tpl]');
+            if (!row) return;
+            this.template = row.dataset.bbTpl;
+            this.renderTemplates();
+        }
+
         async saveNote() {
             const slug = this.editing;
             const input = this.el.pane.querySelector('.bb-leet-note-input');
@@ -345,7 +519,7 @@
 
     const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-    const LeetPanel = { createLeetPanel, OVERLAY_ID, VIEWS, dueText, railRow };
+    const LeetPanel = { createLeetPanel, OVERLAY_ID, VIEWS, TEMPLATES_VIEW, dueText, railRow };
 
     root.BB = root.BB || {};
     root.BB.LeetPanel = LeetPanel;

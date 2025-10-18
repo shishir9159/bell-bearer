@@ -262,6 +262,11 @@
         // shared/leetcode.js owns both shapes.
         leetProblems: 'bbLeetProblems',
         leetDays: 'bbLeetDays',
+
+        // Code templates for LeetCode's editor, in display order. Written by
+        // the user — nothing ships with the extension. shared/leet-templates.js
+        // owns the shape.
+        leetTemplates: 'bbLeetTemplates',
     });
 
     function withDefaults(stored, keys) {

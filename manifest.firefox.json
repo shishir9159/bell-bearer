@@ -82,6 +82,7 @@
         "src/content/chess-limits.js",
         "src/shared/fsrs.js",
         "src/shared/leetcode.js",
+        "src/shared/leet-templates.js",
         "src/content/leet-read.js",
         "src/content/leet-panel.js",
         "src/content/leet-ui.js",
