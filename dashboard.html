@@ -338,6 +338,60 @@
                         <div data-time-limit-view="reddit"></div>
                     </div>
 
+                    <!-- Every control here binds by carrying the same id as
+                         its setting key — see src/page/settings-form.js. There
+                         is no load/save pair to write. -->
+                    <div class="settings-section" id="leetcodeSettingsPanel" data-site-settings="leetcode"
+                         data-plate="LeetCode" data-plate-proper hidden>
+                        <p class="settings-hint">Bell Bearer times each problem with LeetCode's own stopwatch rather than a clock of its own, so the number on the page and the number recorded against the attempt are the same number. Whether a submission passed is read from LeetCode's own network calls, not from the result banner — and pressing Run is not a submission, so it never counts against you.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="leetStartTimer">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="leetStartTimer">Start LeetCode's timer when a problem opens</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="leetGradePrompt">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="leetGradePrompt">Ask how it went after an accepted submission</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="leetNoteButton">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="leetNoteButton">Show your note beside the problem title</label>
+                        </div>
+
+                        <p class="settings-hint">Scheduling is FSRS-5, the algorithm Anki's newer scheduler uses, with its published weights. Target retention is the chance of remembering a problem at the moment it comes back around: raise it and problems return sooner and more often, lower it and you see each one less but forget more of them. Ninety percent is the value the algorithm is tuned for; below seventy or above ninety-seven it stops behaving sensibly, so the field will not go there.</p>
+                        <div class="settings-option">
+                            <label class="setting-label" for="leetRetention">Target retention (percent)</label>
+                            <input type="number" id="leetRetention" min="70" max="97" step="1">
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="leetMaxInterval">Longest gap it may schedule (days)</label>
+                            <input type="number" id="leetMaxInterval" min="1" max="3650" step="1">
+                        </div>
+
+                        <p class="settings-hint">Mock interview mode hides what an interview would not give you — the difficulty, the topic tags, the hints, the similar questions and the solutions tab — and runs a countdown. Nothing is deleted; leaving the mode puts the page back exactly as it was. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd> starts one on the problem you are reading, whether or not this is on.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="leetMockMode">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="leetMockMode">Open every problem in mock interview mode</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="leetMockMinutes">Countdown (minutes)</label>
+                            <input type="number" id="leetMockMinutes" min="1" max="180" step="1">
+                        </div>
+
+                        <p class="settings-hint">Code templates are written by you — nothing ships with the extension. Select working code in LeetCode's editor and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> to save it as one, and the same keys offer them back, filtered to the language the editor is in. That shortcut has its own key handling so that it works with the caret inside the editor, where every other shortcut deliberately stays out of the way.</p>
+                    </div>
+
                     <div class="settings-section" id="youtubeSettingsPanel" data-site-settings="youtube"
                          data-plate="YouTube" data-plate-proper hidden>
                         <div class="settings-option" style="display: flex; align-items: center; gap: 12px;">

@@ -864,6 +864,39 @@ check('human() reads as a stopwatch at every scale', () => {
 require('../src/page/leet-stats.js');
 const LeetStats = globalThis.BB.LeetStats;
 
+console.log('\n# leetcode — the settings panel');
+check('every leetcode setting has a control carrying its key as an id', () => {
+    // This is the whole binding. src/page/settings-form.js matches a control
+    // to a setting by id and nothing else, so a setting with no element is a
+    // setting that can never be changed, and it fails silently — which is
+    // exactly the kind of thing a reader would not notice.
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const Settings = globalThis.BB.Settings;
+    const controls = new Set([...html.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+
+    const leetKeys = Settings.KEYS.filter((key) => /^leet/.test(key));
+    assert(leetKeys.length, 'no leetcode settings at all');
+    for (const key of leetKeys) assert(controls.has(key), `${key} has no control bound to it`);
+});
+check('the number fields cannot be set outside what the code accepts', () => {
+    // The clamps in leet-ui.js and leet-stats.js are the real guard, but a
+    // field that lets you type 400% retention and then quietly ignores it is
+    // a field that lies about what it does.
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const attrs = (id) => (new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html) || [''])[0];
+    const retention = attrs('leetRetention');
+    assert(/min="70"/.test(retention) && /max="97"/.test(retention), `retention is unbounded: ${retention}`);
+    assert(/type="number"/.test(attrs('leetMaxInterval')), 'the interval cap is not a number field');
+    assert(/min="1"/.test(attrs('leetMockMinutes')), 'a zero-minute mock interview is offerable');
+});
+check('a leetcode panel exists for every dashboard tab', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    for (const id of ['leetReviewPanel', 'leetHeatPanel', 'leetNotesPanel', 'leetcodeSettingsPanel']) {
+        assert(html.includes(`id="${id}"`), `${id} is referenced but not in the page`);
+    }
+    assert(/data-site-settings="leetcode"/.test(html), 'the settings launcher has no leetcode card to open');
+});
+
 console.log('\n# leetcode — the dashboard panels');
 check('each heat metric is banded on its own scale', () => {
     // One set of bounds cannot colour both counts and seconds: two
