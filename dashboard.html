@@ -103,6 +103,13 @@
                      own pages, in src/content/roster.js. -->
                 <div id="twitterRosterPanel" class="site-panel" data-site="twitter" data-roster="twitter"></div>
                 <div id="redditRosterPanel" class="site-panel" data-site="reddit" data-roster="reddit"></div>
+
+                <!-- LeetCode, drawn by src/page/leet-stats.js. Review is
+                     first because the question the log exists to answer is
+                     "what should I do today". -->
+                <div id="leetReviewPanel" class="site-panel" data-site="leetcode" data-leet-review></div>
+                <div id="leetHeatPanel" class="site-panel" data-site="leetcode" data-leet-stats></div>
+                <div id="leetNotesPanel" class="site-panel" data-site="leetcode" data-leet-notes></div>
             </div>
         </div>
 
@@ -507,6 +514,10 @@
     <script src="src/page/x-pouch-view.js"></script>
     <script src="src/shared/roster.js"></script>
     <script src="src/page/roster-view.js"></script>
+    <script src="src/shared/fsrs.js"></script>
+    <script src="src/shared/leetcode.js"></script>
+    <script src="src/shared/leet-templates.js"></script>
+    <script src="src/page/leet-stats.js"></script>
     <script src="src/page/chess-stats.js"></script>
     <script src="src/page/chess-settings.js"></script>
     <script src="src/page/backup-buttons.js"></script>

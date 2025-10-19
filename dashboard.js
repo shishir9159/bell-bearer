@@ -120,6 +120,7 @@
             }
             if (window.BB.TimeLimitView) window.BB.TimeLimitView.mountAll();
             if (window.BB.XPouchView) window.BB.XPouchView.mountAll();
+            if (window.BB.LeetStats) window.BB.LeetStats.mountAll();
             if (window.BB.RosterView) window.BB.RosterView.mountAll();
             document.querySelectorAll('[data-chess-games]').forEach((panel) => {
                 const site = panel.dataset.chessGames;

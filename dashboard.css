@@ -2769,3 +2769,135 @@ body[data-skin="deco"] .bb-plate {
 }
 
 .x-empty-row { margin: 2px 0 0; font-size: 12px; color: var(--text-faint); }
+
+/* ======================================================================
+   LeetCode — the review queue, the practice map and the notes.
+   Built on the Activity view's stat-figure / stat-panel / stat-table, so
+   only what those have no use for is here.
+   ====================================================================== */
+
+/* LeetCode's own three colours, kept across every skin: they are the site's
+   vocabulary, and a Medium that is pink on one skin and amber on another
+   stops being readable at a glance. */
+.leet-diff { font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.leet-diff.is-easy { color: #0f9f9f; }
+.leet-diff.is-medium { color: #c98a00; }
+.leet-diff.is-hard { color: #d33a3a; }
+
+/* The pale-on-pale versions go muddy against a dark surface. */
+[data-theme="dark"] .leet-diff.is-easy { color: #2ccccc; }
+[data-theme="dark"] .leet-diff.is-medium { color: #ffc733; }
+[data-theme="dark"] .leet-diff.is-hard { color: #ff5c5c; }
+
+.leet-queue .col-diff { width: 92px; }
+.leet-queue .col-grade { width: 132px; }
+
+/* The note lives in the table rather than behind a menu, because the whole
+   point of a note is to be read while you are deciding what to work on. */
+.leet-note-cell { max-width: 320px; }
+
+.leet-note-btn {
+    max-width: 100%;
+    padding: 4px 9px;
+    border: 1px dashed var(--border);
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.45;
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leet-note-btn:hover { border-color: var(--accent); color: var(--text); }
+.leet-note-btn.is-empty { color: var(--text-faint); font-style: italic; border-style: dotted; }
+
+/* Four initials rather than four words: the row is already carrying a title,
+   a difficulty and a date, and "Again / Hard / Good / Easy" spelled out
+   would be wider than all three. The full word is on each one's title. */
+.leet-grades { display: inline-flex; gap: 4px; }
+
+.leet-grade {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color .12s ease, color .12s ease;
+}
+
+.leet-grade:hover { border-color: var(--accent); color: var(--accent); }
+
+.leet-notes-hint { margin-bottom: 14px; }
+
+.leet-notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.leet-note-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 13px 15px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.leet-note-card:hover { border-color: var(--accent-soft-2); }
+
+.leet-note-head { display: flex; align-items: baseline; gap: 9px; }
+.leet-note-head .page-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leet-note-head .page-host { margin-left: auto; white-space: nowrap; }
+
+.leet-note-del {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.leet-note-del:hover { background: var(--accent-soft); color: var(--danger); }
+
+/* The note itself is the card's body and is editable by clicking it, so it
+   is a button — but it must read as prose, which is what the left rule and
+   the preserved line breaks are for. */
+.leet-note-body {
+    padding: 0 0 0 10px;
+    border: 0;
+    border-left: 2px solid var(--accent-soft-2);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1.5;
+    text-align: left;
+    white-space: pre-wrap;
+    cursor: pointer;
+}
+
+.leet-note-body:hover { border-left-color: var(--accent); color: var(--text); }
+
+/* A note is several lines, so its field is a textarea rather than the
+   single-line input the other modals use. */
+.leet-note-input { resize: vertical; min-height: 96px; line-height: 1.5; }

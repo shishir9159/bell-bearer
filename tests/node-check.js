@@ -859,6 +859,46 @@ check('human() reads as a stopwatch at every scale', () => {
     });
 });
 
+// ------------------------------------------------- the leetcode dashboard
+
+require('../src/page/leet-stats.js');
+const LeetStats = globalThis.BB.LeetStats;
+
+console.log('\n# leetcode — the dashboard panels');
+check('each heat metric is banded on its own scale', () => {
+    // One set of bounds cannot colour both counts and seconds: two
+    // submissions is a quiet day and two seconds is nothing at all. Sharing
+    // a scale made the Time map one flat block of the darkest level.
+    const scales = Object.values(LeetStats.METRICS).map((m) => m.steps.join(','));
+    eq(new Set(scales).size, scales.length, 'two metrics are sharing a scale');
+    for (const [id, spec] of Object.entries(LeetStats.METRICS)) {
+        assertRising(spec.steps, `${id} steps`);
+        eq(spec.legend.length, 5, `${id} needs a word per level, zero included`);
+    }
+});
+check('the heat metrics are the ones the store can answer', () => {
+    eq(Object.keys(LeetStats.METRICS).sort(), Leet.METRICS.map((m) => m.id).sort());
+});
+check('the median shrugs off one runaway reading', () => {
+    // A problem left open in a background tab for two hours is exactly what
+    // the wall-clock fallback mis-measures, and a mean would move to it.
+    const attempt = (seconds) => ({ attempts: [{ at: L0, status: 'Accepted', seconds, runtime: '' }] });
+    const sane = [attempt(300), attempt(600), attempt(900)];
+    eq(LeetStats.medianSeconds(sane), 600);
+    eq(LeetStats.medianSeconds([...sane, attempt(7200)]), 750, 'not the 2250 a mean would give');
+});
+check('problems never timed are left out of the median rather than counted as nought', () => {
+    const attempt = (seconds) => ({ attempts: [{ at: L0, status: 'Accepted', seconds, runtime: '' }] });
+    eq(LeetStats.medianSeconds([attempt(0), attempt(600), attempt(0)]), 600);
+    eq(LeetStats.medianSeconds([]), 0);
+    eq(LeetStats.medianSeconds([attempt(0)]), 0, 'nothing timed is not a median of zero');
+});
+check('the dashboard writes durations the way the panel does', () => {
+    eq(LeetStats.human(45), '45s');
+    eq(LeetStats.human(900), '15m');
+    eq(LeetStats.human(3900), '1h 05m');
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.
