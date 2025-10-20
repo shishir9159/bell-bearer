@@ -86,6 +86,11 @@
 <script src="../src/content/leet-read.js"></script>
 <script src="../src/content/leet-panel.js"></script>
 <script src="../src/content/leet-ui.js"></script>
+<!-- A page module rather than a content script. Its arithmetic is covered in
+     tests/node-check.js; it is here so that a syntax error in it fails the
+     browser run loudly instead of only on the dashboard. -->
+<script src="../src/page/heat-map.js"></script>
+<script src="../src/page/leet-stats.js"></script>
 
 <!-- 4. Specs -->
 <script src="background.test.js"></script>

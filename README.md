@@ -28,6 +28,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Daily time limit**: A budget, or a window of hours, on any site you name — counted while you are actually looking at it, snoozable ten minutes at a time
 - **Rosters**: Who you follow on Twitter and the subreddits you have joined, out to a text file and back in again, slowly
 - **Chess.com and Lichess**: Games, time management and time at the board; a clock warning and moves read aloud while you play
+- **LeetCode**: Each problem timed on LeetCode's own stopwatch, submissions recorded from its own traffic, an FSRS-5 review schedule graded in one click, your notes and code templates on the page, and a mock-interview mode that hides the hints
 - **Reward System**: Track watch credits to spend them on popcorn for later
 
 Export and Import sit in the dashboard header, beside the theme button, and
@@ -85,7 +86,9 @@ while you are typing in a field.
 | `Shift + H` | Skim: search your browsing history |
 | `Shift + A` | Skim: search the actions it can run |
 | `Shift + L` | Label every link and button in view |
-| `Shift + P` | Open the pouch — the sheet on YouTube, the panel on x.com |
+| `Shift + P` | Open the pouch — the sheet on YouTube, the panel on x.com, the sheet on leetcode.com |
+| `Ctrl + Alt + T` | LeetCode: offer a code template at the cursor, or save the selection as one |
+| `Ctrl + Alt + M` | LeetCode: start or end a mock interview on this problem |
 
 Speed steps through one fixed ladder — 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2,
 2.25, 2.5, 3, 3.5, 4, 5 — and the popup's buttons step the same ladder, so the
@@ -94,11 +97,16 @@ break) the speed you picked is re-applied; when *you* change it through the
 site's own speed menu, that becomes the new setting instead. Turn the re-apply
 off with **Keep my playback speed** in Settings.
 
+The two LeetCode shortcuts are `Ctrl + Alt` rather than a bare letter, and they
+have key handling of their own rather than going through the table above. Both
+are meant to work with the caret inside LeetCode's editor, which is the one
+place the "ignored while you are typing" rule is built to cover.
+
 `Shift + P` is off until **Settings › General › Pouch shortcut** turns it on,
 for the same reason Skim and the link hints are: a bare-Shift letter is a large
 claim to make on somebody's keyboard without telling them first. It does nothing
-anywhere but YouTube and x.com, so on every other site the key stays a plain
-capital P.
+anywhere but YouTube, x.com and leetcode.com, so on every other site the key
+stays a plain capital P.
 
 ## Skim
 
@@ -278,6 +286,96 @@ Nothing is deleted. Hidden entries keep their box in the page, because X's
 timeline is virtualised and measures its own rows — a node removed out from under
 that bookkeeping makes the scroll position jump. Turning the setting off puts
 everything back on the page that is already open, without a reload.
+
+## LeetCode
+
+Practising problems is a loop, and the part that is hard to keep by hand is the
+bookkeeping: how long that one actually took, how many goes it needed, and when
+it is worth doing again. LeetCode gets a surface for that loop.
+
+**The clock is LeetCode's own.** Opening a problem starts the stopwatch already
+in its toolbar rather than drawing a second one — two clocks on one screen that
+disagree by a few seconds is worse than either. The elapsed time is then read
+back off that display, as the sum of segments rather than the latest reading, so
+resetting it loses nothing and pausing costs nothing. If the widget cannot be
+found or read at all, the fallback banks wall-clock gaps, and only those spent
+with the tab on screen and the window focused — never by counting ticks, which a
+throttled background tab would under-report tenfold.
+
+**Whether a submission passed is read off LeetCode's own network calls**, not off
+the result banner, whose markup changes every few weeks and which is gone again
+a moment later. That has one consequence worth stating plainly: **pressing Run is
+not a submission.** Run and Submit end up polling the same endpoint with the same
+response shape, and the two are only distinguishable at the moment the job is
+created — so the ids minted by Submit are tracked and the ids minted by Run are
+thrown away. Finding out your code does not compile is not an attempt.
+
+**Grading is a question, asked once, on an accept.** Four buttons — Again, Hard,
+Good, Easy — with one already marked from the clock and the failed submissions
+against a per-difficulty budget (Easy 15m, Medium 30m, Hard 45m). Three failures
+is Again however fast they came; a single failure caps the answer at Hard however
+quick the accepted one was. Each button says what it would cost, because "Hard"
+and "Good" mean nothing until you can see that one brings the problem back on
+Thursday and the other in three weeks. **Dismissing leaves it ungraded** rather
+than quietly taking the suggestion: a schedule written on your behalf is a wrong
+date you never agreed to and would have to go and find to fix. Ungraded problems
+sit under Solved and can be graded later from the dashboard.
+
+The schedule is [FSRS-5](https://github.com/open-spaced-repetition/fsrs4anki),
+with its published weights. Target retention is the chance of remembering a
+problem at the moment it comes back around; ninety percent is what the algorithm
+is tuned for.
+
+**Pouch** sits in LeetCode's top bar and opens a sheet with four rails — Due, To
+solve, Solved, and Templates. Notes are editable there as well as on the
+dashboard, because the moment you want to write one is the moment you have just
+finished the problem.
+
+### Templates
+
+Code templates are the snippets you paste before you start: a binary search that
+gets the boundaries right, a union-find, the import block you always want.
+**Nothing ships with the extension** — a bundled library of somebody else's
+snippets would be in languages you do not use, and the value of a template is
+that it is the version *you* trust.
+
+<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> inside the editor offers the ones
+for the language you are in, filtered as you type; with code selected it offers
+to save that selection as a new one, using whatever you typed in the filter box
+as its name. That shortcut has key handling of its own rather than going through
+the extension's usual one, and deliberately: every other shortcut stays out of
+the way while you are typing in a field, which is right — and this one has to
+fire *inside* the editor, which is the one place that guard is built to cover.
+
+### Mock interview mode
+
+<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>M</kbd> hides what an interview would not
+give you — the difficulty, the topic tags, the hints, the similar questions and
+the solutions tab — and runs a countdown. Knowing a problem is tagged "binary
+search" is most of the work, which is exactly the help that makes practice not
+resemble the thing it is practice for. The note pill and the grade card stay out
+of the way until it ends.
+
+Nothing is deleted: everything is hidden by one class on `<html>`, so leaving
+puts the page back exactly as it was, and LeetCode re-rendering a pane behind you
+cannot resurrect what should be hidden.
+
+### The dashboard
+
+**Review** is the queue — what is due, what was opened and never solved, and
+what is coming up — with a re-grade control on each row and its note in the
+table, since the note is what you read while deciding what to work on. The
+headline figures are solved, due, the current streak, and the **median** time per
+problem; the median rather than the mean, because one problem left open in a
+background tab for two hours drags a mean somewhere nobody's practice actually
+is.
+
+**Practice** is a heat map, one square a day in your own time zone, coloured by
+submissions, solves or time. Only what Bell Bearer watched is in it — solving
+something before you installed it is not, and the history is not pulled from
+LeetCode's API.
+
+**Notes** is every problem you have written one on, editable and deletable.
 
 ## Daily time limit
 
@@ -468,6 +566,9 @@ src/shared/     pure logic, used by every surface
   skim.js          where a match comes to rest, and the action table
   limit-sites.js   which sites are held to a daily limit, and what each limit is
   time-limits.js   the day's tally per limited host, and the snooze
+  fsrs.js          FSRS-5: when a problem is worth doing again
+  leetcode.js      the practice log: one record per problem, one bucket per day
+  leet-templates.js  code templates, and which language each belongs to
   roster.js        a site's own roster: the file format, the pace, and the job
   x-pouch.js       the X pouch: two independent topic lists and their items
   pouch-button.js  the pouch button both YouTube and X inject
@@ -490,8 +591,15 @@ src/content/    injected into every page
   twitter-ui.js    the X nav row, the post and profile buttons, the topic picker
   twitter-panel.js the pouch panel over X's navigation column
   twitter-ads.js   hides promoted posts and Premium upsells, when asked to
+  leet-read.js     every leetcode.com selector, and reading a problem off one
+  leet-ui.js       the clock, the verdict, the grade card, mock mode, the hotkey
+  leet-panel.js    the pouch sheet: due, to solve, solved, templates
   dom-watch.js     one throttled MutationObserver for all of the above
   overlay.js notify.js theme.js page-info.js markdown.js
+
+  MAIN-world entries, loaded per site, with no chrome.* and DOM events only:
+  chess-page.js    the board's own state, which the isolated world cannot see
+  leet-page.js     watches LeetCode's fetches for verdicts; drives Monaco
 
 src/background/ the service worker, pulled in by background.js
   proto.js         the sowon wire format
@@ -515,6 +623,7 @@ src/page/       shared by popup.html and dashboard.html
   limit-sites-panel.js the General list: which sites have a limit, and what it is
   roster-view.js   a site's Roster panel: the file out, the file in, the job
   x-pouch-view.js  the dashboard's People and Posts panels — where X topics are managed
+  leet-stats.js    the LeetCode Review, Practice and Notes panels
   popup-width.js   applies the popup size setting, from popup.html's <head>
 
 skins.css       the token layer for every skin — linked before popup/dashboard css
@@ -594,6 +703,45 @@ A person's `id` is ours and their `handle` is the key they are recognised by; a
 post's `id` *is* its status id, which is the only thing about a post that never
 changes. `postedAt` is stored rather than the "6h" X was showing at the time,
 because a stored "6h" is wrong by tomorrow.
+
+The LeetCode log is three keys. A problem is kept for as long as you care about
+the problem; a day bucket is three numbers for a square on a heat map and is
+dropped after four hundred days, which is a year of map plus the slack to scroll
+it. Templates are an array, because their order is the display order:
+
+```javascript
+{
+  bbLeetProblems: {
+    "two-sum": {
+      slug: "two-sum", title: "Two Sum", difficulty: "Easy",
+      tags: ["Array", "Hash Table"], url: "https://leetcode.com/problems/two-sum/",
+      note: "two pointers, sorted input only", seenAt: 0, solvedAt: 0,
+      attempts: [{ at: 0, status: "Accepted", seconds: 420, runtime: "52 ms" }],
+      fsrs: { stability: 3.17, difficulty: 5.28, due: 0, reviewedAt: 0,
+              reps: 1, lapses: 0, grade: 3 }
+    }
+  },
+  bbLeetDays: { "2026-09-24": { submitted: 4, solved: 1, seconds: 2730 } },
+  bbLeetTemplates: [
+    { id: "lt_…", name: "binary search", lang: "python3", body: "lo, hi = 0, n",
+      createdAt: 0, usedAt: 0, uses: 0 }
+  ]
+}
+```
+
+A problem is keyed by its slug, which is the only stable name it has — titles
+are edited and difficulties are re-rated, and all of those are LeetCode's and are
+refreshed from the page on every visit. The note, the attempts and the schedule
+are yours and survive every refresh. `attempts` is newest first and capped at
+twenty. `fsrs` is `null` until the problem is graded, which is what puts an
+ungraded solve under Solved rather than in the queue.
+
+The day key is **local**, not UTC: an evening's practice east of Greenwich would
+otherwise light up tomorrow's square, and a morning's west of it yesterday's.
+
+A template's `lang` is LeetCode's own spelling, and `""` means "any language" —
+not a fallback for a language with no templates of its own so much as a category,
+since a comment header is not Python or C++.
 
 The daily limit is two keys — what the limits are, and what today has gone on —
 both keyed by host, so neither knows anything about which sites have a workspace:
