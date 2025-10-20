@@ -911,6 +911,33 @@
         }
 
         /**
+         * Undo install().
+         *
+         * Nothing in the extension calls this — a content script lives as long
+         * as its page does — but the specs build a fresh UI per test against
+         * one long-lived document, and four listeners on `document` that
+         * outlive the object that registered them means the third test is
+         * being answered by the first test's UI as well as its own.
+         */
+        function uninstall() {
+            document.removeEventListener(VERDICT, onVerdict);
+            document.removeEventListener('visibilitychange', onVisibility);
+            document.removeEventListener('keydown', onHotkey, true);
+            window.removeEventListener('focus', onVisibility);
+            window.removeEventListener('blur', onVisibility);
+
+            watcher.remove('leet-clock');
+            watcher.remove('leet-nav');
+            watcher.remove('leet-pill');
+            watcher.remove('leet-start');
+
+            closeGradeCard();
+            closeSuggest();
+            if (mock.on) stopMock();
+            if (open && open.alive) { open.close(); open = null; }
+        }
+
+        /**
          * LeetCode navigated. It is a single-page app and announces nothing,
          * so this is called from main.js off the shared observer.
          *
@@ -975,7 +1002,7 @@
         }
 
         return {
-            install, onNavigate, openPouch, refreshSurfaces, panel,
+            install, uninstall, onNavigate, openPouch, refreshSurfaces, panel,
             injectNavEntry, injectNotePill,
             elapsedSeconds, human, inDays,
             // For the specs, which drive these rather than waiting on a real
