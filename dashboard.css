@@ -2901,3 +2901,85 @@ body[data-skin="deco"] .bb-plate {
 /* A note is several lines, so its field is a textarea rather than the
    single-line input the other modals use. */
 .leet-note-input { resize: vertical; min-height: 96px; line-height: 1.5; }
+
+/* ------------------------------------------------- managing the templates */
+
+.leet-tpl-manage { display: flex; flex-direction: column; gap: 8px; }
+
+.leet-tpl-item {
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    background: var(--surface);
+    overflow: hidden;
+}
+
+.leet-tpl-item.is-open { border-color: var(--accent); }
+.leet-tpl-item.is-open .leet-tpl-bar { border-bottom: 1px solid var(--border); }
+
+.leet-tpl-bar { display: flex; align-items: center; gap: 4px; padding: 4px 10px 4px 4px; }
+
+.leet-tpl-grip { display: grid; place-items: center; width: 24px; color: var(--text-faint); cursor: grab; }
+.leet-tpl-grip svg { width: 16px; height: 16px; }
+
+.leet-tpl-open {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 8px 4px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.leet-tpl-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leet-tpl-sub { font-size: 11px; color: var(--text-faint); }
+
+.leet-tpl-del {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+}
+
+.leet-tpl-del:hover { background: var(--accent-soft); color: var(--danger); }
+.leet-tpl-del svg { width: 15px; height: 15px; }
+
+.leet-tpl-editor { padding: 12px; }
+.leet-tpl-fields { display: flex; gap: 8px; margin-bottom: 8px; }
+.leet-tpl-name-input { flex: 1; min-width: 0; }
+.leet-tpl-lang-input { flex: 0 0 auto; width: auto; }
+
+/* Monospace and no wrapping: a template's indentation is part of it, and a
+   wrapped line of code reads as two. */
+.leet-tpl-body-input {
+    width: 100%;
+    font-family: Consolas, 'SF Mono', ui-monospace, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+    resize: vertical;
+}
+
+.leet-tpl-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* A brand-new template has no row to sit under, so its editor is its own
+   card rather than a body hanging off nothing. */
+.leet-tpl-manage > .leet-tpl-editor {
+    border: 1px solid var(--accent);
+    border-radius: var(--card-radius);
+    background: var(--surface);
+}

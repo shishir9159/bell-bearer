@@ -50,6 +50,9 @@
             { id: 'review', label: 'Review', panel: 'leetReviewPanel' },
             { id: 'heat', label: 'Practice', panel: 'leetHeatPanel' },
             { id: 'notes', label: 'Notes', panel: 'leetNotesPanel' },
+            // Templates are read and saved on leetcode.com; they are managed
+            // here, the same split the X pouch keeps.
+            { id: 'templates', label: 'Templates', panel: 'leetTemplatesPanel' },
         ],
     };
 
@@ -121,6 +124,7 @@
             if (window.BB.TimeLimitView) window.BB.TimeLimitView.mountAll();
             if (window.BB.XPouchView) window.BB.XPouchView.mountAll();
             if (window.BB.LeetStats) window.BB.LeetStats.mountAll();
+            if (window.BB.LeetTemplatesView) window.BB.LeetTemplatesView.mountAll();
             if (window.BB.RosterView) window.BB.RosterView.mountAll();
             document.querySelectorAll('[data-chess-games]').forEach((panel) => {
                 const site = panel.dataset.chessGames;
