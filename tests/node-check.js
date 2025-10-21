@@ -486,6 +486,39 @@ check('the grade a session suggests follows from its own numbers', () => {
     }), 2, 'quick, but it took two goes');
 });
 
+console.log('\n# leetcode — putting something back in the queue');
+check('inQueue is exactly what the due and to-solve rails hold', () => {
+    let state = Leet.seeIn(Leet.blank(), { slug: 'fresh' }, L0);
+    eq(Leet.inQueue(state, 'fresh', L0), true, 'seen and unsolved is waiting');
+
+    state = Leet.addAttempt(state, { slug: 'fresh', status: 'Accepted', at: L0 });
+    state.problems.fresh.fsrs = { stability: 30, difficulty: 5, due: L0 + days(30) };
+    eq(Leet.inQueue(state, 'fresh', L0), false, 'solved and not yet due is not');
+
+    eq(Leet.inQueue(state, 'never-heard-of-it', L0), false);
+    eq(Leet.inQueue(state, '', L0), false);
+});
+check('a solved problem is pulled forward rather than given a grade', () => {
+    // Inventing a grade would write a stability nobody earned. Moving the due
+    // date says "I want to see this again" and nothing more.
+    let state = Leet.addAttempt(Leet.blank(), { slug: 'x', status: 'Accepted', at: L0 });
+    state.problems.x.fsrs = { stability: 30, difficulty: 5, due: L0 + days(30), reps: 2, lapses: 0 };
+
+    const problems = Leet.problemsOf(state);
+    problems.x = { ...problems.x, fsrs: { ...problems.x.fsrs, due: L0 } };
+    const after = { ...state, problems };
+
+    eq(Leet.inQueue(after, 'x', L0), true);
+    eq(after.problems.x.fsrs.stability, 30, 'the schedule it earned is untouched');
+});
+check('a problem already waiting is left exactly where it is', () => {
+    // queueNow on an unsolved problem must not drag a due date onto it, or it
+    // moves from "to solve" to "due" and the two rails stop meaning anything.
+    const state = Leet.seeIn(Leet.blank(), { slug: 'fresh' }, L0);
+    eq(Leet.lists(state, L0).toSolve.map((p) => p.slug), ['fresh']);
+    eq(Leet.lists(state, L0).due.length, 0);
+});
+
 console.log('\n# leetcode — the heat map');
 check('heatDays colours by the metric it is asked for', () => {
     let state = Leet.addAttempt(Leet.blank(), { slug: 'a', status: 'Accepted', seconds: 600, at: L0 });

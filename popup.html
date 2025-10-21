@@ -75,6 +75,12 @@
             <div class="chess-pop-body" id="chessPopupBody"></div>
         </div>
 
+        <!-- LeetCode: what to do next, and nothing else. Drawn by
+             src/page/leet-popup.js. -->
+        <div class="leet-panel" id="leetPanel" hidden>
+            <div class="leet-pop-body" id="leetPopupBody"></div>
+        </div>
+
         <!-- Anywhere else the popup is the header alone (and the speed bar,
              on a page with a <video>). -->
     </div>
@@ -93,8 +99,11 @@
     <script src="src/shared/lichess.js"></script>
     <script src="src/shared/chess-sites.js"></script>
     <script src="src/shared/chess-limits.js"></script>
+    <script src="src/shared/fsrs.js"></script>
+    <script src="src/shared/leetcode.js"></script>
     <script src="src/content/site.js"></script>
     <script src="src/page/ui.js"></script>
+    <script src="src/page/leet-popup.js"></script>
     <script src="src/page/tab-actions.js"></script>
     <script src="src/page/chess-stats.js"></script>
     <script src="src/page/chess-limit-button.js"></script>

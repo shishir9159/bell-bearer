@@ -16,7 +16,7 @@
     'use strict';
 
     const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site,
-        ChessSites, ChessStats, ChessLimitButton } = window.BB;
+        ChessSites, ChessStats, ChessLimitButton, Leet, LeetPopup } = window.BB;
 
     class Popup {
         constructor() {
@@ -26,6 +26,9 @@
             this.speedTab = null;
             this.site = 'other';
             this.isWebPage = false;
+            /** The LeetCode problem in the active tab, if it is one. */
+            this.leetSlug = '';
+            this.leetTitle = '';
         }
 
         async init() {
@@ -151,8 +154,22 @@
                 // alone: just "Dashboard", no playback controls.
                 this.isWebPage = !!url && (url.protocol === 'http:' || url.protocol === 'https:');
                 this.site = url && Site ? Site.detectSite(url.hostname) : 'other';
+
+                // Read straight off the tab rather than asked of the content
+                // script. The popup must be able to say "add this one" even on
+                // a page where the content script never loaded — which is
+                // exactly the case someone is most likely to be looking at the
+                // popup to find out about.
+                const match = url && /^\/problems\/([A-Za-z0-9-]+)(?:[/?#]|$)/.exec(url.pathname);
+                this.leetSlug = (this.site === 'leetcode' && match) ? match[1] : '';
+                // LeetCode titles its tabs "Two Sum - LeetCode".
+                this.leetTitle = String((tab && tab.title) || '')
+                    .replace(/\s*[-–|]\s*LeetCode.*$/i, '')
+                    .replace(/^\d+\.\s*/, '')
+                    .trim();
             } catch (_) {
                 this.isWebPage = false;
+                this.leetSlug = '';
                 this.site = 'other';
             }
             document.body.dataset.bbSite = this.site;
@@ -168,6 +185,23 @@
                     compact: true,
                     onSetUsername: () => openDashboard(`#settings/${chessSite.id}`),
                 }).render();
+            }
+
+            const leetPanel = document.getElementById('leetPanel');
+            if (leetPanel) leetPanel.hidden = this.site !== 'leetcode';
+            if (this.site === 'leetcode' && LeetPopup) {
+                const view = LeetPopup.createView({
+                    body: document.getElementById('leetPopupBody'),
+                    currentSlug: () => this.leetSlug,
+                    currentTitle: () => this.leetTitle,
+                    onOpen: (url) => openTab(url),
+                    onDashboard: () => openDashboard('#site/leetcode'),
+                });
+                view.render();
+                // The queue changes from the page itself — a verdict lands, a
+                // grade is picked — and the popup is a separate document, so
+                // without this it shows a list that is already out of date.
+                Settings.watch(Leet.KEYS, () => view.render());
             }
         }
 
@@ -337,6 +371,18 @@
 
     function openDashboard(hash) {
         chrome.tabs.create({ url: chrome.runtime.getURL(`dashboard.html${hash || ''}`) });
+        window.close();
+    }
+
+    /**
+     * Open a problem in the tab that is already there rather than a new one:
+     * picking the next thing to work on replaces what you were looking at.
+     * Only ever an https URL built from a slug, but checked anyway, since
+     * what is stored came off a page.
+     */
+    function openTab(url) {
+        if (!/^https:\/\/([a-z0-9-]+\.)*leetcode\.com\//i.test(String(url || ''))) return;
+        chrome.tabs.update({ url });
         window.close();
     }
 

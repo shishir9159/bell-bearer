@@ -631,6 +631,368 @@
         });
     });
 
+    // -------------------------------------------------------- the popup
+
+    suite('leetcode — the popup queue', () => {
+        const LeetPopup = () => window.BB.LeetPopup;
+
+        function popupHost() {
+            teardown();
+            const host = document.createElement('div');
+            host.id = HOST_ID;
+            document.body.appendChild(host);
+            return host;
+        }
+
+        function makePopup({ slug = '', title = '' } = {}) {
+            const opened = [];
+            const view = LeetPopup().createView({
+                body: popupHost(),
+                currentSlug: () => slug,
+                currentTitle: () => title,
+                onOpen: (url) => opened.push(url),
+                onDashboard: () => opened.push('dashboard'),
+            });
+            return { view, opened, host: document.getElementById(HOST_ID) };
+        }
+
+        const problem = (slug, over) => Object.assign({
+            slug, title: slug, difficulty: 'Medium', tags: [], url: '',
+            note: '', seenAt: Date.now(), solvedAt: 0, attempts: [], fsrs: null,
+        }, over);
+
+        test('lists what to do next, due before unsolved', async () => {
+            const now = Date.now();
+            MockChrome.reset({ localStore: { bbLeetProblems: {
+                fresh: problem('fresh'),
+                overdue: problem('overdue', {
+                    solvedAt: now - 9 * 864e5,
+                    fsrs: { stability: 3, difficulty: 5, due: now - 864e5, reviewedAt: now - 4 * 864e5, reps: 1, lapses: 0 },
+                }),
+            } } });
+
+            const { view, host } = makePopup();
+            await view.render();
+
+            const names = Array.from(host.querySelectorAll('.leet-pop-name')).map((el) => el.textContent);
+            assertDeepEqual(names, ['overdue', 'fresh'],
+                'a half-forgotten problem is worth more than a fresh one');
+            assert(host.textContent.includes('overdue'), 'it does not say how late it is');
+        });
+
+        test('says so plainly when there is nothing waiting', async () => {
+            const now = Date.now();
+            MockChrome.reset({ localStore: { bbLeetProblems: {
+                done: problem('done', {
+                    solvedAt: now,
+                    fsrs: { stability: 30, difficulty: 5, due: now + 30 * 864e5, reviewedAt: now, reps: 2, lapses: 0 },
+                }),
+            } } });
+
+            const { view, host } = makePopup();
+            await view.render();
+
+            assert(host.textContent.includes('Everything is complete'), `got: ${host.textContent}`);
+            assert(host.textContent.includes('1 problem tracked'), 'it does not say what it knows about');
+            assert(!host.querySelector('.leet-pop-row'), 'it listed something anyway');
+        });
+
+        test('an empty log says where problems come from', async () => {
+            MockChrome.reset({ localStore: {} });
+            const { view, host } = makePopup();
+            await view.render();
+            assert(host.textContent.includes('Everything is complete'));
+            assert(/Open a problem on LeetCode/.test(host.textContent),
+                'a first-run popup that says only "complete" is a dead end');
+        });
+
+        test('offers to add the problem in the tab when it is not on the list', async () => {
+            const now = Date.now();
+            MockChrome.reset({ localStore: { bbLeetProblems: {
+                done: problem('done', {
+                    solvedAt: now,
+                    fsrs: { stability: 30, difficulty: 5, due: now + 30 * 864e5, reviewedAt: now, reps: 2, lapses: 0 },
+                }),
+            } } });
+
+            const { view, host } = makePopup({ slug: 'done', title: 'Done' });
+            await view.render();
+
+            const add = host.querySelector('[data-leet-add]');
+            assert(add, 'no way to put the problem in front of you onto the list');
+            assertEqual(add.dataset.leetAdd, 'done');
+
+            add.click();
+            await waitFor(async () => {
+                const state = await Leet().load();
+                return Leet().inQueue(state, 'done', Date.now());
+            }, 'the problem to join the queue');
+
+            await view.render();
+            assert(host.querySelector('.leet-pop-row'), 'it did not appear in the list afterwards');
+            assert(!host.querySelector('[data-leet-add]'), 'it is still offering to add it');
+        });
+
+        test('a problem never seen before can be added straight from the popup', async () => {
+            // The case that matters most: the content script did not load, so
+            // nothing filed it — and the popup is where you would go to find
+            // out why nothing is happening.
+            MockChrome.reset({ localStore: {} });
+            const { view, host } = makePopup({ slug: 'two-sum', title: 'Two Sum' });
+            await view.render();
+
+            const add = host.querySelector('[data-leet-add]');
+            assert(add, 'nothing offered');
+            assert(add.textContent.includes('Two Sum'), 'the button does not name what it would add');
+
+            add.click();
+            await waitFor(async () => (await stored('two-sum')), 'the problem to be recorded');
+
+            const saved = await stored('two-sum');
+            assertEqual(saved.title, 'Two Sum');
+            assertEqual(saved.solvedAt, 0, 'adding it is not solving it');
+        });
+
+        test('a problem already on the list is not offered again', async () => {
+            MockChrome.reset({ localStore: { bbLeetProblems: { fresh: problem('fresh') } } });
+            const { view, host } = makePopup({ slug: 'fresh', title: 'Fresh' });
+            await view.render();
+
+            assert(!host.querySelector('[data-leet-add]'), 'it offered to add something already there');
+            assert(host.textContent.includes('already on the list'));
+        });
+
+        test('off a problem page there is nothing to add', async () => {
+            MockChrome.reset({ localStore: {} });
+            const { view, host } = makePopup({ slug: '' });
+            await view.render();
+            assert(!host.querySelector('[data-leet-add]'), 'it offered to add a page that is not a problem');
+        });
+
+        test('a long queue is capped, with a way through to the rest', async () => {
+            const problems = {};
+            for (let i = 0; i < LeetPopup().LIMIT + 4; i++) problems[`p${i}`] = problem(`p${i}`);
+            MockChrome.reset({ localStore: { bbLeetProblems: problems } });
+
+            const { view, host, opened } = makePopup();
+            await view.render();
+
+            assertEqual(host.querySelectorAll('.leet-pop-row').length, LeetPopup().LIMIT);
+            const more = host.querySelector('[data-leet-dashboard]');
+            assert(more, 'no way through to the rest');
+            assert(more.textContent.includes('4 more'), `got: ${more.textContent}`);
+            more.click();
+            assertDeepEqual(opened, ['dashboard']);
+        });
+
+        test('a row opens that problem', async () => {
+            MockChrome.reset({ localStore: { bbLeetProblems: { fresh: problem('fresh') } } });
+            const { view, host, opened } = makePopup();
+            await view.render();
+
+            host.querySelector('.leet-pop-row').click();
+            assertDeepEqual(opened, ['https://leetcode.com/problems/fresh/']);
+        });
+    });
+
+    // ------------------------------------------- managing templates on the dashboard
+
+    suite('leetcode — managing templates', () => {
+        const View = () => window.BB.LeetTemplatesView;
+
+        function panelHost() {
+            teardown();
+            const host = document.createElement('div');
+            host.id = HOST_ID;
+            host.setAttribute('data-leet-templates', '');
+            document.body.appendChild(host);
+            return host;
+        }
+
+        test('lists every template with its language and size', async () => {
+            MockChrome.reset({ localStore: { bbLeetTemplates: [
+                { id: 'lt_a', name: 'bisect', lang: 'python3', body: 'lo = 0\nhi = n', createdAt: 1, usedAt: 0, uses: 3 },
+                { id: 'lt_b', name: 'header', lang: '', body: '', createdAt: 2, usedAt: 0, uses: 0 },
+            ] } });
+
+            const host = panelHost();
+            const panel = View().mountPanel(host);
+            await panel.reload();
+
+            const titles = Array.from(host.querySelectorAll('.leet-tpl-title')).map((el) => el.textContent);
+            assertDeepEqual(titles, ['bisect', 'header'], 'array order is display order');
+
+            const subs = Array.from(host.querySelectorAll('.leet-tpl-sub')).map((el) => el.textContent);
+            assert(subs[0].includes('Python3') && subs[0].includes('2 lines'), `got: ${subs[0]}`);
+            assert(subs[0].includes('used 3'), 'it does not say how often it is reached for');
+            assert(subs[1].includes('Any language') && subs[1].includes('empty'), `got: ${subs[1]}`);
+            teardown();
+        });
+
+        test('an empty library says where templates come from', async () => {
+            MockChrome.reset({ localStore: { bbLeetTemplates: [] } });
+            const host = panelHost();
+            await View().mountPanel(host).reload();
+
+            assert(/No templates yet/.test(host.textContent));
+            assert(/Ctrl/.test(host.textContent), 'it does not mention the shortcut that makes one');
+            teardown();
+        });
+
+        test('a new template is written to the store', async () => {
+            MockChrome.reset({ localStore: { bbLeetTemplates: [] } });
+            const host = panelHost();
+            const panel = View().mountPanel(host);
+            await panel.reload();
+
+            host.querySelector('[data-leet-tpl-new]').click();
+            host.querySelector('.leet-tpl-name-input').value = 'union find';
+            host.querySelector('.leet-tpl-lang-input').value = 'cpp';
+            host.querySelector('.leet-tpl-body-input').value = 'int find(int x) {\n    return p[x];\n}';
+            host.querySelector('[data-leet-tpl-save]').click();
+
+            await waitFor(async () => (await LeetTemplates().load()).length === 1, 'the template to be saved');
+            const [saved] = await LeetTemplates().load();
+            assertEqual(saved.name, 'union find');
+            assertEqual(saved.lang, 'cpp');
+            assert(saved.body.includes('    return p[x];'), 'the indentation was trimmed away');
+            teardown();
+        });
+
+        test('editing one keeps everything it was not asked to change', async () => {
+            MockChrome.reset({ localStore: { bbLeetTemplates: [
+                { id: 'lt_a', name: 'bisect', lang: 'python3', body: 'old', createdAt: 1, usedAt: 55, uses: 7 },
+            ] } });
+            const host = panelHost();
+            const panel = View().mountPanel(host);
+            await panel.reload();
+
+            host.querySelector('[data-leet-tpl-edit]').click();
+            host.querySelector('.leet-tpl-body-input').value = 'new body';
+            host.querySelector('[data-leet-tpl-save]').click();
+
+            await waitFor(async () => (await LeetTemplates().load())[0].body === 'new body', 'the edit to land');
+            const [saved] = await LeetTemplates().load();
+            assertEqual(saved.name, 'bisect', 'the name was lost');
+            assertEqual(saved.uses, 7, 'the usage count was reset');
+            teardown();
+        });
+
+        test('a template with no name is refused rather than saved blank', async () => {
+            MockChrome.reset({ localStore: { bbLeetTemplates: [] } });
+            const host = panelHost();
+            await View().mountPanel(host).reload();
+
+            host.querySelector('[data-leet-tpl-new]').click();
+            host.querySelector('.leet-tpl-body-input').value = 'something';
+            host.querySelector('[data-leet-tpl-save]').click();
+            await settle();
+            await settle();
+
+            assertEqual((await LeetTemplates().load()).length, 0, 'a nameless template got in');
+            teardown();
+        });
+
+        test('reordering is a splice and nothing else', async () => {
+            MockChrome.reset({ localStore: { bbLeetTemplates: [
+                { id: 'lt_a', name: 'first', lang: '', body: '', createdAt: 1, usedAt: 0, uses: 0 },
+                { id: 'lt_b', name: 'second', lang: '', body: '', createdAt: 2, usedAt: 0, uses: 0 },
+            ] } });
+            const host = panelHost();
+            const panel = View().mountPanel(host);
+            await panel.reload();
+
+            const items = host.querySelectorAll('[data-leet-tpl-id]');
+            items[1].dispatchEvent(new DragEvent('dragstart', { bubbles: true }));
+            items[0].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true }));
+
+            await waitFor(async () => (await LeetTemplates().load())[0].name === 'second', 'the reorder');
+            const order = (await LeetTemplates().load()).map((t) => t.name);
+            assertDeepEqual(order, ['second', 'first']);
+            teardown();
+        });
+    });
+
+    // ------------------------------------------------------------- Shift+P
+
+    suite('leetcode — Shift+P', () => {
+        /**
+         * Wire the keyboard the way src/content/main.js does, including the
+         * two gates that decide whether the key is ours: the `pouchShortcut`
+         * setting, and there being a pouch on this site to open.
+         */
+        function withKeyboard(settings, run) {
+            const made = makeUi({ settings });
+            const uninstall = window.BB.Shortcuts.install({
+                hasVideo: () => false,
+                skip() {}, faster() {}, slower() {}, resetSpeed() {}, boostSpeed() {},
+                startRecording() {}, stopRecording() {}, toggleSegment() {},
+                openSkim() {}, openHints() {},
+                openPouch: () => made.ui.openPouch(),
+                canOpenPouch: () => !!made.ui,
+                featureOn: (key) => made.values[key] === true,
+            }, {
+                canRecord: () => false,
+                getShortcut: (id) => window.BB.Keybindings.resolve(made.values.shortcuts, id),
+                paused: () => false,
+            });
+
+            const press = () => window.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'P', code: 'KeyP', shiftKey: true, bubbles: true, cancelable: true,
+            }));
+
+            return Promise.resolve(run({ press, made })).finally(() => {
+                uninstall();
+                made.restore();
+            });
+        }
+
+        test('opens the pouch when the shortcut is switched on', async () => {
+            MockChrome.reset();
+            problemPage();
+            await withKeyboard({ pouchShortcut: true }, async ({ press }) => {
+                press();
+                await waitFor(() => document.getElementById('bb-leet-overlay'),
+                    'the pouch to open on Shift+P');
+                assert(document.getElementById('bb-leet-overlay'), 'Shift+P opened nothing');
+            });
+            teardown();
+        });
+
+        test('does nothing at all until it is switched on', async () => {
+            // Off by default, like Skim and the link hints: a bare-Shift letter
+            // is a large claim to make on somebody's keyboard unasked. The key
+            // has to go back to the page untouched, not be swallowed.
+            MockChrome.reset();
+            problemPage();
+            await withKeyboard({ pouchShortcut: false }, async ({ press }) => {
+                let defaultPrevented = false;
+                const watch = (event) => { defaultPrevented = event.defaultPrevented; };
+                window.addEventListener('keydown', watch);
+                press();
+                window.removeEventListener('keydown', watch);
+
+                await settle();
+                assert(!document.getElementById('bb-leet-overlay'), 'it opened with the setting off');
+                assert(!defaultPrevented, 'the key was swallowed instead of left to the page');
+            });
+            teardown();
+        });
+
+        test('a second press closes it again', async () => {
+            MockChrome.reset();
+            problemPage();
+            await withKeyboard({ pouchShortcut: true }, async ({ press }) => {
+                press();
+                await waitFor(() => document.getElementById('bb-leet-overlay'), 'the pouch to open');
+                press();
+                await settle();
+                assert(!document.getElementById('bb-leet-overlay'), 'the second press did not close it');
+            });
+            teardown();
+        });
+    });
+
     // ------------------------------------------------------- the page bridge
 
     suite('leetcode — the page-world bridge', () => {

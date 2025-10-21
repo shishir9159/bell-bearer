@@ -341,6 +341,52 @@
     }
 
     /**
+     * Put a problem in the queue now, whatever its schedule said.
+     *
+     * What "add this to the list" means from the popup. A problem never
+     * tracked is simply recorded — it lands under "to solve" by being unsolved
+     * — and one already solved has its due date pulled to now, which is the
+     * only honest way to say "I want to see this again" without inventing a
+     * grade for it. A problem already in the queue is left exactly as it is.
+     */
+    async function queueNow({ slug, title = '', url = '' }, now = Date.now()) {
+        const key = text(slug);
+        if (!key) return null;
+        return update((state) => {
+            const problems = problemsOf(state);
+            const problem = problems[key];
+
+            if (!problem) {
+                return seeIn(state, { slug: key, title, url }, now);
+            }
+            // Never accepted: it is already waiting under "to solve", and
+            // dragging a due date onto it would move it to the wrong rail.
+            if (!problem.solvedAt) return state;
+
+            problems[key] = {
+                ...problem,
+                title: text(title) || problem.title,
+                fsrs: problem.fsrs
+                    ? { ...problem.fsrs, due: now }
+                    // Solved but never graded, so there is no card to pull
+                    // forward. It goes in with no schedule, and grading it
+                    // after the next accept starts one properly.
+                    : null,
+                solvedAt: problem.fsrs ? problem.solvedAt : 0,
+            };
+            return { ...state, problems };
+        }, now);
+    }
+
+    /** Is this problem one of the ones the queue is currently offering? */
+    function inQueue(state, slug, now = Date.now()) {
+        const key = text(slug);
+        if (!key) return false;
+        const { due, toSolve } = lists(state, now);
+        return [...due, ...toSolve].some((problem) => problem.slug === key);
+    }
+
+    /**
      * Write a grade against a problem, scheduling it by how long it has been
      * since the last one. A re-grade from the dashboard comes through here
      * too, which is why the elapsed days are measured from `fsrs.reviewedAt`
@@ -364,8 +410,8 @@
     const Leet = {
         ATTEMPT_CAP, KEEP_DAYS, DIFFICULTIES, METRICS, DAY_MS,
         dayKey, blank, prune, problemsOf, cleanProblem,
-        seeIn, addAttempt, failuresSince, lastAttempt, lists, nextDue, heatDays, streak,
-        load, update, see, recordAttempt, setNote, remove, gradeProblem,
+        seeIn, addAttempt, failuresSince, lastAttempt, lists, nextDue, heatDays, streak, inQueue,
+        load, update, see, recordAttempt, setNote, remove, gradeProblem, queueNow,
         KEYS: [PROBLEMS_KEY, DAYS_KEY],
     };
 

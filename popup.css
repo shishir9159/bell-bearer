@@ -959,3 +959,113 @@ a.chess-pill:hover { transform: translateY(-1px); box-shadow: var(--card-shadow-
     from { opacity: 0; transform: translateY(8px) scale(.98); }
     to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+/* ======================================================================
+   LeetCode — the popup is the queue and nothing else. It answers "what
+   should I open now", and anything else here would make it worse at that.
+   ====================================================================== */
+
+.leet-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+.leet-pop-body { flex: 1; min-height: 0; padding: 12px; overflow-y: auto; }
+
+.leet-pop-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.leet-pop-count { color: var(--accent-ink); letter-spacing: .02em; }
+
+.leet-pop-rows { display: flex; flex-direction: column; gap: 4px; }
+
+.leet-pop-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.leet-pop-row:hover { border-color: var(--accent); }
+
+.leet-pop-name {
+    width: 100%;
+    font-size: 12.5px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leet-pop-meta { display: flex; align-items: baseline; gap: 8px; font-size: 10.5px; color: var(--text-faint); }
+.leet-pop-when { color: var(--text-muted); }
+
+/* LeetCode's own three, as everywhere else this extension names them. */
+.leet-diff { font-weight: 700; }
+.leet-diff.is-easy { color: #0f9f9f; }
+.leet-diff.is-medium { color: #c98a00; }
+.leet-diff.is-hard { color: #d33a3a; }
+
+[data-theme="dark"] .leet-diff.is-easy { color: #2ccccc; }
+[data-theme="dark"] .leet-diff.is-medium { color: #ffc733; }
+[data-theme="dark"] .leet-diff.is-hard { color: #ff5c5c; }
+
+.leet-pop-more {
+    width: 100%;
+    margin-top: 8px;
+    padding: 6px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--accent-ink);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.leet-pop-more:hover { background: var(--surface-2); }
+
+.leet-pop-done { padding: 26px 12px; text-align: center; }
+.leet-pop-done-title { margin: 0 0 5px; font-size: 13.5px; font-weight: 600; color: var(--text); }
+.leet-pop-done-sub { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-muted); }
+
+/* The problem in the tab behind the popup, when it is not one of the ones
+   being offered. Ruled off, because it is about a different thing from the
+   list above it. */
+.leet-pop-add { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.leet-pop-add-why { margin: 0 0 7px; font-size: 11px; color: var(--text-faint); }
+
+.leet-pop-add-btn {
+    width: 100%;
+    /* The title inside it can be long; one line with an ellipsis rather than
+       a button that grows to three rows. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leet-pop-add-btn[disabled] { opacity: .5; cursor: default; }
+
+.leet-pop-here {
+    margin: 12px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-faint);
+    text-align: center;
+}
