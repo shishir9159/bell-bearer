@@ -309,17 +309,32 @@
     function installWatchedTracking() {
         let marked = null;
 
-        document.addEventListener('timeupdate', () => {
+        document.addEventListener('timeupdate', (event) => {
             const id = PageInfo.getVideoId();
             if (!id || id === marked) return;
 
-            const video = getVideoElement();
-            if (!video) return;
+            // The element the event came from, rather than asking the locator
+            // which video to look at. timeupdate fires about four times a
+            // second, and the locator's first move is to check that its
+            // memoised element still has a box — a bounding-rect read, which
+            // forces the browser to flush layout. Four forced layouts a
+            // second, for the whole first minute of every video, bought
+            // nothing: the event already says which element is playing.
+            const video = event.target;
+            if (!video || video.tagName !== 'VIDEO') return;
 
             const enough = Number.isFinite(video.duration) && video.duration > 0
                 ? Math.min(WATCHED_AFTER_S, video.duration * 0.25)
                 : WATCHED_AFTER_S;
             if (video.currentTime < enough) return;
+
+            // Only once the threshold is reached is it worth asking whether
+            // this is the player at all. It usually is — but a hover preview
+            // is also a <video> firing timeupdate, and a short one looping
+            // past a quarter of its length would otherwise mark a video as
+            // watched that nobody opened. One layout read per video, at the
+            // moment it matters, instead of two hundred and forty.
+            if (video !== getVideoElement()) return;
 
             marked = id;
             Watched.mark(id);
