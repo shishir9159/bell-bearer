@@ -73,10 +73,22 @@
         // The heuristic: a small, visible container that talks about cookies
         // and holds a button that says "accept" or "reject". The size cap keeps
         // a page that merely *mentions* cookies in its body from qualifying.
+        //
+        // The text is tested before the visibility, and the order is the whole
+        // performance of this function. isVisible() reads a bounding rect and
+        // a computed style, and both force the browser to flush style and
+        // layout; doing that first meant every candidate on the page paid for
+        // it. CANDIDATES matches [role="dialog"] among other things, and a
+        // YouTube watch page carries dozens of those — so a scan that found
+        // nothing still forced a hundred-odd layouts, every 250ms, for the
+        // whole watch window. Reading textContent touches no layout at all,
+        // and almost nothing on a page is both dialog-shaped and talking
+        // about cookies, so this way the expensive half runs a handful of
+        // times instead of hundreds.
         for (const banner of doc.querySelectorAll(CANDIDATES)) {
-            if (!isVisible(banner)) continue;
             const text = banner.textContent || '';
             if (text.length > 4000 || !BANNER_TEXT.test(text)) continue;
+            if (!isVisible(banner)) continue;
             const buttons = Array.from(banner.querySelectorAll(BUTTONS)).filter(isVisible);
             const accept = buttons.find((button) => ACCEPT_TEXT.test(buttonText(button))) || null;
             const reject = buttons.find((button) => REJECT_TEXT.test(buttonText(button))) || null;
@@ -155,14 +167,34 @@
             if (!found.banner.querySelector(`.${ACTIONS_CLASS}`)) addButtons(found);
         }
 
+        /**
+         * How long to wait before the next scan.
+         *
+         * A consent banner is up within the first second or two of a page or
+         * it is an afterthought, so the first few seconds are watched closely
+         * and the rest of the window loosely. That matters because the
+         * observer is on documentElement with subtree:true, and on a page
+         * that never stops mutating — a watch page streaming comments, a
+         * board with a clock on it — every mutation would otherwise buy
+         * another scan at the tight interval for the full twenty seconds.
+         * A banner that arrives late is still caught within a second, which
+         * nobody can tell from instant.
+         */
+        const EAGER_MS = 250;
+        const RELAXED_MS = 1000;
+        const EAGER_FOR_MS = 3000;
+        let startedAt = 0;
+
         function schedule() {
             if (scheduled) return;
             scheduled = true;
-            setTimeout(scan, 250);
+            const settled = startedAt && Date.now() - startedAt > EAGER_FOR_MS;
+            setTimeout(scan, settled ? RELAXED_MS : EAGER_MS);
         }
 
         function install() {
             if (!document.documentElement) return;
+            startedAt = Date.now();
             schedule();
             observer = new MutationObserver(schedule);
             observer.observe(document.documentElement, { childList: true, subtree: true });
