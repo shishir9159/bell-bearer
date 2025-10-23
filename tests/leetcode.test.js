@@ -107,7 +107,12 @@
             <div data-track-load="similar_question">Similar questions</div>
             <div data-track-load="hints">Hints</div>
             <div id="solutions_tab">Solutions</div>
-            <button data-e2e-locator="console-timer"><span>00:00</span></button>`;
+            <!-- LeetCode's stopwatch as it is actually built: a div wearing
+                 role="button", named only by an aria-label that changes with
+                 its state. Copied from the live page. -->
+            <div class="flex h-8 flex-none items-center p-1">
+                <div role="button" aria-label="Start" data-state="closed">00:00:00</div>
+            </div>`;
         document.body.appendChild(host);
         return host;
     }
@@ -173,11 +178,66 @@
         test('reads the stopwatch, and says nothing when it cannot', () => {
             problemPage();
             const read = LeetRead();
-            assertEqual(read.timerSeconds(), 0, '00:00 is a reading, not a failure');
-            document.querySelector('[data-e2e-locator="console-timer"] span').textContent = '12:30';
+            const clock = document.querySelector('[role="button"][aria-label="Start"]');
+            assertEqual(read.timerSeconds(), 0, '00:00:00 is a reading, not a failure');
+            clock.textContent = '12:30';
             assertEqual(read.timerSeconds(), 750);
-            document.querySelector('[data-e2e-locator="console-timer"]').remove();
+            clock.textContent = '1:02:05';
+            assertEqual(read.timerSeconds(), 3725, 'an hour in');
+            clock.remove();
             assertEqual(read.timerSeconds(), null, 'no widget is null, not zero');
+            teardown();
+        });
+
+        test('a control that does not read as a clock is not the stopwatch', () => {
+            // The last-resort selector is "anything clickable", so the clock
+            // test is the only thing standing between us and clicking some
+            // unrelated button on the page.
+            problemPage();
+            document.querySelector('[role="button"][aria-label="Start"]').remove();
+            const stray = document.createElement('div');
+            stray.setAttribute('role', 'button');
+            stray.setAttribute('aria-label', 'Start');
+            stray.textContent = 'Start coding';
+            document.getElementById(HOST_ID).appendChild(stray);
+
+            assertEqual(LeetRead().timerControl(), null, 'it believed a button that says "Start coding"');
+            assertEqual(LeetRead().timerButton(), null);
+            teardown();
+        });
+
+        test('a running stopwatch is never pressed', () => {
+            // The same element is start and pause, told apart only by its
+            // label. Pressing it while it runs would stop the clock of anyone
+            // who had already started it — every time they opened a problem.
+            problemPage();
+            const clock = document.querySelector('[role="button"][aria-label="Start"]');
+            clock.setAttribute('aria-label', 'Pause');
+            clock.textContent = '04:12';
+
+            assert(LeetRead().timerControl(), 'it can still be read');
+            assertEqual(LeetRead().timerSeconds(), 252, 'and read correctly');
+            assertEqual(LeetRead().timerButton(), null, 'but it must not be pressable');
+            teardown();
+        });
+
+        test('a stopped clock reading zero is pressable whatever it is called', () => {
+            problemPage();
+            const clock = document.querySelector('[role="button"][aria-label="Start"]');
+            clock.removeAttribute('aria-label');
+            assert(LeetRead().timerButton(), 'a zeroed clock is the one case worth starting');
+            teardown();
+        });
+
+        test('the stopwatch is found even when every named spelling is gone', () => {
+            // LeetCode renames these; the generic fallback plus the clock test
+            // is what keeps the timer working through that.
+            problemPage();
+            const clock = document.querySelector('[role="button"][aria-label="Start"]');
+            clock.removeAttribute('aria-label');
+            clock.removeAttribute('data-state');
+            clock.textContent = '07:45';
+            assertEqual(LeetRead().timerSeconds(), 465);
             teardown();
         });
 

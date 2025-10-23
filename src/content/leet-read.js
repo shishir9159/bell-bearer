@@ -56,23 +56,36 @@
         ],
 
         /**
-         * LeetCode's own stopwatch control. We click this rather than drawing
-         * a count-up of our own, so the number the user sees on the page and
-         * the number recorded against the attempt are the same number.
+         * LeetCode's own stopwatch. We read this rather than drawing a
+         * count-up of our own, so the number on the page and the number
+         * recorded against the attempt are the same number.
+         *
+         * It is not a <button>: it is a plain div carrying `role="button"`,
+         * and the only thing naming it is an aria-label that *changes with
+         * its state* — "Start" before it runs, "Pause" while it does. So the
+         * state labels are all listed, and which of them may be clicked is
+         * decided in startableTimer() rather than here. The earlier spellings
+         * are kept below them: LeetCode has shipped a real button with a
+         * `data-e2e-locator` before and may again.
          */
-        timerButton: [
+        timer: [
+            '[role="button"][aria-label="Start"]',
+            '[role="button"][aria-label="Resume"]',
+            '[role="button"][aria-label="Pause"]',
+            '[role="button"][aria-label*="timer" i]',
             'button[data-e2e-locator="console-timer"]',
             'button[aria-label*="timer" i]',
             'button[title*="timer" i]',
             'div[class*="timer"] button',
         ],
 
-        /** Where that control shows mm:ss or h:mm:ss once it is running. */
-        timerText: [
-            '[data-e2e-locator="console-timer"]',
-            'div[class*="timer"] span',
-            'button[aria-label*="timer" i] span',
-        ],
+        /**
+         * The last resort, when every spelling above has stopped matching:
+         * anything clickable at all. Meaningless on its own — which is why
+         * nothing here is believed until its text has been read as a clock.
+         * See timerControl.
+         */
+        clickable: ['[role="button"]', 'button'],
 
         /** The top navigation bar, where the Pouch row goes. */
         nav: [
@@ -223,25 +236,68 @@
         return whole + (fraction ? Number(`0.${fraction}`) : 0);
     }
 
-    /** LeetCode's stopwatch control, for the one click that starts it. */
-    const timerButton = () => find('timerButton');
+    /**
+     * A clock and nothing else: "12:30", "1:02:05". Anchored on purpose — a
+     * paragraph that merely contains a time is not the stopwatch, and this is
+     * the test that lets the generic fallback below be safe at all. Same
+     * discipline as validating a chess move list against algebraic notation
+     * before believing a selector's matches.
+     */
+    const CLOCK_ONLY = /^\s*\d{1,2}:\d{2}(?::\d{2})?\s*$/;
+
+    const readsAsClock = (node) => !!node && CLOCK_ONLY.test(node.textContent || '');
 
     /**
-     * What that stopwatch currently reads, in seconds, or null.
+     * LeetCode's stopwatch, whatever state it is in — the element that
+     * carries the digits.
      *
-     * Every candidate is tried rather than only the first, because the
-     * element that carries the control and the element that carries the
-     * digits are not always the same one — and a reading that does not parse
-     * as a clock is passed over rather than returned as a zero, which would
-     * look exactly like a timer that had just been reset.
+     * Every spelling is tried and each match is checked against the clock
+     * pattern before it is believed. That check is what stops this picking up
+     * some other control the day LeetCode renames things: a selector whose
+     * matches do not read as a clock is passed over, and the last resort
+     * ("anything clickable") is only usable *because* of it.
+     */
+    function timerControl() {
+        for (const node of findAll('timer')) {
+            if (readsAsClock(node)) return node;
+        }
+        for (const node of findAll('clickable')) {
+            if (readsAsClock(node)) return node;
+        }
+        return null;
+    }
+
+    /**
+     * The control, but only when pressing it would *start* the clock.
+     *
+     * This is the difference between helping and interfering. The same
+     * element is the start button and the pause button, distinguished only by
+     * its label — so a version of this that returned the control whenever it
+     * found one would pause the stopwatch of anyone who already had it
+     * running, every time they opened a problem. Anything we cannot read as
+     * startable is left alone; the worst case is that the clock does not
+     * start itself, which the elapsed-time fallback already covers.
+     */
+    function timerButton() {
+        const control = timerControl();
+        if (!control) return null;
+        const label = (control.getAttribute('aria-label') || '').trim().toLowerCase();
+        if (label === 'pause' || label === 'stop') return null;
+        // A zeroed clock has not been started, whatever it calls itself.
+        if (label === 'start' || label === 'resume') return control;
+        return parseClock(control.textContent) === 0 ? control : null;
+    }
+
+    /**
+     * What the stopwatch currently reads, in seconds, or null.
+     *
+     * Null rather than zero when nothing can be read: a zero is a timer that
+     * has just been reset, and the two must stay distinguishable or the
+     * fallback clock never takes over.
      */
     function timerSeconds() {
-        for (const node of findAll('timerText')) {
-            const seconds = parseClock(node.textContent);
-            if (seconds !== null) return seconds;
-        }
-        const button = timerButton();
-        return button ? parseClock(button.textContent) : null;
+        const control = timerControl();
+        return control ? parseClock(control.textContent) : null;
     }
 
     /** Where the Pouch row goes, and what it sits at the end of. */
@@ -276,7 +332,8 @@
     const LeetRead = {
         SELECTORS, find, findAll,
         slugOf, onProblem, readProblem, readTitle, readDifficulty, readTags,
-        parseClock, timerButton, timerSeconds, navSlot, titleSlot, hideTargets,
+        parseClock, readsAsClock, timerControl, timerButton, timerSeconds,
+        navSlot, titleSlot, hideTargets,
     };
 
     root.BB = root.BB || {};
