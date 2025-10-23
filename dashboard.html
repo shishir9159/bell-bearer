@@ -344,6 +344,12 @@
                          is no load/save pair to write. -->
                     <div class="settings-section" id="leetcodeSettingsPanel" data-site-settings="leetcode"
                          data-plate="LeetCode" data-plate-proper hidden>
+                        <p class="settings-hint">Your LeetCode username, used to draw the practice heat map from LeetCode's own record rather than only from what Bell Bearer watched — which starts the day you installed it. The request is public and carries no cookies: it tells LeetCode nothing about who is asking, and works signed out. Leave it empty to keep the map local.</p>
+                        <div class="settings-option">
+                            <label class="setting-label" for="leetUsername">LeetCode username</label>
+                            <input type="text" id="leetUsername" placeholder="e.g. your profile name" autocomplete="off" spellcheck="false">
+                        </div>
+
                         <p class="settings-hint">Bell Bearer times each problem with LeetCode's own stopwatch rather than a clock of its own, so the number on the page and the number recorded against the attempt are the same number. Whether a submission passed is read from LeetCode's own network calls, not from the result banner — and pressing Run is not a submission, so it never counts against you.</p>
                         <div class="settings-option">
                             <label class="toggle-switch">
@@ -572,6 +578,7 @@
     <script src="src/shared/fsrs.js"></script>
     <script src="src/shared/leetcode.js"></script>
     <script src="src/shared/leet-templates.js"></script>
+    <script src="src/shared/leet-api.js"></script>
     <script src="src/page/leet-stats.js"></script>
     <script src="src/page/leet-templates-view.js"></script>
     <script src="src/page/chess-stats.js"></script>

@@ -19,7 +19,7 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
-    const { Settings, Leet, Fsrs, Dom, Ui, SiteIcons } = BB;
+    const { Settings, Leet, LeetApi, Fsrs, Dom, Ui, SiteIcons } = BB;
 
     const esc = Dom.escapeHtml;
     const att = Dom.escapeAttr;
@@ -140,6 +140,16 @@
         let state = Leet.blank();
         let metric = 'submitted';
 
+        /**
+         * LeetCode's own calendar, when a username is set. Only the
+         * Submissions metric can come from it — see shared/leet-api.js — so
+         * `state` stays the source for everything else.
+         */
+        let calendar = null;
+        let calendarError = null;
+        let calendarLoading = false;
+        let username = '';
+
         function paint() {
             const now = Date.now();
             const lists = Leet.lists(state, now);
@@ -248,16 +258,62 @@
 
         // ---------------------------------------------------------- heat
 
+        /**
+         * Whether this metric is being drawn from LeetCode's own calendar.
+         *
+         * Only Submissions can be: the endpoint reports how many submissions
+         * a day held and nothing else, so Solved and Time have no source but
+         * the local log however good the username is.
+         */
+        const fromLeetCode = () => metric === 'submitted' && !!calendar && !!username;
+
+        /** The squares to draw, and where they came from. */
+        function heatSource(now) {
+            if (fromLeetCode()) {
+                const days = {};
+                for (const [key, count] of Object.entries(calendar.days)) {
+                    days[key] = { value: count, submitted: count, solved: 0, seconds: 0 };
+                }
+                return { days, remote: true };
+            }
+            return { days: Leet.heatDays(state, metric, now), remote: false };
+        }
+
+        function heatSub(remote) {
+            if (calendarLoading && metric === 'submitted') return 'Reading your calendar from LeetCode…';
+            if (remote) {
+                const stale = calendar.stale ? ' Could not refresh just now, so this is the last good read.' : '';
+                return `Every submission on LeetCode’s record for ${esc(username)} this past year, on its own
+                        day boundaries — the same squares your profile draws.${stale}`;
+            }
+            if (metric === 'submitted' && calendarError) {
+                return `${esc(calendarError.message)} — showing what Bell Bearer watched instead.`;
+            }
+            if (metric === 'submitted' && !username) {
+                return `Only what Bell Bearer watched, which starts the day you installed it. Put your
+                        LeetCode username in Settings → LeetCode to draw your whole year instead.`;
+            }
+            return `One square a day, in your own time zone. LeetCode only reports how many submissions
+                    a day held, so this one is what Bell Bearer watched.`;
+        }
+
         function heatMarkup(lists, now) {
             const spec = METRICS[metric];
-            const days = Leet.heatDays(state, metric, now);
-            const entries = Object.values(days);
-            const practised = entries.filter((day) => day.submitted).length;
+            const { days, remote } = heatSource(now);
+            const entries = Object.values(Leet.heatDays(state, 'submitted', now));
+            const practised = remote
+                ? (calendar.activeDays || Object.keys(calendar.days).length)
+                : entries.filter((day) => day.submitted).length;
             const totals = entries.reduce((sum, day) => ({
                 submitted: sum.submitted + day.submitted,
                 solved: sum.solved + day.solved,
                 seconds: sum.seconds + day.seconds,
             }), { submitted: 0, solved: 0, seconds: 0 });
+
+            // LeetCode's own streak and totals when we have them: they cover
+            // the whole year rather than the part this machine saw.
+            const submissions = calendar && username ? calendar.total : totals.submitted;
+            const streak = calendar && username ? calendar.streak : Leet.streak(state, now);
 
             return `
                 <div class="dashboard-header">
@@ -268,18 +324,19 @@
                                 <button class="range-opt" type="button" data-leet-metric="${att(id)}"
                                         aria-pressed="${id === metric}">${esc(entry.label)}</button>`).join('')}
                         </div>
+                        ${username ? `<button class="btn-secondary" type="button" data-leet-refresh
+                                ${calendarLoading ? 'disabled' : ''}>Refresh</button>` : ''}
                     </div>
                 </div>
                 <div class="stat-figures">
-                    ${figure('Days practised', practised, 'in the last year')}
-                    ${figure('Submissions', totals.submitted, `${totals.solved} accepted`)}
+                    ${figure('Days practised', practised, remote ? `as ${username}` : 'that were watched')}
+                    ${figure('Submissions', submissions, remote ? 'on LeetCode’s record' : `${totals.solved} accepted`)}
                     ${figure('Time', human(totals.seconds), 'timed on problems')}
-                    ${figure('Streak', Leet.streak(state, now), 'days running')}
+                    ${figure('Streak', streak, 'days running')}
                 </div>
                 <div class="stat-panel">
                     <h3>${esc(spec.label)}</h3>
-                    <p class="stat-sub">One square a day, in your own time zone. Only what Bell Bearer
-                       watched is here — solving something before you installed it is not.</p>
+                    <p class="stat-sub">${heatSub(remote)}</p>
                     ${BB.HeatMap.render({
                         days,
                         end: now,
@@ -290,6 +347,28 @@
                             : `${dayLabel(date)} — nothing`),
                     })}
                 </div>`;
+        }
+
+        /**
+         * Read the calendar, then repaint. Failures are kept rather than
+         * thrown: an unreachable LeetCode should cost the remote squares, not
+         * the whole panel.
+         */
+        async function loadCalendar({ force = false } = {}) {
+            if (kind !== 'heat' || !username || calendarLoading) return;
+            calendarLoading = true;
+            calendarError = null;
+            paint();
+            try {
+                calendar = await LeetApi.calendar(username, { force });
+                if (calendar.stale) calendarError = calendar.error || null;
+            } catch (error) {
+                calendar = null;
+                calendarError = error;
+            } finally {
+                calendarLoading = false;
+                paint();
+            }
         }
 
         // --------------------------------------------------------- notes
@@ -392,6 +471,7 @@
                 paint();
                 return;
             }
+            if (event.target.closest('[data-leet-refresh]')) return void loadCalendar({ force: true });
             const note = event.target.closest('[data-leet-note]');
             if (note) return void editNote(note.dataset.leetNote);
 
@@ -407,7 +487,24 @@
             paint();
         }
 
-        return { reload, render: paint };
+        /**
+         * The username changed in Settings. A different name means the
+         * calendar on screen belongs to somebody else, so it goes before the
+         * new one is asked for rather than lingering until the read lands.
+         */
+        async function applyUsername() {
+            if (kind !== 'heat') return;
+            const { leetUsername } = await Settings.get(['leetUsername']);
+            const next = LeetApi.cleanUsername(leetUsername);
+            if (next === username) return;
+            username = next;
+            calendar = null;
+            calendarError = null;
+            paint();
+            if (username) loadCalendar();
+        }
+
+        return { reload, render: paint, applyUsername };
     }
 
     /**
@@ -429,10 +526,12 @@
         const panels = hosts.map(([host, kind]) => {
             const panel = mountPanel(host, kind);
             panel.reload();
+            panel.applyUsername();
             return panel;
         });
 
         Settings.watch(Leet.KEYS, () => panels.forEach((panel) => panel.reload()));
+        Settings.watch(['leetUsername'], () => panels.forEach((panel) => panel.applyUsername()));
     }
 
     BB.LeetStats = { mountAll, mountPanel, METRICS, medianSeconds, dueText, human };

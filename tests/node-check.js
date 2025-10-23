@@ -814,6 +814,103 @@ check('a stored record that is nonsense does not take the list down', () => {
     eq(rows[0].uses, 0);
 });
 
+// ------------------------------------------- leetcode's own submission calendar
+
+const LeetApi = require('../src/shared/leet-api.js');
+
+/** A reply shaped the way LeetCode's GraphQL endpoint actually answers. */
+function calendarReply(map, extra = {}) {
+    return {
+        submissionCalendar: JSON.stringify(map),
+        streak: 8,
+        totalActiveDays: Object.keys(map).length,
+        activeYears: [2025, 2026],
+        ...extra,
+    };
+}
+
+/** A unix seconds value for a UTC midnight. */
+const utcMidnight = (iso) => Date.parse(`${iso}T00:00:00.000Z`) / 1000;
+
+console.log('\n# leetcode — reading the submission calendar');
+check('the calendar comes back as one count per day', () => {
+    const parsed = LeetApi.parseCalendar(calendarReply({
+        [utcMidnight('2026-09-10')]: 4,
+        [utcMidnight('2026-09-02')]: 5,
+    }));
+    // Ordered oldest first: the incoming keys are unix seconds, which JS
+    // treats as integer keys and hands back in ascending order.
+    eq(parsed.days, { '2026-09-02': 5, '2026-09-10': 4 });
+    eq(parsed.total, 9);
+    eq(parsed.streak, 8);
+    eq(parsed.activeDays, 2);
+});
+check('the day keys are UTC, the way LeetCode itself draws them', () => {
+    // Read back in local time, a midnight timestamp lands on the day before
+    // for anyone west of Greenwich and the day after for anyone far enough
+    // east. Matching LeetCode's own profile page is the answer a person can
+    // actually check against.
+    eq(LeetApi.dayKeyUtc(utcMidnight('2026-01-01')), '2026-01-01');
+    eq(LeetApi.dayKeyUtc(utcMidnight('2026-12-31')), '2026-12-31');
+});
+check('a submissionCalendar that is not JSON does not take the map down', () => {
+    // It arrives as a string rather than an object, so it is the one field
+    // that can arrive malformed without the response itself being invalid.
+    eq(LeetApi.parseCalendar({ submissionCalendar: 'not json' }).days, {});
+    eq(LeetApi.parseCalendar({}).days, {});
+    eq(LeetApi.parseCalendar({ submissionCalendar: '{}' }).total, 0);
+});
+check('a day with a nonsense count is dropped rather than drawn as NaN', () => {
+    const parsed = LeetApi.parseCalendar(calendarReply({
+        [utcMidnight('2026-09-10')]: 'lots',
+        [utcMidnight('2026-09-11')]: 3,
+    }));
+    eq(parsed.days, { '2026-09-11': 3 });
+    eq(parsed.total, 3);
+});
+check('a username is cleaned the way LeetCode spells one', () => {
+    eq(LeetApi.cleanUsername('  Shishir43 '), 'Shishir43');
+    eq(LeetApi.cleanUsername('@Shishir43'), 'Shishir43');
+    eq(LeetApi.cleanUsername(''), '');
+    eq(LeetApi.cleanUsername(null), '');
+});
+
+console.log('\n# leetcode — asking LeetCode for it');
+checkAsync('the request is public: no cookies, just a username', async () => {
+    let sent = null;
+    const fetcher = async (url, options) => {
+        sent = { url, options };
+        return { ok: true, json: async () => ({ data: { matchedUser: { userCalendar: calendarReply({ [utcMidnight('2026-09-10')]: 2 }) } } }) };
+    };
+    const out = await LeetApi.fetchCalendar('Shishir43', { fetcher });
+
+    eq(sent.url, LeetApi.ENDPOINT);
+    eq(sent.options.credentials, 'omit', 'the request must not carry the user’s session');
+    eq(JSON.parse(sent.options.body).variables, { username: 'Shishir43' });
+    eq(out.days, { '2026-09-10': 2 });
+    eq(out.user, 'Shishir43');
+});
+checkAsync('a username nobody has is said so, not drawn as an empty year', async () => {
+    const fetcher = async () => ({ ok: true, json: async () => ({ data: { matchedUser: null } }) });
+    let code = null;
+    try { await LeetApi.fetchCalendar('nobody-at-all', { fetcher }); } catch (error) { code = error.code; }
+    eq(code, 'not-found');
+});
+checkAsync('an unreachable LeetCode is an error, not an empty calendar', async () => {
+    const fetcher = async () => { throw new Error('offline'); };
+    let code = null;
+    try { await LeetApi.fetchCalendar('Shishir43', { fetcher }); } catch (error) { code = error.code; }
+    eq(code, 'network');
+});
+checkAsync('an empty username never reaches the network', async () => {
+    let called = false;
+    const fetcher = async () => { called = true; };
+    let code = null;
+    try { await LeetApi.fetchCalendar('  ', { fetcher }); } catch (error) { code = error.code; }
+    eq(code, 'no-username');
+    eq(called, false);
+});
+
 console.log('\n# leetcode — the pouch panel');
 const LeetPanel = require('../src/content/leet-panel.js');
 

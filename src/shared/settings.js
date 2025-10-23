@@ -166,6 +166,10 @@
         // that never asked it would collect attempts and schedule nothing.
         // The three that reach further into the page are off until asked for,
         // the same rule the X surfaces follow.
+        // The username whose submission calendar the practice heat map draws.
+        // Empty means the map falls back to what Bell Bearer watched itself,
+        // which starts the day it was installed. See shared/leet-api.js.
+        leetUsername: '',
         leetStartTimer: true,
         leetGradePrompt: true,
         leetNoteButton: false,
@@ -267,6 +271,11 @@
         // the user — nothing ships with the extension. shared/leet-templates.js
         // owns the shape.
         leetTemplates: 'bbLeetTemplates',
+
+        // LeetCode's own submission calendar for the past year, as its public
+        // GraphQL endpoint reports it, with the day it was fetched.
+        // shared/leet-api.js owns the shape.
+        leetCalendar: 'bbLeetCalendar',
     });
 
     function withDefaults(stored, keys) {
