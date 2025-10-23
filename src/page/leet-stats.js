@@ -24,6 +24,10 @@
     const esc = Dom.escapeHtml;
     const att = Dom.escapeAttr;
 
+    const ICONS = {
+        trash: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7v13h12V7"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>',
+    };
+
     /**
      * The heat map's three metrics, and the level steps each is banded by.
      *
@@ -206,6 +210,7 @@
                     <thead><tr>
                         <th>Problem</th><th class="col-diff">Difficulty</th><th class="col-day">Due</th>
                         <th>Note</th>${gradable ? '<th class="col-grade">Re-grade</th>' : ''}
+                        <th class="col-forget"><span class="visually-hidden">Remove</span></th>
                     </tr></thead>
                     <tbody>${rows.map((problem) => `
                         <tr>
@@ -217,6 +222,11 @@
                                         data-leet-note="${att(problem.slug)}">${problem.note ? esc(problem.note) : '+ note'}</button>
                             </td>
                             ${gradable ? `<td class="col-grade">${gradeButtons(problem)}</td>` : ''}
+                            <td class="col-forget">
+                                <button type="button" class="leet-forget" data-leet-forget="${att(problem.slug)}"
+                                        title="Remove this problem from the list"
+                                        aria-label="Remove ${att(problem.title || problem.slug)} from the list">${ICONS.trash}</button>
+                            </td>
                         </tr>`).join('')}</tbody>
                 </table>`;
         }

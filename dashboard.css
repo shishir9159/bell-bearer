@@ -2791,6 +2791,51 @@ body[data-skin="deco"] .bb-plate {
 
 .leet-queue .col-diff { width: 92px; }
 .leet-queue .col-grade { width: 132px; }
+.leet-queue .col-forget { width: 40px; text-align: right; }
+
+/* The remove column's header has no word in it — the icon in each row is
+   labelled instead — but the column still needs a name for anyone reading
+   the table with a screen reader. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Removing a problem sits at the far right, away from the controls that act
+   on it — the one destructive thing in the row should not be adjacent to the
+   four grade buttons it would otherwise be mistaken for. It stays faint
+   until the row is under the cursor. */
+.leet-forget {
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .12s ease, color .12s ease, background .12s ease;
+}
+
+.leet-queue tr:hover .leet-forget,
+.leet-forget:focus-visible { opacity: 1; }
+.leet-forget:hover { background: var(--accent-soft); color: var(--danger); }
+.leet-forget svg { width: 15px; height: 15px; }
+
+/* Touch and keyboard have no hover, so never hide it from them. */
+@media (hover: none) {
+    .leet-forget { opacity: .7; }
+}
 
 /* The note lives in the table rather than behind a menu, because the whole
    point of a note is to be read while you are deciding what to work on. */
