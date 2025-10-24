@@ -1062,6 +1062,214 @@ check('the dashboard writes durations the way the panel does', () => {
     eq(LeetStats.human(3900), '1h 05m');
 });
 
+// ----------------------------------------------------------- typeracer
+
+const Typer = require('../src/shared/typeracer.js');
+
+/**
+ * A keystroke stream, written the way a race actually happens.
+ *
+ * `quote` is what was on screen; `typed` is what went in, where a `<` is one
+ * backspace. Every gap is `step` unless the character is preceded by a number
+ * in braces, which is that gap in milliseconds — so a test can put a four
+ * second stare or a three millisecond key repeat exactly where it wants one
+ * without arithmetic in the test body.
+ */
+function stream(quote, typed, { start = 1000, step = 200 } = {}) {
+    const events = [];
+    const buffer = [];
+    let at = start;
+    let i = 0;
+    while (i < typed.length) {
+        let gap = step;
+        if (typed[i] === '{') {
+            const close = typed.indexOf('}', i);
+            gap = Number(typed.slice(i + 1, close));
+            i = close + 1;
+        }
+        at += gap;
+        const ch = typed[i++];
+        if (ch === '<') {
+            buffer.pop();
+            events.push({ del: true, at });
+            continue;
+        }
+        const expected = quote[buffer.length] || '';
+        events.push({ ch, expected, at, ok: ch === expected });
+        buffer.push(ch);
+    }
+    return events;
+}
+
+const gramsOf = (quote, typed, options) => Typer.gramsFrom(stream(quote, typed, options));
+const msOf = (table, gram) => (table[gram] ? table[gram].ms : null);
+
+// Half past eleven at night, today. The day bucket is keyed in local time,
+// and a hard-coded date would stop being recorded once the suite is run more
+// than KEEP_DAYS after it was written.
+const R0 = new Date().setHours(23, 30, 0, 0);
+
+console.log('\n# typeracer — folding a character');
+check('case folds, because the shift is already its own interval', () => {
+    eq(Typer.foldChar('A'), 'a');
+    eq(Typer.foldChar('a'), 'a');
+    eq(Typer.foldGram(['T', 'h']), 'th');
+});
+check('every digit is one key, and everything unreachable is another', () => {
+    eq(Typer.foldChar('7'), '#');
+    eq(Typer.foldChar('0'), '#');
+    // An accented letter is somebody else's keyboard. Folding it to itself
+    // would fill the table with pairs you never meet twice.
+    eq(Typer.foldChar('é'), '?');
+    eq(Typer.foldChar('€'), '?');
+});
+check('the punctuation you actually type survives', () => {
+    for (const ch of [' ', "'", ',', '.', '-']) eq(Typer.foldChar(ch), ch);
+    // A quote is typeset with curly marks and long dashes; the keyboard has
+    // neither, so they fold onto the key that was actually pressed.
+    eq(Typer.foldChar('’'), "'");
+    eq(Typer.foldChar('—'), '-');
+});
+
+console.log('\n# typeracer — reading the keystrokes');
+check('a clean run credits each pair once and the roll once', () => {
+    const grams = gramsOf('the', 'the');
+    eq(Object.keys(grams.bi).sort(), ['he', 'th']);
+    eq(Object.keys(grams.tri), ['the']);
+    eq(grams.tri.the.ms, 200, 'the roll is its second interval, not its span');
+    eq(grams.totalN, 2);
+    eq(grams.errors, 0);
+});
+check('an interval spanning a backspace is credited to nothing', () => {
+    // Typing "the" as t, x, backspace, h, e. Both intervals touching the
+    // retyped position measure how long the fix took, not how fast the pair
+    // is, so neither belongs in a table about speed.
+    const grams = gramsOf('the', 'tx<he');
+    eq(Object.keys(grams.bi), []);
+    eq(Object.keys(grams.tri), []);
+    eq(grams.errors, 1);
+});
+check('a stare and a key repeat are both dropped', () => {
+    const grams = gramsOf('theirs', 'th{4000}e{3}i{200}r{200}s');
+    eq(Object.keys(grams.bi).sort(), ['ir', 'rs', 'th']);
+    eq(Object.keys(grams.tri), ['irs'], 'a roll needs both of its intervals');
+});
+check('dropping a reading does not shift the ones around it', () => {
+    // Every interval is the difference of two absolute timestamps rather
+    // than a step in a chain, which is the whole reason dropping is safe.
+    const clean = gramsOf('theirs', 'th{200}e{200}i{200}r{200}s');
+    const gappy = gramsOf('theirs', 'th{4000}e{3}i{200}r{200}s');
+    eq(msOf(gappy.bi, 'th'), msOf(clean.bi, 'th'));
+    eq(msOf(gappy.bi, 'rs'), msOf(clean.bi, 'rs'));
+});
+check('a mistype is filed against the character that was due', () => {
+    const grams = gramsOf('the', 'tge');
+    eq(grams.chars.h.due, 1);
+    eq(grams.chars.h.wrong, 1);
+    eq(grams.chars.h.subs.g, 1, 'what was hit instead is the interesting half');
+    eq(grams.chars.t.wrong, 0);
+});
+check('a character typed twice was due twice', () => {
+    // Otherwise the error rate for a key you fumble and fix is 1/1, and
+    // every such key sits at the top of the table for ever.
+    const grams = gramsOf('the', 'tg<he');
+    eq(grams.chars.h.due, 2);
+    eq(grams.chars.h.wrong, 1);
+});
+
+console.log('\n# typeracer — merging and evicting');
+check('merging is commutative, because it is all sums', () => {
+    const a = gramsOf('the', 'the');
+    const b = gramsOf('then', 'then');
+    const ab = Typer.mergeGrams(Typer.mergeGrams(Typer.blankGrams(), a), b);
+    const ba = Typer.mergeGrams(Typer.mergeGrams(Typer.blankGrams(), b), a);
+    eq(ab.bi, ba.bi);
+    eq(ab.totalMs, ba.totalMs);
+    eq(ab.bi.th.n, 2, 'the pair both quotes hold is counted twice');
+});
+check('a sum is stored rather than a mean', () => {
+    const once = Typer.mergeGrams(Typer.blankGrams(), gramsOf('the', 'th{100}e'));
+    const twice = Typer.mergeGrams(once, gramsOf('the', 'th{300}e'));
+    eq(twice.bi.he.n, 2);
+    eq(twice.bi.he.ms, 400, 'means do not merge; sums do');
+});
+check('eviction takes the rarest first and never a gram you know', () => {
+    const grams = Typer.blankGrams();
+    for (let i = 0; i < Typer.GRAM_CAP + 100; i++) {
+        grams.bi[`x${i}`] = { n: i < 100 ? Typer.KEEP_N : 1, ms: 100, err: 0 };
+    }
+    const pruned = Typer.pruneGrams(grams);
+    eq(Object.keys(pruned.bi).length, Typer.GRAM_CAP);
+    for (let i = 0; i < 100; i++) assert(pruned.bi[`x${i}`], `x${i} was evicted at KEEP_N`);
+});
+check('a table of nothing but known grams stays over the cap', () => {
+    // The cap is there to keep one-offs out, not to throw away the answer.
+    const grams = Typer.blankGrams();
+    for (let i = 0; i < Typer.GRAM_CAP + 50; i++) grams.bi[`x${i}`] = { n: Typer.KEEP_N, ms: 100, err: 0 };
+    eq(Object.keys(Typer.pruneGrams(grams).bi).length, Typer.GRAM_CAP + 50);
+});
+check('the cap holds after a thousand races of novel grams', () => {
+    let state = Typer.blank();
+    const letters = 'abcdefghijklmnopqrstuvwxyz';
+    for (let race = 0; race < 1000; race++) {
+        // A different quote every time, so nothing ever reaches KEEP_N and
+        // the table is under maximum pressure to grow.
+        let quote = '';
+        for (let i = 0; i < 40; i++) quote += letters[(race * 7 + i * 11) % 26];
+        state = Typer.recordRace(state, { at: R0, seconds: 30 }, stream(quote, quote), R0);
+    }
+    assert(Object.keys(state.grams.bi).length <= Typer.GRAM_CAP, 'the bigram table ran away');
+    assert(Object.keys(state.grams.tri).length <= Typer.GRAM_CAP_TRI, 'the trigram table ran away');
+});
+
+console.log('\n# typeracer — the race log');
+check('a race lands on the local day it was typed on', () => {
+    // toISOString() would file this one under tomorrow east of Greenwich —
+    // the square that lights up would not be the one you were sitting at.
+    const state = Typer.recordRace(Typer.blank(), { at: R0, wpm: 80, accuracy: 97, seconds: 30, chars: 200 }, [], R0);
+    const local = new Date(R0);
+    const key = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
+    eq(Object.keys(state.days), [key]);
+    eq(state.days[key], { races: 1, seconds: 30, best: 80 });
+});
+check('the day keeps the best of its races, not the last', () => {
+    let state = Typer.recordRace(Typer.blank(), { at: R0, wpm: 90, seconds: 30 }, [], R0);
+    state = Typer.recordRace(state, { at: R0, wpm: 70, seconds: 30 }, [], R0);
+    eq(state.days[Typer.dayKey(R0)], { races: 2, seconds: 60, best: 90 });
+});
+check('the page is believed when it parses and measured when it does not', () => {
+    const told = Typer.recordRace(Typer.blank(), { at: R0, wpm: 84.4, accuracy: 96.5, seconds: 30, chars: 200 }, [], R0);
+    eq(told.races[0].wpm, 84.4, 'the number the user just saw on screen');
+
+    // 200 characters in 30 seconds is 80 wpm by the five-character word.
+    const measured = Typer.recordRace(Typer.blank(), { at: R0, seconds: 30, chars: 200 }, [], R0);
+    eq(measured.races[0].wpm, 80);
+});
+check('accuracy is computed from the stream when the panel says nothing', () => {
+    const state = Typer.recordRace(Typer.blank(), { at: R0, seconds: 10 }, stream('the', 'tge'), R0);
+    eq(state.races[0].errors, 1);
+    eq(state.races[0].accuracy, 66.7);
+});
+check('the log is newest first and capped', () => {
+    let state = Typer.blank();
+    for (let i = 0; i < Typer.RACE_CAP + 20; i++) {
+        state = Typer.recordRace(state, { at: R0 + i, wpm: i, seconds: 1 }, [], R0);
+    }
+    eq(state.races.length, Typer.RACE_CAP);
+    eq(state.races[0].wpm, Typer.RACE_CAP + 19, 'newest first');
+});
+check('day buckets older than the map are dropped rather than aged', () => {
+    const old = R0 - (Typer.KEEP_DAYS + 5) * Typer.DAY_MS;
+    const days = { [Typer.dayKey(old)]: { races: 3, seconds: 90, best: 60 }, [Typer.dayKey(R0)]: { races: 1, seconds: 30, best: 70 } };
+    eq(Object.keys(Typer.prune(days, R0)), [Typer.dayKey(R0)]);
+});
+check('a stored race written by an older version cannot hand back nonsense', () => {
+    // Every field is interpolated into markup somewhere, so nothing is
+    // trusted as stored — the rule shared/leetcode.js follows.
+    const race = Typer.cleanRace({ at: '12', wpm: -5, accuracy: 300, seconds: 'x', quoteId: { nope: 1 }, chars: 4.6 });
+    eq(race, { at: 12, wpm: 0, accuracy: 100, seconds: 0, chars: 5, errors: 0, quoteId: '[object Object]', place: 0, of: 0 });
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

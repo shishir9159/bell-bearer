@@ -276,6 +276,18 @@
         // GraphQL endpoint reports it, with the day it was fetched.
         // shared/leet-api.js owns the shape.
         leetCalendar: 'bbLeetCalendar',
+
+        // TypeRacer. Three keys rather than one, because they age at three
+        // different rates: a race is a row in a table and two hundred of
+        // them is the history worth keeping, the n-gram tables are a rolling
+        // aggregate that never expires but is capped, and a day bucket is
+        // three numbers for a square on a heat map. Raw keystrokes are never
+        // stored at all — a race is about three hundred of them and a hundred
+        // races would be thirty thousand rows, which chrome.storage.local is
+        // not. shared/typeracer.js owns all three shapes.
+        typerRaces: 'bbTyperRaces',
+        typerGrams: 'bbTyperGrams',
+        typerDays: 'bbTyperDays',
     });
 
     function withDefaults(stored, keys) {

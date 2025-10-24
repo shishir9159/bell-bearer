@@ -83,6 +83,7 @@
         "src/content/leet-panel.js",
         "src/content/leet-ui.js",
         "src/shared/sfx.js",
+        "src/shared/typeracer.js",
         "src/content/main.js"
       ],
       "css": [
