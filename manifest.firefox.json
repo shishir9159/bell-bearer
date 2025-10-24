@@ -86,6 +86,7 @@
         "src/content/leet-read.js",
         "src/content/leet-panel.js",
         "src/content/leet-ui.js",
+        "src/shared/sfx.js",
         "src/content/main.js"
       ],
       "css": [

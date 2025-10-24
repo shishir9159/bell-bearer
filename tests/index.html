@@ -96,6 +96,12 @@
 <script src="../src/page/leet-popup.js"></script>
 <script src="../src/page/leet-templates-view.js"></script>
 
+<!-- TypeRacer. The synthesised sound module is loaded here rather than under
+     the specs, so a syntax error in it fails the run loudly; it stays silent
+     throughout, because nothing in a test run is a user gesture and the
+     context therefore never starts. -->
+<script src="../src/shared/sfx.js"></script>
+
 <!-- 4. Specs -->
 <script src="background.test.js"></script>
 <script src="transcript.test.js"></script>
