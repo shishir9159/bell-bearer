@@ -3319,6 +3319,36 @@ const dayRecord = (at = T0) =>
             assert(/^M/.test(site.path), `${site.id}'s glyph is not a path`);
         }
     });
+    check('typeracer is one site, whichever subdomain a race is on', () => {
+        // play.typeracer.com races, data.typeracer.com keeps the site's own
+        // stats, and typeracer.com is the front door. All three are the site.
+        eq(Site.detectSite('play.typeracer.com'), 'typeracer');
+        eq(Site.detectSite('data.typeracer.com'), 'typeracer');
+        eq(Site.detectSite('typeracer.com'), 'typeracer');
+        eq(Site.detectSite('nottyperacer.com'), 'other');
+    });
+    check('typeracer needs no player selector of its own', () => {
+        // Every other site in this table is here because it has a <video>.
+        // A typing test has nothing to play, and a selector list for it would
+        // only ever match something that is not a player.
+        eq(Site.PLAYER_SELECTORS.typeracer, undefined);
+    });
+
+    check('typeracer is in the launcher', () => {
+        eq(SiteIcons.get('typeracer').name, 'TypeRacer');
+        assert(SiteIcons.list().some((site) => site.id === 'typeracer'), 'not in ORDER');
+        assert(SiteIcons.svg('typeracer').includes('<svg'), 'draws nothing');
+    });
+    check('the typeracer workspace has a panel behind every tab', () => {
+        const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+        const dashboard = require('fs').readFileSync(`${__dirname}/../dashboard.js`, 'utf8');
+        // The tab list and the panels are two files apart, and a tab whose
+        // panel is missing switches to a blank page rather than failing.
+        for (const id of ['typerRacesPanel', 'typerWeakPanel', 'typerPracticePanel']) {
+            assert(dashboard.includes(`'${id}'`), `${id} is in the page but no tab opens it`);
+            assert(html.includes(`id="${id}"`), `${id} is referenced but not in the page`);
+        }
+    });
     check('leetcode is in the launcher', () => {
         eq(SiteIcons.get('leetcode').name, 'LeetCode');
         assert(SiteIcons.list().some((site) => site.id === 'leetcode'), 'not in ORDER');

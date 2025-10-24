@@ -32,6 +32,10 @@
         if (/(^|\.)chess\.com$/.test(host)) return 'chess';
         if (/(^|\.)lichess\.org$/.test(host)) return 'lichess';
         if (/(^|\.)leetcode\.com$/.test(host)) return 'leetcode';
+        // play.typeracer.com is where a race happens and data.typeracer.com
+        // is where the site keeps its own stats, so the whole domain is
+        // matched rather than the one subdomain.
+        if (/(^|\.)typeracer\.com$/.test(host)) return 'typeracer';
         return 'other';
     }
 

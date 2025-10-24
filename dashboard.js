@@ -54,6 +54,14 @@
             // here, the same split the X pouch keeps.
             { id: 'templates', label: 'Templates', panel: 'leetTemplatesPanel' },
         ],
+        typeracer: [
+            // Races first: it is the tab that answers "am I getting faster",
+            // which is the question anyone opens a typing log to ask. The
+            // other two are what to do about the answer.
+            { id: 'races', label: 'Races', panel: 'typerRacesPanel' },
+            { id: 'weak', label: 'Weak spots', panel: 'typerWeakPanel' },
+            { id: 'practice', label: 'Practice', panel: 'typerPracticePanel' },
+        ],
     };
 
     /**
