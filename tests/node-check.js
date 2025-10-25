@@ -1270,6 +1270,153 @@ check('a stored race written by an older version cannot hand back nonsense', () 
     eq(race, { at: 12, wpm: 0, accuracy: 100, seconds: 0, chars: 5, errors: 0, quoteId: '[object Object]', place: 0, of: 0 });
 });
 
+// ------------------------------------------------ reading typeracer.com
+
+const TyperRead = require('../src/content/typeracer-read.js');
+
+/**
+ * A page shaped like TypeRacer's, without a browser.
+ *
+ * `bySelector` maps one of the spellings in TyperRead.SELECTORS to the node
+ * (or nodes) it finds. That is the whole seam: the readers are selector list
+ * plus validation, and it is the validation these tests are about — whether
+ * the real spelling is still current is the browser suite's question, and
+ * beyond that, the site's.
+ */
+function stubPage(bySelector) {
+    const pick = (selector) => bySelector[selector] || null;
+    return {
+        querySelector: (selector) => {
+            const hit = pick(selector);
+            return Array.isArray(hit) ? (hit[0] || null) : hit;
+        },
+        querySelectorAll: (selector) => {
+            const hit = pick(selector);
+            if (!hit) return [];
+            return Array.isArray(hit) ? hit : [hit];
+        },
+    };
+}
+
+/** One element, on screen and the size of a line of text. */
+const stubNode = (textContent, extra = {}) => ({
+    textContent,
+    isConnected: true,
+    children: [],
+    firstElementChild: null,
+    getAttribute: (name) => (extra.attrs || {})[name] || null,
+    getBoundingClientRect: () => ({ width: extra.hidden ? 0 : 200, height: extra.hidden ? 0 : 18 }),
+    ...extra,
+});
+
+console.log('\n# typeracer — reading the address bar');
+check('the pit and a race are race pages, and the rest of the site is not', () => {
+    eq(TyperRead.isRacePage('/'), true, 'the front door is the pit');
+    eq(TyperRead.isRacePage('/pit/'), true);
+    eq(TyperRead.isRacePage('/race'), true);
+    eq(TyperRead.isRacePage('/play'), true);
+    eq(TyperRead.isRacePage('/pit/profile'), true, 'still under the pit');
+    eq(TyperRead.isRacePage('/texts'), false);
+    eq(TyperRead.isRacePage('/forum/thread'), false);
+});
+
+console.log('\n# typeracer — reading the quote');
+check('a quote is believed only once it is long enough to be one', () => {
+    const long = 'The quick brown fox jumps over the lazy dog and keeps going.';
+    eq(TyperRead.quoteText(stubPage({ '.inputPanelText': stubNode(long) })), long);
+    // A selector that has started matching a chat bubble reports nothing,
+    // the same way a chess move list that does not parse is passed over.
+    eq(TyperRead.quoteText(stubPage({ '.inputPanelText': stubNode('Loading…') })), null);
+    eq(TyperRead.quoteText(stubPage({})), null);
+});
+check('the panel’s line wrapping does not end up in the quote', () => {
+    const wrapped = stubNode('  The quick brown\n  fox jumps over   the lazy dog.  ');
+    eq(TyperRead.quoteText(stubPage({ '.inputPanelText': wrapped })),
+        'The quick brown fox jumps over the lazy dog.');
+});
+check('a later spelling is used when the first no longer matches', () => {
+    const long = 'The quick brown fox jumps over the lazy dog and keeps going.';
+    eq(TyperRead.quoteText(stubPage({ '.raceQuote': stubNode(long) })), long);
+});
+
+console.log('\n# typeracer — the box you type in');
+check('a read-only box between races is not the one to listen on', () => {
+    const live = stubNode('', { tagName: 'INPUT' });
+    const spent = stubNode('', { tagName: 'INPUT', readOnly: true });
+    eq(TyperRead.inputBox(stubPage({ 'input.txtInput': spent })), null);
+    assert(TyperRead.inputBox(stubPage({ 'input.txtInput': live })) === live, 'the live box was passed over');
+});
+check('a box with no box is not on screen', () => {
+    const hidden = stubNode('', { tagName: 'INPUT', hidden: true });
+    eq(TyperRead.inputBox(stubPage({ 'input.txtInput': hidden })), null);
+});
+check('something that is not a field cannot be the field', () => {
+    const div = stubNode('', { tagName: 'DIV' });
+    eq(TyperRead.inputBox(stubPage({ 'input.txtInput': div })), null);
+});
+
+console.log('\n# typeracer — the results panel');
+const resultsOf = (text) => TyperRead.readResult(stubPage({ 'table.raceResults': stubNode(text) }));
+
+check('speed, accuracy and finishing place are read off the scoreboard', () => {
+    const result = resultsOf('You finished 2nd out of 5! Speed: 84 WPM Accuracy: 97.4%');
+    eq(result.wpm, 84);
+    eq(result.accuracy, 97.4);
+    eq(result.place, 2);
+    eq(result.of, 5);
+});
+check('a solo run has a speed and no placing', () => {
+    const result = resultsOf('Speed: 71 WPM Accuracy: 95%');
+    eq(result.wpm, 71);
+    eq(result.place, null);
+    eq(result.of, null);
+});
+check('a field that does not parse is null rather than nought', () => {
+    // A zero is a value: it would go into the mean the dashboard draws and
+    // stay there. Nothing read has to stay distinguishable from nothing done.
+    eq(resultsOf('Race complete!'), { wpm: null, accuracy: null, place: null, of: null });
+    eq(TyperRead.readResult(stubPage({})), { wpm: null, accuracy: null, place: null, of: null });
+});
+check('a reading outside what a race can be is dropped', () => {
+    // 4000 WPM is a renamed table whose digits happen to sit next to the
+    // letters "wpm", not somebody typing.
+    eq(resultsOf('Speed: 4000 WPM Accuracy: 99%').wpm, null);
+    eq(resultsOf('Speed: 0 WPM').wpm, null);
+    eq(resultsOf('Speed: 60 WPM Accuracy: 140%').accuracy, null);
+});
+check('the quote’s own id is taken from the link beside the result', () => {
+    const link = stubNode('see this text', { attrs: { href: '/text?id=3810721' } });
+    eq(TyperRead.quoteId(stubPage({ 'a[href*="/text?id="]': link })), '3810721');
+    eq(TyperRead.quoteId(stubPage({})), '', 'a race with no link is not an error');
+});
+
+console.log('\n# typeracer — where the caret belongs');
+check('nothing typed yet puts the caret on the front of the quote', () => {
+    const first = stubNode('The');
+    const panel = stubNode('The quick brown fox', { firstElementChild: first, children: [first] });
+    assert(TyperRead.caretAnchor(stubPage({ '.inputPanelText': panel })) === first, 'not the first piece');
+});
+check('the caret is the first piece the site has not marked as typed', () => {
+    const done = stubNode('The quick ');
+    const next = stubNode('brown fox');
+    const panel = stubNode('The quick brown fox', { firstElementChild: done, children: [done, next] });
+    const page = stubPage({ '.inputPanelText': panel, '.inputPanelText span.txtHighlight': done });
+    assert(TyperRead.caretAnchor(page) === next, 'the caret stayed on what was already typed');
+});
+check('a quote that cannot be read draws no caret at all', () => {
+    // Degrade, never guess. A caret in the wrong place over the word you are
+    // reading is worse than none, and worse in a way you cannot switch off
+    // without going to find the setting.
+    eq(TyperRead.caretAnchor(stubPage({})), null);
+    const bare = stubNode('The quick brown fox');
+    eq(TyperRead.caretAnchor(stubPage({ '.inputPanelText': bare })), null, 'no pieces to point at');
+});
+check('a finished quote has nothing left to point at', () => {
+    const done = stubNode('The quick brown fox');
+    const panel = stubNode('The quick brown fox', { firstElementChild: done, children: [done] });
+    eq(TyperRead.caretAnchor(stubPage({ '.inputPanelText': panel, '.inputPanelText span.txtHighlight': done })), null);
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.
