@@ -180,6 +180,14 @@
         leetMaxInterval: 365,
         leetMockMode: false,
         leetMockMinutes: 35,
+
+        // TypeRacer. Unlike the X and LeetCode surfaces this one is on by
+        // default, because it puts nothing into somebody else's page: it
+        // listens to keystrokes that are already happening and writes the
+        // shape of them to a store of our own. Nothing is recorded while it
+        // is off, and turning it off stops the race already in progress
+        // rather than waiting for the next page.
+        typerTrack: true,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

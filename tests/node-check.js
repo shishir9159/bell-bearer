@@ -1417,6 +1417,261 @@ check('a finished quote has nothing left to point at', () => {
     eq(TyperRead.caretAnchor(stubPage({ '.inputPanelText': panel, '.inputPanelText span.txtHighlight': done })), null);
 });
 
+// ------------------------------------------------ typing on typeracer.com
+
+const TyperUi = require('../src/content/typeracer-ui.js');
+
+/**
+ * Drive a race without a browser.
+ *
+ * Only what createTyperUi actually touches is stubbed: the capture listener it
+ * registers on `document`, the monotonic clock it timestamps with, and the
+ * four readers it asks about the page. `record` is intercepted rather than
+ * left to storage — what is written is the thing under test here, and the
+ * store's own arithmetic has its own section above.
+ *
+ * `clock` is moved by hand. A typing test measured against a clock that some
+ * test slept through would be a test of how fast this machine is.
+ */
+function withTyperPage(run, { settings = {}, quote = '' } = {}) {
+    const BB = globalThis.BB;
+    const saved = {
+        document: global.document,
+        performance: global.performance,
+        location: global.location,
+        record: BB.Typer.record,
+        readResult: BB.TyperRead.readResult,
+        quoteId: BB.TyperRead.quoteId,
+        quoteText: BB.TyperRead.quoteText,
+        find: BB.TyperRead.find,
+    };
+
+    const handlers = {};
+    global.document = {
+        addEventListener: (type, fn) => { handlers[type] = fn; },
+        removeEventListener: (type) => { delete handlers[type]; },
+    };
+    global.location = { pathname: '/' };
+
+    let clock = 1000;
+    global.performance = { now: () => clock };
+
+    const page = { quote, results: null, quoteId: '' };
+    BB.TyperRead.quoteText = () => page.quote || null;
+    BB.TyperRead.find = (names) => (names === 'results' ? page.results : null);
+    BB.TyperRead.readResult = () => page.results || { wpm: null, accuracy: null, place: null, of: null };
+    BB.TyperRead.quoteId = () => page.quoteId;
+
+    const written = [];
+    BB.Typer.record = (race, events) => {
+        written.push({ race, events });
+        return Promise.resolve(null);
+    };
+
+    const tasks = new Map();
+    const watcher = {
+        add: (name, fn) => tasks.set(name, fn),
+        remove: (name) => tasks.delete(name),
+        schedule() {}, has: (name) => tasks.has(name),
+    };
+
+    const ui = TyperUi.createTyperUi({
+        watcher,
+        notify: () => {},
+        getSettings: () => ({ ...BB.Settings.DEFAULTS, ...settings }),
+    });
+    ui.install();
+
+    /**
+     * Type `text` into the box, one `beforeinput` per character, `step`
+     * milliseconds apart. A `<` is one backspace, as in the store's tests.
+     */
+    const type = (text, { step = 200 } = {}) => {
+        for (const ch of text) {
+            clock += step;
+            if (ch === '<') {
+                handlers.beforeinput({ inputType: 'deleteContentBackward', data: null, target: { value: '', selectionStart: 1, selectionEnd: 1 } });
+            } else {
+                handlers.beforeinput({ inputType: 'insertText', data: ch, target: { value: ch, selectionStart: 1, selectionEnd: 1 } });
+            }
+        }
+    };
+
+    const pass = () => tasks.get('typer-race')();
+
+    try {
+        return run({ ui, page, type, pass, written, watcher, handlers, wait: (ms) => { clock += ms; } });
+    } finally {
+        ui.uninstall();
+        Object.assign(global, { document: saved.document, performance: saved.performance, location: saved.location });
+        BB.Typer.record = saved.record;
+        BB.TyperRead.readResult = saved.readResult;
+        BB.TyperRead.quoteId = saved.quoteId;
+        BB.TyperRead.quoteText = saved.quoteText;
+        BB.TyperRead.find = saved.find;
+    }
+}
+
+console.log('\n# typeracer — counting what a delete took away');
+check('a plain backspace is one character', () => {
+    eq(TyperUi.deletedCount({ value: 'the', selectionStart: 3, selectionEnd: 3 }, 'deleteContentBackward'), 1);
+});
+check('a selection being replaced takes all of it', () => {
+    eq(TyperUi.deletedCount({ value: 'the quick', selectionStart: 4, selectionEnd: 9 }, 'deleteContentBackward'), 5);
+});
+check('a word delete is measured off the text rather than guessed at', () => {
+    // Guessing 1 would leave our position in the quote wrong for the rest of
+    // the race, and every interval after it silently spoiled.
+    eq(TyperUi.deletedCount({ value: 'the quick', selectionStart: 9, selectionEnd: 9 }, 'deleteWordBackward'), 5);
+    eq(TyperUi.deletedCount({ value: 'the', selectionStart: 3, selectionEnd: 3 }, 'deleteWordBackward'), 3);
+});
+check('an input that cannot say is treated as one character', () => {
+    eq(TyperUi.deletedCount(null, 'deleteContentBackward'), 1);
+    eq(TyperUi.deletedCount({ value: 'x' }, 'deleteContentBackward'), 1);
+});
+
+console.log('\n# typeracer — measuring a race');
+check('a new quote starts a race and the keys go into it', () => {
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('the');
+        const race = ui.currentRace();
+        eq(race.events.map((e) => e.ch), ['t', 'h', 'e']);
+        eq(race.events.every((e) => e.ok), true);
+        eq(race.depth, 3);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('the expected character is our own position, not the box’s', () => {
+    // TypeRacer empties the box after every word, so its length stops being
+    // the position in the quote the moment the first space goes in.
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('the quick');
+        const race = ui.currentRace();
+        eq(race.events.map((e) => e.expected).join(''), 'the quick');
+        eq(race.events.some((e) => !e.ok), false);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a wrong key is recorded against what was due', () => {
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('tge');
+        const [, wrong] = ui.currentRace().events;
+        eq(wrong.ch, 'g');
+        eq(wrong.expected, 'h');
+        eq(wrong.ok, false);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a backspace steps the position back and is recorded as one', () => {
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('tg<h');
+        const race = ui.currentRace();
+        eq(race.depth, 2);
+        eq(race.events.map((e) => (e.del ? '<' : e.ch)).join(''), 'tg<h');
+        eq(race.events[3].expected, 'h', 'the retype is compared against the same position');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('deleting past the start of the quote is not recorded', () => {
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('t<<<');
+        eq(ui.currentRace().depth, 0);
+        eq(ui.currentRace().events.filter((e) => e.del).length, 1, 'only the one that had something to take');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+
+console.log('\n# typeracer — ending a race');
+check('the results panel appearing files the race', () => {
+    withTyperPage(({ page, pass, type, written }) => {
+        pass();
+        type('the quick brown fox');
+        page.results = { wpm: 84, accuracy: 97, place: 2, of: 5 };
+        page.quoteId = '3810721';
+        pass();
+
+        eq(written.length, 1);
+        const { race } = written[0];
+        eq(race.wpm, 84);
+        eq(race.accuracy, 97);
+        eq(race.place, 2);
+        eq(race.of, 5);
+        eq(race.chars, 19);
+        eq(race.quoteId, '3810721');
+        // 19 characters at 200ms each, measured from the first to the last.
+        eq(race.seconds, 3.6);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a false start is not a race', () => {
+    withTyperPage(({ page, pass, type, written }) => {
+        pass();
+        type('the');
+        page.results = { wpm: 84, accuracy: 97, place: null, of: null };
+        pass();
+        eq(written.length, 0);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a new quote under a running race banks the old one', () => {
+    withTyperPage(({ page, pass, type, written, wait }) => {
+        pass();
+        type('the quick brown fox');
+        page.quote = 'every good boy deserves favour and so on';
+        wait(TyperUi.QUOTE_SAMPLE_MS + 1);
+        pass();
+        eq(written.length, 1, 'the first race was dropped rather than banked');
+        eq(written[0].race.chars, 19, 'what was typed belongs to the quote it was typed against');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('the quote is not re-read on every pass of the observer', () => {
+    // TypeRacer moves its own highlight as you type, so the shared observer
+    // fires continuously through a race; textContent on the quote panel
+    // concatenates three hundred characters every time it is asked.
+    withTyperPage(({ pass, type, wait }) => {
+        pass();
+        type('the quick');
+        pass();
+
+        let reads = 0;
+        const real = globalThis.BB.TyperRead.quoteText;
+        globalThis.BB.TyperRead.quoteText = () => { reads++; return real(); };
+        for (let i = 0; i < 60; i++) pass();
+        eq(reads, 0, 'a frame inside the sample window re-read the quote');
+
+        wait(TyperUi.QUOTE_SAMPLE_MS + 1);
+        pass();
+        globalThis.BB.TyperRead.quoteText = real;
+        eq(reads, 1, 'and the window never reopens');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('tracking turned off stops the race already in progress', () => {
+    withTyperPage(({ ui, page, pass, type, written }) => {
+        pass();
+        type('the quick brown fox');
+        ui.refreshSurfaces();
+        page.results = { wpm: 84, accuracy: 97, place: null, of: null };
+        pass();
+        eq(written.length, 0);
+        eq(ui.currentRace(), null);
+    }, { quote: 'the quick brown fox jumps over it', settings: { typerTrack: false } });
+});
+check('leaving the pit abandons the race rather than banking it', () => {
+    // A race you navigated away from mid-quote has no honest finishing time.
+    withTyperPage(({ ui, pass, type, written }) => {
+        pass();
+        type('the quick brown fox');
+        ui.onNavigate();
+        eq(ui.currentRace(), null);
+        eq(written.length, 0);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a page of the site with no race on it gets no race', () => {
+    withTyperPage(({ ui, pass }) => {
+        global.location.pathname = '/texts';
+        pass();
+        eq(ui.currentRace(), null);
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

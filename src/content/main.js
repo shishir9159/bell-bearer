@@ -32,7 +32,7 @@
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
         CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
         Keybindings, SkimContent, LinkHints, TimeLimitContent, TwitterUi, TwitterAds,
-        RosterContent, LeetUi } = BB;
+        RosterContent, LeetUi, TyperUi } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -194,6 +194,7 @@
     let twitterUi = null;
     let twitterAds = null;
     let leetUi = null;
+    let typerUi = null;
 
     /** Whichever site's pouch surface this page has, or null for the rest. */
     function pouchUi() {
@@ -285,6 +286,29 @@
             if (location.pathname !== lastPath) {
                 lastPath = location.pathname;
                 leetUi.onNavigate();
+            }
+            return false;
+        });
+        window.addEventListener('popstate', () => watcher.schedule());
+    }
+
+    // ---------------------------------------------------- TypeRacer extras
+
+    if (site === 'typeracer') {
+        const watcher = DomWatch.createWatcher();
+
+        typerUi = TyperUi.createTyperUi({ watcher, notify, getSettings: () => settings });
+        typerUi.install();
+
+        // The same treatment as X and LeetCode: a single-page app with no
+        // navigation event of its own. Every move between the pit and a
+        // finished race rebuilds the panel, so the observer has already fired
+        // by the time the path differs.
+        let lastPath = location.pathname;
+        watcher.add('typer-route', () => {
+            if (location.pathname !== lastPath) {
+                lastPath = location.pathname;
+                typerUi.onNavigate();
             }
             return false;
         });
@@ -473,6 +497,9 @@
     /** And the same for LeetCode's. */
     const LEET_SURFACES = ['leetNoteButton', 'leetMockMode', 'leetMockMinutes', 'leetGradePrompt'];
 
+    /** And TypeRacer's. */
+    const TYPER_SURFACES = ['typerTrack'];
+
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&
             values.pouchButtonStyle !== settings.pouchButtonStyle;
@@ -481,6 +508,8 @@
         const xSurfacesChanged = X_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
         const leetSurfacesChanged = LEET_SURFACES.some((key) =>
+            key in values && values[key] !== settings[key]);
+        const typerSurfacesChanged = TYPER_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
 
         Object.assign(settings, values);
@@ -495,6 +524,9 @@
         // And the same again for LeetCode's, which additionally has to undo
         // mock mode on the page that is already open.
         if (leetSurfacesChanged && leetUi) leetUi.refreshSurfaces();
+        // And again for TypeRacer's, which has to stop measuring the race
+        // already in progress rather than waiting for the next page.
+        if (typerSurfacesChanged && typerUi) typerUi.refreshSurfaces();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
         if (timeLimit) timeLimit.sync();
