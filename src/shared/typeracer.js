@@ -137,6 +137,12 @@
      *     trigram and the bigram inside it are not the same number under two
      *     names. Both of its intervals still have to be readable, or what is
      *     being measured is not a roll — it is a pause with a pair after it.
+     *
+     * The replay is also where `correctionMs` comes from: the buffer holding a
+     * wrong character opens an error window, and the window closes the moment
+     * it holds none. That is the whole measurement, and it is why the cost of
+     * correcting can be reported without asking TypeRacer anything — the site
+     * does not publish it, and no scoreboard it draws contains it.
      */
     function gramsFrom(events) {
         const bi = {};
@@ -145,6 +151,13 @@
         let totalN = 0;
         let totalMs = 0;
         let errors = 0;
+        let correctionMs = 0;
+
+        // How many wrong characters the box is holding, when it started
+        // holding one, and the last moment anything happened.
+        let dirtyChars = 0;
+        let brokeAt = 0;
+        let lastAt = 0;
 
         // One slot per position in the quote, filled by replaying the buffer.
         // `dirty` is set by a retype or a deletion, and is what excludes an
@@ -155,18 +168,28 @@
         for (const raw of asArray(events)) {
             const at = Number(raw && raw.at);
             if (!Number.isFinite(at)) continue;
+            lastAt = at;
+            const wasClean = dirtyChars === 0;
 
             if (raw.del) {
                 if (depth === 0) continue;
                 depth--;
-                if (slots[depth]) slots[depth].dirty = true;
+                if (slots[depth]) {
+                    if (!slots[depth].ok) dirtyChars--;
+                    slots[depth].dirty = true;
+                }
+                if (!wasClean && dirtyChars === 0) correctionMs += at - brokeAt;
                 continue;
             }
 
             const ch = String(raw.ch == null ? '' : raw.ch).slice(0, 1);
             if (!ch) continue;
             const ok = raw.ok === true;
-            if (!ok) errors++;
+            if (!ok) {
+                errors++;
+                dirtyChars++;
+                if (wasClean) brokeAt = at;
+            }
 
             const entry = charEntry(chars, foldChar(raw.expected) || '?');
             // Every attempt counts as a due: a character you had to type
@@ -216,7 +239,13 @@
             roll.ms += second;
         }
 
-        return { bi, tri, chars, totalN, totalMs, errors, committed: slots.length };
+        // A race that ended still holding a wrong character never closed its
+        // window. Billing it to the last keystroke is the honest reading: the
+        // time was spent, and leaving it out would make a race abandoned in
+        // an error state look like the cleanest one in the log.
+        if (dirtyChars > 0 && lastAt > brokeAt) correctionMs += lastAt - brokeAt;
+
+        return { bi, tri, chars, totalN, totalMs, errors, correctionMs, committed: slots.length };
     }
 
     // ----------------------------------------------------- merge and evict
@@ -291,15 +320,19 @@
 
     // ------------------------------------------------------------ the races
 
+    const round1 = (value) => Math.round(num(value) * 10) / 10;
+
     function cleanRace(record) {
         const race = asObject(record);
         return {
             at: count(race.at),
-            wpm: Math.max(0, Math.round(num(race.wpm) * 10) / 10),
-            accuracy: Math.min(100, Math.max(0, Math.round(num(race.accuracy) * 10) / 10)),
-            seconds: Math.max(0, Math.round(num(race.seconds) * 10) / 10),
+            wpm: Math.max(0, round1(race.wpm)),
+            accuracy: Math.min(100, Math.max(0, round1(race.accuracy))),
+            seconds: Math.max(0, round1(race.seconds)),
             chars: count(race.chars),
             errors: count(race.errors),
+            correctionMs: count(race.correctionMs),
+            cleanWpm: Math.max(0, round1(race.cleanWpm)),
             quoteId: text(race.quoteId).slice(0, 40),
             place: count(race.place),
             of: count(race.of),
@@ -340,15 +373,61 @@
             ? ((derived.committed - derived.errors) / derived.committed) * 100
             : 0;
 
+        const wpm = num(given.wpm) > 0 ? num(given.wpm) : typedWpm;
+
         return cleanRace({
             ...given,
             at,
             seconds,
             chars,
-            wpm: num(given.wpm) > 0 ? num(given.wpm) : typedWpm,
+            wpm,
             accuracy: num(given.accuracy) > 0 ? num(given.accuracy) : accurate,
             errors: derived.errors,
+            correctionMs: derived.correctionMs,
+            cleanWpm: cleanWpmOf(wpm, seconds, derived.correctionMs),
         });
+    }
+
+    /**
+     * The same keystrokes with the error windows taken out of the clock.
+     *
+     * Not a projection of how fast you *could* type — it is this race with the
+     * time spent in and getting out of a mistake removed, which is why the
+     * panel says so under the figure. Anything that would divide by nothing
+     * left reports the race's own speed rather than an infinity.
+     */
+    function cleanWpmOf(wpm, seconds, correctionMs) {
+        const clear = num(seconds) - Math.max(0, num(correctionMs)) / 1000;
+        return clear > 0 ? num(wpm) * (num(seconds) / clear) : num(wpm);
+    }
+
+    /**
+     * What correcting cost over a range: the seconds, the two speeds, and the
+     * gap between them.
+     *
+     * A plain mean of each race's own figure rather than a weighted one. Both
+     * are means over the same set, so `delta` is the honest difference, and
+     * weighting by length would quietly make a long slow race the answer.
+     */
+    function correctionCost(races, { since = 0, until = Infinity } = {}) {
+        const rows = asArray(races).map(cleanRace)
+            .filter((race) => race.at >= since && race.at <= until);
+        if (!rows.length) return { races: 0, seconds: 0, wpm: 0, cleanWpm: 0, delta: 0, percent: 0 };
+
+        const sum = (pick) => rows.reduce((total, race) => total + pick(race), 0);
+        const seconds = sum((race) => race.correctionMs) / 1000;
+        const raced = sum((race) => race.seconds);
+        const wpm = sum((race) => race.wpm) / rows.length;
+        const cleanWpm = sum((race) => race.cleanWpm || race.wpm) / rows.length;
+
+        return {
+            races: rows.length,
+            seconds: round1(seconds),
+            wpm: round1(wpm),
+            cleanWpm: round1(cleanWpm),
+            delta: round1(cleanWpm - wpm),
+            percent: raced > 0 ? round1((seconds / raced) * 100) : 0,
+        };
     }
 
     /** Push the race, fold the grams, credit the day. */
@@ -427,7 +506,7 @@
     const Typer = {
         RACE_CAP, KEEP_DAYS, GRAM_CAP, GRAM_CAP_TRI, KEEP_N, OUTLIER_MS, FLOOR_MS, MIN_SAMPLES, DAY_MS,
         dayKey, blank, blankGrams, foldChar, foldGram, prune, cleanRace,
-        gramsFrom, mergeGrams, pruneGrams, recordRace,
+        gramsFrom, mergeGrams, pruneGrams, recordRace, cleanWpmOf, correctionCost,
         load, update, record,
         KEYS: [RACES_KEY, GRAMS_KEY, DAYS_KEY],
     };

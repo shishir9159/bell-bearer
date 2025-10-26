@@ -1267,7 +1267,10 @@ check('a stored race written by an older version cannot hand back nonsense', () 
     // Every field is interpolated into markup somewhere, so nothing is
     // trusted as stored — the rule shared/leetcode.js follows.
     const race = Typer.cleanRace({ at: '12', wpm: -5, accuracy: 300, seconds: 'x', quoteId: { nope: 1 }, chars: 4.6 });
-    eq(race, { at: 12, wpm: 0, accuracy: 100, seconds: 0, chars: 5, errors: 0, quoteId: '[object Object]', place: 0, of: 0 });
+    eq(race, {
+        at: 12, wpm: 0, accuracy: 100, seconds: 0, chars: 5, errors: 0,
+        correctionMs: 0, cleanWpm: 0, quoteId: '[object Object]', place: 0, of: 0,
+    });
 });
 
 // ------------------------------------------------ reading typeracer.com
@@ -1670,6 +1673,128 @@ check('a page of the site with no race on it gets no race', () => {
         pass();
         eq(ui.currentRace(), null);
     }, { quote: 'the quick brown fox jumps over it' });
+});
+
+console.log('\n# typeracer — what correcting cost');
+check('the window is the span from the wrong key to the restored prefix', () => {
+    // "the quick" typed as t, h, x, q, u, then three backspaces taking the
+    // x back off, then the right letters. The clock starts on the x and
+    // stops on the backspace that removed it — not on the retype, because
+    // the moment the box is a correct prefix again is the moment the
+    // correcting is over.
+    const at = (ms) => ms;
+    const events = [
+        { ch: 't', expected: 't', at: at(0), ok: true },
+        { ch: 'h', expected: 'h', at: at(200), ok: true },
+        { ch: 'x', expected: 'e', at: at(400), ok: false },
+        { ch: ' ', expected: ' ', at: at(600), ok: true },
+        { ch: 'q', expected: 'q', at: at(800), ok: true },
+        { del: true, at: at(1000) },
+        { del: true, at: at(1150) },
+        { del: true, at: at(1300) },
+        { ch: 'e', expected: 'e', at: at(1500), ok: true },
+    ];
+    eq(Typer.gramsFrom(events).correctionMs, 900, 'from the x at 400 to the last backspace at 1300');
+});
+check('a race typed clean bills nothing', () => {
+    eq(gramsOf('the quick', 'the quick').correctionMs, 0);
+});
+check('two separate mistakes are two windows, not one span', () => {
+    // A span from the first mistake to the last would bill every clean
+    // keystroke in between as correction.
+    const events = [
+        { ch: 'x', expected: 't', at: 0, ok: false },
+        { del: true, at: 100 },
+        { ch: 't', expected: 't', at: 200, ok: true },
+        { ch: 'h', expected: 'h', at: 400, ok: true },
+        { ch: 'e', expected: 'e', at: 600, ok: true },
+        { ch: 'z', expected: ' ', at: 800, ok: false },
+        { del: true, at: 950 },
+    ];
+    eq(Typer.gramsFrom(events).correctionMs, 250, '100 for the first, 150 for the second');
+});
+check('a race abandoned in an error state is billed to its last key', () => {
+    // Leaving it out would make the race you gave up on halfway through a
+    // word look like the cleanest one in the log.
+    const events = [
+        { ch: 't', expected: 't', at: 0, ok: true },
+        { ch: 'x', expected: 'h', at: 200, ok: false },
+        { ch: 'y', expected: 'e', at: 700, ok: false },
+    ];
+    eq(Typer.gramsFrom(events).correctionMs, 500);
+});
+check('correcting one mistake does not close the window on another', () => {
+    const events = [
+        { ch: 'x', expected: 't', at: 0, ok: false },
+        { ch: 'y', expected: 'h', at: 100, ok: false },
+        { del: true, at: 200 },
+        { ch: 'h', expected: 'h', at: 300, ok: true },
+        { del: true, at: 400 },
+        { del: true, at: 500 },
+        { ch: 't', expected: 't', at: 600, ok: true },
+    ];
+    // The box still held the wrong `x` at 200 and at 400; it is only clean
+    // once the second backspace at 500 takes that one off too.
+    eq(Typer.gramsFrom(events).correctionMs, 500);
+});
+
+console.log('\n# typeracer — clean speed');
+check('clean speed is the same race with the error windows taken out', () => {
+    // 60 seconds, 6 of them spent correcting: the same characters in 54
+    // seconds is 60/54 of the speed.
+    eq(Typer.cleanWpmOf(90, 60, 6000), 100);
+    eq(Typer.cleanWpmOf(90, 60, 0), 90, 'a clean race is its own clean speed');
+});
+check('clean speed is above the race’s own whenever anything was corrected', () => {
+    const state = Typer.recordRace(Typer.blank(), { at: R0, seconds: 10 }, stream('the quick', 'thx q<<<e quick'), R0);
+    const race = state.races[0];
+    assert(race.correctionMs > 0, 'nothing was billed');
+    assert(race.cleanWpm > race.wpm, `${race.cleanWpm} is not above ${race.wpm}`);
+});
+check('a race with nothing to correct has one speed under two names', () => {
+    const state = Typer.recordRace(Typer.blank(), { at: R0, seconds: 10 }, stream('the quick', 'the quick'), R0);
+    eq(state.races[0].correctionMs, 0);
+    eq(state.races[0].cleanWpm, state.races[0].wpm);
+});
+check('a race that was nothing but correcting reports its own speed', () => {
+    // Rather than an infinity, or a division by what is left of nothing.
+    eq(Typer.cleanWpmOf(40, 5, 5000), 40);
+    eq(Typer.cleanWpmOf(40, 0, 0), 40);
+});
+
+console.log('\n# typeracer — the cost over a range');
+const costRace = (at, wpm, cleanWpm, seconds, correctionMs) =>
+    ({ at, wpm, cleanWpm, seconds, correctionMs, accuracy: 95, chars: 200 });
+
+check('the cost is the seconds lost and the speed they cost', () => {
+    const cost = Typer.correctionCost([
+        costRace(R0, 80, 88, 30, 3000),
+        costRace(R0 - 1000, 70, 77, 30, 3000),
+    ]);
+    eq(cost.races, 2);
+    eq(cost.seconds, 6);
+    eq(cost.wpm, 75);
+    eq(cost.cleanWpm, 82.5);
+    eq(cost.delta, 7.5);
+    eq(cost.percent, 10, 'six seconds out of sixty');
+});
+check('a range leaves out what is outside it', () => {
+    const cost = Typer.correctionCost([
+        costRace(R0, 80, 88, 30, 3000),
+        costRace(R0 - 10 * Typer.DAY_MS, 40, 60, 30, 9000),
+    ], { since: R0 - Typer.DAY_MS });
+    eq(cost.races, 1);
+    eq(cost.wpm, 80);
+});
+check('no races in the range is nought rather than a division by none', () => {
+    eq(Typer.correctionCost([], { since: R0 }), { races: 0, seconds: 0, wpm: 0, cleanWpm: 0, delta: 0, percent: 0 });
+});
+check('a race stored before clean speed existed falls back to its own', () => {
+    // The store is older than this figure; a missing cleanWpm must read as
+    // "no correction measured", not as a race typed at nought.
+    const cost = Typer.correctionCost([{ at: R0, wpm: 80, seconds: 30 }]);
+    eq(cost.cleanWpm, 80);
+    eq(cost.delta, 0);
 });
 
 // ------------------------------------------------------------ activity
