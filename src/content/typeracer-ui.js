@@ -28,8 +28,31 @@
 
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
+    const Settings = ns.Settings || req('../shared/settings.js');
     const Typer = ns.Typer || req('../shared/typeracer.js');
     const TyperRead = ns.TyperRead || req('./typeracer-read.js');
+    const Keybindings = ns.Keybindings || req('../shared/keybindings.js');
+    const Theme = ns.Theme || req('./theme.js');
+
+    /** The caret shapes, in the order the hotkey cycles them. */
+    const SHAPES = Object.freeze(['site', 'bar', 'block', 'underline', 'outline']);
+
+    const CARET_CLASS = 'bb-typer-caret';
+    /** On <html> while we draw, so content.css can stand the site's own down. */
+    const CARET_ON = 'bb-typer-caret-on';
+    /** On the element holding the next character, which is what that rule aims at. */
+    const ANCHOR_ATTR = 'data-bb-typer-anchor';
+
+    /**
+     * Two misses in a row and the caret gives up for the rest of the page.
+     *
+     * One miss is the moment between races when the quote has gone; two in a
+     * row is the markup having moved under us. Drawing anyway would put a
+     * marker somewhere in the middle of the words you are reading, and it is
+     * a kind of wrong the user cannot switch off without going to look for
+     * the setting.
+     */
+    const CARET_MISSES = 2;
 
     /**
      * How often the quote is re-read while a race is already running.
@@ -95,6 +118,20 @@
 
         const on = (key) => getSettings()[key] === true;
 
+        /**
+         * The caret's own state, kept as plain fields rather than read out of
+         * the settings each time. `caretMode` is what scheduleCaret() tests on
+         * every committed character, and a settings lookup plus an array
+         * membership test per keystroke is exactly the sort of thing this file
+         * exists not to do.
+         */
+        let caretMode = 'site';
+        let caretNode = null;
+        let caretFrame = 0;
+        let caretMisses = 0;
+        let caretGaveUp = false;
+        let anchored = null;
+
         // ------------------------------------------------------ the keys
 
         /**
@@ -111,6 +148,7 @@
             race.depth++;
             if (!race.startedAt) race.startedAt = at;
             race.lastAt = at;
+            scheduleCaret();
         }
 
         function onBeforeInput(event) {
@@ -138,6 +176,163 @@
                     race.depth--;
                 }
             }
+        }
+
+        // ---------------------------------------------------- the caret
+
+        /**
+         * Ask for one redraw, at most once per frame.
+         *
+         * Called from inside the keystroke handler, so it is a comparison and
+         * — when a caret is actually being drawn — one requestAnimationFrame.
+         * With the setting on 'site', which is the default, it is the
+         * comparison alone and nothing else in this section ever runs.
+         */
+        function scheduleCaret() {
+            if (caretFrame || caretGaveUp || caretMode === 'site') return;
+            caretFrame = requestAnimationFrame(drawCaret);
+        }
+
+        /**
+         * The box of the next character, not of the element holding it.
+         *
+         * caretAnchor() hands back the run of text that has not been typed
+         * yet, which on TypeRacer is most of the quote — its own rect is a
+         * block three lines tall. A Range over the first character of it is
+         * the actual glyph, which is the only thing a caret can sensibly sit
+         * against, and it costs one range rather than measuring text
+         * ourselves against a font we do not know.
+         */
+        function glyphRect(anchor) {
+            const node = anchor.firstChild;
+            if (node && node.nodeType === 3 && node.data && node.data.length) {
+                try {
+                    const range = document.createRange();
+                    range.setStart(node, 0);
+                    range.setEnd(node, 1);
+                    const rect = range.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) return rect;
+                } catch (_) { /* the node went away between the frames */ }
+            }
+            const box = anchor.getBoundingClientRect();
+            return box.height > 0 ? box : null;
+        }
+
+        function caretElement() {
+            if (caretNode && caretNode.isConnected) return caretNode;
+            caretNode = document.createElement('span');
+            // Dressed for the default skin from the first frame. Theme.appearance
+            // is a storage read and so a promise, and a caret drawn before it
+            // resolves would have no --bb-accent to take its colour from — one
+            // frame of an invisible caret at the start of every race.
+            caretNode.className = `${CARET_CLASS} bb-themed`;
+            caretNode.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(caretNode);
+            // The skin and the light/dark of the page underneath, so the
+            // caret is in the same ink as everything else we draw.
+            Theme.appearance().then((look) => {
+                if (caretNode) Theme.dress(caretNode, look);
+            }).catch(() => {});
+            dressCaret();
+            return caretNode;
+        }
+
+        /** The shape, the glide and the blink, all of which are CSS. */
+        function dressCaret() {
+            if (!caretNode) return;
+            caretNode.dataset.bbCaret = caretMode;
+            // A 70ms transition is the whole "smooth caret" feature: one CSS
+            // property, and no animation loop of our own to keep running.
+            caretNode.classList.toggle('is-smooth', on('typerCaretSmooth'));
+            caretNode.classList.toggle('is-blink', on('typerCaretBlink'));
+        }
+
+        function markAnchor(anchor) {
+            if (anchored === anchor) return;
+            if (anchored) anchored.removeAttribute(ANCHOR_ATTR);
+            anchored = anchor;
+            if (anchor) anchor.setAttribute(ANCHOR_ATTR, '');
+        }
+
+        function drawCaret() {
+            caretFrame = 0;
+            if (caretMode === 'site' || caretGaveUp) return teardownCaret();
+
+            const anchor = TyperRead.caretAnchor();
+            if (!anchor) {
+                if (++caretMisses >= CARET_MISSES) {
+                    caretGaveUp = true;
+                    teardownCaret();
+                    // Once, on purpose. A message per keystroke would be a
+                    // second bug on top of the first.
+                    console.debug('Bell Bearer: cannot tell where you are in the quote; leaving TypeRacer’s own caret');
+                }
+                return;
+            }
+            caretMisses = 0;
+
+            const rect = glyphRect(anchor);
+            if (!rect) return;
+
+            const node = caretElement();
+            markAnchor(anchor);
+            document.documentElement.classList.add(CARET_ON);
+            node.style.width = `${rect.width}px`;
+            node.style.height = `${rect.height}px`;
+            // Fixed positioning and a transform: the rect is in viewport
+            // coordinates, so there is nothing to convert and nothing to
+            // listen to. A scroll leaves the caret behind until the next
+            // keystroke, which is a tenth of a second away while anyone is
+            // actually racing — cheaper than a scroll listener that fires
+            // through every one of them.
+            node.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
+        }
+
+        /** Take the caret, the mark and the class back off. */
+        function teardownCaret() {
+            if (caretFrame) { cancelAnimationFrame(caretFrame); caretFrame = 0; }
+            if (caretNode) { caretNode.remove(); caretNode = null; }
+            markAnchor(null);
+            document.documentElement.classList.remove(CARET_ON);
+        }
+
+        /** The hotkey: 'site', then each shape, then round again. */
+        function cycleCaret() {
+            const next = SHAPES[(SHAPES.indexOf(caretMode) + 1) % SHAPES.length];
+            Settings.set({ typerCaret: next });
+            // Applied here as well as through the settings watcher, so the
+            // key feels immediate rather than waiting on a storage round trip.
+            applyCaret(next);
+            notify(next === 'site' ? 'Caret: TypeRacer’s own' : `Caret: ${next}`, 'success');
+        }
+
+        /**
+         * Take the caret settings, in both directions.
+         *
+         * Switching it off has to give the page back on the spot — that is the
+         * whole contract of refreshSurfaces(), and the rule twitter-ui.js set.
+         */
+        function applyCaret(mode) {
+            const want = SHAPES.includes(mode) ? mode : 'site';
+            if (want !== caretMode) {
+                caretMode = want;
+                // A shape the user just asked for deserves another try even
+                // if the last one gave up.
+                caretGaveUp = false;
+                caretMisses = 0;
+            }
+            if (caretMode === 'site') return teardownCaret();
+            dressCaret();
+            scheduleCaret();
+        }
+
+        function onHotkey(event) {
+            const binding = Keybindings.resolve(getSettings().shortcuts, 'typer-caret');
+            if (!binding || !binding.enabled) return;
+            if (!Keybindings.matches(event, binding.combo, binding.kind)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            cycleCaret();
         }
 
         // ---------------------------------------------------- the race
@@ -193,6 +388,8 @@
             if (race) {
                 if (TyperRead.find('results')) {
                     finishRace();
+                    // The quote is gone, so there is nothing to point at.
+                    teardownCaret();
                     return false;
                 }
                 const now = performance.now();
@@ -210,7 +407,14 @@
             }
 
             const quote = TyperRead.quoteText();
-            if (quote && quote !== lastQuote) startRace(quote);
+            if (quote && quote !== lastQuote) {
+                startRace(quote);
+                // A fresh quote is a fresh chance for the caret: the markup
+                // that could not be read a moment ago was the gap between
+                // races, not a rename.
+                caretMisses = 0;
+                scheduleCaret();
+            }
             return false;
         }
 
@@ -224,9 +428,11 @@
                 // handlers do with the event afterwards; passive, because
                 // nothing here ever cancels one.
                 document.addEventListener('beforeinput', onBeforeInput, { capture: true, passive: true });
+                document.addEventListener('keydown', onHotkey, true);
                 listening = true;
             }
             watcher.add('typer-race', sync);
+            applyCaret(getSettings().typerCaret);
         }
 
         /**
@@ -241,9 +447,11 @@
         function uninstall() {
             if (listening) {
                 document.removeEventListener('beforeinput', onBeforeInput, { capture: true });
+                document.removeEventListener('keydown', onHotkey, true);
                 listening = false;
             }
             watcher.remove('typer-race');
+            teardownCaret();
             race = null;
         }
 
@@ -259,12 +467,15 @@
             race = null;
             lastQuote = '';
             sampledAt = 0;
+            teardownCaret();
+            caretMisses = 0;
             watcher.schedule();
         }
 
         /** A setting changed in the dashboard; both directions, on this page. */
         function refreshSurfaces() {
             if (!on('typerTrack')) race = null;
+            applyCaret(getSettings().typerCaret);
             watcher.schedule();
         }
 
@@ -273,10 +484,17 @@
             // For the specs, which drive a race rather than waiting on one.
             currentRace: () => race,
             startRace, finishRace,
+            cycleCaret, drawCaret, applyCaret, glyphRect,
+            caretMode: () => caretMode,
+            caretElement: () => caretNode,
+            caretGaveUp: () => caretGaveUp,
         };
     }
 
-    const TyperUi = { createTyperUi, QUOTE_SAMPLE_MS, MIN_RACE_CHARS, MAX_EVENTS, deletedCount };
+    const TyperUi = {
+        createTyperUi, QUOTE_SAMPLE_MS, MIN_RACE_CHARS, MAX_EVENTS, CARET_MISSES,
+        SHAPES, CARET_CLASS, CARET_ON, ANCHOR_ATTR, deletedCount,
+    };
 
     root.BB = root.BB || {};
     root.BB.TyperUi = TyperUi;

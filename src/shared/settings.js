@@ -188,6 +188,17 @@
         // is off, and turning it off stops the race already in progress
         // rather than waiting for the next page.
         typerTrack: true,
+
+        // The typing caret — the marker showing where you are in the quote,
+        // not the mouse pointer. 'site' draws nothing and leaves TypeRacer's
+        // own, which is the default because replacing something a site
+        // already does is not a default to assume for anyone.
+        typerCaret: 'site', // 'site' | 'bar' | 'block' | 'underline' | 'outline'
+        typerCaretSmooth: true,
+        // Off, and it is the one of the three that is off on purpose: a caret
+        // blinking while you read ahead of it is exactly the distraction the
+        // rest of this setting exists to remove.
+        typerCaretBlink: false,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

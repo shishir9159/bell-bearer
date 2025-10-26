@@ -27,7 +27,7 @@
 (function (root) {
     'use strict';
 
-    const SCOPES = Object.freeze({ general: 'General', youtube: 'YouTube', chess: 'Chess.com', leetcode: 'LeetCode' });
+    const SCOPES = Object.freeze({ general: 'General', youtube: 'YouTube', chess: 'Chess.com', leetcode: 'LeetCode', typeracer: 'TypeRacer' });
 
     const BINDINGS = Object.freeze([
         { id: 'skim-find', scope: 'general', kind: 'key', needs: 'skimMode', label: 'Skim — find within this page', combo: { shift: true, code: 'KeyF', key: 'F' } },
@@ -57,6 +57,11 @@
         // inside LeetCode's editor, where a bare letter is a letter.
         { id: 'leet-templates', scope: 'leetcode', kind: 'key', label: 'Suggest a code template', combo: { ctrl: true, alt: true, code: 'KeyT', key: 't' } },
         { id: 'leet-mock', scope: 'leetcode', kind: 'key', label: 'Start a mock interview on this problem', combo: { ctrl: true, alt: true, code: 'KeyM', key: 'm' } },
+
+        // Ctrl+Alt for the same reason as the two above, and more so: this
+        // one fires with the caret inside the box you are racing in, where
+        // every bare letter is a letter you meant to type.
+        { id: 'typer-caret', scope: 'typeracer', kind: 'key', label: 'Cycle the typing caret style', combo: { ctrl: true, alt: true, code: 'KeyC', key: 'c' } },
     ]);
 
     const BY_ID = Object.freeze(Object.fromEntries(BINDINGS.map((binding) => [binding.id, binding])));

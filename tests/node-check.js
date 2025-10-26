@@ -1453,6 +1453,11 @@ function withTyperPage(run, { settings = {}, quote = '' } = {}) {
     global.document = {
         addEventListener: (type, fn) => { handlers[type] = fn; },
         removeEventListener: (type) => { delete handlers[type]; },
+        // The caret is on its default ('site') through all of these, so it
+        // draws nothing — but tearing it down is unconditional, and a page
+        // with no <html> on it would fail there rather than in the code
+        // these tests are about.
+        documentElement: { classList: { add() {}, remove() {}, contains: () => false, toggle() {} } },
     };
     global.location = { pathname: '/' };
 
@@ -1795,6 +1800,228 @@ check('a race stored before clean speed existed falls back to its own', () => {
     const cost = Typer.correctionCost([{ at: R0, wpm: 80, seconds: 30 }]);
     eq(cost.cleanWpm, 80);
     eq(cost.delta, 0);
+});
+
+console.log('\n# typeracer — the typing caret');
+check('the caret cycles through every shape and back to the site’s own', () => {
+    const seen = [];
+    let mode = 'site';
+    for (let i = 0; i < TyperUi.SHAPES.length + 1; i++) {
+        mode = TyperUi.SHAPES[(TyperUi.SHAPES.indexOf(mode) + 1) % TyperUi.SHAPES.length];
+        seen.push(mode);
+    }
+    eq(seen, ['bar', 'block', 'underline', 'outline', 'site', 'bar']);
+    eq(TyperUi.SHAPES[0], 'site', 'the setting’s default has to be the first rung');
+    eq(globalThis.BB.Settings.DEFAULTS.typerCaret, 'site');
+});
+check('the caret shapes and the setting cannot drift apart', () => {
+    // The settings <select> is built from this list, and a shape the panel
+    // can offer but the page cannot draw would fail silently.
+    const html = require('fs').readFileSync(`${__dirname}/../content.css`, 'utf8');
+    for (const shape of TyperUi.SHAPES) {
+        if (shape === 'site') continue;
+        assert(html.includes(`[data-bb-caret="${shape}"]`), `${shape} has no rule to draw it`);
+    }
+});
+check('the caret is drawn from the skin’s tokens rather than a colour', () => {
+    // So it follows a skin or a day/night change without being redrawn, the
+    // rule every surface this extension injects follows.
+    const css = require('fs').readFileSync(`${__dirname}/../content.css`, 'utf8');
+    const block = css.slice(css.indexOf('.bb-typer-caret {'));
+    const hard = block.match(/:\s*#[0-9a-f]{3,8}\b/gi) || [];
+    eq(hard, [], `a colour was baked into the caret: ${hard.join(', ')}`);
+    assert(/\.bb-typer-caret\[data-bb-caret="bar"\][^}]*var\(--bb-accent\)/.test(block), 'the bar is not the accent');
+});
+check('the caret hotkey is modified enough to survive a race', () => {
+    const Keybindings = require('../src/shared/keybindings.js');
+    eq(Keybindings.SCOPES.typeracer, 'TypeRacer');
+    eq(Keybindings.list({}, 'typeracer').map((b) => b.id), ['typer-caret']);
+    const [binding] = Keybindings.list({}, 'typeracer');
+    // It fires with the caret inside the box you are racing in, where a bare
+    // letter is a letter you meant to type.
+    assert(binding.combo.ctrl && binding.combo.alt, 'a racer would trigger this by typing');
+    eq(Keybindings.conflicts({}, binding.id, binding.combo), []);
+});
+
+/** A quote panel whose untyped remainder is one text node, like the site's. */
+function withCaretPage(run, { settings = {}, anchor = 'the quick brown fox' } = {}) {
+    const BB = globalThis.BB;
+    const saved = { caretAnchor: BB.TyperRead.caretAnchor, appearance: BB.Theme.appearance };
+
+    const html = { classes: new Set(), classList: null };
+    html.classList = {
+        add: (name) => html.classes.add(name),
+        remove: (name) => html.classes.delete(name),
+        contains: (name) => html.classes.has(name),
+        toggle: (name, want) => (want ? html.classes.add(name) : html.classes.delete(name)),
+    };
+
+    const made = [];
+    const element = () => {
+        const node = {
+            style: {}, dataset: {}, isConnected: true, attributes: {},
+            classList: { toggle() {}, add() {}, remove() {} },
+            setAttribute(name, value) { this.attributes[name] = value; },
+            removeAttribute(name) { delete this.attributes[name]; },
+            remove() { this.isConnected = false; },
+        };
+        made.push(node);
+        return node;
+    };
+
+    const page = { anchor: null };
+    const setAnchor = (text) => {
+        page.anchor = text == null ? null : {
+            firstChild: { nodeType: 3, data: text },
+            attributes: {},
+            setAttribute(name, value) { this.attributes[name] = value; },
+            removeAttribute(name) { delete this.attributes[name]; },
+            getBoundingClientRect: () => ({ left: 40, top: 120, width: 300, height: 22 }),
+        };
+    };
+    setAnchor(anchor);
+
+    const frames = [];
+    const savedGlobals = {
+        document: global.document, window: global.window, location: global.location,
+        raf: global.requestAnimationFrame, caf: global.cancelAnimationFrame,
+        performance: global.performance,
+    };
+
+    global.document = {
+        documentElement: html,
+        body: { appendChild() {} },
+        createElement: () => element(),
+        createRange: () => ({
+            setStart() {}, setEnd() {},
+            getBoundingClientRect: () => ({ left: 40, top: 120, width: 9, height: 22 }),
+        }),
+        addEventListener() {}, removeEventListener() {},
+    };
+    global.location = { pathname: '/' };
+    global.performance = { now: () => 1000 };
+    global.requestAnimationFrame = (fn) => { frames.push(fn); return frames.length; };
+    global.cancelAnimationFrame = () => {};
+
+    BB.TyperRead.caretAnchor = () => page.anchor;
+    BB.Theme.appearance = () => Promise.resolve({ theme: 'light', skin: 'default' });
+
+    const tasks = new Map();
+    const watcher = { add: (n, f) => tasks.set(n, f), remove: (n) => tasks.delete(n), schedule() {}, has: (n) => tasks.has(n) };
+    const ui = TyperUi.createTyperUi({
+        watcher, notify: () => {},
+        getSettings: () => ({ ...BB.Settings.DEFAULTS, ...settings }),
+    });
+    ui.install();
+
+    const flush = () => { const queued = frames.splice(0); queued.forEach((fn) => fn()); };
+
+    try {
+        return run({ ui, html, flush, frames, setAnchor, made, anchorNode: () => page.anchor });
+    } finally {
+        ui.uninstall();
+        Object.assign(global, {
+            document: savedGlobals.document, window: savedGlobals.window, location: savedGlobals.location,
+            requestAnimationFrame: savedGlobals.raf, cancelAnimationFrame: savedGlobals.caf,
+            performance: savedGlobals.performance,
+        });
+        BB.TyperRead.caretAnchor = saved.caretAnchor;
+        BB.Theme.appearance = saved.appearance;
+    }
+}
+
+check('the default setting draws nothing and asks for no frames', () => {
+    // 'site' is the default, so on an ordinary visit this whole section is
+    // one comparison per keystroke and nothing else.
+    withCaretPage(({ ui, frames, html }) => {
+        eq(ui.caretMode(), 'site');
+        eq(frames.length, 0);
+        eq(ui.caretElement(), null);
+        eq(html.classes.has(TyperUi.CARET_ON), false);
+    });
+});
+check('a shape puts a caret over the next character', () => {
+    withCaretPage(({ ui, flush, html }) => {
+        flush();
+        const caret = ui.caretElement();
+        assert(caret, 'nothing was drawn');
+        // The glyph box, not the block of untyped text the anchor spans.
+        eq(caret.style.width, '9px');
+        eq(caret.style.height, '22px');
+        eq(caret.style.transform, 'translate(40px, 120px)');
+        eq(caret.dataset.bbCaret, 'bar');
+        eq(html.classes.has(TyperUi.CARET_ON), true, 'the site’s own caret is still up');
+    }, { settings: { typerCaret: 'bar' } });
+});
+check('the element holding the next character is marked, never rewritten', () => {
+    // Nothing is removed from TypeRacer's markup: a class on <html> plus a
+    // mark on that one element is the whole mechanism, so leaving is one
+    // class removal rather than a reconstruction of somebody else's page.
+    withCaretPage(({ ui, flush, anchorNode, html }) => {
+        flush();
+        eq(Object.keys(anchorNode().attributes), [TyperUi.ANCHOR_ATTR]);
+        eq(html.classes.has(TyperUi.CARET_ON), true);
+
+        ui.applyCaret('site');
+        eq(Object.keys(anchorNode().attributes), [], 'the mark was left on the page');
+    }, { settings: { typerCaret: 'block' } });
+});
+check('the caret follows the quote rather than staying on one piece', () => {
+    withCaretPage(({ ui, flush, setAnchor, anchorNode }) => {
+        flush();
+        const first = anchorNode();
+        setAnchor('brown fox');
+        ui.drawCaret();
+        assert(anchorNode() !== first, 'the page did not move on');
+        eq(Object.keys(first.attributes), [], 'the piece already typed kept the mark');
+        eq(Object.keys(anchorNode().attributes), [TyperUi.ANCHOR_ATTR]);
+    }, { settings: { typerCaret: 'bar' } });
+});
+check('one frame is asked for however many keys land in it', () => {
+    withCaretPage(({ ui, frames }) => {
+        frames.length = 0;
+        ui.applyCaret('bar');
+        const first = frames.length;
+        ui.applyCaret('bar');
+        ui.applyCaret('bar');
+        eq(frames.length, first, 'a second frame was queued before the first ran');
+    }, { settings: { typerCaret: 'bar' } });
+});
+check('two misses in a row and the caret leaves the page alone', () => {
+    // A caret in the wrong place over the word you are reading is worse than
+    // none, and worse in a way you cannot switch off without going to look.
+    withCaretPage(({ ui, flush, setAnchor, html }) => {
+        flush();
+        assert(ui.caretElement(), 'nothing was drawn to begin with');
+
+        setAnchor(null);
+        ui.applyCaret('bar');
+        ui.drawCaret();
+        eq(ui.caretGaveUp(), false, 'one miss is the gap between races');
+        ui.drawCaret();
+        eq(ui.caretGaveUp(), true);
+        eq(ui.caretElement(), null);
+        eq(html.classes.has(TyperUi.CARET_ON), false, 'the page was not given back');
+    }, { settings: { typerCaret: 'bar' } });
+});
+check('turning the caret off gives the page back on the spot', () => {
+    withCaretPage(({ ui, flush, html }) => {
+        flush();
+        assert(ui.caretElement(), 'nothing was drawn');
+        ui.applyCaret('site');
+        eq(ui.caretElement(), null);
+        eq(html.classes.has(TyperUi.CARET_ON), false);
+    }, { settings: { typerCaret: 'outline' } });
+});
+check('uninstalling takes the caret and the class with it', () => {
+    let after = null;
+    withCaretPage(({ ui, flush, html }) => {
+        flush();
+        assert(html.classes.has(TyperUi.CARET_ON), 'the class never went on');
+        after = html;
+        void ui;
+    }, { settings: { typerCaret: 'block' } });
+    eq(after.classes.has(TyperUi.CARET_ON), false, 'uninstall left the page marked');
 });
 
 // ------------------------------------------------------------ activity
