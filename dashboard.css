@@ -1865,6 +1865,48 @@ header h1 {
 
 .hm-placeholder { height: 110px; border-radius: var(--r-sm); background: var(--surface-2); }
 
+/* ---------- The line over time (src/page/spark.js) ---------- */
+
+/* Same contract as the heat map above: no colour is baked into the markup,
+   so a skin or a day/night change is followed without redrawing a thing. */
+.spark-svg { display: block; width: 100%; }
+
+.spark-line {
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    /* The viewBox is stretched to the panel's width, which would stretch the
+       stroke with it and leave a two-pixel line drawn at three. */
+    vector-effect: non-scaling-stroke;
+}
+
+/* The run rather than the jitter, so it has to sit behind the line it
+   smooths rather than compete with it. */
+.spark-trend {
+    stroke: var(--text-faint);
+    stroke-width: 1.5;
+    stroke-dasharray: 4 3;
+    vector-effect: non-scaling-stroke;
+}
+
+.spark-band { fill: var(--accent-soft); stroke: none; }
+
+.spark-axis { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+.spark-label { font-family: var(--font); font-size: 9.5px; fill: var(--text-faint); }
+
+.spark-dot {
+    fill: var(--accent);
+    /* Drawn small and lifted on hover: two hundred races is two hundred of
+       these, and at any size that reads as a dotted line rather than a line. */
+    opacity: 0;
+    transition: opacity .1s ease;
+}
+
+.spark-svg:hover .spark-dot { opacity: .5; }
+.spark-dot:hover { opacity: 1; }
+
 /* ---------- Settings → Chess.com / Lichess (src/page/chess-settings.js) ---------- */
 
 .chess-settings-lead { margin: 0 0 12px; }

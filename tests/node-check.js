@@ -2172,6 +2172,109 @@ check('the chime at the end says whether it beat anything', () => {
     }, { typerSound: true, typerSoundVolume: 60 });
 });
 
+// ------------------------------------------------------- the line chart
+
+const Spark = require('../src/page/spark.js');
+
+/** Every "M12.3 45" and "L12.3 45" in a path, as pairs of numbers. */
+function pointsIn(svg, className) {
+    const path = new RegExp(`class="${className}" d="([^"]+)"`).exec(svg);
+    if (!path) return [];
+    return [...path[1].matchAll(/[ML]([-\d.]+) ([-\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+}
+
+console.log('\n# the line chart');
+check('an empty series draws nothing rather than an empty chart', () => {
+    // A 640-pixel box of nothing above the panel's own "no races yet" reads
+    // as a chart that has broken.
+    eq(Spark.line({ points: [] }), '');
+    eq(Spark.line({}), '');
+    eq(Spark.line({ points: [{ x: 'soon', y: null }] }), '', 'nothing plottable is nothing');
+});
+check('one point is still a chart', () => {
+    const svg = Spark.line({ points: [{ x: 1000, y: 80 }] });
+    assert(svg.includes('<svg'), 'drew nothing at all');
+    eq(pointsIn(svg, 'spark-line').length, 1);
+});
+check('x is scaled by time, not by index', () => {
+    // Three races: two on one day and the third a fortnight later. Spacing
+    // them evenly is the obvious shape and it is wrong — it draws a break in
+    // practice as one flat step.
+    const day = 864e5;
+    const svg = Spark.line({ points: [
+        { x: 0, y: 70 },
+        { x: day, y: 75 },
+        { x: 15 * day, y: 80 },
+    ], width: 640 });
+    const [a, b, c] = pointsIn(svg, 'spark-line').map(([x]) => x);
+    const first = b - a;
+    const second = c - b;
+    assert(second > first * 10, `a fortnight (${second}px) was drawn like a day (${first}px)`);
+});
+check('the series is drawn oldest first however it arrives', () => {
+    const svg = Spark.line({ points: [{ x: 300, y: 1 }, { x: 100, y: 2 }, { x: 200, y: 3 }] });
+    const xs = pointsIn(svg, 'spark-line').map(([x]) => x);
+    eq(xs.slice().sort((p, q) => p - q), xs, 'the line doubles back on itself');
+});
+check('a run of identical scores is a flat line, not a line at nought', () => {
+    const svg = Spark.line({ points: [{ x: 1, y: 80 }, { x: 2, y: 80 }, { x: 3, y: 80 }], height: 160 });
+    const ys = pointsIn(svg, 'spark-line').map(([, y]) => y);
+    eq(new Set(ys).size, 1, 'a flat series is not flat');
+    assert(ys[0] > 40 && ys[0] < 120, `drawn at ${ys[0]}, which is the frame rather than the middle`);
+});
+check('every race on one day is spaced out rather than stacked', () => {
+    // The one case where "by value" has nothing to say, because the span is
+    // zero and dividing by it is not an answer.
+    const svg = Spark.line({ points: [{ x: 5, y: 70 }, { x: 5, y: 80 }, { x: 5, y: 75 }] });
+    const xs = pointsIn(svg, 'spark-line').map(([x]) => x);
+    eq(new Set(xs).size, 3);
+});
+check('nothing about the chart is a colour', () => {
+    // The line takes --accent and the band --accent-soft from dashboard.css,
+    // so a skin change is followed without redrawing a thing.
+    const svg = Spark.line({
+        points: [{ x: 1, y: 70 }, { x: 2, y: 80 }],
+        band: [{ x: 1, lo: 60, hi: 80 }, { x: 2, lo: 70, hi: 90 }],
+        trend: [{ x: 1, y: 70 }, { x: 2, y: 75 }],
+        describe: (row) => `${row.y} wpm`,
+    });
+    eq(svg.match(/#[0-9a-f]{3,8}\b/gi), null);
+    eq(/\b(?:fill|stroke)="(?!none)[^"]/.test(svg), false, 'a paint was written into the markup');
+});
+check('a band and a trend are drawn behind the line, not instead of it', () => {
+    const svg = Spark.line({
+        points: [{ x: 1, y: 70 }, { x: 2, y: 80 }],
+        band: [{ x: 1, lo: 60, hi: 80 }, { x: 2, lo: 70, hi: 90 }],
+        trend: [{ x: 1, y: 70 }, { x: 2, y: 75 }],
+    });
+    assert(svg.indexOf('spark-band') < svg.indexOf('spark-line'), 'the band is over the line');
+    assert(svg.indexOf('spark-trend') < svg.indexOf('spark-line'), 'the trend is over the line');
+});
+check('a tooltip is escaped like everything else this extension writes', () => {
+    const svg = Spark.line({ points: [{ x: 1, y: 70 }], describe: () => '<script>&"' });
+    assert(svg.includes('&lt;script&gt;&amp;&quot;'), svg);
+});
+
+console.log('\n# the line chart — the run rather than the jitter');
+check('the average is trailing, so the last point is the run as it stands', () => {
+    // A centred window cannot produce a value for the points at the end,
+    // which are the only ones anybody looks at on a chart of how they are
+    // doing.
+    const points = [10, 20, 30, 40].map((y, i) => ({ x: i, y }));
+    eq(Spark.trend(points, 2).map((row) => row.y), [10, 15, 25, 35]);
+});
+check('the window fills up rather than starting empty', () => {
+    const points = [60, 80].map((y, i) => ({ x: i, y }));
+    eq(Spark.trend(points, 10).map((row) => row.y), [60, 70], 'the first points are their own average');
+});
+check('a trend of nothing is nothing', () => {
+    eq(Spark.trend([], 5), []);
+    eq(Spark.trend(null, 5), []);
+});
+check('a window of nought does not divide by it', () => {
+    eq(Spark.trend([{ x: 1, y: 50 }, { x: 2, y: 70 }], 0).map((row) => row.y), [50, 70]);
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.
