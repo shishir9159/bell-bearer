@@ -189,6 +189,21 @@
         // rather than waiting for the next page.
         typerTrack: true,
 
+        // A sound as you type. Off until asked for — a page that starts
+        // making noises on its own is not a default to assume for anyone —
+        // and synthesised rather than played from a file, so there is nothing
+        // to load before the first keystroke can click. See shared/sfx.js.
+        // The volume is a percent and above 100 it really is louder, the same
+        // way the chess low-clock tone works; at 0 the whole sound path is
+        // skipped rather than played silently.
+        typerSound: false,
+        typerSoundVoice: 'click', // one of Sfx.KEY_VOICE_IDS
+        typerSoundVolume: 50,
+        // On, but only heard when the above is: a wrong key is the one thing
+        // worth interrupting for, and it is the sound people turn the rest
+        // off and keep.
+        typerErrorSound: true,
+
         // The typing caret — the marker showing where you are in the quote,
         // not the mouse pointer. 'site' draws nothing and leaves TypeRacer's
         // own, which is the default because replacing something a site

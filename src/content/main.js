@@ -498,7 +498,8 @@
     const LEET_SURFACES = ['leetNoteButton', 'leetMockMode', 'leetMockMinutes', 'leetGradePrompt'];
 
     /** And TypeRacer's. */
-    const TYPER_SURFACES = ['typerTrack'];
+    const TYPER_SURFACES = ['typerTrack', 'typerCaret', 'typerCaretSmooth', 'typerCaretBlink',
+        'typerSound', 'typerSoundVoice', 'typerSoundVolume', 'typerErrorSound'];
 
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&

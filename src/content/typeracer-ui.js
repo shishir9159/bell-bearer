@@ -33,6 +33,18 @@
     const TyperRead = ns.TyperRead || req('./typeracer-read.js');
     const Keybindings = ns.Keybindings || req('../shared/keybindings.js');
     const Theme = ns.Theme || req('./theme.js');
+    const Sfx = ns.Sfx || req('../shared/sfx.js');
+
+    /**
+     * How far a key sound is pitched either side of its voice, in cents.
+     *
+     * By position in the quote, `(index % 7 - 3) * 12`, so a run of letters
+     * does not come out as a metronome. Seven because it is coprime with
+     * anything you would type in a rhythm, and twelve cents because more than
+     * that stops sounding like one keyboard.
+     */
+    const DETUNE_STEPS = 7;
+    const DETUNE_CENTS = 12;
 
     /** The caret shapes, in the order the hotkey cycles them. */
     const SHAPES = Object.freeze(['site', 'bar', 'block', 'underline', 'outline']);
@@ -132,6 +144,17 @@
         let caretGaveUp = false;
         let anchored = null;
 
+        /**
+         * And the same for the sound, for the same reason. `soundOn` folds in
+         * the volume: at zero the whole path below is skipped rather than
+         * played silently, so the common case — which is off, since the
+         * setting starts off — costs one comparison per keystroke.
+         */
+        let soundOn = false;
+        let soundVoice = 'click';
+        let soundVolume = 0;
+        let errorSoundOn = true;
+
         // ------------------------------------------------------ the keys
 
         /**
@@ -144,11 +167,49 @@
          */
         function commit(ch, at) {
             const expected = race.quote.charAt(race.depth);
-            race.events.push({ ch, expected, at, ok: ch === expected });
+            const ok = ch === expected;
+            race.events.push({ ch, expected, at, ok });
+            if (soundOn) keySound(ch, ok, race.depth);
             race.depth++;
             if (!race.startedAt) race.startedAt = at;
             race.lastAt = at;
             scheduleCaret();
+        }
+
+        /**
+         * The sound one key makes. Reached only when `soundOn`, and then it is
+         * two comparisons and a call that allocates two audio nodes — no
+         * layout, no storage, nothing that can block.
+         */
+        function keySound(ch, ok, index) {
+            // A wrong key is the one thing worth interrupting for, so it takes
+            // the error voice ahead of the word one even on a space. With that
+            // voice switched off it still clicks like any other key: the
+            // setting means "do not tell me differently", not "go quiet".
+            if (!ok && errorSoundOn) {
+                Sfx.play('error', { volume: soundVolume });
+                return;
+            }
+            if (ch === ' ') {
+                Sfx.play('word', { volume: soundVolume });
+                return;
+            }
+            Sfx.play(soundVoice, {
+                volume: soundVolume,
+                detune: (index % DETUNE_STEPS - Math.floor(DETUNE_STEPS / 2)) * DETUNE_CENTS,
+            });
+        }
+
+        /**
+         * Open the audio context, from inside a gesture and only then.
+         *
+         * Chrome refuses to start Web Audio that a page did not start in
+         * answer to a click or a key, and the first keystroke of a race is
+         * both. Sfx.unlock() is a comparison once the context is running, so
+         * this costs nothing after the first one.
+         */
+        function onGesture() {
+            if (soundOn) Sfx.unlock();
         }
 
         function onBeforeInput(event) {
@@ -326,7 +387,18 @@
             scheduleCaret();
         }
 
+        /** The settings the hot path reads, taken once rather than per key. */
+        function applySound() {
+            const values = getSettings();
+            const volume = Math.max(0, Math.min(150, Number(values.typerSoundVolume) || 0));
+            soundVolume = volume;
+            soundOn = values.typerSound === true && volume > 0;
+            soundVoice = Sfx.KEY_VOICE_IDS.includes(values.typerSoundVoice) ? values.typerSoundVoice : 'click';
+            errorSoundOn = values.typerErrorSound === true;
+        }
+
         function onHotkey(event) {
+            onGesture();
             const binding = Keybindings.resolve(getSettings().shortcuts, 'typer-caret');
             if (!binding || !binding.enabled) return;
             if (!Keybindings.matches(event, binding.combo, binding.kind)) return;
@@ -340,6 +412,7 @@
         function startRace(quote) {
             race = { quote, events: [], depth: 0, startedAt: 0, lastAt: 0 };
             lastQuote = quote;
+            if (soundOn) Sfx.play('start', { volume: soundVolume });
         }
 
         /**
@@ -368,8 +441,36 @@
                 chars: done.depth,
                 quoteId: TyperRead.quoteId(),
             };
-            Typer.record(record, done.events);
+            const written = Typer.record(record, done.events);
+            if (soundOn) endSound(written);
             return record;
+        }
+
+        /**
+         * The chime at the end, and whether it is the one for a personal best.
+         *
+         * Asked of the store rather than kept in a field here: the log is
+         * written from every tab, so a best measured against what this page
+         * happened to see would congratulate you for beating yourself on a
+         * race you had already beaten in another window. The first race ever
+         * takes the ordinary chime — there is nothing yet to have beaten.
+         */
+        function endSound(written) {
+            const chime = (state) => {
+                const races = (state && state.races) || [];
+                const before = races.slice(1);
+                const best = before.length && races[0].wpm > Math.max(...before.map((one) => one.wpm));
+                Sfx.play(best ? 'best' : 'done', { volume: soundVolume });
+            };
+            // Played on the spot when the state is already in hand — which is
+            // what the specs hand it, and what a store that answered from
+            // memory would. A write that has to go to storage first is a
+            // promise, and a chime a frame late is still the right chime.
+            if (written && typeof written.then === 'function') {
+                written.then(chime).catch(() => Sfx.play('done', { volume: soundVolume }));
+            } else {
+                chime(written);
+            }
         }
 
         /**
@@ -429,10 +530,12 @@
                 // nothing here ever cancels one.
                 document.addEventListener('beforeinput', onBeforeInput, { capture: true, passive: true });
                 document.addEventListener('keydown', onHotkey, true);
+                document.addEventListener('pointerdown', onGesture, { capture: true, passive: true });
                 listening = true;
             }
             watcher.add('typer-race', sync);
             applyCaret(getSettings().typerCaret);
+            applySound();
         }
 
         /**
@@ -448,6 +551,7 @@
             if (listening) {
                 document.removeEventListener('beforeinput', onBeforeInput, { capture: true });
                 document.removeEventListener('keydown', onHotkey, true);
+                document.removeEventListener('pointerdown', onGesture, { capture: true });
                 listening = false;
             }
             watcher.remove('typer-race');
@@ -476,6 +580,7 @@
         function refreshSurfaces() {
             if (!on('typerTrack')) race = null;
             applyCaret(getSettings().typerCaret);
+            applySound();
             watcher.schedule();
         }
 
@@ -485,6 +590,7 @@
             currentRace: () => race,
             startRace, finishRace,
             cycleCaret, drawCaret, applyCaret, glyphRect,
+            applySound, keySound, endSound,
             caretMode: () => caretMode,
             caretElement: () => caretNode,
             caretGaveUp: () => caretGaveUp,

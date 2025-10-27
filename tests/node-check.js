@@ -2024,6 +2024,154 @@ check('uninstalling takes the caret and the class with it', () => {
     eq(after.classes.has(TyperUi.CARET_ON), false, 'uninstall left the page marked');
 });
 
+// ------------------------------------------------------ typing sounds
+
+const Sfx = require('../src/shared/sfx.js');
+
+console.log('\n# the sound module');
+check('a page with no Web Audio is quiet rather than broken', () => {
+    // Node has no AudioContext, which is the same shape as a browser that
+    // refuses one. Nothing here may throw: play() sits inside a keydown
+    // handler on a typing test.
+    eq(Sfx.available(), false);
+    eq(Sfx.state(), 'none');
+    Sfx.unlock();
+    Sfx.play('click');
+    Sfx.play('click', { volume: 150, detune: -36 });
+    Sfx.play('nonesuch');
+    eq(Sfx.state(), 'none', 'a context was opened without a gesture');
+});
+check('every voice is playable and says how to play it', () => {
+    for (const id of Sfx.VOICE_IDS) {
+        const voice = Sfx.VOICES[id];
+        assert(['sine', 'square', 'triangle', 'sawtooth'].includes(voice.type), `${id} has no waveform`);
+        assert(voice.freq > 20 && voice.freq < 8000, `${id} is outside hearing`);
+        assert(voice.decay > 0 && voice.decay < 0.5, `${id} rings for ${voice.decay}s`);
+        assert(voice.gain > 0 && voice.gain <= 1, `${id} has no level`);
+    }
+});
+check('the key voices are a subset of the voices', () => {
+    // The settings <select> is built from KEY_VOICE_IDS, so one that is not
+    // in the table would be a silent choice the user could pick.
+    for (const id of Sfx.KEY_VOICE_IDS) assert(Sfx.VOICES[id], `${id} is offered but not defined`);
+    assert(Sfx.KEY_VOICE_IDS.includes(globalThis.BB.Settings.DEFAULTS.typerSoundVoice),
+        'the default voice is not one of the ones offered');
+});
+check('a key sound is short enough to be over before the next key', () => {
+    // 120 words a minute is ten characters a second. A key voice that rings
+    // for longer than that overlaps itself into a drone.
+    for (const id of Sfx.KEY_VOICE_IDS) {
+        assert(Sfx.VOICES[id].decay <= 0.1, `${id} rings for ${Sfx.VOICES[id].decay}s`);
+    }
+});
+check('the three chimes slide rather than sitting on one note', () => {
+    // What makes them read as events rather than as another key.
+    for (const id of ['start', 'done', 'best']) {
+        assert(Sfx.VOICES[id].then, `${id} does not move`);
+    }
+    assert(Sfx.VOICES.best.then > Sfx.VOICES.done.then, 'a personal best has to land higher than an ordinary finish');
+});
+
+console.log('\n# typeracer — the sound of typing');
+
+/** What was played, without an AudioContext anywhere near it. */
+function withSoundPage(run, settings) {
+    const played = [];
+    const real = globalThis.BB.Sfx.play;
+    globalThis.BB.Sfx.play = (id, options) => played.push({ id, ...options });
+    try {
+        return withTyperPage((tools) => run({ ...tools, played }), {
+            settings, quote: 'the quick brown fox jumps over it',
+        });
+    } finally {
+        globalThis.BB.Sfx.play = real;
+    }
+}
+
+check('nothing is played while the setting is off', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('the quick');
+        eq(played, []);
+    }, { typerSound: false });
+});
+check('a volume of nought is silence rather than a silent sound', () => {
+    // The whole path is skipped, so the common case costs one comparison.
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('the quick');
+        eq(played, []);
+    }, { typerSound: true, typerSoundVolume: 0 });
+});
+check('each letter takes the chosen voice, pitched by where it is', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('the');
+        eq(played.map((one) => one.id), ['start', 'thock', 'thock', 'thock']);
+        const detunes = played.slice(1).map((one) => one.detune);
+        eq(new Set(detunes).size, 3, 'three letters in a row came out on one note');
+        eq(detunes, [-36, -24, -12]);
+    }, { typerSound: true, typerSoundVolume: 60, typerSoundVoice: 'thock' });
+});
+check('a space is the end of a word rather than another letter', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('the ');
+        eq(played[played.length - 1].id, 'word');
+    }, { typerSound: true, typerSoundVolume: 60 });
+});
+check('a wrong key interrupts, even on a space', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('thx');
+        eq(played[played.length - 1].id, 'error');
+    }, { typerSound: true, typerSoundVolume: 60 });
+});
+check('the error sound can be turned off without turning the rest off', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('thx');
+        eq(played.map((one) => one.id), ['start', 'click', 'click', 'click']);
+    }, { typerSound: true, typerSoundVolume: 60, typerErrorSound: false });
+});
+check('the volume is carried through and may go above a hundred', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('t');
+        eq(played[1].volume, 150, 'gain is not capped at 1 the way an <audio> volume is');
+    }, { typerSound: true, typerSoundVolume: 150 });
+});
+check('a volume past what the slider allows is brought back to it', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('t');
+        eq(played[1].volume, 150);
+    }, { typerSound: true, typerSoundVolume: 9000 });
+});
+check('a voice the table does not hold falls back rather than going quiet', () => {
+    withSoundPage(({ pass, type, played }) => {
+        pass();
+        type('t');
+        eq(played[1].id, 'click');
+    }, { typerSound: true, typerSoundVolume: 60, typerSoundVoice: 'trumpet' });
+});
+check('the chime at the end says whether it beat anything', () => {
+    withSoundPage(({ ui, page, pass, type, played }) => {
+        pass();
+        type('the quick brown fox');
+        page.results = { wpm: 84, accuracy: 97, place: null, of: null };
+        // The store is asked rather than a field kept here: the log is
+        // written from every tab, so a best measured against what this page
+        // saw would congratulate you for a race you had already beaten.
+        ui.endSound({ races: [{ wpm: 84 }, { wpm: 70 }, { wpm: 62 }] });
+        eq(played[played.length - 1].id, 'best');
+        ui.endSound({ races: [{ wpm: 60 }, { wpm: 70 }] });
+        eq(played[played.length - 1].id, 'done');
+        ui.endSound({ races: [{ wpm: 60 }] });
+        eq(played[played.length - 1].id, 'done', 'the first race ever has nothing to have beaten');
+    }, { typerSound: true, typerSoundVolume: 60 });
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.
