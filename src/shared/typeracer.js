@@ -452,6 +452,34 @@
         return { races, grams, days };
     }
 
+    /**
+     * The headline figures over a range, in the shape chess.js#summarize
+     * established: the races themselves plus the numbers drawn above them.
+     *
+     * `meanLast10` is there because a mean over everything moves too slowly to
+     * answer "am I getting faster" — a hundred races ago still counts for a
+     * hundredth of it — and `best` alone is one good afternoon you had in
+     * March. The two together are the honest pair.
+     */
+    function summarize(races, { since = 0, until = Infinity } = {}) {
+        const rows = asArray(races).map(cleanRace)
+            .filter((race) => race.at >= since && race.at <= until)
+            .sort((a, b) => b.at - a.at);
+        if (!rows.length) {
+            return { races: rows, count: 0, best: 0, mean: 0, meanLast10: 0, accuracy: 0, seconds: 0 };
+        }
+        const mean = (list, pick) => list.reduce((total, race) => total + pick(race), 0) / list.length;
+        return {
+            races: rows,
+            count: rows.length,
+            best: Math.max(...rows.map((race) => race.wpm)),
+            mean: round1(mean(rows, (race) => race.wpm)),
+            meanLast10: round1(mean(rows.slice(0, 10), (race) => race.wpm)),
+            accuracy: round1(mean(rows, (race) => race.accuracy)),
+            seconds: Math.round(rows.reduce((total, race) => total + race.seconds, 0)),
+        };
+    }
+
     // ------------------------------------------------------------ storage
 
     let writeChain = Promise.resolve();
@@ -506,7 +534,7 @@
     const Typer = {
         RACE_CAP, KEEP_DAYS, GRAM_CAP, GRAM_CAP_TRI, KEEP_N, OUTLIER_MS, FLOOR_MS, MIN_SAMPLES, DAY_MS,
         dayKey, blank, blankGrams, foldChar, foldGram, prune, cleanRace,
-        gramsFrom, mergeGrams, pruneGrams, recordRace, cleanWpmOf, correctionCost,
+        gramsFrom, mergeGrams, pruneGrams, recordRace, cleanWpmOf, correctionCost, summarize,
         load, update, record,
         KEYS: [RACES_KEY, GRAMS_KEY, DAYS_KEY],
     };

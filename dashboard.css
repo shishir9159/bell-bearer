@@ -3070,3 +3070,14 @@ body[data-skin="deco"] .bb-plate {
     border-radius: var(--card-radius);
     background: var(--surface);
 }
+
+/* ---------- TypeRacer (src/page/typeracer-stats.js) ---------- */
+
+/* The races table leans on the Activity vocabulary — .stat-table, .col-num —
+   and needs only the date column held on one line, since "24 Sep 2026 14:05"
+   wraps into two rows at the width the panel sits at. */
+.typer-races td:first-child { white-space: nowrap; }
+
+/* The time of day beside the date, in the same quiet ink .page-host uses
+   elsewhere for a thing that qualifies the line rather than being it. */
+.typer-races .page-host { margin-left: 6px; }

@@ -2275,6 +2275,74 @@ check('a window of nought does not divide by it', () => {
     eq(Spark.trend([{ x: 1, y: 50 }, { x: 2, y: 70 }], 0).map((row) => row.y), [50, 70]);
 });
 
+console.log('\n# typeracer — the headline figures');
+const raceAt = (at, wpm, accuracy = 96, seconds = 30) => ({ at, wpm, accuracy, seconds, chars: 200 });
+
+check('best and the mean of the last ten are both reported', () => {
+    // A mean over everything moves too slowly to answer "am I getting
+    // faster", and a best on its own is one good afternoon in March.
+    const races = [];
+    for (let i = 0; i < 20; i++) races.push(raceAt(R0 - i * 1000, i < 10 ? 90 : 50));
+    const summary = Typer.summarize(races);
+    eq(summary.count, 20);
+    eq(summary.best, 90);
+    eq(summary.mean, 70);
+    eq(summary.meanLast10, 90, 'the last ten are the newest ten, not the first ten stored');
+});
+check('a range leaves out what is outside it', () => {
+    const summary = Typer.summarize([
+        raceAt(R0, 90),
+        raceAt(R0 - 10 * Typer.DAY_MS, 40),
+    ], { since: R0 - Typer.DAY_MS });
+    eq(summary.count, 1);
+    eq(summary.best, 90);
+});
+check('an empty range is nought rather than a division by none', () => {
+    eq(Typer.summarize([], { since: R0 }),
+        { races: [], count: 0, best: 0, mean: 0, meanLast10: 0, accuracy: 0, seconds: 0 });
+});
+check('the races come back newest first, whatever order they were stored in', () => {
+    const summary = Typer.summarize([raceAt(R0 - 5000, 60), raceAt(R0, 80), raceAt(R0 - 1000, 70)]);
+    eq(summary.races.map((race) => race.wpm), [80, 70, 60]);
+});
+
+console.log('\n# typeracer — the races panel');
+
+require('../src/page/typeracer-stats.js');
+const TyperStats = globalThis.BB.TyperStats;
+
+check('the ranges start at the week rather than at everything', () => {
+    // The question a typing log is opened to ask is about this week, and a
+    // mean over two years of races cannot answer it.
+    eq(TyperStats.RANGES.map((range) => range.id), ['7', '30', 'all']);
+    eq(TyperStats.RANGES[0].days, 7);
+    eq(TyperStats.sinceOf('all', R0), 0, '"all" is not a window at all');
+    eq(TyperStats.sinceOf('30', R0), R0 - 30 * Typer.DAY_MS);
+    eq(TyperStats.sinceOf('nonesuch', R0), R0 - 7 * Typer.DAY_MS, 'a range that is not one falls back');
+});
+check('a solo run has no finishing position to report', () => {
+    eq(TyperStats.placeText({ place: 2, of: 5 }), '2 of 5');
+    eq(TyperStats.placeText({ place: 0, of: 0 }), '—', 'not "0 of 0"');
+});
+check('the dashboard writes durations the way the other views do', () => {
+    eq(TyperStats.human(45), '45s');
+    eq(TyperStats.human(600), '10m');
+    eq(TyperStats.human(3900), '1h 05m');
+    eq(TyperStats.human(0), '0s');
+});
+check('a typeracer panel exists for every dashboard tab it draws', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    assert(/<script src="src\/shared\/typeracer\.js">/.test(html), 'the store is not loaded on the dashboard');
+    assert(/<script src="src\/page\/typeracer-stats\.js">/.test(html), 'the panels are not loaded');
+    // Load order is manual here — there is no bundler — so a module that
+    // destructures another off BB has to come after it or it gets undefined.
+    const tagAt = (src) => html.indexOf(`<script src="${src}">`);
+    assert(tagAt('src/page/spark.js') < tagAt('src/page/typeracer-stats.js'),
+        'the panel is loaded before the chart it draws with');
+    assert(tagAt('src/shared/typeracer.js') < tagAt('src/page/typeracer-stats.js'),
+        'the panel is loaded before the store it reads');
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

@@ -133,6 +133,7 @@
             if (window.BB.XPouchView) window.BB.XPouchView.mountAll();
             if (window.BB.LeetStats) window.BB.LeetStats.mountAll();
             if (window.BB.LeetTemplatesView) window.BB.LeetTemplatesView.mountAll();
+            if (window.BB.TyperStats) window.BB.TyperStats.mountAll();
             if (window.BB.RosterView) window.BB.RosterView.mountAll();
             document.querySelectorAll('[data-chess-games]').forEach((panel) => {
                 const site = panel.dataset.chessGames;
