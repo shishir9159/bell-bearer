@@ -406,6 +406,77 @@
                         <p class="settings-hint">Code templates are written by you — nothing ships with the extension. Select working code in LeetCode's editor and press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>T</kbd> to save it as one, and the same keys offer them back, filtered to the language the editor is in. That shortcut has its own key handling so that it works with the caret inside the editor, where every other shortcut deliberately stays out of the way.</p>
                     </div>
 
+                    <!-- Every control here binds by carrying the same id as
+                         its setting key — see src/page/settings-form.js. The
+                         one exception is the voice list, whose <option>s are
+                         built from Sfx.VOICE_IDS by typeracer-stats.js so
+                         that adding a voice is one edit rather than two. -->
+                    <div class="settings-section" id="typeracerSettingsPanel" data-site-settings="typeracer"
+                         data-plate="TypeRacer" data-plate-proper hidden>
+                        <p class="settings-hint">Bell Bearer measures a race from the keystrokes themselves rather than from TypeRacer's scoreboard — which is what makes the weak-spot tables possible at all, since the site publishes none of it. Nothing is sent anywhere and no raw keystrokes are kept: each race is folded into a table of letter pairs at the end and the stream is thrown away. Speed and accuracy are read off the result panel as a cross-check only.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="typerTrack">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="typerTrack">Record races and keystroke timing</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="typerMinSamples">Hide a letter pair under this many readings</label>
+                            <input type="number" id="typerMinSamples" min="3" max="200" step="1">
+                        </div>
+
+                        <p class="settings-hint">The typing caret is the marker showing where you are in the quote, not the mouse pointer. Leaving it on <em>TypeRacer's own</em> draws nothing and changes nothing on the page. Any other shape hides the site's own marking while ours is up and puts it straight back the moment you switch away — and if the quote's markup cannot be read, no caret is drawn rather than one in the wrong place. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> cycles the shapes from the page itself.</p>
+                        <div class="settings-option">
+                            <label class="setting-label" for="typerCaret">Caret</label>
+                            <select id="typerCaret">
+                                <option value="site">TypeRacer's own</option>
+                                <option value="bar">Bar</option>
+                                <option value="block">Block</option>
+                                <option value="underline">Underline</option>
+                                <option value="outline">Outline</option>
+                            </select>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="typerCaretSmooth">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="typerCaretSmooth">Glide between characters</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="typerCaretBlink">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="typerCaretBlink">Blink</label>
+                        </div>
+
+                        <p class="settings-hint">The sounds are synthesised rather than played from a file, so there is nothing to load before the first keystroke can click and no audio ships with the extension. The volume is a percent and above 100 it really is louder — Web Audio gain is not capped the way an audio element's volume is. At 0 nothing is played at all rather than played silently.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="typerSound">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="typerSound">Play a sound as you type</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="typerSoundVoice">Key sound</label>
+                            <select id="typerSoundVoice"></select>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="typerSoundVolume">Volume (percent)</label>
+                            <input type="range" id="typerSoundVolume" min="0" max="150" step="5">
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="typerErrorSound">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="typerErrorSound">A different sound on a wrong character</label>
+                        </div>
+                    </div>
+
                     <div class="settings-section" id="youtubeSettingsPanel" data-site-settings="youtube"
                          data-plate="YouTube" data-plate-proper hidden>
                         <div class="settings-option" style="display: flex; align-items: center; gap: 12px;">
@@ -577,6 +648,7 @@
     <script src="src/page/stats.js"></script>
     <script src="src/page/heat-map.js"></script>
     <script src="src/page/spark.js"></script>
+    <script src="src/shared/sfx.js"></script>
     <script src="src/shared/typeracer.js"></script>
     <script src="src/page/typeracer-stats.js"></script>
     <script src="src/shared/time-limits.js"></script>

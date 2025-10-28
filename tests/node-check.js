@@ -2584,6 +2584,69 @@ check('nothing measured yet is no drill rather than an empty one', () => {
     eq(Typer.drill(drillState(['t ', 'e,']), { grams: 2 }), '', 'punctuation alone is nothing to drill');
 });
 
+console.log('\n# typeracer — the settings panel');
+check('every typeracer setting has a control carrying its key as an id', () => {
+    // This is the whole binding. src/page/settings-form.js matches a control
+    // to a setting by id and nothing else, so a setting with no element is a
+    // setting that can never be changed, and it fails silently.
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const Settings = globalThis.BB.Settings;
+    const controls = new Set([...html.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+
+    const keys = Settings.KEYS.filter((key) => /^typer/.test(key));
+    assert(keys.length, 'no typeracer settings at all');
+    for (const key of keys) assert(controls.has(key), `${key} has no control bound to it`);
+});
+check('the number fields cannot be set outside what the code accepts', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const attrs = (id) => (new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html) || [''])[0];
+
+    const samples = attrs('typerMinSamples');
+    assert(/type="number"/.test(samples) && /min="3"/.test(samples),
+        `a noise floor below three is offerable: ${samples}`);
+
+    // Above 100 really is louder — Web Audio gain is not capped the way an
+    // <audio> element's volume is — so the slider goes there on purpose.
+    const volume = attrs('typerSoundVolume');
+    assert(/type="range"/.test(volume), 'the volume is not a slider');
+    assert(/min="0"/.test(volume) && /max="150"/.test(volume), `the volume is unbounded: ${volume}`);
+});
+check('the caret list offers exactly the shapes the page can draw', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const select = /<select id="typerCaret">([\s\S]*?)<\/select>/.exec(html)[1];
+    const offered = [...select.matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
+    eq(offered, TyperUi.SHAPES.slice(), 'the panel and the page disagree about the shapes');
+});
+check('the voice list is built from the sound module rather than the page', () => {
+    // Adding a voice would otherwise be two edits with no way to notice you
+    // had only made one.
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    assert(/<select id="typerSoundVoice"><\/select>/.test(html), 'the options are spelled out in the page');
+    assert(/<script src="src\/shared\/sfx\.js">/.test(html), 'the dashboard cannot reach the voices');
+
+    const dashboard = require('fs').readFileSync(`${__dirname}/../dashboard.js`, 'utf8');
+    // A <select> with no options cannot be given a value, so it has to be
+    // filled before the form is bound.
+    assert(dashboard.indexOf('TyperStats.mountSettings') < dashboard.indexOf('SettingsForm.bindAll'),
+        'the voice list is filled after the form is bound to it');
+});
+check('the settings launcher has a typeracer card to open', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    assert(/data-site-settings="typeracer"/.test(html), 'no panel for the card to show');
+    assert(html.includes('id="typeracerSettingsPanel"'), 'the panel has no id');
+});
+check('the surfaces main.js repaints cover every typeracer setting that changes one', () => {
+    // A setting the content script never hears about is a switch that only
+    // works after a reload, which reads as a switch that did nothing.
+    const main = require('fs').readFileSync(`${__dirname}/../src/content/main.js`, 'utf8');
+    const listed = /const TYPER_SURFACES = \[([\s\S]*?)\];/.exec(main)[1];
+    const Settings = globalThis.BB.Settings;
+    for (const key of Settings.KEYS.filter((one) => /^typer/.test(one))) {
+        if (key === 'typerMinSamples') continue; // the dashboard's own, never the page's
+        assert(listed.includes(`'${key}'`), `${key} never reaches the page it governs`);
+    }
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

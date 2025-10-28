@@ -504,8 +504,27 @@
         Settings.watch(['typerMinSamples'], () => panels.forEach((panel) => panel.applySettings()));
     }
 
+    /**
+     * Fill the voice list from the sound module's own table.
+     *
+     * The one control on the TypeRacer settings panel that is not simply an
+     * element carrying its setting's id: its options are the voices, and
+     * spelling them out in dashboard.html would mean adding a voice was two
+     * edits with no way to notice you had only made one.
+     *
+     * Called before SettingsForm.bindAll(), the same way the chess panels are
+     * drawn before they are bound — a <select> with no options cannot be
+     * given a value.
+     */
+    function mountSettings(scope = document) {
+        const select = scope.querySelector('#typerSoundVoice');
+        if (!select || !BB.Sfx) return;
+        select.innerHTML = BB.Sfx.KEY_VOICE_IDS.map((id) =>
+            `<option value="${att(id)}">${esc(id.charAt(0).toUpperCase() + id.slice(1))}</option>`).join('');
+    }
+
     BB.TyperStats = {
-        mountAll, mountPanel, RANGES, TREND_WINDOW, HEAT,
+        mountAll, mountPanel, mountSettings, RANGES, TREND_WINDOW, HEAT,
         human, sinceOf, placeText, gramGlyph, ratioBar,
     };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

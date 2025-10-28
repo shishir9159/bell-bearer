@@ -110,6 +110,9 @@
             if (Skin) await Skin.install().catch(() => {});
             // The chess settings are drawn, so they must exist before binding.
             ChessSettings.mountAll();
+            // And the same for the TypeRacer voice list, whose <option>s come
+            // from the sound module rather than from the page.
+            if (window.BB.TyperStats) window.BB.TyperStats.mountSettings();
             SettingsForm.bindAll();
             this.renderSiteGrids();
             this.wireControls();
