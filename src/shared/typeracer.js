@@ -452,6 +452,112 @@
         return { races, grams, days };
     }
 
+    // ----------------------------------------------------- the weak spots
+
+    /**
+     * Under this many sightings a character's error *rate* means nothing —
+     * one fumble out of one is not a hundred percent of anything.
+     */
+    const MISTYPE_MIN_DUE = 10;
+
+    /** A word is five characters, so an interval of `ms` implies this speed. */
+    const wpmFor = (meanMs) => (meanMs > 0 ? Math.round(12000 / meanMs) : 0);
+
+    /**
+     * What this gram is being judged against.
+     *
+     * The obvious baseline is the whole-race one, `totalMs / totalN`, and on
+     * its own it is not enough: with one baseline for every gram, the ratio is
+     * just the mean under another name, and the table comes back as every gram
+     * containing a capital or a punctuation mark — which is true and useless,
+     * because reaching for a comma is slower than reaching for `e` for
+     * everybody and always will be.
+     *
+     * So a gram is judged against **the character its interval lands on**, as
+     * you type it: "is this pair slow for a pair ending in a comma?" A gram
+     * whose landing character has too few readings of its own falls back to
+     * the whole-race baseline, which is the only honest answer there.
+     */
+    function baselineFor(grams, gram) {
+        const overall = count(grams.totalN) ? num(grams.totalMs) / count(grams.totalN) : 0;
+        const entry = asObject(grams.chars)[gram.slice(-1)];
+        return entry && count(entry.n) >= KEEP_N ? num(entry.ms) / count(entry.n) : overall;
+    }
+
+    /**
+     * The grams you are slowest at, worst first.
+     *
+     * Ranked by `ratio` — how slow this is *for you*, against the baseline
+     * above — and never by `meanMs`. `minSamples` is the typerMinSamples
+     * setting; under it a mean is one bad morning rather than a habit.
+     */
+    function slowest(state, kind = 'bi', { minSamples = MIN_SAMPLES, limit = 12 } = {}) {
+        const grams = asObject(asObject(state).grams);
+        const table = asObject(kind === 'tri' ? grams.tri : grams.bi);
+        const floor = Math.max(1, count(minSamples));
+        const overall = count(grams.totalN) ? num(grams.totalMs) / count(grams.totalN) : 0;
+
+        const rows = [];
+        for (const [gram, entry] of Object.entries(table)) {
+            const n = count(entry && entry.n);
+            if (n < floor) continue;
+            const meanMs = num(entry.ms) / n;
+            const baseline = baselineFor(grams, gram);
+            rows.push({
+                gram,
+                n,
+                meanMs: round1(meanMs),
+                baseline: round1(baseline),
+                overall: round1(overall),
+                ratio: baseline > 0 ? Math.round((meanMs / baseline) * 100) / 100 : 0,
+                wpm: wpmFor(meanMs),
+            });
+        }
+        // Ties broken by sample count and then alphabetically, so the table
+        // does not reshuffle itself between two repaints of the same data.
+        rows.sort((a, b) => b.ratio - a.ratio || b.n - a.n || (a.gram < b.gram ? -1 : 1));
+        return rows.slice(0, Math.max(1, count(limit)));
+    }
+
+    /**
+     * The characters you get wrong, and what you hit instead.
+     *
+     * Two orderings, because they are genuinely different questions. `wrong`
+     * is "most often", which `e` wins simply by being everywhere. `rate` is
+     * "most likely", which is the honest one — and it needs MISTYPE_MIN_DUE
+     * under it, or a character you met once and fumbled tops the table at a
+     * hundred percent for ever.
+     */
+    function mistyped(state, { limit = 12, by = 'wrong', minDue = MISTYPE_MIN_DUE } = {}) {
+        const chars = asObject(asObject(asObject(state).grams).chars);
+        const rows = [];
+
+        for (const [ch, entry] of Object.entries(chars)) {
+            const due = count(entry && entry.due);
+            const wrong = count(entry && entry.wrong);
+            if (!wrong) continue;
+            if (by === 'rate' && due < count(minDue)) continue;
+
+            const subs = Object.entries(asObject(entry.subs))
+                .map(([hit, times]) => ({ ch: hit, n: count(times) }))
+                .sort((a, b) => b.n - a.n || (a.ch < b.ch ? -1 : 1));
+
+            rows.push({
+                ch,
+                due,
+                wrong,
+                rate: due ? Math.round((wrong / due) * 1000) / 1000 : 0,
+                topSub: subs.length ? subs[0].ch : '',
+                subs: subs.slice(0, 3),
+            });
+        }
+
+        rows.sort(by === 'rate'
+            ? (a, b) => b.rate - a.rate || b.wrong - a.wrong || (a.ch < b.ch ? -1 : 1)
+            : (a, b) => b.wrong - a.wrong || b.rate - a.rate || (a.ch < b.ch ? -1 : 1));
+        return rows.slice(0, Math.max(1, count(limit)));
+    }
+
     /**
      * The headline figures over a range, in the shape chess.js#summarize
      * established: the races themselves plus the numbers drawn above them.
@@ -532,7 +638,9 @@
         update((state) => recordRace(state, race, events, now), count(race && race.at) || now);
 
     const Typer = {
-        RACE_CAP, KEEP_DAYS, GRAM_CAP, GRAM_CAP_TRI, KEEP_N, OUTLIER_MS, FLOOR_MS, MIN_SAMPLES, DAY_MS,
+        RACE_CAP, KEEP_DAYS, GRAM_CAP, GRAM_CAP_TRI, KEEP_N, OUTLIER_MS, FLOOR_MS,
+        MIN_SAMPLES, MISTYPE_MIN_DUE, DAY_MS,
+        slowest, mistyped, baselineFor, wpmFor,
         dayKey, blank, blankGrams, foldChar, foldGram, prune, cleanRace,
         gramsFrom, mergeGrams, pruneGrams, recordRace, cleanWpmOf, correctionCost, summarize,
         load, update, record,

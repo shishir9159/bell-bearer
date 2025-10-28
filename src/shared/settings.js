@@ -214,6 +214,11 @@
         // blinking while you read ahead of it is exactly the distraction the
         // rest of this setting exists to remove.
         typerCaretBlink: false,
+
+        // How many readings a letter pair needs before its mean is shown as
+        // a weak spot rather than hidden as noise. Below three there is no
+        // mean worth the name — one slow morning is the whole figure.
+        typerMinSamples: 8,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

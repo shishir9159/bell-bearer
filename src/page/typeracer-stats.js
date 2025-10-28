@@ -165,6 +165,142 @@
             </table>`;
     }
 
+    // --------------------------------------------------------- weak spots
+
+    /**
+     * A gram, written so a space in it is visible.
+     *
+     * Half the slow bigrams are a letter followed by a space, and a pair
+     * rendered as "t " reads as a rendering fault rather than as a finding.
+     * The open-box glyph is what a text editor uses for the same job.
+     */
+    function gramGlyph(gram) {
+        return String(gram).split('').map((ch) => (ch === ' '
+            ? '<span class="typer-space" title="space">␣</span>'
+            : esc(ch))).join('');
+    }
+
+    /**
+     * How slow this gram is against your own baseline, as a bar.
+     *
+     * The bar is the .chess-wdl shape: a track with a filled part, no colour
+     * of its own. Anything at or under the baseline fills nothing — the table
+     * only holds grams that are slower than it, and a full bar on the best
+     * row in a table of worst rows would say the opposite of what it means.
+     */
+    function ratioBar(row) {
+        // Twice the baseline fills the track; past that it is simply full.
+        const share = Math.max(0, Math.min(100, (row.ratio - 1) * 100));
+        const title = `${row.meanMs}ms against ${row.baseline}ms for anything ending "${row.gram.slice(-1)}"`;
+        return `<span class="chess-wdl typer-ratio" title="${att(title)}"><span class="typer-ratio-fill" style="width:${share}%"></span></span>`;
+    }
+
+    function gramTable(rows, minSamples, noun) {
+        if (!rows.length) {
+            return `<p class="stat-sub">Nothing with ${esc(String(minSamples))} readings yet. Type a few more
+                    races and the ${esc(noun)} you stall on come out of the noise.</p>`;
+        }
+        return `
+            <table class="stat-table typer-grams">
+                <thead><tr>
+                    <th>Gram</th><th class="col-num">Mean</th><th class="col-num">WPM</th>
+                    <th class="col-num">Seen</th><th class="typer-ratio-col">Against your own</th>
+                </tr></thead>
+                <tbody>${rows.map((row) => `
+                    <tr>
+                        <td><span class="typer-gram">${gramGlyph(row.gram)}</span></td>
+                        <td class="col-num">${esc(String(row.meanMs))}ms</td>
+                        <td class="col-num">${esc(String(row.wpm))}</td>
+                        <td class="col-num">${esc(String(row.n))}</td>
+                        <td class="typer-ratio-col">${ratioBar(row)}<span class="typer-ratio-num">${esc(row.ratio.toFixed(2))}&times;</span></td>
+                    </tr>`).join('')}</tbody>
+            </table>`;
+    }
+
+    function mistypeTable(rows) {
+        if (!rows.length) return '<p class="stat-sub">Nothing mistyped often enough to name. Well done.</p>';
+        return `
+            <table class="stat-table typer-mistypes">
+                <thead><tr>
+                    <th>Due</th><th class="col-num">Times</th><th class="col-num">Wrong</th>
+                    <th class="col-num">Rate</th><th>You hit</th>
+                </tr></thead>
+                <tbody>${rows.map((row) => `
+                    <tr>
+                        <td><span class="typer-gram">${gramGlyph(row.ch)}</span></td>
+                        <td class="col-num">${esc(String(row.due))}</td>
+                        <td class="col-num">${esc(String(row.wrong))}</td>
+                        <td class="col-num">${esc((row.rate * 100).toFixed(1))}%</td>
+                        <td>${row.subs.map((sub) =>
+                            `<span class="typer-sub"><span class="typer-gram">${gramGlyph(sub.ch)}</span>&times;${esc(String(sub.n))}</span>`).join('')}</td>
+                    </tr>`).join('')}</tbody>
+            </table>`;
+    }
+
+    function costMarkup(state, range, now) {
+        const cost = Typer.correctionCost(state.races, { since: sinceOf(range, now) });
+        return `
+            <div class="stat-figures">
+                ${figure('Lost', human(cost.seconds), `${cost.percent}% of the time raced`)}
+                ${figure('Actual', cost.wpm, 'words per minute')}
+                ${figure('Clean', cost.cleanWpm, 'with the corrections out')}
+                ${figure('Difference', cost.delta > 0 ? `+${cost.delta}` : String(cost.delta), 'words per minute')}
+            </div>
+            <p class="stat-sub">Clean speed is these same keystrokes with the time spent typing something
+                wrong — and getting back out of it — taken off the clock. It is not a projection of what you
+                could do; it is what this race already was, minus the correcting.</p>`;
+    }
+
+    function weakMarkup(state, range, sort, minSamples, now) {
+        if (!state.races.length) {
+            return `<div class="dashboard-header"><h2>Weak spots</h2></div>` +
+                emptyMarkup('Nothing measured yet',
+                    'These tables are built from the keystrokes themselves rather than from anything TypeRacer publishes, so they fill up as you race. A dozen quotes is usually enough for the first pairs to come out of the noise.');
+        }
+
+        const bigrams = Typer.slowest(state, 'bi', { minSamples });
+        const trigrams = Typer.slowest(state, 'tri', { minSamples });
+
+        return `
+            <div class="dashboard-header">
+                <h2>Weak spots</h2>
+                <div class="dashboard-controls">${rangeSeg(range, 'typer-range', 'How far back')}</div>
+            </div>
+            <div class="stat-panel">
+                <h3>Slowest pairs</h3>
+                <p class="stat-sub">Ranked by how slow each pair is <em>for you</em> — against your own mean
+                    for anything ending in that character — rather than by raw milliseconds, which only ever
+                    returns every pair containing a comma. Intervals spanning a correction are left out.</p>
+                ${gramTable(bigrams, minSamples, 'pairs')}
+            </div>
+            <div class="stat-panel">
+                <h3>Slowest rolls</h3>
+                <p class="stat-sub">Three characters, timed across the second of their two intervals. A roll
+                    that is slow when both pairs inside it are fast is a different problem from a slow pair,
+                    and a different thing to drill.</p>
+                ${gramTable(trigrams, minSamples, 'rolls')}
+            </div>
+            <div class="stat-panel">
+                <h3>Most mistyped</h3>
+                <p class="stat-sub">"Most often" is dominated by the letters that are simply everywhere.
+                    "Most likely" is the share of the times you met it — the honest one, and the one worth
+                    doing something about.</p>
+                <div class="dashboard-controls">
+                    <div class="range-seg" role="group" aria-label="How the characters are ranked">
+                        <button class="range-opt" type="button" data-typer-sort="wrong"
+                                aria-pressed="${sort === 'wrong'}">Most often</button>
+                        <button class="range-opt" type="button" data-typer-sort="rate"
+                                aria-pressed="${sort === 'rate'}">Most likely</button>
+                    </div>
+                </div>
+                ${mistypeTable(Typer.mistyped(state, { by: sort }))}
+            </div>
+            <div class="stat-panel">
+                <h3>Cost of correction</h3>
+                ${costMarkup(state, range, now)}
+            </div>`;
+    }
+
     // ----------------------------------------------------------- the view
 
     /**
@@ -174,16 +310,25 @@
     function mountPanel(host, kind) {
         let state = Typer.blank();
         let range = RANGES[0].id;
+        let sort = 'wrong';
+        let minSamples = Settings.DEFAULTS.typerMinSamples;
 
         function paint() {
             const now = Date.now();
             if (kind === 'races') host.innerHTML = racesMarkup(state, range, now);
+            else if (kind === 'weak') host.innerHTML = weakMarkup(state, range, sort, minSamples, now);
         }
 
         host.addEventListener('click', (event) => {
-            const button = event.target.closest('[data-typer-range]');
-            if (button) {
-                range = button.dataset.typerRange;
+            const ranged = event.target.closest('[data-typer-range]');
+            if (ranged) {
+                range = ranged.dataset.typerRange;
+                paint();
+                return;
+            }
+            const sorted = event.target.closest('[data-typer-sort]');
+            if (sorted) {
+                sort = sorted.dataset.typerSort;
                 paint();
             }
         });
@@ -193,7 +338,22 @@
             paint();
         }
 
-        return { reload, render: paint, rangeId: () => range };
+        /**
+         * The noise floor changed in Settings.
+         *
+         * Read here rather than passed in, because it is one number the panel
+         * needs and threading it through mountAll would mean the tables went
+         * stale whenever it was edited from another tab.
+         */
+        async function applySettings() {
+            const values = await Settings.get(['typerMinSamples']);
+            const want = Math.max(3, Number(values.typerMinSamples) || Settings.DEFAULTS.typerMinSamples);
+            if (want === minSamples) return;
+            minSamples = want;
+            paint();
+        }
+
+        return { reload, render: paint, applySettings, rangeId: () => range, sortId: () => sort };
     }
 
     /**
@@ -205,17 +365,25 @@
      * was opened.
      */
     function mountAll(scope = document) {
-        const hosts = Array.from(scope.querySelectorAll('[data-typer-races]')).map((host) => [host, 'races']);
+        const hosts = [
+            ...Array.from(scope.querySelectorAll('[data-typer-races]')).map((host) => [host, 'races']),
+            ...Array.from(scope.querySelectorAll('[data-typer-weak]')).map((host) => [host, 'weak']),
+        ];
         if (!hosts.length) return;
 
         const panels = hosts.map(([host, kind]) => {
             const panel = mountPanel(host, kind);
             panel.reload();
+            panel.applySettings();
             return panel;
         });
 
         Settings.watch(Typer.KEYS, () => panels.forEach((panel) => panel.reload()));
+        Settings.watch(['typerMinSamples'], () => panels.forEach((panel) => panel.applySettings()));
     }
 
-    BB.TyperStats = { mountAll, mountPanel, RANGES, TREND_WINDOW, human, sinceOf, placeText };
+    BB.TyperStats = {
+        mountAll, mountPanel, RANGES, TREND_WINDOW,
+        human, sinceOf, placeText, gramGlyph, ratioBar,
+    };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

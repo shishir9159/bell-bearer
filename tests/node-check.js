@@ -2343,6 +2343,141 @@ check('a typeracer panel exists for every dashboard tab it draws', () => {
         'the panel is loaded before the store it reads');
 });
 
+console.log('\n# typeracer — the slowest grams');
+
+/** A grams table built by hand, so the ranking can be asked exact questions. */
+function gramsWith(bi, chars = {}, { totalN = 100, totalMs = 20000 } = {}) {
+    const state = { races: [], days: {}, grams: Typer.blankGrams() };
+    state.grams.bi = bi;
+    state.grams.chars = chars;
+    state.grams.totalN = totalN;
+    state.grams.totalMs = totalMs;
+    return state;
+}
+
+check('a gram with too few readings is noise rather than a finding', () => {
+    const state = gramsWith({
+        th: { n: 3, ms: 1500, err: 0 },
+        he: { n: 20, ms: 6000, err: 0 },
+    });
+    eq(Typer.slowest(state, 'bi', { minSamples: 8 }).map((row) => row.gram), ['he']);
+    eq(Typer.slowest(state, 'bi', { minSamples: 3 }).map((row) => row.gram).sort(), ['he', 'th']);
+});
+check('ranking is against your own baseline, not by raw milliseconds', () => {
+    // Reaching for a comma is slower than reaching for "e" for everybody and
+    // always will be. Ranking by mean returns every gram containing one,
+    // which is true and useless.
+    const state = gramsWith({
+        // 400ms, but every gram ending in a comma takes about 400ms.
+        'e,': { n: 30, ms: 12000, err: 0 },
+        // 260ms, where anything ending in "h" normally takes 150.
+        th: { n: 30, ms: 7800, err: 0 },
+    }, {
+        ',': { due: 30, wrong: 0, subs: {}, n: 60, ms: 24000 },
+        h: { due: 30, wrong: 0, subs: {}, n: 60, ms: 9000 },
+    });
+    const rows = Typer.slowest(state, 'bi', { minSamples: 8 });
+    eq(rows.map((row) => row.gram), ['th', 'e,'], 'the comma came first, so it was ranked by mean');
+    eq(rows[0].ratio, 1.73);
+    eq(rows[1].ratio, 1, 'a comma at comma speed is not a weak spot');
+});
+check('a character with too little of its own falls back to the whole race', () => {
+    const state = gramsWith(
+        { zq: { n: 10, ms: 4000, err: 0 } },
+        { q: { due: 10, wrong: 0, subs: {}, n: 2, ms: 800 } },
+        { totalN: 100, totalMs: 20000 },
+    );
+    const [row] = Typer.slowest(state, 'bi', { minSamples: 8 });
+    eq(row.baseline, 200, 'two readings is not a baseline; the race mean is');
+    eq(row.ratio, 2);
+});
+check('a gram reports the speed it implies as well as its mean', () => {
+    // A word is five characters, so a 240ms interval is 50 words a minute.
+    const state = gramsWith({ th: { n: 10, ms: 2400, err: 0 } });
+    const [row] = Typer.slowest(state, 'bi', { minSamples: 8 });
+    eq(row.meanMs, 240);
+    eq(row.wpm, 50);
+    eq(Typer.wpmFor(0), 0, 'and nothing does not divide by nothing');
+});
+check('the trigram table is asked for separately from the bigram one', () => {
+    const state = gramsWith({ th: { n: 10, ms: 2400, err: 0 } });
+    state.grams.tri = { the: { n: 10, ms: 3000, err: 0 } };
+    eq(Typer.slowest(state, 'bi', { minSamples: 8 }).map((row) => row.gram), ['th']);
+    eq(Typer.slowest(state, 'tri', { minSamples: 8 }).map((row) => row.gram), ['the']);
+});
+check('the order does not reshuffle between two draws of the same data', () => {
+    const state = gramsWith({
+        ab: { n: 10, ms: 2000, err: 0 },
+        cd: { n: 10, ms: 2000, err: 0 },
+        ef: { n: 10, ms: 2000, err: 0 },
+    });
+    const once = Typer.slowest(state, 'bi', { minSamples: 8 }).map((row) => row.gram);
+    eq(Typer.slowest(state, 'bi', { minSamples: 8 }).map((row) => row.gram), once);
+    eq(once, ['ab', 'cd', 'ef'], 'ties fall back to something stable');
+});
+check('an empty store is an empty table rather than a crash', () => {
+    eq(Typer.slowest(Typer.blank(), 'bi', {}), []);
+    eq(Typer.slowest(null, 'tri', {}), []);
+});
+
+console.log('\n# typeracer — the characters you get wrong');
+const charsWith = (chars) => gramsWith({}, chars);
+
+check('most often and most likely are two different tables', () => {
+    // `e` is mistyped most in absolute terms simply because `e` is
+    // everywhere; the rate is the honest number.
+    const state = charsWith({
+        e: { due: 1000, wrong: 10, subs: { r: 8, w: 2 }, n: 0, ms: 0 },
+        q: { due: 12, wrong: 8, subs: { w: 6, a: 2 }, n: 0, ms: 0 },
+    });
+    eq(Typer.mistyped(state, { by: 'wrong' }).map((row) => row.ch), ['e', 'q']);
+    eq(Typer.mistyped(state, { by: 'rate' }).map((row) => row.ch), ['q', 'e']);
+});
+check('the rate is wrong over due', () => {
+    const state = charsWith({ q: { due: 12, wrong: 8, subs: { w: 8 }, n: 0, ms: 0 } });
+    eq(Typer.mistyped(state, {})[0].rate, 0.667);
+});
+check('a character met once and fumbled is not a hundred percent of anything', () => {
+    const state = charsWith({
+        z: { due: 1, wrong: 1, subs: { x: 1 }, n: 0, ms: 0 },
+        q: { due: 12, wrong: 8, subs: { w: 8 }, n: 0, ms: 0 },
+    });
+    eq(Typer.mistyped(state, { by: 'rate' }).map((row) => row.ch), ['q'], 'the one-off topped the table');
+    eq(Typer.mistyped(state, { by: 'wrong' }).map((row) => row.ch), ['q', 'z'], 'but it is still a mistype');
+});
+check('what you hit instead is the interesting half', () => {
+    const state = charsWith({ e: { due: 100, wrong: 20, subs: { r: 12, w: 5, d: 3 }, n: 0, ms: 0 } });
+    const [row] = Typer.mistyped(state, {});
+    eq(row.topSub, 'r');
+    eq(row.subs, [{ ch: 'r', n: 12 }, { ch: 'w', n: 5 }, { ch: 'd', n: 3 }]);
+});
+check('a character never got wrong is not in a table of mistakes', () => {
+    const state = charsWith({ e: { due: 500, wrong: 0, subs: {}, n: 400, ms: 60000 } });
+    eq(Typer.mistyped(state, {}), []);
+});
+
+console.log('\n# typeracer — the weak spot panel');
+check('a space in a gram is shown rather than left to look like a fault', () => {
+    // Half the slow pairs are a letter followed by a space.
+    assert(TyperStats.gramGlyph('t ').includes('␣'), TyperStats.gramGlyph('t '));
+    eq(TyperStats.gramGlyph('th'), 'th');
+});
+check('a gram is escaped like everything else this extension writes', () => {
+    eq(TyperStats.gramGlyph('<&'), '&lt;&amp;');
+});
+check('the bar fills by how far past your own baseline the gram is', () => {
+    const bar = (ratio) => /width:([\d.]+)%/.exec(TyperStats.ratioBar({ ratio, meanMs: 1, baseline: 1, gram: 'th' }))[1];
+    eq(bar(1), '0', 'a gram at your own baseline is not a weak spot');
+    eq(bar(1.5), '50');
+    eq(bar(3), '100', 'and past twice as slow it is simply full');
+    eq(bar(0.5), '0', 'never below empty');
+});
+check('the noise floor is a setting the panel can be told about', () => {
+    const Settings = globalThis.BB.Settings;
+    eq(Settings.DEFAULTS.typerMinSamples, Typer.MIN_SAMPLES, 'the store and the setting disagree');
+    assert(Settings.DEFAULTS.typerMinSamples >= 3, 'below three there is no mean worth the name');
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

@@ -3081,3 +3081,46 @@ body[data-skin="deco"] .bb-plate {
 /* The time of day beside the date, in the same quiet ink .page-host uses
    elsewhere for a thing that qualifies the line rather than being it. */
 .typer-races .page-host { margin-left: 6px; }
+
+/* A gram is a pair of characters shown as themselves, so it wants the fixed
+   pitch the rest of the page does not: "il" and "mw" are the same two
+   characters wide here, and in the body face they are not. */
+.typer-gram {
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--r-sm);
+    background: var(--surface-3);
+    white-space: pre;
+}
+
+/* Half the slow pairs are a letter followed by a space, and a pair drawn as
+   "t " reads as a rendering fault rather than as a finding. */
+.typer-space { opacity: .55; }
+
+.typer-ratio-col { width: 190px; white-space: nowrap; }
+
+/* The .chess-wdl track, with one fill rather than three. No colour of its
+   own beyond the accent, so a skin change is followed without redrawing. */
+.typer-ratio { display: inline-flex; width: 110px; vertical-align: middle; }
+.typer-ratio-fill { display: block; height: 100%; background: var(--accent); }
+
+.typer-ratio-num {
+    margin-left: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* What you hit instead, as a row of small pairs. */
+.typer-sub {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-right: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.typer-sub .typer-gram { font-size: 11px; padding: 1px 4px; }
