@@ -301,6 +301,98 @@
             </div>`;
     }
 
+    // ------------------------------------------------------- the practice map
+
+    /**
+     * The level steps each metric is banded by.
+     *
+     * They have to differ: two races is a quiet day and two seconds is
+     * nothing at all, so one set of bounds cannot colour both. And Best WPM is
+     * not a count at all — its bands are speeds, so a day at 40 words a minute
+     * is pale and one at 90 is not.
+     */
+    const HEAT = Object.freeze({
+        races: {
+            steps: [1, 3, 6],
+            legend: ['Nothing', '1', '2–3', '4–6', 'Over 6'],
+            say: (day) => `${day.races} race${day.races === 1 ? '' : 's'}`,
+        },
+        wpm: {
+            steps: [40, 60, 80],
+            legend: ['Nothing', 'Up to 40', '40 – 60', '60 – 80', 'Over 80'],
+            say: (day) => `best ${day.best} wpm`,
+        },
+        seconds: {
+            steps: [5 * 60, 15 * 60, 40 * 60],
+            legend: ['Nothing', 'Up to 5m', '5m – 15m', '15m – 40m', 'Over 40m'],
+            say: (day) => human(day.seconds),
+        },
+    });
+
+    function drillMarkup(drill) {
+        if (!drill) {
+            return `<p class="stat-sub">There is nothing to drill yet — the pairs have to come out of the
+                    noise first. A dozen races is usually enough.</p>`;
+        }
+        return `
+            <div class="typer-drill">
+                <p class="typer-drill-text">${esc(drill)}</p>
+                <button class="btn-secondary" type="button" data-typer-copy>Copy</button>
+            </div>`;
+    }
+
+    function practiceMarkup(state, metric, minSamples, now) {
+        const spec = HEAT[metric] || HEAT.races;
+        const days = Typer.heatDays(state, metric, now);
+        const buckets = Object.values(days);
+        const raced = buckets.filter((day) => day.races).length;
+        const totals = buckets.reduce((sum, day) => ({
+            races: sum.races + day.races,
+            seconds: sum.seconds + day.seconds,
+            best: Math.max(sum.best, day.best),
+        }), { races: 0, seconds: 0, best: 0 });
+
+        return `
+            <div class="dashboard-header">
+                <h2>Practice</h2>
+                <div class="dashboard-controls">
+                    <div class="range-seg" role="group" aria-label="What the map shows">
+                        ${Typer.METRICS.map((one) => `
+                            <button class="range-opt" type="button" data-typer-metric="${att(one.id)}"
+                                    aria-pressed="${one.id === metric}">${esc(one.label)}</button>`).join('')}
+                    </div>
+                </div>
+            </div>
+            <div class="stat-figures">
+                ${figure('Days raced', raced, 'that were watched')}
+                ${figure('Races', totals.races, 'in the last year')}
+                ${figure('Time', human(totals.seconds), 'at the keyboard')}
+                ${figure('Streak', Typer.streak(state, now), 'days running')}
+            </div>
+            <div class="stat-panel">
+                <h3>${esc((Typer.METRICS.find((one) => one.id === metric) || Typer.METRICS[0]).label)}</h3>
+                <p class="stat-sub">One square a day, in your own time zone. These are the races Bell Bearer
+                    watched, which starts the day you installed it — TypeRacer publishes no history that can
+                    be read without an account.</p>
+                ${BB.HeatMap.render({
+                    days,
+                    end: now,
+                    steps: spec.steps,
+                    legend: spec.legend,
+                    describe: (day, date) => (day && day.races
+                        ? `${dayLabel(date)} — ${spec.say(day)}`
+                        : `${dayLabel(date)} — nothing`),
+                })}
+            </div>
+            <div class="stat-panel">
+                <h3>Today's drill</h3>
+                <p class="stat-sub">Your worst pairs, each padded into something that can be typed as a word
+                    — a pair drilled on its own trains it in an isolation it is never typed in. Paste it into
+                    TypeRacer's own custom-text box, or anywhere else you can type.</p>
+                ${drillMarkup(Typer.drill(state, { minSamples }))}
+            </div>`;
+    }
+
     // ----------------------------------------------------------- the view
 
     /**
@@ -311,12 +403,23 @@
         let state = Typer.blank();
         let range = RANGES[0].id;
         let sort = 'wrong';
+        let metric = Typer.METRICS[0].id;
         let minSamples = Settings.DEFAULTS.typerMinSamples;
 
         function paint() {
             const now = Date.now();
+            // Redrawing wholesale would snap a scrolled heat map back to
+            // January — the same guard chess-stats.js keeps around its
+            // repaint, and leet-stats.js after it.
+            const scroller = host.querySelector('.hm-scroll');
+            const scrolled = scroller ? scroller.scrollWidth - scroller.clientWidth - scroller.scrollLeft : 0;
+
             if (kind === 'races') host.innerHTML = racesMarkup(state, range, now);
             else if (kind === 'weak') host.innerHTML = weakMarkup(state, range, sort, minSamples, now);
+            else host.innerHTML = practiceMarkup(state, metric, minSamples, now);
+
+            const heat = host.querySelector('.hm-scroll');
+            if (heat) heat.scrollLeft = heat.scrollWidth - heat.clientWidth - scrolled;
         }
 
         host.addEventListener('click', (event) => {
@@ -330,8 +433,23 @@
             if (sorted) {
                 sort = sorted.dataset.typerSort;
                 paint();
+                return;
             }
+            const metered = event.target.closest('[data-typer-metric]');
+            if (metered) {
+                metric = metered.dataset.typerMetric;
+                paint();
+                return;
+            }
+            if (event.target.closest('[data-typer-copy]')) copyDrill();
         });
+
+        async function copyDrill() {
+            const text = host.querySelector('.typer-drill-text');
+            if (!text || !BB.Ui) return;
+            const ok = await BB.Ui.copyText(text.textContent);
+            BB.Ui.toast(ok ? 'Drill copied' : 'Could not copy the drill', ok ? 'success' : 'error');
+        }
 
         async function reload() {
             state = await Typer.load();
@@ -353,7 +471,10 @@
             paint();
         }
 
-        return { reload, render: paint, applySettings, rangeId: () => range, sortId: () => sort };
+        return {
+            reload, render: paint, applySettings,
+            rangeId: () => range, sortId: () => sort, metricId: () => metric,
+        };
     }
 
     /**
@@ -368,6 +489,7 @@
         const hosts = [
             ...Array.from(scope.querySelectorAll('[data-typer-races]')).map((host) => [host, 'races']),
             ...Array.from(scope.querySelectorAll('[data-typer-weak]')).map((host) => [host, 'weak']),
+            ...Array.from(scope.querySelectorAll('[data-typer-practice]')).map((host) => [host, 'practice']),
         ];
         if (!hosts.length) return;
 
@@ -383,7 +505,7 @@
     }
 
     BB.TyperStats = {
-        mountAll, mountPanel, RANGES, TREND_WINDOW,
+        mountAll, mountPanel, RANGES, TREND_WINDOW, HEAT,
         human, sinceOf, placeText, gramGlyph, ratioBar,
     };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

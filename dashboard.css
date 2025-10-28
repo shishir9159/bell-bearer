@@ -3124,3 +3124,29 @@ body[data-skin="deco"] .bb-plate {
 }
 
 .typer-sub .typer-gram { font-size: 11px; padding: 1px 4px; }
+
+/* The generated drill, and the button that takes it to the clipboard. */
+.typer-drill {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface-2);
+}
+
+.typer-drill-text {
+    flex: 1;
+    margin: 0;
+    font-family: Consolas, ui-monospace, monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    /* It is a string to type, not prose: the line breaks are wherever the
+       panel is wide enough for them, and a long run has to wrap rather than
+       push the Copy button off the panel. */
+    word-break: break-word;
+    color: var(--text);
+}
+
+.typer-drill .btn-secondary { flex: none; }

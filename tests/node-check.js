@@ -2478,6 +2478,112 @@ check('the noise floor is a setting the panel can be told about', () => {
     assert(Settings.DEFAULTS.typerMinSamples >= 3, 'below three there is no mean worth the name');
 });
 
+console.log('\n# typeracer — the practice map');
+check('the map is shaped for the heat map, whichever metric is picked', () => {
+    let state = Typer.recordRace(Typer.blank(), { at: R0, wpm: 80, seconds: 30 }, [], R0);
+    state = Typer.recordRace(state, { at: R0, wpm: 95, seconds: 45 }, [], R0);
+    const key = Typer.dayKey(R0);
+
+    eq(Typer.heatDays(state, 'races', R0)[key].value, 2);
+    eq(Typer.heatDays(state, 'wpm', R0)[key].value, 95, 'the best of the day, not the last');
+    eq(Typer.heatDays(state, 'seconds', R0)[key].value, 75);
+    // The other fields ride along, so a square's tooltip can name all three
+    // whichever one is being coloured by.
+    eq(Typer.heatDays(state, 'wpm', R0)[key].races, 2);
+});
+check('a metric that is not one falls back rather than colouring by nothing', () => {
+    const state = Typer.recordRace(Typer.blank(), { at: R0, wpm: 80, seconds: 30 }, [], R0);
+    eq(Typer.heatDays(state, 'nonesuch', R0)[Typer.dayKey(R0)].value, 1);
+});
+check('a day outside the map cannot draw a square on it', () => {
+    const old = Typer.dayKey(R0 - (Typer.KEEP_DAYS + 5) * Typer.DAY_MS);
+    const state = { races: [], days: { [old]: { races: 3, seconds: 90, best: 60 } } };
+    eq(Object.keys(Typer.heatDays(state, 'races', R0)), []);
+});
+check('each metric is banded on a scale of its own', () => {
+    // Two races is a quiet day and two seconds is nothing at all; one set of
+    // bounds cannot colour both. Best WPM is not a count at all.
+    const scales = Object.values(TyperStats.HEAT).map((spec) => spec.steps.join(','));
+    eq(new Set(scales).size, scales.length, 'two metrics are sharing a scale');
+    for (const [id, spec] of Object.entries(TyperStats.HEAT)) {
+        assertRising(spec.steps, `${id} steps`);
+        eq(spec.legend.length, 5, `${id} needs a word per level, zero included`);
+    }
+});
+check('the map metrics are the ones the store can answer', () => {
+    eq(Object.keys(TyperStats.HEAT).sort(), Typer.METRICS.map((one) => one.id).sort());
+});
+
+console.log('\n# typeracer — the streak');
+check('a run of days is counted back from today', () => {
+    let state = Typer.blank();
+    for (const back of [0, 1, 2]) {
+        state = Typer.recordRace(state, { at: R0 - back * Typer.DAY_MS, wpm: 70, seconds: 30 }, [], R0);
+    }
+    eq(Typer.streak(state, R0), 3);
+});
+check('today with nothing in it yet is only the afternoon', () => {
+    let state = Typer.blank();
+    for (const back of [1, 2]) {
+        state = Typer.recordRace(state, { at: R0 - back * Typer.DAY_MS, wpm: 70, seconds: 30 }, [], R0);
+    }
+    eq(Typer.streak(state, R0), 2, 'not racing yet today broke the streak');
+});
+check('a day missed in the middle ends the run', () => {
+    let state = Typer.blank();
+    for (const back of [0, 2, 3]) {
+        state = Typer.recordRace(state, { at: R0 - back * Typer.DAY_MS, wpm: 70, seconds: 30 }, [], R0);
+    }
+    eq(Typer.streak(state, R0), 1);
+});
+check('never having raced is a streak of nought', () => {
+    eq(Typer.streak(Typer.blank(), R0), 0);
+});
+
+console.log('\n# typeracer — the drill');
+const drillState = (pairs) => gramsWith(Object.fromEntries(
+    pairs.map((gram, i) => [gram, { n: 20, ms: 20 * (600 - i * 10), err: 0 }])));
+
+check('the drill is built out of the pairs you are worst at', () => {
+    const text = Typer.drill(drillState(['th', 'nk', 'rl']), { grams: 3, length: 60 });
+    for (const gram of ['th', 'nk', 'rl']) assert(text.includes(gram), `${gram} is not in "${text}"`);
+});
+check('a pair is padded into something that can be typed as a word', () => {
+    // Drilling a bare pair over and over trains it in an isolation it is
+    // never typed in.
+    eq(Typer.drillChunk('th', 0), 'athith');
+    assert(!/\bth\b/.test(Typer.drill(drillState(['th']), { grams: 1, length: 40 })), 'the bare pair was drilled');
+});
+check('a pair with a space or a comma in it is not made into a word', () => {
+    // A chunk built around a comma is not a word; it is line noise.
+    const state = drillState(['t ', 'e,', 'th']);
+    const text = Typer.drill(state, { grams: 3, length: 60 });
+    assert(text.length > 0, 'nothing was drilled at all');
+    assert(!text.includes(','), text);
+    eq(text.split(' ').every((chunk) => /^[a-z]+$/.test(chunk)), true, text);
+});
+check('the drill is long enough to be one and stops there', () => {
+    const text = Typer.drill(drillState(['th', 'nk', 'rl']), { grams: 3, length: 120 });
+    assert(text.length >= 120, `only ${text.length} characters`);
+    assert(text.length < 200, `${text.length} characters is a paragraph`);
+});
+check('the same store gives the same drill twice', () => {
+    // A drill you can compare with yesterday's is worth more than a
+    // different one every time, and Math.random() cannot be tested.
+    const state = drillState(['th', 'nk', 'rl']);
+    eq(Typer.drill(state, { grams: 3, length: 80 }), Typer.drill(state, { grams: 3, length: 80 }));
+});
+check('the chunks do not come back in the same loop every time round', () => {
+    const text = Typer.drill(drillState(['th', 'nk', 'rl']), { grams: 3, length: 200 });
+    const chunks = text.split(' ');
+    const first = chunks.slice(0, 3).join(' ');
+    assert(chunks.slice(3, 6).join(' ') !== first, `the order repeats: ${text}`);
+});
+check('nothing measured yet is no drill rather than an empty one', () => {
+    eq(Typer.drill(Typer.blank(), {}), '');
+    eq(Typer.drill(drillState(['t ', 'e,']), { grams: 2 }), '', 'punctuation alone is nothing to drill');
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

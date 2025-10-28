@@ -452,6 +452,52 @@
         return { races, grams, days };
     }
 
+    // ---------------------------------------------------- the practice map
+
+    /** What a day bucket can be coloured by, and what each means on the map. */
+    const METRICS = Object.freeze([
+        Object.freeze({ id: 'races', label: 'Races', noun: 'race' }),
+        Object.freeze({ id: 'wpm', label: 'Best WPM', noun: 'wpm' }),
+        Object.freeze({ id: 'seconds', label: 'Time', noun: 'second' }),
+    ]);
+
+    /** Which field of a bucket each metric colours by. */
+    const METRIC_FIELD = Object.freeze({ races: 'races', wpm: 'best', seconds: 'seconds' });
+
+    /**
+     * The day buckets shaped for BB.HeatMap.render.
+     *
+     * `value` is whichever of the three the map is colouring by, and the rest
+     * ride along so a square's tooltip can name all of them whichever one is
+     * picked. Pruned on the way out as well as in, so a store written before a
+     * long break cannot draw a square outside the map's own window.
+     */
+    function heatDays(state, metric = 'races', now = Date.now()) {
+        const field = METRIC_FIELD[metric] || METRIC_FIELD.races;
+        const out = {};
+        for (const [key, bucket] of Object.entries(prune(asObject(state).days, now))) {
+            out[key] = { ...bucket, value: bucket[field] };
+        }
+        return out;
+    }
+
+    /** Days raced in a row, ending today or yesterday. */
+    function streak(state, now = Date.now()) {
+        const days = prune(asObject(state).days, now);
+        let current = 0;
+        for (let i = 0; ; i++) {
+            const bucket = days[dayKey(now - i * DAY_MS)];
+            // Today not having a race in it yet does not break a streak — it
+            // is only the afternoon. Yesterday not having one does.
+            if (!bucket || !bucket.races) {
+                if (i === 0) continue;
+                break;
+            }
+            current++;
+        }
+        return current;
+    }
+
     // ----------------------------------------------------- the weak spots
 
     /**
@@ -559,6 +605,47 @@
     }
 
     /**
+     * A practice string built from the pairs you are worst at.
+     *
+     * Each gram is padded into a chunk that can be typed as a word — "th"
+     * becomes "athath" — because drilling a bare pair over and over trains the
+     * pair in isolation, and a pair is never typed in isolation. Only pairs of
+     * letters are used: a chunk built around a comma or a space is not a word
+     * and reads as line noise.
+     *
+     * Rotated rather than shuffled. A drill you can compare with yesterday's
+     * is worth more than a different one every time, and `Math.random()` in a
+     * pure function is not something a test can pin down.
+     */
+    const DRILL_PADS = 'aeiou';
+
+    function drillChunk(gram, index) {
+        const open = DRILL_PADS[index % DRILL_PADS.length];
+        const close = DRILL_PADS[(index + 2) % DRILL_PADS.length];
+        return `${open}${gram}${close}${gram}`;
+    }
+
+    function drill(state, { grams = 6, length = 180, minSamples = MIN_SAMPLES } = {}) {
+        const wanted = Math.max(1, count(grams));
+        const worst = slowest(state, 'bi', { minSamples, limit: wanted * 4 })
+            .filter((row) => /^[a-z]+$/.test(row.gram))
+            .slice(0, wanted);
+        if (!worst.length) return '';
+
+        const chunks = worst.map((row, index) => drillChunk(row.gram, index));
+        const out = [];
+        let size = 0;
+        for (let i = 0; size < count(length); i++) {
+            // The offset walks the order on by one every time round, so the
+            // same six chunks do not come back in the same six-chunk loop.
+            const chunk = chunks[(i + Math.floor(i / chunks.length)) % chunks.length];
+            out.push(chunk);
+            size += chunk.length + 1;
+        }
+        return out.join(' ');
+    }
+
+    /**
      * The headline figures over a range, in the shape chess.js#summarize
      * established: the races themselves plus the numbers drawn above them.
      *
@@ -639,8 +726,8 @@
 
     const Typer = {
         RACE_CAP, KEEP_DAYS, GRAM_CAP, GRAM_CAP_TRI, KEEP_N, OUTLIER_MS, FLOOR_MS,
-        MIN_SAMPLES, MISTYPE_MIN_DUE, DAY_MS,
-        slowest, mistyped, baselineFor, wpmFor,
+        MIN_SAMPLES, MISTYPE_MIN_DUE, DAY_MS, METRICS,
+        slowest, mistyped, baselineFor, wpmFor, heatDays, streak, drill, drillChunk,
         dayKey, blank, blankGrams, foldChar, foldGram, prune, cleanRace,
         gramsFrom, mergeGrams, pruneGrams, recordRace, cleanWpmOf, correctionCost, summarize,
         load, update, record,
