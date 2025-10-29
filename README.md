@@ -29,6 +29,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Rosters**: Who you follow on Twitter and the subreddits you have joined, out to a text file and back in again, slowly
 - **Chess.com and Lichess**: Games, time management and time at the board; a clock warning and moves read aloud while you play
 - **LeetCode**: Each problem timed on LeetCode's own stopwatch, submissions recorded from its own traffic, an FSRS-5 review schedule graded in one click, your notes and code templates on the page, and a mock-interview mode that hides the hints
+- **TypeRacer**: Every race logged from the keystrokes themselves — the letter pairs you stall on, the characters you reach for wrongly, and what correcting them costs you in words per minute — plus a typing caret and a synthesised key sound
 - **Reward System**: Track watch credits to spend them on popcorn for later
 
 Export and Import sit in the dashboard header, beside the theme button, and
@@ -89,6 +90,7 @@ while you are typing in a field.
 | `Shift + P` | Open the pouch — the sheet on YouTube, the panel on x.com, the sheet on leetcode.com |
 | `Ctrl + Alt + T` | LeetCode: offer a code template at the cursor, or save the selection as one |
 | `Ctrl + Alt + M` | LeetCode: start or end a mock interview on this problem |
+| `Ctrl + Alt + C` | TypeRacer: cycle the typing caret — bar, block, underline, outline, or the site's own |
 
 Speed steps through one fixed ladder — 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2,
 2.25, 2.5, 3, 3.5, 4, 5 — and the popup's buttons step the same ladder, so the
@@ -97,10 +99,12 @@ break) the speed you picked is re-applied; when *you* change it through the
 site's own speed menu, that becomes the new setting instead. Turn the re-apply
 off with **Keep my playback speed** in Settings.
 
-The two LeetCode shortcuts are `Ctrl + Alt` rather than a bare letter, and they
-have key handling of their own rather than going through the table above. Both
-are meant to work with the caret inside LeetCode's editor, which is the one
-place the "ignored while you are typing" rule is built to cover.
+The two LeetCode shortcuts and the TypeRacer one are `Ctrl + Alt` rather than a
+bare letter, and they have key handling of their own rather than going through
+the table above. All three are meant to work with the caret inside a field — the
+LeetCode editor, the TypeRacer input box — which is the one place the "ignored
+while you are typing" rule is built to cover. On TypeRacer that is not a corner
+case but the whole of it: every bare letter there is a letter you meant to type.
 
 `Shift + P` is off until **Settings › General › Pouch shortcut** turns it on,
 for the same reason Skim and the link hints are: a bare-Shift letter is a large
@@ -377,6 +381,95 @@ LeetCode's API.
 
 **Notes** is every problem you have written one on, editable and deletable.
 
+## TypeRacer
+
+Typing practice is the one skill-practice site where the interesting data is not
+the score at the end — it is **the shape of the keystrokes**. Which letter pairs
+you stall on, which characters you reach for wrongly, and how much of a race
+went to backspacing. TypeRacer shows none of that, and the third-party sites
+that do want an account and a scrape. Bell Bearer is already sitting in the page
+with a capture-phase listener, so it measures it directly.
+
+**The typed stream is the measurement, not the scoreboard.** WPM and accuracy
+are read off TypeRacer's result panel as a cross-check and believed when they
+parse, because they are the numbers you just saw on screen. Everything the
+dashboard is actually *for* is derived from the keystrokes themselves, so it
+survives every CSS rename on the site.
+
+**Nothing is sent anywhere and no raw keystrokes are kept.** A race is about
+three hundred of them and a hundred races would be thirty thousand rows, which
+`chrome.storage.local` is not. Each race is folded into a rolling table of
+letter pairs at the end and the stream is thrown away.
+
+**No page-world script.** chess.com and LeetCode each need one because the board
+object and `window.fetch` only exist in the page's own world. Keystrokes are DOM
+events, which a capture-phase listener in the isolated world sees in full.
+
+### What the tables say
+
+**Races** is best, the mean of the last ten, accuracy and races today, over a
+line of speed against time — spaced by *when* each race happened rather than
+evenly, so a fortnight away from the keyboard shows as a fortnight. Under it, the
+recent races with what each one lost to correcting.
+
+**Weak spots** is four blocks:
+
+- **Slowest pairs**, ranked by how slow each one is *for you* — against your own
+  mean for anything ending in that character — and never by raw milliseconds,
+  which only ever returns every pair containing a comma. An interval is credited
+  only when both of its characters were typed correctly first time; one spanning
+  a backspace measures how long you spent fixing something, not how fast the
+  pair is. Readings over 1.5s (you looked away) and under 10ms (key repeat, or a
+  paste) are dropped rather than clamped — a clamped outlier is still an
+  invented reading sitting in the mean.
+- **Slowest rolls**, the same for three characters, timed across the *second* of
+  their two intervals so a roll and the pair inside it are not the same number
+  under two names. A roll that is slow when both its pairs are fast is a
+  different problem and a different thing to drill.
+- **Most mistyped**, sortable between "most often" and "most likely" because
+  they are genuinely different questions: `e` is mistyped most in absolute terms
+  simply because `e` is everywhere. Each row names what you hit instead.
+- **Cost of correction** — the seconds lost in the range, your actual mean
+  speed, and your **clean** speed: the same keystrokes with the time spent in
+  and getting out of a mistake taken off the clock. Not a projection of what you
+  could do; what the race already was, minus the correcting.
+
+**Practice** is a heat map, one square a day in your own time zone, coloured by
+races, best speed or time — plus a generated drill built from your worst pairs,
+each padded into something that can be typed as a word, since a pair drilled on
+its own trains it in an isolation it is never typed in.
+
+Case is folded before anything is counted: an upper-case pair and its lower-case
+twin are the same motion for the fingers that matter, and the shift is already
+measured as an interval of its own. Digits all fold to `#`, and anything outside
+letters, space, apostrophe, comma, period and hyphen to `?`, so a quote full of
+accents cannot fill the table with pairs you will never meet twice.
+
+### The caret and the sound
+
+**The typing caret** is the marker showing where you are in the quote — bar,
+block, underline or outline, or TypeRacer's own, which is the default. Ours
+hides the site's marking while it is up and puts it straight back the moment you
+switch away; nothing is removed from the page. Position is read once per typed
+character inside an animation frame and written as a transform — not on scroll,
+not on a timer. **If the quote's markup cannot be read, no caret is drawn**: a
+caret in the wrong place over the word you are reading is worse than none.
+<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>C</kbd> cycles the shapes from the page.
+
+**The sounds are synthesised**, so nothing ships and nothing loads before the
+first keystroke can click. A key is pitched by its position in the quote, which
+is the difference between a typewriter and a smoke alarm; a space ends a word
+and a wrong character interrupts. The volume is a percent and above 100 it
+really is louder — Web Audio gain is not capped the way an audio element's
+volume is — and at 0 nothing is played at all rather than played silently. The
+same module now carries the chess low-clock tone.
+
+This is a typing test, so the keystroke path is the whole design: the capture
+handler pushes one small object onto an array and returns. No storage, no
+layout reads, no DOM writes, nothing that can force a reflow. Everything that
+costs anything happens on the shared observer's animation frame or once at the
+end of the race.
+
 ## Daily time limit
 
 **Any** site can be held to a daily limit. The list is under
@@ -568,6 +661,8 @@ src/shared/     pure logic, used by every surface
   time-limits.js   the day's tally per limited host, and the snooze
   fsrs.js          FSRS-5: when a problem is worth doing again
   leetcode.js      the practice log: one record per problem, one bucket per day
+  typeracer.js     the typing log: races, the n-gram tables, the day buckets
+  sfx.js           synthesised sound: one context, a voice table, a cheap play()
   leet-templates.js  code templates, and which language each belongs to
   roster.js        a site's own roster: the file format, the pace, and the job
   x-pouch.js       the X pouch: two independent topic lists and their items
@@ -594,6 +689,8 @@ src/content/    injected into every page
   leet-read.js     every leetcode.com selector, and reading a problem off one
   leet-ui.js       the clock, the verdict, the grade card, mock mode, the hotkey
   leet-panel.js    the pouch sheet: due, to solve, solved, templates
+  typeracer-read.js every typeracer.com selector, and reading a race off one
+  typeracer-ui.js  the keystroke capture, the typing caret, the sounds
   dom-watch.js     one throttled MutationObserver for all of the above
   overlay.js notify.js theme.js page-info.js markdown.js
 
@@ -619,11 +716,13 @@ src/page/       shared by popup.html and dashboard.html
   chess-stats.js   a chess site's Games view, dashboard and popup
   chess-settings.js a chess site's settings panel
   heat-map.js      the calendar heat map
+  spark.js         a line over time, scaled by when rather than by index
   time-limit-view.js today against a site's daily limit
   limit-sites-panel.js the General list: which sites have a limit, and what it is
   roster-view.js   a site's Roster panel: the file out, the file in, the job
   x-pouch-view.js  the dashboard's People and Posts panels — where X topics are managed
   leet-stats.js    the LeetCode Review, Practice and Notes panels
+  typeracer-stats.js the TypeRacer Races, Weak spots and Practice panels
   popup-width.js   applies the popup size setting, from popup.html's <head>
 
 skins.css       the token layer for every skin — linked before popup/dashboard css
@@ -742,6 +841,40 @@ otherwise light up tomorrow's square, and a morning's west of it yesterday's.
 A template's `lang` is LeetCode's own spelling, and `""` means "any language" —
 not a fallback for a language with no templates of its own so much as a category,
 since a comment header is not Python or C++.
+
+The TypeRacer log is three keys, because they age at three different rates. A
+race is a row in a table and the last two hundred is all a table wants. The
+n-gram tables have no age at all — they are capped by how many distinct grams
+they hold, not by when they were typed. A day bucket is three numbers for a
+square on a heat map, and is dropped after four hundred days:
+
+```javascript
+{
+  bbTyperRaces: [
+    { at: 0, wpm: 84, accuracy: 97.4, seconds: 31.2, chars: 260, errors: 6,
+      correctionMs: 2400, cleanWpm: 91, quoteId: "3810721", place: 2, of: 5 }
+  ],
+  bbTyperGrams: {
+    bi:  { "th": { n: 412, ms: 51500, err: 3 } },
+    tri: { "the": { n: 210, ms: 27300, err: 1 } },
+    chars: { "e": { due: 5120, wrong: 41, subs: { "r": 28, "w": 9 },
+                    n: 4800, ms: 566400 } },
+    totalN: 18400, totalMs: 2392000, updatedAt: 0
+  },
+  bbTyperDays: { "2026-09-24": { races: 7, seconds: 214, best: 88 } }
+}
+```
+
+`ms` is a **sum**, not a mean — means do not merge, and these tables are merged
+on every race. Everything read off them is derived at read time from `n` and
+`ms`. A gram's `n` is how many readings it has; once a table is over its cap the
+rarest are evicted, and an entry seen eight times or more never is — meeting
+forty new pairs today must not cost you the pair you have two hundred readings
+of. `chars` carries both halves of a character's story: `due` and `wrong` are
+how often you met it and got it wrong, and `n`/`ms` are the intervals that
+landed on it, which is the baseline a pair ending in it is judged against.
+
+The day key is **local**, not UTC, for the same reason the LeetCode one is.
 
 The daily limit is two keys — what the limits are, and what today has gone on —
 both keyed by host, so neither knows anything about which sites have a workspace:
