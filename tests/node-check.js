@@ -2647,6 +2647,63 @@ check('the surfaces main.js repaints cover every typeracer setting that changes 
     }
 });
 
+console.log('\n# the lists that have to move together');
+
+const readRepo = (name) => require('fs').readFileSync(`${__dirname}/../${name}`, 'utf8');
+
+check('the two manifests load exactly the same content scripts', () => {
+    // They are byte-identical today and the point is to keep them so: a
+    // module added to one and not the other fails in that browser only, at
+    // load, with "undefined is not an object".
+    const chrome = JSON.parse(readRepo('manifest.json')).content_scripts;
+    const firefox = JSON.parse(readRepo('manifest.firefox.json')).content_scripts;
+    eq(firefox, chrome);
+});
+check('typeracer needs no page-world script, and has not grown one', () => {
+    // chess.com and LeetCode each need one because the board object and
+    // window.fetch only exist in the page's world. Keystrokes are DOM events,
+    // which a capture listener in the isolated world sees in full.
+    const worlds = JSON.parse(readRepo('manifest.json')).content_scripts
+        .filter((entry) => entry.world === 'MAIN');
+    for (const entry of worlds) {
+        assert(!entry.matches.some((match) => /typeracer/.test(match)),
+            `a MAIN-world entry was added for ${entry.matches.join(', ')}`);
+    }
+});
+check('every typeracer source the manifest loads is in the browser suite too', () => {
+    const manifest = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+    const suite = readRepo('tests/index.html');
+    for (const src of manifest.filter((one) => /typeracer|sfx/.test(one))) {
+        assert(suite.includes(`../${src}`), `${src} is shipped but never loaded by the suite`);
+    }
+    assert(suite.includes('typeracer.test.js'), 'the spec itself is not loaded');
+});
+check('a module is loaded after everything it destructures off BB', () => {
+    // Load order is manual — there is no bundler — and getting it wrong fails
+    // in that one surface, at load.
+    const suite = readRepo('tests/index.html');
+    const at = (src) => suite.indexOf(`<script src="../${src}">`);
+    for (const [first, second] of [
+        ['src/shared/typeracer.js', 'src/content/typeracer-read.js'],
+        ['src/content/typeracer-read.js', 'src/content/typeracer-ui.js'],
+        ['src/shared/sfx.js', 'src/content/typeracer-ui.js'],
+        ['src/shared/typeracer.js', 'src/page/typeracer-stats.js'],
+        ['src/page/spark.js', 'src/page/typeracer-stats.js'],
+    ]) {
+        assert(at(first) !== -1 && at(second) !== -1, `${first} or ${second} is missing from the suite`);
+        assert(at(first) < at(second), `${second} is loaded before ${first}`);
+    }
+});
+check('the manifest loads them in that order as well', () => {
+    const js = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+    const at = (src) => js.indexOf(src);
+    assert(at('src/shared/sfx.js') < at('src/content/typeracer-ui.js'));
+    assert(at('src/shared/typeracer.js') < at('src/content/typeracer-read.js'));
+    assert(at('src/content/typeracer-read.js') < at('src/content/typeracer-ui.js'));
+    // main.js is the bootstrap and destructures all of them.
+    assert(at('src/content/typeracer-ui.js') < at('src/content/main.js'));
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

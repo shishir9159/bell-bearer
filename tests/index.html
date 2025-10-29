@@ -93,7 +93,6 @@
      browser run loudly instead of only on the dashboard. -->
 <script src="../src/page/heat-map.js"></script>
 <script src="../src/page/spark.js"></script>
-<script src="../src/page/typeracer-stats.js"></script>
 <script src="../src/page/leet-stats.js"></script>
 <script src="../src/page/leet-popup.js"></script>
 <script src="../src/page/leet-templates-view.js"></script>
@@ -106,6 +105,9 @@
 <script src="../src/shared/typeracer.js"></script>
 <script src="../src/content/typeracer-read.js"></script>
 <script src="../src/content/typeracer-ui.js"></script>
+<!-- After the store it destructures off BB, and after spark.js above — a page
+     module here for the same reason heat-map.js is. -->
+<script src="../src/page/typeracer-stats.js"></script>
 
 <!-- 4. Specs -->
 <script src="background.test.js"></script>
@@ -122,6 +124,7 @@
 <script src="roster.test.js"></script>
 <script src="cookie-banner.test.js"></script>
 <script src="leetcode.test.js"></script>
+<script src="typeracer.test.js"></script>
 
 <script>
     (async () => {
