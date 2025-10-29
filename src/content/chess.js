@@ -41,6 +41,7 @@
 
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ChessSites = (root.BB && root.BB.ChessSites) || req('../shared/chess-sites.js');
+    const Sfx = (root.BB && root.BB.Sfx) || req('../shared/sfx.js');
 
     const EVENT = 'bb:chess';
 
@@ -301,50 +302,21 @@
      * reaches — two short beeps through the page's Web Audio, which needs no
      * file and so no web-accessible resource. Above 100% it really is louder:
      * gain is not capped at 1 the way an <audio> element's volume is.
+     *
+     * Both of those rules now live in src/shared/sfx.js, which started as a
+     * copy of what was here and is shared with TypeRacer. The tone itself is
+     * unchanged: the `low` voice is the same two notes, the same 880 and
+     * 1180, the same 180ms apart.
+     *
+     * The context is still only ever opened from a gesture — Chrome refuses
+     * Web Audio a page did not start in answer to a click or a key, and this
+     * tone is played from the poll timer, which is never one.
      */
-    let audio = null;
-
-    /**
-     * Create or resume the audio context — only ever from inside a user
-     * gesture. Chrome refuses to start Web Audio that a page did not start in
-     * answer to a click or a key ("The AudioContext was not allowed to
-     * start"), and the tone is played from the poll timer, which is never a
-     * gesture. So the context is opened on the first pointerdown or keydown
-     * on the page — moving a piece is one — and the tone only ever plays
-     * through a context that is already running.
-     */
-    function unlockAudio() {
-        if (audio && audio.state === 'running') return;
-        try {
-            const Ctx = window.AudioContext || window.webkitAudioContext;
-            if (!Ctx) return;
-            if (!audio) audio = new Ctx();
-            if (audio.state === 'suspended') audio.resume().catch(() => {});
-        } catch (_) { /* no Web Audio on this page */ }
-    }
-
     function beep(volume) {
-        // Not yet unlocked by a gesture: stay quiet rather than make Chrome
-        // warn. In a real game a piece has been touched long before a clock
-        // runs low.
-        if (volume <= 0 || !audio || audio.state !== 'running') return;
-        try {
-            const at = audio.currentTime;
-            for (const [offset, frequency] of [[0, 880], [0.18, 1180]]) {
-                const oscillator = audio.createOscillator();
-                const gain = audio.createGain();
-                oscillator.type = 'sine';
-                oscillator.frequency.value = frequency;
-                // Ramped rather than switched: a square edge on a sine is a
-                // click, and a click at 150% volume is unpleasant.
-                gain.gain.setValueAtTime(0.0001, at + offset);
-                gain.gain.exponentialRampToValueAtTime(volume * 0.3, at + offset + 0.02);
-                gain.gain.exponentialRampToValueAtTime(0.0001, at + offset + 0.14);
-                oscillator.connect(gain).connect(audio.destination);
-                oscillator.start(at + offset);
-                oscillator.stop(at + offset + 0.16);
-            }
-        } catch (_) { /* the context went away; nothing to play through */ }
+        // lowVolumeFor is a fraction of full, clamped to [0, 2]; Sfx speaks in
+        // percent. The multiply is the whole difference, and keeping the clamp
+        // here means the settings' own bound is still the one that applies.
+        Sfx.play('low', { volume: volume * 100 });
     }
 
     // ----------------------------------------------------------------- speech
@@ -509,7 +481,7 @@
 
         /** Unlock the tone on a gesture — but only for someone who wants the tone. */
         function onGesture() {
-            if (ChessSites.anyLowTimeOn(getSettings(), site)) unlockAudio();
+            if (ChessSites.anyLowTimeOn(getSettings(), site)) Sfx.unlock();
         }
 
         function install() {

@@ -41,6 +41,11 @@
         start: Object.freeze({ type: 'sine',     freq: 440,  decay: 0.180, gain: 0.20, then: 660 }),
         done:  Object.freeze({ type: 'sine',     freq: 660,  decay: 0.220, gain: 0.22, then: 880 }),
         best:  Object.freeze({ type: 'sine',     freq: 660,  decay: 0.180, gain: 0.24, then: 990 }),
+        // The chess low-clock tone, which was the original of all of this —
+        // see src/content/chess.js. Two separate beeps rather than a slide,
+        // which is what `gap` means: at low volume a slide is easy to miss and
+        // two notes are not, and that sound is the whole point of the setting.
+        low:   Object.freeze({ type: 'sine',     freq: 880,  decay: 0.140, gain: 0.30, then: 1180, gap: 0.18 }),
     });
 
     /** What the settings `<select>` is built from, so adding a voice is one edit. */
@@ -98,26 +103,39 @@
 
         try {
             const at = ctx.currentTime;
-            const oscillator = ctx.createOscillator();
-            const gain = ctx.createGain();
-
-            oscillator.type = voice.type;
-            oscillator.frequency.setValueAtTime(voice.freq, at);
-            if (voice.then) oscillator.frequency.exponentialRampToValueAtTime(voice.then, at + voice.decay);
-            if (detune) oscillator.detune.setValueAtTime(detune, at);
-
             // Ramped rather than switched: a square edge on the envelope is a
             // click of its own, and a click at 150% volume is unpleasant.
             const peak = Math.max(SILENT, voice.gain * (volume / 100));
-            gain.gain.setValueAtTime(SILENT, at);
-            gain.gain.exponentialRampToValueAtTime(peak, at + 0.006);
-            gain.gain.exponentialRampToValueAtTime(SILENT, at + voice.decay);
 
-            oscillator.connect(gain).connect(ctx.destination);
-            oscillator.start(at);
-            // Stopped a little past the envelope, so the node is collected
-            // rather than left running silently for the life of the page.
-            oscillator.stop(at + voice.decay + 0.02);
+            const note = (start, freq, slideTo) => {
+                const oscillator = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                oscillator.type = voice.type;
+                oscillator.frequency.setValueAtTime(freq, start);
+                if (slideTo) oscillator.frequency.exponentialRampToValueAtTime(slideTo, start + voice.decay);
+                if (detune) oscillator.detune.setValueAtTime(detune, start);
+
+                gain.gain.setValueAtTime(SILENT, start);
+                gain.gain.exponentialRampToValueAtTime(peak, start + 0.006);
+                gain.gain.exponentialRampToValueAtTime(SILENT, start + voice.decay);
+
+                oscillator.connect(gain).connect(ctx.destination);
+                oscillator.start(start);
+                // Stopped a little past the envelope, so the node is collected
+                // rather than left running silently for the life of the page.
+                oscillator.stop(start + voice.decay + 0.02);
+            };
+
+            // `then` alone is a slide; `then` with a `gap` is a second note
+            // that far behind the first. Two notes carry at a low volume in a
+            // way a slide does not, which is why the distinction exists.
+            if (voice.gap) {
+                note(at, voice.freq);
+                note(at + voice.gap, voice.then);
+            } else {
+                note(at, voice.freq, voice.then);
+            }
         } catch (_) { /* the context went away; nothing to play through */ }
     }
 

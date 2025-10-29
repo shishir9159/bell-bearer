@@ -2704,6 +2704,46 @@ check('the manifest loads them in that order as well', () => {
     assert(at('src/content/typeracer-ui.js') < at('src/content/main.js'));
 });
 
+console.log('\n# the chess low-clock tone, on the sound module');
+check('the tone is the same two notes it always was', () => {
+    // A refactor, not a redesign: 880 then 1180, 180ms apart, a sine, and a
+    // peak of 0.3 of whatever the volume setting asks for.
+    const low = Sfx.VOICES.low;
+    eq(low.type, 'sine');
+    eq(low.freq, 880);
+    eq(low.then, 1180);
+    eq(low.gap, 0.18);
+    eq(low.gain, 0.3);
+});
+check('a gap means two notes rather than a slide', () => {
+    // Two notes carry at a low volume in a way a slide does not, and that
+    // sound is the whole point of the setting.
+    assert(Sfx.VOICES.low.gap, 'the low tone would now glide');
+    for (const id of ['start', 'done', 'best']) {
+        assert(!Sfx.VOICES[id].gap, `${id} should slide, not repeat`);
+    }
+});
+check('the low tone is not offered as a key sound', () => {
+    // It is a chess alarm. Typing to it would be unbearable.
+    assert(!Sfx.KEY_VOICE_IDS.includes('low'), 'the alarm is in the typing list');
+    assert(Sfx.VOICE_IDS.includes('low'), 'but it still has to be in the table');
+});
+check('chess.js no longer keeps an audio context of its own', () => {
+    const source = require('fs').readFileSync(`${__dirname}/../src/content/chess.js`, 'utf8');
+    assert(!/new Ctx\(\)|createOscillator|AudioContext/.test(source),
+        'the old context is still in there beside the shared one');
+    assert(/Sfx\.play\('low'/.test(source), 'the tone is not played through the module');
+    assert(/Sfx\.unlock\(\)/.test(source), 'the context is opened somewhere other than a gesture');
+});
+check('the sound module is loaded before the file that now plays through it', () => {
+    // Load order is manual. chess.js sits well before the TypeRacer cluster,
+    // so moving this one line is the whole of the migration's risk.
+    const js = JSON.parse(require('fs').readFileSync(`${__dirname}/../manifest.json`, 'utf8'))
+        .content_scripts[0].js;
+    assert(js.indexOf('src/shared/sfx.js') < js.indexOf('src/content/chess.js'),
+        'chess.js would get undefined for Sfx at load');
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.
