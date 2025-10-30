@@ -149,6 +149,25 @@
         return null;
     }
 
+    /**
+     * Whether `element` is the race box, answered without a layout read.
+     *
+     * The keystroke handler asks this, so it may not do what inputBox() does
+     * — measuring the box is a forced layout. It only has to tell the race
+     * box from TypeRacer's chat and the site's search field, and matching a
+     * spelling of it is enough for that.
+     */
+    function isInput(element) {
+        if (!element || element.nodeType !== 1) return false;
+        const tag = element.tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA') return false;
+        if (element.readOnly || element.disabled) return false;
+        for (const selector of SELECTORS.input) {
+            try { if (element.matches(selector)) return true; } catch (_) { /* a spelling this engine rejects */ }
+        }
+        return false;
+    }
+
     /** A number, but only inside the bounds that make it a real reading. */
     function inRange(value, low, high) {
         const number = Number(value);
@@ -237,7 +256,7 @@
 
     const TyperRead = {
         SELECTORS, MIN_QUOTE, WPM_RANGE, find, findAll,
-        quoteText, inputBox, readResult, quoteId, caretAnchor, isRacePage, onScreen,
+        quoteText, inputBox, isInput, readResult, quoteId, caretAnchor, isRacePage, onScreen,
     };
 
     root.BB = root.BB || {};

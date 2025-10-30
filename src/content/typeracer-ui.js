@@ -107,6 +107,11 @@
         const start = target.selectionStart;
         const end = target.selectionEnd;
         if (end > start) return end - start;
+        // Forward delete with the caret at the end of the box — which is
+        // where it always is while racing — removes nothing, and counting it
+        // as a character walked the position back past a letter that was
+        // still sitting there.
+        if (inputType === 'deleteContentForward') return start < String(target.value || '').length ? 1 : 0;
         if (inputType === 'deleteWordBackward') {
             // The whitespace before the caret goes, then the word before
             // that — the order a browser does it in, and the reason this is
@@ -214,6 +219,17 @@
 
         function onBeforeInput(event) {
             if (!race || race.events.length >= MAX_EVENTS) return;
+            // The listener is on `document`, so it also hears TypeRacer's chat
+            // box and the site's search field. It used to take every one of
+            // those keys as part of the race, which pushed the position on and
+            // marked the rest of the quote wrong. The box is adopted on the
+            // first key that lands in one and then compared by identity: one
+            // comparison per key, and no selector match on the hot path.
+            const target = event.target;
+            if (target !== race.input) {
+                if (race.input || !TyperRead.isInput(target)) return;
+                race.input = target;
+            }
             const at = performance.now();
             const type = event.inputType;
 
@@ -424,7 +440,7 @@
         // ---------------------------------------------------- the race
 
         function startRace(quote) {
-            race = { quote, events: [], depth: 0, startedAt: 0, lastAt: 0 };
+            race = { quote, input: null, events: [], depth: 0, startedAt: 0, lastAt: 0 };
             lastQuote = quote;
             if (soundOn) Sfx.play('start', { volume: soundVolume });
         }

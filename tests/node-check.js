@@ -1501,13 +1501,17 @@ function withTyperPage(run, { settings = {}, quote = '' } = {}) {
      * Type `text` into the box, one `beforeinput` per character, `step`
      * milliseconds apart. A `<` is one backspace, as in the store's tests.
      */
-    const type = (text, { step = 200 } = {}) => {
+    const box = makeBox();
+    const type = (text, { step = 200, into = box } = {}) => {
         for (const ch of text) {
             clock += step;
+            into.selectionStart = into.selectionEnd = 1;
             if (ch === '<') {
-                handlers.beforeinput({ inputType: 'deleteContentBackward', data: null, target: { value: '', selectionStart: 1, selectionEnd: 1 } });
+                into.value = 'x';
+                handlers.beforeinput({ inputType: 'deleteContentBackward', data: null, target: into });
             } else {
-                handlers.beforeinput({ inputType: 'insertText', data: ch, target: { value: ch, selectionStart: 1, selectionEnd: 1 } });
+                into.value = ch;
+                handlers.beforeinput({ inputType: 'insertText', data: ch, target: into });
             }
         }
     };
@@ -1515,7 +1519,7 @@ function withTyperPage(run, { settings = {}, quote = '' } = {}) {
     const pass = () => tasks.get('typer-race')();
 
     try {
-        return run({ ui, page, type, pass, written, watcher, handlers, wait: (ms) => { clock += ms; } });
+        return run({ ui, page, type, pass, written, watcher, handlers, box, wait: (ms) => { clock += ms; } });
     } finally {
         ui.uninstall();
         Object.assign(global, {
@@ -1530,6 +1534,18 @@ function withTyperPage(run, { settings = {}, quote = '' } = {}) {
     }
 }
 
+/**
+ * A stand-in for a text box, answering only what the keystroke path asks:
+ * what it is, what it holds and which of the reader's spellings it matches.
+ */
+function makeBox(selector = 'input.txtInput') {
+    return {
+        nodeType: 1, tagName: 'INPUT', readOnly: false, disabled: false,
+        value: '', selectionStart: 0, selectionEnd: 0,
+        matches: (spelling) => spelling === selector,
+    };
+}
+
 console.log('\n# typeracer — counting what a delete took away');
 check('a plain backspace is one character', () => {
     eq(TyperUi.deletedCount({ value: 'the', selectionStart: 3, selectionEnd: 3 }, 'deleteContentBackward'), 1);
@@ -1542,6 +1558,10 @@ check('a word delete is measured off the text rather than guessed at', () => {
     // the race, and every interval after it silently spoiled.
     eq(TyperUi.deletedCount({ value: 'the quick', selectionStart: 9, selectionEnd: 9 }, 'deleteWordBackward'), 5);
     eq(TyperUi.deletedCount({ value: 'the', selectionStart: 3, selectionEnd: 3 }, 'deleteWordBackward'), 3);
+});
+check('a forward delete at the end of the box takes nothing', () => {
+    eq(TyperUi.deletedCount({ value: 'the', selectionStart: 3, selectionEnd: 3 }, 'deleteContentForward'), 0);
+    eq(TyperUi.deletedCount({ value: 'the', selectionStart: 1, selectionEnd: 1 }, 'deleteContentForward'), 1);
 });
 check('an input that cannot say is treated as one character', () => {
     eq(TyperUi.deletedCount(null, 'deleteContentBackward'), 1);
@@ -1588,6 +1608,29 @@ check('a backspace steps the position back and is recorded as one', () => {
         eq(race.depth, 2);
         eq(race.events.map((e) => (e.del ? '<' : e.ch)).join(''), 'tg<h');
         eq(race.events[3].expected, 'h', 'the retype is compared against the same position');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('keys typed into another box on the page are not part of the race', () => {
+    // The listener is on document, so TypeRacer's chat is heard too. Those
+    // keys used to push the position on and mark the rest of the quote wrong.
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        type('the');
+        type('gg', { into: makeBox('.chatInput') });
+        type(' qu');
+        const race = ui.currentRace();
+        eq(race.depth, 6);
+        eq(race.events.every((e) => e.ok), true, 'the chat keys were counted as mistakes');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('the race box is the first one a key lands in, and only that one', () => {
+    withTyperPage(({ ui, pass, type }) => {
+        pass();
+        const first = makeBox();
+        const second = makeBox();
+        type('th', { into: first });
+        type('xx', { into: second });
+        eq(ui.currentRace().depth, 2, 'a second matching box mid-race was taken as the race box');
     }, { quote: 'the quick brown fox jumps over it' });
 });
 check('deleting past the start of the quote is not recorded', () => {
