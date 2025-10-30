@@ -498,8 +498,11 @@
     const LEET_SURFACES = ['leetNoteButton', 'leetMockMode', 'leetMockMinutes', 'leetGradePrompt'];
 
     /** And TypeRacer's. */
+    // 'shortcuts' is in here because the caret hotkey is resolved once and
+    // cached — see applyHotkey in typeracer-ui.js — so a rebind has to reach
+    // the page rather than waiting for the next load.
     const TYPER_SURFACES = ['typerTrack', 'typerCaret', 'typerCaretSmooth', 'typerCaretBlink',
-        'typerSound', 'typerSoundVoice', 'typerSoundVolume', 'typerErrorSound'];
+        'typerSound', 'typerSoundVoice', 'typerSoundVolume', 'typerErrorSound', 'shortcuts'];
 
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&

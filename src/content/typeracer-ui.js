@@ -387,6 +387,21 @@
             scheduleCaret();
         }
 
+        /**
+         * The caret hotkey, resolved once rather than on every keydown.
+         *
+         * `Keybindings.resolve` spreads the binding into a fresh object, and
+         * this listener sees every key of every race — so resolving in the
+         * handler meant an allocation per keystroke on a typing test. It is
+         * taken again whenever the settings change, which is what puts
+         * `shortcuts` in main.js's TYPER_SURFACES list.
+         */
+        let hotkey = null;
+
+        function applyHotkey() {
+            hotkey = Keybindings.resolve(getSettings().shortcuts, 'typer-caret');
+        }
+
         /** The settings the hot path reads, taken once rather than per key. */
         function applySound() {
             const values = getSettings();
@@ -399,9 +414,8 @@
 
         function onHotkey(event) {
             onGesture();
-            const binding = Keybindings.resolve(getSettings().shortcuts, 'typer-caret');
-            if (!binding || !binding.enabled) return;
-            if (!Keybindings.matches(event, binding.combo, binding.kind)) return;
+            if (!hotkey || !hotkey.enabled) return;
+            if (!Keybindings.matches(event, hotkey.combo, hotkey.kind)) return;
             event.preventDefault();
             event.stopPropagation();
             cycleCaret();
@@ -536,6 +550,7 @@
             watcher.add('typer-race', sync);
             applyCaret(getSettings().typerCaret);
             applySound();
+            applyHotkey();
         }
 
         /**
@@ -581,6 +596,7 @@
             if (!on('typerTrack')) race = null;
             applyCaret(getSettings().typerCaret);
             applySound();
+            applyHotkey();
             watcher.schedule();
         }
 
@@ -591,6 +607,7 @@
             startRace, finishRace,
             cycleCaret, drawCaret, applyCaret, glyphRect,
             applySound, keySound, endSound,
+            applyHotkey, onHotkey,
             caretMode: () => caretMode,
             caretElement: () => caretNode,
             caretGaveUp: () => caretGaveUp,

@@ -1442,6 +1442,8 @@ function withTyperPage(run, { settings = {}, quote = '' } = {}) {
         document: global.document,
         performance: global.performance,
         location: global.location,
+        raf: global.requestAnimationFrame,
+        caf: global.cancelAnimationFrame,
         record: BB.Typer.record,
         readResult: BB.TyperRead.readResult,
         quoteId: BB.TyperRead.quoteId,
@@ -1460,6 +1462,11 @@ function withTyperPage(run, { settings = {}, quote = '' } = {}) {
         documentElement: { classList: { add() {}, remove() {}, contains: () => false, toggle() {} } },
     };
     global.location = { pathname: '/' };
+    // Frames are collected rather than run: what these tests are about is what
+    // the keystroke handler does, and a caret redraw is a page away.
+    const frames = [];
+    global.requestAnimationFrame = (fn) => frames.push(fn);
+    global.cancelAnimationFrame = () => {};
 
     let clock = 1000;
     global.performance = { now: () => clock };
@@ -1511,7 +1518,10 @@ function withTyperPage(run, { settings = {}, quote = '' } = {}) {
         return run({ ui, page, type, pass, written, watcher, handlers, wait: (ms) => { clock += ms; } });
     } finally {
         ui.uninstall();
-        Object.assign(global, { document: saved.document, performance: saved.performance, location: saved.location });
+        Object.assign(global, {
+            document: saved.document, performance: saved.performance, location: saved.location,
+            requestAnimationFrame: saved.raf, cancelAnimationFrame: saved.caf,
+        });
         BB.Typer.record = saved.record;
         BB.TyperRead.readResult = saved.readResult;
         BB.TyperRead.quoteId = saved.quoteId;
@@ -2742,6 +2752,78 @@ check('the sound module is loaded before the file that now plays through it', ()
         .content_scripts[0].js;
     assert(js.indexOf('src/shared/sfx.js') < js.indexOf('src/content/chess.js'),
         'chess.js would get undefined for Sfx at load');
+});
+
+console.log('\n# typeracer — the caret hotkey');
+
+/** A keydown as the page would send one, with the two fields matching needs. */
+const keyPress = (code, { ctrl = false, alt = false, shift = false, meta = false } = {}) => ({
+    code, key: code.replace(/^Key/, '').toLowerCase(),
+    ctrlKey: ctrl, altKey: alt, shiftKey: shift, metaKey: meta,
+    preventDefault() { this.defaulted = true; },
+    stopPropagation() {},
+});
+
+check('the binding is resolved once rather than on every keystroke', () => {
+    // Keybindings.resolve spreads the binding into a fresh object, and this
+    // listener sees every key of every race. Resolving in the handler meant
+    // an allocation per keystroke on a typing test.
+    withTyperPage(({ ui }) => {
+        const Keybindings = globalThis.BB.Keybindings;
+        const real = Keybindings.resolve;
+        let calls = 0;
+        Keybindings.resolve = (...args) => { calls++; return real(...args); };
+        try {
+            for (let i = 0; i < 50; i++) ui.onHotkey(keyPress('KeyT'));
+            eq(calls, 0, 'the binding was resolved inside the handler');
+        } finally {
+            Keybindings.resolve = real;
+        }
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('the hotkey fires on its own combination and on nothing else', () => {
+    withTyperPage(({ ui }) => {
+        ui.applyHotkey();
+
+        const plain = keyPress('KeyC');
+        ui.onHotkey(plain);
+        eq(plain.defaulted, undefined, 'a bare letter was swallowed on a typing test');
+        eq(ui.caretMode(), 'site');
+
+        const combo = keyPress('KeyC', { ctrl: true, alt: true });
+        ui.onHotkey(combo);
+        eq(combo.defaulted, true, 'the key was left to the page');
+        eq(ui.caretMode(), 'bar', 'the shape did not move on');
+    }, { quote: 'the quick brown fox jumps over it' });
+});
+check('a rebind reaches the page rather than waiting for the next load', () => {
+    // Which is why 'shortcuts' is in main.js's TYPER_SURFACES list: the
+    // binding is cached, so something has to go and take it again.
+    const main = require('fs').readFileSync(`${__dirname}/../src/content/main.js`, 'utf8');
+    const listed = /const TYPER_SURFACES = \[([\s\S]*?)\];/.exec(main)[1];
+    assert(listed.includes("'shortcuts'"), 'a rebound caret key would not reach an open tab');
+
+    withTyperPage(({ ui }) => {
+        ui.applyHotkey();
+        const moved = keyPress('KeyK', { ctrl: true, alt: true });
+        ui.onHotkey(moved);
+        eq(moved.defaulted, true, 'the rebound key did nothing');
+    }, {
+        quote: 'the quick brown fox jumps over it',
+        settings: { shortcuts: { 'typer-caret': { combo: { ctrl: true, alt: true, code: 'KeyK', key: 'k' } } } },
+    });
+});
+check('a binding turned off is a key the page keeps', () => {
+    withTyperPage(({ ui }) => {
+        ui.applyHotkey();
+        const combo = keyPress('KeyC', { ctrl: true, alt: true });
+        ui.onHotkey(combo);
+        eq(combo.defaulted, undefined);
+        eq(ui.caretMode(), 'site');
+    }, {
+        quote: 'the quick brown fox jumps over it',
+        settings: { shortcuts: { 'typer-caret': { enabled: false } } },
+    });
 });
 
 // ------------------------------------------------------------ activity
