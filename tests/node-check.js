@@ -1663,6 +1663,53 @@ check('the results panel appearing files the race', () => {
         eq(race.seconds, 3.6);
     }, { quote: 'the quick brown fox jumps over it' });
 });
+check('a quote typed to the end is a finished race, scoreboard or not', () => {
+    const quote = 'the quick brown fox jumps';
+    withTyperPage(({ ui, pass, type, written, wait }) => {
+        pass();
+        type(quote);
+        pass();
+        eq(written.length, 0, 'the scoreboard is still worth a moment’s wait');
+        wait(TyperUi.RESULT_WAIT_MS);
+        pass();
+        eq(written.length, 1, 'a race with no results panel was left open');
+        eq(written[0].race.chars, quote.length);
+        eq(written[0].race.wpm, null, 'a speed was invented rather than left to the store');
+        eq(ui.currentRace(), null);
+    }, { quote });
+});
+check('a quote ending on a wrong character is not finished until it is fixed', () => {
+    const quote = 'the quick brown fox jumps';
+    withTyperPage(({ ui, pass, type, written, wait }) => {
+        pass();
+        type(`${quote.slice(0, -1)}x`);
+        wait(TyperUi.RESULT_WAIT_MS);
+        pass();
+        eq(written.length, 0, 'a box still holding a mistake was taken as the finish');
+        type('<s');
+        wait(TyperUi.RESULT_WAIT_MS);
+        pass();
+        eq(written.length, 1);
+        eq(ui.currentRace(), null);
+    }, { quote });
+});
+check('the last race’s scoreboard neither ends this one nor is filed with it', () => {
+    // It used to end the new race on the first pass, too short to bank, and
+    // the whole race went with it.
+    withTyperPage(({ page, pass, type, written, wait }) => {
+        page.results = { wpm: 61, accuracy: 90, place: 3, of: 4 };
+        page.quoteId = '111';
+        pass();
+        type('the quick brown fox jumps');
+        pass();
+        eq(written.length, 0, 'a stale panel ended the race');
+        wait(TyperUi.RESULT_WAIT_MS);
+        pass();
+        eq(written.length, 1);
+        eq(written[0].race.wpm, null, 'the old race’s speed was filed against this one');
+        eq(written[0].race.quoteId, '', 'and its quote id');
+    }, { quote: 'the quick brown fox jumps' });
+});
 check('a false start is not a race', () => {
     withTyperPage(({ page, pass, type, written }) => {
         pass();

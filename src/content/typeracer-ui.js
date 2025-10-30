@@ -84,6 +84,16 @@
     const MIN_RACE_CHARS = 10;
 
     /**
+     * How long a quote typed to the end waits for the scoreboard.
+     *
+     * The keystrokes already say the race is over — every character is in
+     * and none of them is wrong — so the results panel is only waited for as
+     * the cross-check it is. A renamed panel, or a practice run with none,
+     * used to leave the race open until the next quote turned up.
+     */
+    const RESULT_WAIT_MS = 1000;
+
+    /**
      * The stream cannot grow past this.
      *
      * A quote is about three hundred characters and the worst imaginable race
@@ -175,10 +185,24 @@
             const ok = ch === expected;
             race.events.push({ ch, expected, at, ok });
             if (soundOn) keySound(ch, ok, race.depth);
+            race.marks[race.depth] = ok;
+            if (!ok) race.wrong++;
             race.depth++;
             if (!race.startedAt) race.startedAt = at;
             race.lastAt = at;
+            if (race.depth === race.quote.length && race.wrong === 0 && !race.doneAt) {
+                // The last character, and nothing wrong left in the box.
+                race.doneAt = at;
+                watcher.schedule();
+            }
             scheduleCaret();
+        }
+
+        /** One character taken back off the end. */
+        function uncommit(at) {
+            race.events.push({ del: true, at });
+            race.depth--;
+            if (race.marks[race.depth] === false) race.wrong--;
         }
 
         /**
@@ -248,10 +272,7 @@
             if (type === 'deleteContentBackward' || type === 'deleteWordBackward' ||
                 type === 'deleteByCut' || type === 'deleteContentForward') {
                 let gone = deletedCount(event.target, type);
-                while (gone-- > 0 && race.depth > 0) {
-                    race.events.push({ del: true, at });
-                    race.depth--;
-                }
+                while (gone-- > 0 && race.depth > 0) uncommit(at);
             }
         }
 
@@ -440,7 +461,16 @@
         // ---------------------------------------------------- the race
 
         function startRace(quote) {
-            race = { quote, input: null, events: [], depth: 0, startedAt: 0, lastAt: 0 };
+            race = {
+                quote, input: null, events: [], depth: 0, startedAt: 0, lastAt: 0,
+                // Whether each position went in right, and how many in the box
+                // are wrong now — which is what says the quote is finished.
+                marks: [], wrong: 0, doneAt: 0,
+                // A scoreboard already on the page belongs to the last race.
+                // It used to end this one the moment it started, too short to
+                // bank, and the whole race was lost.
+                staleResults: TyperRead.find('results'),
+            };
             lastQuote = quote;
             if (soundOn) Sfx.play('start', { volume: soundVolume });
         }
@@ -452,13 +482,17 @@
          * This is the only place the page is read on behalf of a race, and the
          * only place anything is written to storage — both at a moment when
          * nobody is typing.
+         *
+         * `scoreboard` false is a race ended without a results panel of its
+         * own on the page. The one there, if any, is the last race's, and its
+         * numbers must not be filed against this one.
          */
-        function finishRace() {
+        function finishRace(scoreboard = true) {
             const done = race;
             race = null;
             if (!done || done.depth < MIN_RACE_CHARS) return null;
 
-            const result = TyperRead.readResult();
+            const result = scoreboard ? TyperRead.readResult() : { wpm: null, accuracy: null, place: null, of: null };
             const seconds = done.lastAt > done.startedAt ? (done.lastAt - done.startedAt) / 1000 : 0;
 
             const record = {
@@ -469,7 +503,7 @@
                 of: result.of,
                 seconds,
                 chars: done.depth,
-                quoteId: TyperRead.quoteId(),
+                quoteId: scoreboard ? TyperRead.quoteId() : '',
             };
             const written = Typer.record(record, done.events);
             if (soundOn) endSound(written);
@@ -517,13 +551,15 @@
             }
 
             if (race) {
-                if (TyperRead.find('results')) {
-                    finishRace();
+                const results = TyperRead.find('results');
+                const fresh = !!results && results !== race.staleResults;
+                const now = performance.now();
+                if (fresh || (race.doneAt && now - race.doneAt >= RESULT_WAIT_MS)) {
+                    finishRace(fresh);
                     // The quote is gone, so there is nothing to point at.
                     teardownCaret();
                     return false;
                 }
-                const now = performance.now();
                 if (now - sampledAt < QUOTE_SAMPLE_MS) return false;
                 sampledAt = now;
                 const quote = TyperRead.quoteText();
@@ -531,7 +567,7 @@
                 // having started without a scoreboard in between. What was
                 // typed so far belongs to the old one.
                 if (quote && quote !== race.quote) {
-                    finishRace();
+                    finishRace(fresh);
                     startRace(quote);
                 }
                 return false;
@@ -631,7 +667,7 @@
     }
 
     const TyperUi = {
-        createTyperUi, QUOTE_SAMPLE_MS, MIN_RACE_CHARS, MAX_EVENTS, CARET_MISSES,
+        createTyperUi, QUOTE_SAMPLE_MS, MIN_RACE_CHARS, RESULT_WAIT_MS, MAX_EVENTS, CARET_MISSES,
         SHAPES, CARET_CLASS, CARET_ON, ANCHOR_ATTR, deletedCount,
     };
 
