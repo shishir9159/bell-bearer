@@ -32,7 +32,7 @@
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
         CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
         Keybindings, SkimContent, LinkHints, TimeLimitContent, TwitterUi, TwitterAds,
-        RosterContent, LeetUi, TyperUi } = BB;
+        RosterContent, LeetUi, TyperUi, Reader } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -122,6 +122,7 @@
         startRecording: () => recorder.startRecording(),
         stopRecording: () => recorder.stopRecording(),
         toggleSegment: () => recorder.toggleSegment(),
+        toggleReader: () => reader && reader.toggle(),
         openSkim: (source) => skim.show(source),
         openHints,
         // Two sites draw a pouch, and the shortcut opens whichever one this
@@ -169,6 +170,10 @@
                 sendResponse({ ok: !!getVideoElement(), rate: player.currentRate() });
                 break;
 
+            case 'openReader':
+                sendResponse({ ok: !!reader && reader.open() });
+                break;
+
             case 'copyMarkdownLink':
                 markdown.copy(markdown.buildPageMarkdown()).then((ok) => {
                     if (ok) notify('Copied page as Markdown link', 'success');
@@ -195,6 +200,8 @@
     let twitterAds = null;
     let leetUi = null;
     let typerUi = null;
+    /** The YouTube reader; built on YouTube only, and opened on demand. */
+    let reader = null;
 
     /** Whichever site's pouch surface this page has, or null for the rest. */
     function pouchUi() {
@@ -213,6 +220,8 @@
 
         Theme.installYouTubeSync(() => settings.syncThemeWithYouTube);
 
+        reader = Reader.createReader({ watcher, getVideo, transcripts });
+
         // YouTube is a single-page app: it fires yt-navigate-finish instead of
         // reloading. `loadstart` is the belt-and-braces path for the cases where
         // the player swaps its source without a navigation event.
@@ -220,6 +229,7 @@
         const onPageChange = () => {
             youtubeUi.onNavigate();
             const id = PageInfo.getVideoId();
+            reader.onNavigate(id);
             if (!id || id === lastVideoId) return;
             lastVideoId = id;
             transcripts.prefetch(id);

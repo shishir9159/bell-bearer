@@ -49,6 +49,9 @@
         { id: 'speed-up', scope: 'youtube', kind: 'key', label: 'Increase playback speed', combo: { shift: true, code: 'Period', key: '>', char: true } },
         { id: 'speed-down', scope: 'youtube', kind: 'key', label: 'Decrease playback speed', combo: { shift: true, code: 'Comma', key: '<', char: true } },
         { id: 'speed-reset', scope: 'youtube', kind: 'key', label: 'Reset playback speed to 1x', combo: { key: '+', char: true } },
+        // Ctrl+Alt, the cluster chess and LeetCode already use: the bare-Shift
+        // letters belong to Skim, and Ctrl+Shift+R is the browser's reload.
+        { id: 'reader-mode', scope: 'youtube', kind: 'key', label: 'Open or close the distraction-free reader', combo: { ctrl: true, alt: true, code: 'KeyR', key: 'r' } },
 
         { id: 'chess-clear-arrows', scope: 'chess', kind: 'key', label: 'Clear every arrow drawn on the board', combo: { alt: true, code: 'KeyC', key: 'c' } },
 

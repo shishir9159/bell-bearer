@@ -88,6 +88,7 @@
             ['speed-up', { enabled: hasVideo, run: () => actions.faster() }],
             ['speed-down', { enabled: hasVideo, run: () => actions.slower() }],
             ['speed-reset', { enabled: hasVideo, run: () => actions.resetSpeed() }],
+            ['reader-mode', { noRepeat: true, enabled: canRecord, run: () => actions.toggleReader && actions.toggleReader() }],
         ];
 
         return rows.map(([name, row]) => ({

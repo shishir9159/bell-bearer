@@ -71,6 +71,7 @@
         "src/content/markdown.js",
         "src/content/pouch-sheet.js",
         "src/content/youtube-ui.js",
+        "src/content/reader.js",
         "src/content/twitter-page.js",
         "src/content/twitter-panel.js",
         "src/content/twitter-ui.js",
