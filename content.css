@@ -2999,6 +2999,28 @@ html.bb-reader-open body { overflow: hidden !important; }
 }
 
 
+/* YouTube writes the player's size, and the video box's, as inline styles
+   worked out for wherever it last laid itself out. The screen is the size
+   now, so both are told to fill it; the resize event reader.js sends lets
+   YouTube catch its control bar up. */
+.bb-reader-screen #movie_player {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.bb-reader-screen #movie_player video.html5-main-video {
+    width: 100% !important;
+    height: 100% !important;
+    left: 0 !important;
+    top: 0 !important;
+    object-fit: contain;
+}
+
+/* The slot left where the player was: nothing, and it takes up nothing. */
+#bb-reader-slot { display: none; }
+
 .bb-reader-side {
     min-width: 0;
     border-left: 1px solid var(--bb-border);
