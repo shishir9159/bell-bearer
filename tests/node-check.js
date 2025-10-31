@@ -167,6 +167,52 @@ check('a checkpoint at t=0 is kept', () => {
     eq(out.added, 1);
     eq(out.videos[0].bookmarks.length, 1);
 });
+check('two checkpoints starting in the same second both survive', () => {
+    // The regression test for the collision: de-duplicating by whole second
+    // silently dropped the second of two highlights made close together.
+    const video = { id: 'v', title: 'V', url: 'u' };
+    let out = Bookmarks.addBookmarks([], video, [{ id: 'a', time: 62, start: 62.1, end: 64 }]);
+    out = Bookmarks.addBookmarks(out.videos, video, [{ id: 'b', time: 62, start: 62.7, end: 66 }]);
+    eq(out.added, 1);
+    eq(out.videos[0].bookmarks.map((b) => b.id), ['a', 'b']);
+});
+check('the same id twice is one checkpoint', () => {
+    const video = { id: 'v', title: 'V', url: 'u' };
+    const first = Bookmarks.addBookmarks([], video, [{ id: 'a', time: 5 }]);
+    const again = Bookmarks.addBookmarks(first.videos, video, [{ id: 'a', time: 90, note: 'edited elsewhere' }]);
+    eq(again.added, 0, 're-importing an export added its own checkpoints a second time');
+});
+check('records from before ids still de-duplicate by time', () => {
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [{ time: 30, start: 30, end: 34 }] }];
+    const out = Bookmarks.addBookmarks(videos, { id: 'v' }, [{ time: 30, start: 30, end: 40 }]);
+    eq(out.added, 0, 'two id-less records in the same second are one, as they always were');
+});
+check('a new checkpoint is not swallowed by an old one in the same second', () => {
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [{ time: 30, start: 30, end: 34 }] }];
+    eq(Bookmarks.addBookmarks(videos, { id: 'v' }, [{ id: 'n', time: 30, start: 30, end: 38 }]).added, 1);
+    eq(Bookmarks.addBookmarks(videos, { id: 'v' }, [{ id: 'n', time: 30, start: 30, end: 34 }]).added, 0,
+        'but the very same span is the same checkpoint');
+});
+check('removing by id takes the right one when three share a second', () => {
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [
+        { id: 'a', time: 7 }, { id: 'b', time: 7 }, { id: 'c', time: 7 } ] }];
+    eq(Bookmarks.removeBookmarkById(videos, 'v', 'b')[0].bookmarks.map((b) => b.id), ['a', 'c']);
+    eq(Bookmarks.removeBookmarkById(videos, 'v', 'zz'), videos, 'an unknown id changes nothing');
+});
+check('a record from before ids can still be edited and removed', () => {
+    const old = { time: 12, start: 12, end: 15, timestamp: 1700000000000, note: 'n' };
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [old, { id: 'x', time: 12 }] }];
+    const key = Bookmarks.bookmarkKey(old);
+    const edited = Bookmarks.editBookmark(videos, 'v', key, { note: 'changed' });
+    eq(edited[0].bookmarks[0].note, 'changed');
+    eq(Bookmarks.bookmarkKey(edited[0].bookmarks[0]), key, 'editing the note moved the handle');
+    eq(Bookmarks.removeBookmarkById(edited, 'v', key)[0].bookmarks.map((b) => b.id), ['x']);
+});
+check('ids are unique across a tight loop', () => {
+    const ids = new Set();
+    for (let i = 0; i < 1000; i++) ids.add(Bookmarks.newId());
+    eq(ids.size, 1000);
+});
 check('removing the last checkpoint drops the video entry', () => {
     const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [{ time: 5 }] }];
     eq(Bookmarks.removeBookmark(videos, 'v', 0).length, 0);

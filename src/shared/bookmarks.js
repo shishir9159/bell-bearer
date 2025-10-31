@@ -7,8 +7,12 @@
  * script appended blindly. One implementation now backs all three surfaces.
  *
  * Shape on disk, under `youtubeBookmarks`:
- *   [{ id, title, url, bookmarks: [{ time, start?, end?, timestamp, note,
+ *   [{ id, title, url, bookmarks: [{ id?, time, start?, end?, timestamp, note,
  *                                    title?, subtitle? }] }]
+ *
+ * A checkpoint's own `id` is newer than the store. Everything written before
+ * it has none, and nothing is rewritten to give it one — see sameCheckpoint
+ * for how the two generations live side by side.
  */
 (function (root) {
     'use strict';
@@ -89,12 +93,58 @@
         return bookmarkTime(a) - bookmarkTime(b);
     }
 
+    let idCounter = 0;
+
+    /**
+     * A fresh checkpoint id — the same shape x-pouch.js mints. The counter
+     * is what keeps two made in the same millisecond apart, which a
+     * highlight made and then extended genuinely can be.
+     */
+    function newId() {
+        idCounter = (idCounter + 1) % 1296;
+        return `cp_${Date.now().toString(36)}${idCounter.toString(36).padStart(2, '0')}`;
+    }
+
+    /**
+     * Whether two records are the same checkpoint.
+     *
+     * This used to be "starts in the same whole second", and a second
+     * checkpoint beginning in that second was silently dropped. Holding
+     * Ctrl+B that was rare; highlighting transcript lines one after another
+     * it is constant. So an id decides whenever both sides have one.
+     *
+     * The fallbacks are the compatibility, and there is no migration behind
+     * them. Two records without ids still compare by time, exactly as they
+     * always have, so re-importing an old export adds nothing. A record with
+     * an id against one without has to match the whole span, not just where
+     * it starts — a new highlight must not vanish because an old checkpoint
+     * happens to begin in the same second. Please do not "simplify" this
+     * back to a set of times.
+     */
+    function sameCheckpoint(a, b) {
+        if (a.id && b.id) return a.id === b.id;
+        if (!a.id && !b.id) return bookmarkTime(a) === bookmarkTime(b);
+        return bookmarkTime(a) === bookmarkTime(b) && a.start === b.start && a.end === b.end;
+    }
+
+    /**
+     * A handle on one checkpoint that survives the list being re-sorted: its
+     * id, or for a record from before ids, the fields that never change after
+     * it is made. The note and title are edited, so they are not part of it.
+     */
+    function bookmarkKey(bookmark) {
+        if (!bookmark) return '';
+        if (bookmark.id) return String(bookmark.id);
+        return `t:${bookmarkTime(bookmark)}:${bookmark.start}:${bookmark.end}:${bookmark.timestamp}`;
+    }
+
     /**
      * Add checkpoints to a video, creating its entry when new.
      *
      * De-duplicates against every existing checkpoint rather than only the
      * neighbouring one: the old adjacent-pair filter left duplicates behind
-     * whenever a re-import interleaved times.
+     * whenever a re-import interleaved times. What counts as a duplicate is
+     * sameCheckpoint's call.
      */
     function addBookmarks(videos, video, newBookmarks) {
         const list = Array.isArray(newBookmarks) ? newBookmarks.filter(isBookmark) : [];
@@ -111,12 +161,9 @@
         }
 
         const entry = next[index];
-        const seen = new Set(entry.bookmarks.map(bookmarkTime));
         let added = 0;
         for (const bookmark of list) {
-            const at = bookmarkTime(bookmark);
-            if (seen.has(at)) continue;
-            seen.add(at);
+            if (entry.bookmarks.some((existing) => sameCheckpoint(existing, bookmark))) continue;
             entry.bookmarks.push(bookmark);
             added++;
         }
@@ -132,10 +179,40 @@
         const video = videos[index];
         if (bookmarkIndex < 0 || bookmarkIndex >= video.bookmarks.length) return videos;
 
-        const bookmarks = video.bookmarks.filter((_, i) => i !== bookmarkIndex);
+        return withBookmarks(videos, index, video.bookmarks.filter((_, i) => i !== bookmarkIndex));
+    }
+
+    /**
+     * Remove one checkpoint by its bookmarkKey. The reader re-sorts and
+     * re-renders its list under the user, so an index into it is not a
+     * stable handle the way it is in the popup's fixed list.
+     */
+    function removeBookmarkById(videos, videoId, key) {
+        const index = videos.findIndex((v) => v.id === videoId);
+        if (index === -1 || !key) return videos;
+        const bookmarks = videos[index].bookmarks.filter((bookmark) => bookmarkKey(bookmark) !== key);
+        if (bookmarks.length === videos[index].bookmarks.length) return videos;
+        return withBookmarks(videos, index, bookmarks);
+    }
+
+    /** Change fields on one checkpoint, found by its bookmarkKey. */
+    function editBookmark(videos, videoId, key, patch) {
+        const index = videos.findIndex((v) => v.id === videoId);
+        if (index === -1 || !key) return videos;
+        let changed = false;
+        const bookmarks = videos[index].bookmarks.map((bookmark) => {
+            if (bookmarkKey(bookmark) !== key) return bookmark;
+            changed = true;
+            return { ...bookmark, ...patch };
+        });
+        return changed ? withBookmarks(videos, index, bookmarks) : videos;
+    }
+
+    /** `videos` with one entry's list replaced, and the entry gone when it is empty. */
+    function withBookmarks(videos, index, bookmarks) {
         const next = videos.slice();
         if (bookmarks.length === 0) next.splice(index, 1);
-        else next[index] = { ...video, bookmarks };
+        else next[index] = { ...videos[index], bookmarks };
         return next;
     }
 
@@ -286,6 +363,7 @@
         KEY, EXPORT_VERSION,
         load, save, update,
         normalizeVideos, bookmarkTime, addBookmarks, removeBookmark,
+        newId, sameCheckpoint, bookmarkKey, removeBookmarkById, editBookmark,
         lastSaved, sortVideos, SORTS,
         buildExport, validateImport, mergeImported, parseTimestampLinks,
     };

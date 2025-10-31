@@ -147,14 +147,20 @@
          * Goes through Bookmarks.update so the read-modify-write is atomic: the
          * old code read the whole list, appended, and wrote it back, so a save
          * racing the dashboard's save silently dropped one of them.
+         *
+         * Every path mints its id here, so a checkpoint cannot be saved
+         * without one. Resolves to the record as saved, or null.
          */
         async function save(video, bookmark) {
+            const record = { id: Bookmarks.newId(), ...bookmark };
             try {
                 await Bookmarks.update((videos) =>
-                    Bookmarks.addBookmarks(videos, video, [bookmark]).videos);
+                    Bookmarks.addBookmarks(videos, video, [record]).videos);
+                return record;
             } catch (error) {
                 console.error('Bell Bearer: could not save checkpoint', error);
                 notify('Could not save the checkpoint', 'error');
+                return null;
             }
         }
 
