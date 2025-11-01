@@ -3076,6 +3076,49 @@ html.bb-reader-open body { overflow: hidden !important; }
 }
 
 .bb-rt-row.is-active { background: var(--bb-accent-soft); }
+
+/* Inside the reader rather than our page-wide toast, because it carries a
+   button: Undo has to be where the selection was just made. */
+.bb-reader-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: min(560px, calc(100% - 32px));
+    padding: 10px 12px 10px 16px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r);
+    background: var(--bb-panel-solid);
+    box-shadow: var(--bb-shadow);
+    animation: bb-fade .16s ease-out;
+}
+
+.bb-reader-toast[hidden] { display: none; }
+
+.bb-reader-toast-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bb-reader-toast-act {
+    flex: none;
+    padding: 6px 12px;
+    border: 0;
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-btn-fill);
+    color: var(--bb-btn-text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bb-reader-toast-act:hover { background: var(--bb-btn-fill-hover); }
+.bb-reader-toast-act[hidden] { display: none; }
 .bb-rt-row.is-active .bb-rt-time { color: var(--bb-accent); }
 
 .bb-reader-empty { margin: 24px; color: var(--bb-sub); }

@@ -269,6 +269,61 @@ check('row text is escaped', () => {
     assert(html.includes('second &lt;line&gt;'), 'a caption could inject markup');
     assert(/data-i="2" data-start="6"/.test(html));
 });
+/**
+ * Rows shaped the way rowsHtml draws them — a container of <p>s with the
+ * markup's whitespace between them — as bare objects, so a range can be
+ * pointed at any node in it.
+ */
+function fakeRows(count) {
+    const container = { nodeType: 1, classList: { contains: () => false }, childNodes: [] };
+    container.querySelectorAll = () => container.childNodes.filter((n) => n.row);
+    const rows = [];
+    for (let i = 0; i < count; i++) {
+        const row = { nodeType: 1, row: true, parentNode: container, dataset: { i: String(i) },
+            classList: { contains: (c) => c === ReaderTranscript.ROW_CLASS } };
+        row.text = { nodeType: 3, parentNode: { nodeType: 1, classList: { contains: () => false }, parentNode: row } };
+        container.childNodes.push({ nodeType: 3, parentNode: container }, row);
+        rows.push(row);
+    }
+    container.childNodes.push({ nodeType: 3, parentNode: container });
+    return { container, rows };
+}
+
+const RANGE_ENTRIES = [
+    { start: 0, end: 3, text: 'a' }, { start: 3, end: 6.5, text: 'b' },
+    { start: 6, end: 9, text: 'c' }, { start: 9, end: 12, text: 'd' },
+];
+
+check('a selection inside one line covers that line', () => {
+    const { rows } = fakeRows(4);
+    const range = { collapsed: false, startContainer: rows[1].text, startOffset: 2, endContainer: rows[1].text, endOffset: 5 };
+    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES), { first: 1, last: 1, start: 3, end: 6 },
+        'the overlap into the next caption was kept as part of this one');
+});
+check('a selection across three lines runs from the first start to the last end', () => {
+    const { rows } = fakeRows(4);
+    const range = { collapsed: false, startContainer: rows[0].text, startOffset: 4, endContainer: rows[2].text, endOffset: 1 };
+    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES), { first: 0, last: 2, start: 0, end: 9 });
+});
+check('a drag let go in the whitespace past the last line ends on that line', () => {
+    const { container, rows } = fakeRows(4);
+    const range = { collapsed: false, startContainer: rows[2].text, startOffset: 0,
+        endContainer: container, endOffset: container.childNodes.length };
+    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES).last, 3);
+});
+check('a triple-click does not take the next line with it', () => {
+    // Chrome ends a triple-clicked paragraph at offset 0 of the one after.
+    const { rows } = fakeRows(4);
+    const range = { collapsed: false, startContainer: rows[1].text, startOffset: 0, endContainer: rows[2].text, endOffset: 0 };
+    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES).last, 1);
+});
+check('a collapsed or foreign selection is no range at all', () => {
+    const { rows } = fakeRows(2);
+    eq(ReaderTranscript.selectionToRange({ collapsed: true, startContainer: rows[0].text }, RANGE_ENTRIES), null);
+    const elsewhere = { nodeType: 3, parentNode: null };
+    eq(ReaderTranscript.selectionToRange({ collapsed: false, startContainer: elsewhere, startOffset: 0,
+        endContainer: elsewhere, endOffset: 1 }, RANGE_ENTRIES), null);
+});
 check('a text node is walked up to its row', () => {
     const row = { nodeType: 1, classList: { contains: (c) => c === ReaderTranscript.ROW_CLASS }, dataset: { i: '4' } };
     const span = { nodeType: 1, classList: { contains: () => false }, parentNode: row };

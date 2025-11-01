@@ -228,6 +228,9 @@
         // Whether the transcript scrolls itself to the line being spoken.
         // Scrolling it yourself still pauses this for a few seconds.
         readerFollow: true,
+        // Selecting transcript text saves it as a checkpoint straight away,
+        // with an Undo. Off, the same selection offers a Save button instead.
+        readerAutoCheckpoint: true,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

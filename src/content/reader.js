@@ -27,6 +27,7 @@
     const Dom = ns.Dom || req('../shared/dom.js');
     const Theme = ns.Theme || req('./theme.js');
     const ReaderTranscript = ns.ReaderTranscript || req('./reader-transcript.js');
+    const Bookmarks = ns.Bookmarks || req('../shared/bookmarks.js');
 
     const ROOT_ID = 'bb-reader';
     const SLOT_ID = 'bb-reader-slot';
@@ -41,6 +42,9 @@
      * find your place and short enough that it catches up again on its own.
      */
     const HANDS_OFF_MS = 4000;
+
+    /** How long the checkpoint toast, and its Undo, stays up. */
+    const TOAST_MS = 6000;
 
     /** Keys that scroll the column, which count as the user scrolling it. */
     const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
@@ -60,10 +64,12 @@
                         <p class="bb-reader-empty">Loading the transcript…</p>
                     </section>
                 </aside>
-            </div>`;
+            </div>
+            <div class="bb-reader-toast" role="status" aria-live="polite" hidden><span
+                 class="bb-reader-toast-text"></span><button type="button" class="bb-reader-toast-act"></button></div>`;
     }
 
-    function createReader({ player, watcher, getVideo, getSettings, transcripts }) {
+    function createReader({ player, watcher, getVideo, getSettings, transcripts, recorder }) {
         /**
          * The open reader, or null. A fresh object per open, so an answer that
          * arrives after a close — the transcript fetch, the skin read — can
@@ -194,6 +200,17 @@
             column.addEventListener('wheel', handsOff, { passive: true });
             column.addEventListener('touchmove', handsOff, { passive: true });
             column.addEventListener('keydown', (event) => { if (SCROLL_KEYS.has(event.key)) handsOff(); });
+            // Let go of the mouse, or of Shift after selecting with the keys:
+            // the selection is finished, and only then is it read. Watching
+            // selectionchange for a quiet moment instead would save half a
+            // passage whenever the drag paused with the button still held.
+            column.addEventListener('pointerup', onSelectEnd);
+            column.addEventListener('keyup', (event) => { if (event.key === 'Shift') onSelectEnd(); });
+            element.querySelector('.bb-reader-toast-act').addEventListener('click', () => {
+                const act = mine.toastAction;
+                hideToast();
+                if (act) act();
+            });
             document.addEventListener('fullscreenchange', onFullscreen);
 
             // YouTube reparents its player on some navigations. The task takes
@@ -255,6 +272,84 @@
             follow(video.currentTime);
         }
 
+        // ------------------------------------------ highlight to checkpoint
+
+        /**
+         * Deferred a turn, so the click that ended a drag has settled it. A
+         * timeout rather than a frame: a frame only comes when something on
+         * screen changes, and a finished selection changes nothing.
+         */
+        function onSelectEnd() {
+            const mine = session;
+            setTimeout(() => { if (mine.alive) captureSelection(); }, 0);
+        }
+
+        function captureSelection() {
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed || !selection.rangeCount) return;
+            const range = selection.getRangeAt(0);
+            const column = session.element.querySelector('.bb-reader-transcript');
+            if (!column.contains(range.commonAncestorContainer)) return;
+
+            const span = ReaderTranscript.selectionToRange(range, session.entries);
+            const text = ReaderTranscript.rangeText(range);
+            if (!span || !text) return;
+            const video = getVideo();
+            if (!video || video.id !== session.videoId) return;
+
+            const highlight = { video, start: span.start, end: span.end, text };
+            if (getSettings().readerAutoCheckpoint === false) {
+                showToast(`“${clip(text)}”`, 'Save as checkpoint', () => saveHighlight(highlight, selection));
+                return;
+            }
+            saveHighlight(highlight, selection);
+        }
+
+        /**
+         * Saved on the spot, with an Undo right there. The Undo is what makes
+         * saving without asking safe enough to be the default: without it the
+         * gesture is a commitment, and people stop using it.
+         */
+        async function saveHighlight(highlight, selection) {
+            const mine = session;
+            const saved = await recorder.saveHighlight(highlight);
+            if (!mine.alive) return;
+            if (!saved) {
+                showToast('Could not save the checkpoint');
+                return;
+            }
+            if (selection) selection.removeAllRanges();
+            if (saved.repeat) {
+                showToast('Already a checkpoint');
+                return;
+            }
+            const id = saved.record.id;
+            showToast(`Checkpoint saved: “${clip(highlight.text)}”`, 'Undo', () => {
+                Bookmarks.update((videos) => Bookmarks.removeBookmarkById(videos, mine.videoId, id));
+            });
+        }
+
+        const clip = (text) => (text.length > 48 ? `${text.slice(0, 47)}…` : text);
+
+        function showToast(message, actionLabel, action) {
+            const toast = session.element.querySelector('.bb-reader-toast');
+            const button = toast.querySelector('.bb-reader-toast-act');
+            toast.querySelector('.bb-reader-toast-text').textContent = message;
+            button.textContent = actionLabel || '';
+            button.hidden = !actionLabel;
+            session.toastAction = action || null;
+            toast.hidden = false;
+            clearTimeout(session.toastTimer);
+            session.toastTimer = setTimeout(hideToast, TOAST_MS);
+        }
+
+        function hideToast() {
+            if (!session) return;
+            clearTimeout(session.toastTimer);
+            session.toastAction = null;
+            session.element.querySelector('.bb-reader-toast').hidden = true;
+        }
+
         function follow(t) {
             const index = ReaderTranscript.activeIndex(session.entries, t);
             if (index === session.active) return;
@@ -287,6 +382,7 @@
             if (!session) return;
             const done = session;
             done.alive = false;
+            clearTimeout(done.toastTimer);
             restore();
             session = null;
             document.removeEventListener('keydown', onKey, true);
