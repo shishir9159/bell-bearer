@@ -34,6 +34,17 @@
     /** On <html> while the reader is up; content.css keys everything off it. */
     const OPEN_CLASS = 'bb-reader-open';
 
+    /**
+     * How long the transcript leaves you alone after you scroll it yourself.
+     * A column that yanks itself back to the playing line while you are
+     * reading ahead of it is unusable, and four seconds is long enough to
+     * find your place and short enough that it catches up again on its own.
+     */
+    const HANDS_OFF_MS = 4000;
+
+    /** Keys that scroll the column, which count as the user scrolling it. */
+    const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
+
     function shellHtml(title) {
         const esc = Dom.escapeHtml;
         return `
@@ -52,7 +63,7 @@
             </div>`;
     }
 
-    function createReader({ watcher, getVideo, transcripts }) {
+    function createReader({ player, watcher, getVideo, getSettings, transcripts }) {
         /**
          * The open reader, or null. A fresh object per open, so an answer that
          * arrives after a close — the transcript fetch, the skin read — can
@@ -163,7 +174,9 @@
                 home: null,
                 lent: false,
                 entries: [],
+                rows: [],
                 active: -1,
+                handsOffAt: 0,
             };
             const mine = session;
 
@@ -173,6 +186,14 @@
 
             element.querySelector('.bb-reader-close').addEventListener('click', close);
             document.addEventListener('keydown', onKey, true);
+            document.addEventListener('timeupdate', onTime, { capture: true, passive: true });
+
+            const column = element.querySelector('.bb-reader-transcript');
+            column.addEventListener('click', onRowClick);
+            const handsOff = () => { mine.handsOffAt = Date.now(); };
+            column.addEventListener('wheel', handsOff, { passive: true });
+            column.addEventListener('touchmove', handsOff, { passive: true });
+            column.addEventListener('keydown', (event) => { if (SCROLL_KEYS.has(event.key)) handsOff(); });
             document.addEventListener('fullscreenchange', onFullscreen);
 
             // YouTube reparents its player on some navigations. The task takes
@@ -205,6 +226,57 @@
                 return;
             }
             column.innerHTML = `<div class="bb-rt-rows">${ReaderTranscript.rowsHtml(session.entries)}</div>`;
+            session.rows = Array.from(column.querySelectorAll(`.${ReaderTranscript.ROW_CLASS}`));
+            follow(player.currentTime());
+        }
+
+        // ------------------------------------------ seeking and following
+
+        /** A click on a row plays from it — unless it ended a selection. */
+        function onRowClick(event) {
+            const selection = window.getSelection();
+            if (selection && !selection.isCollapsed) return;
+            const row = ReaderTranscript.rowAt(event.target);
+            const entry = row && session.entries[ReaderTranscript.indexOf(row)];
+            if (entry) player.seekTo(entry.start);
+        }
+
+        /**
+         * The one timeupdate listener, in the shape the watched-video tracker
+         * in main.js was fixed into: work out the row from the time alone — a
+         * binary search, no layout read — and return straight away unless it
+         * changed. Only a change touches the DOM, which is a few times a
+         * minute rather than four times a second.
+         */
+        function onTime(event) {
+            if (!session || !session.rows.length) return;
+            const video = event.target;
+            if (!session.player || !session.player.contains(video)) return;
+            follow(video.currentTime);
+        }
+
+        function follow(t) {
+            const index = ReaderTranscript.activeIndex(session.entries, t);
+            if (index === session.active) return;
+            const before = session.rows[session.active];
+            const after = session.rows[index];
+            session.active = index;
+            if (before) before.classList.remove('is-active');
+            if (!after) return;
+            after.classList.add('is-active');
+            if (getSettings().readerFollow === false) return;
+            if (Date.now() - session.handsOffAt < HANDS_OFF_MS) return;
+            // The column is scrolled, not the row "into view": scrollIntoView
+            // also scrolls every ancestor that can be, and YouTube's page
+            // under the reader is one of them — it came back from the reader
+            // somewhere other than where it was left.
+            const column = after.offsetParent;
+            if (!column) return;
+            const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            column.scrollTo({
+                top: after.offsetTop - (column.clientHeight - after.offsetHeight) / 2,
+                behavior: still ? 'auto' : 'smooth',
+            });
         }
 
         /**
@@ -218,6 +290,7 @@
             restore();
             session = null;
             document.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('timeupdate', onTime, { capture: true });
             document.removeEventListener('fullscreenchange', onFullscreen);
             watcher.remove('reader-player');
             done.element.remove();
@@ -263,7 +336,7 @@
         };
     }
 
-    const Reader = { createReader, ROOT_ID, SLOT_ID, PLAYER_ID, OPEN_CLASS };
+    const Reader = { createReader, ROOT_ID, SLOT_ID, PLAYER_ID, OPEN_CLASS, HANDS_OFF_MS };
 
     root.BB = root.BB || {};
     root.BB.Reader = Reader;

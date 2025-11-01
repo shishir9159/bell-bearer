@@ -3029,7 +3029,11 @@ html.bb-reader-open body { overflow: hidden !important; }
     border-left: 1px solid var(--bb-border);
 }
 
+/* Positioned so it is every row's offsetParent: follow-along scrolls this
+   column by a row's offsetTop, and against any other ancestor the number
+   would be off by everything above the column. */
 .bb-reader-transcript {
+    position: relative;
     flex: 1;
     min-height: 0;
     overflow-y: auto;

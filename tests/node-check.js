@@ -2784,6 +2784,18 @@ check('nothing measured yet is no drill rather than an empty one', () => {
 });
 
 console.log('\n# typeracer — the settings panel');
+check('every reader setting has a control carrying its key as an id', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const keys = globalThis.BB.Settings.KEYS.filter((key) => /^reader/.test(key));
+    assert(keys.length, 'no reader settings at all');
+    // In the YouTube panel, which is where the reader is — the panel runs
+    // from its own id to the next settings section or the scripts.
+    const from = html.indexOf('id="youtubeSettingsPanel"');
+    const next = html.indexOf('class="settings-section"', from);
+    const panel = html.slice(from, next === -1 ? html.indexOf('<script', from) : next);
+    const controls = new Set([...panel.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+    for (const key of keys) assert(controls.has(key), `${key} has no control in the YouTube panel`);
+});
 check('every typeracer setting has a control carrying its key as an id', () => {
     // This is the whole binding. src/page/settings-form.js matches a control
     // to a setting by id and nothing else, so a setting with no element is a

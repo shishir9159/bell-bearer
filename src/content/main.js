@@ -220,7 +220,7 @@
 
         Theme.installYouTubeSync(() => settings.syncThemeWithYouTube);
 
-        reader = Reader.createReader({ watcher, getVideo, transcripts });
+        reader = Reader.createReader({ player, watcher, getVideo, getSettings: () => settings, transcripts });
 
         // YouTube is a single-page app: it fires yt-navigate-finish instead of
         // reloading. `loadstart` is the belt-and-braces path for the cases where

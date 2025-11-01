@@ -219,6 +219,15 @@
         // a weak spot rather than hidden as noise. Below three there is no
         // mean worth the name — one slow morning is the whole figure.
         typerMinSamples: 8,
+
+        // The YouTube reader (src/content/reader.js). What it opens in and
+        // how its transcript column reads; the player's size in each layout
+        // is set by dragging, so it lives in DATA.readerSizes rather than
+        // here, where a control would have nothing to bind to.
+        //
+        // Whether the transcript scrolls itself to the line being spoken.
+        // Scrolling it yourself still pauses this for a few seconds.
+        readerFollow: true,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
