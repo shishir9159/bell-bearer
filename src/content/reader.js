@@ -26,6 +26,7 @@
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
     const Theme = ns.Theme || req('./theme.js');
+    const ReaderTranscript = ns.ReaderTranscript || req('./reader-transcript.js');
 
     const ROOT_ID = 'bb-reader';
     const SLOT_ID = 'bb-reader-slot';
@@ -161,6 +162,8 @@
                 player: null,
                 home: null,
                 lent: false,
+                entries: [],
+                active: -1,
             };
             const mine = session;
 
@@ -188,9 +191,20 @@
             return true;
         }
 
+        /**
+         * Fill the transcript column. A video with no captions says so and
+         * carries on — the player and everything else in the reader work the
+         * same without one.
+         */
         function hydrate(transcript) {
             const column = session.element.querySelector('.bb-reader-transcript');
-            if (!transcript) column.innerHTML = '<p class="bb-reader-empty">This video has no transcript.</p>';
+            session.entries = ReaderTranscript.entriesOf(transcript);
+            session.active = -1;
+            if (!session.entries.length) {
+                column.innerHTML = '<p class="bb-reader-empty">This video has no transcript.</p>';
+                return;
+            }
+            column.innerHTML = `<div class="bb-rt-rows">${ReaderTranscript.rowsHtml(session.entries)}</div>`;
         }
 
         /**

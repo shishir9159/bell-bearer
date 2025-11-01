@@ -225,6 +225,59 @@ check('timestamp links parse out of pasted text, one per line', () => {
     eq(found[0].bookmarks.map((b) => b.time), [90, 150]);
 });
 
+// ------------------------------------------------------ reader transcript
+
+globalThis.BB = globalThis.BB || {};
+globalThis.BB.Dom = globalThis.BB.Dom || require('../src/shared/dom.js');
+const ReaderTranscript = require('../src/content/reader-transcript.js');
+const { FetchedTranscript } = require('../transcript.js');
+
+/** Snippets in the shape transcript.js hands over. */
+const SNIPPETS = [
+    { text: 'first  line', start: 0, duration: 2.5 },
+    { text: '', start: 2.5, duration: 0.5 },
+    { text: 'second <line>', start: 3, duration: 2 },
+    { text: 'third line', start: 6, duration: 3 },
+];
+
+console.log('\n# reader — the transcript column');
+check('blank snippets are left out and the text is tidied', () => {
+    const entries = ReaderTranscript.entriesOf({ snippets: SNIPPETS });
+    eq(entries.map((e) => e.text), ['first line', 'second <line>', 'third line']);
+    eq(entries[2], { start: 6, end: 9, text: 'third line' });
+    eq(ReaderTranscript.entriesOf(null), []);
+});
+check('the playing row is the last one started, gaps included', () => {
+    const entries = ReaderTranscript.entriesOf({ snippets: SNIPPETS });
+    eq(ReaderTranscript.activeIndex(entries, -1), -1);
+    eq(ReaderTranscript.activeIndex(entries, 0), 0);
+    eq(ReaderTranscript.activeIndex(entries, 5.5), 1, 'a pause in speech lost the row');
+    eq(ReaderTranscript.activeIndex(entries, 6), 2);
+    eq(ReaderTranscript.activeIndex(entries, 6), ReaderTranscript.activeIndex(entries, 6), 'unstable at one time');
+});
+check('at a snippet boundary it agrees with the transcript’s own lookup', () => {
+    const snippets = SNIPPETS.filter((s) => s.text);
+    const transcript = new FetchedTranscript({ snippets, videoId: 'v', language: 'en', languageCode: 'en' });
+    const entries = ReaderTranscript.entriesOf(transcript);
+    for (const t of [0, 3, 6]) {
+        eq(entries[ReaderTranscript.activeIndex(entries, t)].text,
+            transcript.getSnippetAtTime(t).text.replace(/\s+/g, ' '), `at ${t}`);
+    }
+});
+check('row text is escaped', () => {
+    const html = ReaderTranscript.rowsHtml(ReaderTranscript.entriesOf({ snippets: SNIPPETS }));
+    assert(html.includes('second &lt;line&gt;'), 'a caption could inject markup');
+    assert(/data-i="2" data-start="6"/.test(html));
+});
+check('a text node is walked up to its row', () => {
+    const row = { nodeType: 1, classList: { contains: (c) => c === ReaderTranscript.ROW_CLASS }, dataset: { i: '4' } };
+    const span = { nodeType: 1, classList: { contains: () => false }, parentNode: row };
+    const text = { nodeType: 3, parentNode: span };
+    eq(ReaderTranscript.rowAt(text) === row, true);
+    eq(ReaderTranscript.indexOf(ReaderTranscript.rowAt(text)), 4);
+    eq(ReaderTranscript.rowAt({ nodeType: 3, parentNode: null }), null);
+});
+
 // ---------------------------------------------------------------- time
 
 const Time = require('../src/shared/time.js');
