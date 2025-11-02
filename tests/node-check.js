@@ -324,6 +324,17 @@ check('a collapsed or foreign selection is no range at all', () => {
     eq(ReaderTranscript.selectionToRange({ collapsed: false, startContainer: elsewhere, startOffset: 0,
         endContainer: elsewhere, endOffset: 1 }, RANGE_ENTRIES), null);
 });
+check('a checkpoint shades the lines that start inside it', () => {
+    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ start: 3, end: 9 }]), [0, 1, 1, 0]);
+    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ start: 3, end: 9 }, { start: 6, end: 12 }]), [0, 1, 2, 1],
+        'overlapping checkpoints deepen rather than fight');
+});
+check('an old whole-second checkpoint and a point in time both shade sensibly', () => {
+    // Ctrl+B checkpoints were floored to the second: 3.4 is stored as 3.
+    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ time: 3, start: 3, end: 5 }]), [0, 1, 0, 0]);
+    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ time: 7 }]), [0, 0, 1, 0], 'a point shades the line playing then');
+    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ note: 'no time at all' }]), [0, 0, 0, 0]);
+});
 check('a text node is walked up to its row', () => {
     const row = { nodeType: 1, classList: { contains: (c) => c === ReaderTranscript.ROW_CLASS }, dataset: { i: '4' } };
     const span = { nodeType: 1, classList: { contains: () => false }, parentNode: row };

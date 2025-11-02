@@ -146,9 +146,36 @@
         return String(raw || '').replace(/\s+/g, ' ').trim();
     }
 
+    /**
+     * How many checkpoints cover each row: a row is covered when it starts
+     * inside a checkpoint's span. A checkpoint that is a point in time rather
+     * than a span covers the row playing at that moment.
+     *
+     * A count rather than a flag, so overlapping checkpoints deepen the
+     * shading instead of two rules fighting over one row.
+     */
+    function marksFor(entries, checkpoints) {
+        const marks = new Array(entries.length).fill(0);
+        for (const checkpoint of checkpoints || []) {
+            const start = typeof checkpoint.start === 'number' ? checkpoint.start : checkpoint.time;
+            const end = typeof checkpoint.end === 'number' ? checkpoint.end : null;
+            if (typeof start !== 'number') continue;
+            if (end === null || end <= start) {
+                const at = activeIndex(entries, start);
+                if (at >= 0) marks[at]++;
+                continue;
+            }
+            for (let i = Math.max(0, activeIndex(entries, start)); i < entries.length; i++) {
+                if (entries[i].start >= end) break;
+                if (entries[i].start >= start) marks[i]++;
+            }
+        }
+        return marks;
+    }
+
     const ReaderTranscript = {
         ROW_CLASS, entriesOf, rowsHtml, activeIndex, rowAt, indexOf,
-        endOf, selectionToRange, rangeText,
+        endOf, selectionToRange, rangeText, marksFor,
     };
 
     root.BB = root.BB || {};

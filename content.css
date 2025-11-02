@@ -3077,6 +3077,17 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 .bb-rt-row.is-active { background: var(--bb-accent-soft); }
 
+/* A line inside a checkpoint: a rule in the margin and a wash that deepens
+   with each checkpoint over it, up to three, rather than one colour for any
+   number. The wash sits under the playing line's, so the two read together. */
+.bb-rt-row[data-bb-marks] {
+    box-shadow: inset 3px 0 0 var(--bb-accent);
+    background-image: linear-gradient(var(--bb-reader-mark, rgba(255, 196, 0, .16)), var(--bb-reader-mark, rgba(255, 196, 0, .16)));
+}
+
+.bb-rt-row[data-bb-marks="2"] { --bb-reader-mark: rgba(255, 196, 0, .26); }
+.bb-rt-row[data-bb-marks="3"] { --bb-reader-mark: rgba(255, 196, 0, .36); }
+
 /* Inside the reader rather than our page-wide toast, because it carries a
    button: Undo has to be where the selection was just made. */
 .bb-reader-toast {

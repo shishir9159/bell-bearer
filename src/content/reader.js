@@ -28,6 +28,7 @@
     const Theme = ns.Theme || req('./theme.js');
     const ReaderTranscript = ns.ReaderTranscript || req('./reader-transcript.js');
     const Bookmarks = ns.Bookmarks || req('../shared/bookmarks.js');
+    const Settings = ns.Settings || req('../shared/settings.js');
 
     const ROOT_ID = 'bb-reader';
     const SLOT_ID = 'bb-reader-slot';
@@ -181,6 +182,8 @@
                 lent: false,
                 entries: [],
                 rows: [],
+                checkpoints: [],
+                unwatch: null,
                 active: -1,
                 handsOffAt: 0,
             };
@@ -226,7 +229,31 @@
             transcripts.fetch(video.id).then((transcript) => {
                 if (mine.alive) hydrate(transcript);
             });
+            // A checkpoint saved, edited or deleted anywhere — this reader,
+            // Ctrl+B, the dashboard in another tab — lands here.
+            mine.unwatch = Settings.watch([Bookmarks.KEY], () => loadCheckpoints(mine));
+            loadCheckpoints(mine);
             return true;
+        }
+
+        // ---------------------------------------------------- checkpoints
+
+        async function loadCheckpoints(mine) {
+            const videos = await Bookmarks.load();
+            if (!mine.alive) return;
+            const entry = videos.find((video) => video.id === mine.videoId);
+            mine.checkpoints = entry ? entry.bookmarks : [];
+            shade();
+        }
+
+        /** Shade the rows each checkpoint covers — by time, never by DOM position. */
+        function shade() {
+            if (!session.rows.length) return;
+            const marks = ReaderTranscript.marksFor(session.entries, session.checkpoints);
+            session.rows.forEach((row, index) => {
+                if (marks[index]) row.dataset.bbMarks = String(Math.min(marks[index], 3));
+                else delete row.dataset.bbMarks;
+            });
         }
 
         /**
@@ -244,6 +271,7 @@
             }
             column.innerHTML = `<div class="bb-rt-rows">${ReaderTranscript.rowsHtml(session.entries)}</div>`;
             session.rows = Array.from(column.querySelectorAll(`.${ReaderTranscript.ROW_CLASS}`));
+            shade();
             follow(player.currentTime());
         }
 
@@ -383,6 +411,7 @@
             const done = session;
             done.alive = false;
             clearTimeout(done.toastTimer);
+            if (done.unwatch) done.unwatch();
             restore();
             session = null;
             document.removeEventListener('keydown', onKey, true);
