@@ -2877,6 +2877,13 @@ check('every reader setting has a control carrying its key as an id', () => {
     const controls = new Set([...panel.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
     for (const key of keys) assert(controls.has(key), `${key} has no control in the YouTube panel`);
 });
+check('the reader layout list offers exactly the layouts the reader draws', () => {
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const select = /<select id="readerLayout">([\s\S]*?)<\/select>/.exec(html)[1];
+    const offered = [...select.matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
+    eq(offered, require('../src/content/reader.js').LAYOUT_IDS.slice());
+    eq(globalThis.BB.Settings.DEFAULTS.readerLayout, 'split');
+});
 check('every typeracer setting has a control carrying its key as an id', () => {
     // This is the whole binding. src/page/settings-form.js matches a control
     // to a setting by id and nothing else, so a setting with no element is a

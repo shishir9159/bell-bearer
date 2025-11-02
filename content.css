@@ -2966,11 +2966,119 @@ html.bb-reader-open body { overflow: hidden !important; }
 }
 
 
+.bb-reader-layouts {
+    display: flex;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    overflow: hidden;
+}
+
+.bb-reader-layout {
+    padding: 5px 10px;
+    border: 0;
+    border-left: 1px solid var(--bb-border);
+    background: transparent;
+    color: var(--bb-sub);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.bb-reader-layout:first-child { border-left: 0; }
+.bb-reader-layout:hover { color: var(--bb-text); background: var(--bb-chip); }
+.bb-reader-layout[aria-checked="true"] { background: var(--bb-accent-soft); color: var(--bb-accent); font-weight: 600; }
+
+/* ---- The four layouts. One grid each, chosen by data-layout, and nothing
+   worked out in script. --bb-reader-share is the one number each layout
+   lets you drag: the video's width in split, its height in stacked, the
+   drawer's width in theatre and the corner player's width in focus — a
+   percentage every time, so a window resized between sessions can never
+   put the video off the edge. */
+
 .bb-reader-body {
+    position: relative;
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
+    grid-template-columns: minmax(0, calc(var(--bb-reader-share, 62) * 1%)) minmax(0, 1fr);
+}
+
+/* Stacked: the video centred on top, transcript and notes in one column
+   under it. Best on a laptop, and for wide video. */
+.bb-reader[data-layout="stacked"] .bb-reader-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, calc(var(--bb-reader-share, 55) * 1%)) minmax(0, 1fr);
+}
+
+.bb-reader[data-layout="stacked"] .bb-reader-side {
+    border-left: 0;
+    border-top: 1px solid var(--bb-border);
+}
+
+/* Theatre: the video takes the whole body and the transcript is a drawer
+   over it from the right. A sliver of the drawer stays on screen as the
+   thing to reach for, and it slides out while it is hovered or holds focus
+   — so it stays out while you select in it, and hides itself after. */
+.bb-reader[data-layout="theatre"] .bb-reader-body { grid-template-columns: minmax(0, 1fr); }
+
+.bb-reader[data-layout="theatre"] .bb-reader-side {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: calc(var(--bb-reader-share, 34) * 1%);
+    background: var(--bb-panel-solid);
+    box-shadow: var(--bb-shadow);
+    transform: translateX(calc(100% - 14px));
+    transition: transform .22s ease;
+    z-index: 2;
+}
+
+.bb-reader[data-layout="theatre"] .bb-reader-side::before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 50%;
+    width: 4px;
+    height: 48px;
+    margin-top: -24px;
+    border-radius: 2px;
+    background: var(--bb-border-strong);
+}
+
+.bb-reader[data-layout="theatre"] .bb-reader-side:hover,
+.bb-reader[data-layout="theatre"] .bb-reader-side:focus-within { transform: none; }
+
+/* Focus: the transcript leads, set for reading, and the video is pinned in
+   the corner. 30% of the viewport by default — deliberately bigger than a
+   thumbnail, because a corner player you cannot see is the complaint that
+   started this feature. */
+.bb-reader[data-layout="focus"] .bb-reader-body { grid-template-columns: minmax(0, 1fr); }
+
+.bb-reader[data-layout="focus"] .bb-reader-side { border-left: 0; }
+
+.bb-reader[data-layout="focus"] .bb-reader-stage {
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
+    width: calc(var(--bb-reader-share, 30) * 1%);
+    aspect-ratio: 16 / 9;
+    padding: 0;
+    border-radius: var(--bb-r);
+    overflow: hidden;
+    box-shadow: var(--bb-shadow);
+    z-index: 2;
+}
+
+/* The notes would sit under the corner player, so in focus they stop short
+   of it. */
+.bb-reader[data-layout="focus"] .bb-reader-notes {
+    margin-right: calc(var(--bb-reader-share, 30) * 1% + 20px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bb-reader[data-layout="theatre"] .bb-reader-side { transition: none; }
+    .bb-reader-toast { animation: none; }
 }
 
 /* The stage gets a soft vignette rather than a flat black slab, so the

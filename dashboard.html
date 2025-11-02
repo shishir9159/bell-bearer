@@ -610,6 +610,15 @@
 
                         <p class="settings-hint">The reader puts YouTube's own player beside the video's transcript, with your checkpoints under it — the same player, moved rather than copied, so it keeps playing, at the speed and with the captions it had. Open it from the popup or with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>.</p>
                         <div class="settings-option">
+                            <label class="setting-label" for="readerLayout">Open the reader in</label>
+                            <select id="readerLayout">
+                                <option value="split">Split — video beside the transcript</option>
+                                <option value="stacked">Stacked — video above the transcript</option>
+                                <option value="theatre">Theatre — video first, transcript in a drawer</option>
+                                <option value="focus">Focus — transcript first, video in the corner</option>
+                            </select>
+                        </div>
+                        <div class="settings-option">
                             <label class="toggle-switch">
                                 <input type="checkbox" id="readerFollow">
                                 <span class="toggle-slider"></span>

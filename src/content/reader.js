@@ -52,6 +52,28 @@
     /** A note is written this long after the last keystroke, not on every one. */
     const NOTE_DEBOUNCE_MS = 400;
 
+    /**
+     * The four shapes the reader takes. The layout itself is all CSS — one
+     * grid per id, chosen by `data-layout` — and there is no layout maths
+     * in this file at all.
+     */
+    const LAYOUTS = Object.freeze([
+        Object.freeze({ id: 'split', label: 'Split', hint: 'Video beside the transcript' }),
+        Object.freeze({ id: 'stacked', label: 'Stacked', hint: 'Video above the transcript' }),
+        Object.freeze({ id: 'theatre', label: 'Theatre', hint: 'Video first, transcript in a drawer' }),
+        Object.freeze({ id: 'focus', label: 'Focus', hint: 'Transcript first, video in the corner' }),
+    ]);
+    const LAYOUT_IDS = Object.freeze(LAYOUTS.map((layout) => layout.id));
+
+    const layoutOf = (id) => (LAYOUT_IDS.includes(id) ? id : 'split');
+
+    function layoutsHtml(current) {
+        return `<div class="bb-reader-layouts" role="radiogroup" aria-label="Layout">${LAYOUTS.map((layout) => `
+            <button type="button" role="radio" class="bb-reader-layout" data-layout="${layout.id}"
+                    aria-checked="${layout.id === current}" title="${layout.hint}">${layout.label}</button>`).join('')}
+        </div>`;
+    }
+
     /** Keys that scroll the column, which count as the user scrolling it. */
     const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
 
@@ -199,6 +221,9 @@
             element.setAttribute('role', 'dialog');
             element.setAttribute('aria-label', 'Reader');
             element.innerHTML = shellHtml(video.title);
+            const layout = layoutOf(getSettings().readerLayout);
+            element.dataset.layout = layout;
+            element.querySelector('.bb-reader-tools').innerHTML = layoutsHtml(layout);
             // Dressed for the page's light or dark from the first frame, and
             // for the skin as soon as storage answers.
             Theme.dress(element, { theme: Theme.pageTheme(), skin: 'default' });
@@ -227,6 +252,10 @@
             adopt();
 
             element.querySelector('.bb-reader-close').addEventListener('click', close);
+            element.querySelector('.bb-reader-layouts').addEventListener('click', (event) => {
+                const button = event.target.closest('.bb-reader-layout');
+                if (button) setLayout(button.dataset.layout);
+            });
             document.addEventListener('keydown', onKey, true);
             document.addEventListener('timeupdate', onTime, { capture: true, passive: true });
 
@@ -565,6 +594,22 @@
             document.documentElement.classList.remove(OPEN_CLASS);
         }
 
+        /**
+         * Switch layout live, and remember it as the one the next reader opens
+         * in. The transcript is not fetched again and nothing is redrawn: the
+         * grid changes under the same elements.
+         */
+        function setLayout(id) {
+            if (!session) return;
+            const layout = layoutOf(id);
+            session.element.dataset.layout = layout;
+            for (const button of session.element.querySelectorAll('.bb-reader-layout')) {
+                button.setAttribute('aria-checked', String(button.dataset.layout === layout));
+            }
+            Settings.set({ readerLayout: layout });
+            nudge();
+        }
+
         function toggle() {
             if (!session) return open();
             close();
@@ -597,14 +642,14 @@
         }
 
         return {
-            open, close, toggle, onNavigate,
+            open, close, toggle, onNavigate, setLayout,
             get isOpen() { return !!session; },
             /** For the specs. */
             get element() { return session ? session.element : null; },
         };
     }
 
-    const Reader = { createReader, ROOT_ID, SLOT_ID, PLAYER_ID, OPEN_CLASS, HANDS_OFF_MS };
+    const Reader = { createReader, ROOT_ID, SLOT_ID, PLAYER_ID, OPEN_CLASS, HANDS_OFF_MS, LAYOUTS, LAYOUT_IDS };
 
     root.BB = root.BB || {};
     root.BB.Reader = Reader;

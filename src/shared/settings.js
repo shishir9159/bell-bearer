@@ -231,6 +231,9 @@
         // Selecting transcript text saves it as a checkpoint straight away,
         // with an Undo. Off, the same selection offers a Save button instead.
         readerAutoCheckpoint: true,
+        // The layout a new reader opens in; switching in the reader itself
+        // updates it. One of Reader.LAYOUT_IDS.
+        readerLayout: 'split', // 'split' | 'stacked' | 'theatre' | 'focus'
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
