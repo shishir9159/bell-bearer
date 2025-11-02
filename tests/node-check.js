@@ -335,6 +335,21 @@ check('an old whole-second checkpoint and a point in time both shade sensibly', 
     eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ time: 7 }]), [0, 0, 1, 0], 'a point shades the line playing then');
     eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ note: 'no time at all' }]), [0, 0, 0, 0]);
 });
+check('checkpoints copy out as a timestamped markdown list', () => {
+    globalThis.BB.YouTube = globalThis.BB.YouTube || require('../src/shared/youtube.js');
+    const Markdown = require('../src/content/markdown.js');
+    const Time = require('../src/shared/time.js');
+    const text = Markdown.checkpointList({ id: 'abcdefghijk', title: 'A [talk]' }, [
+        { time: 62, start: 62.4, end: 75, subtitle: 'the  point', note: 'worth rewatching' },
+        { time: 90, start: 90, end: 95, subtitle: 'later', note: 'Checkpoint 1:30 - 1:35' },
+    ], Time.formatTime);
+    eq(text.split('\n'), [
+        '## [A \\[talk\\]](https://www.youtube.com/watch?v=abcdefghijk)',
+        '',
+        '- [1:02](https://www.youtube.com/watch?v=abcdefghijk&t=62s) “the point” — worth rewatching',
+        '- [1:30](https://www.youtube.com/watch?v=abcdefghijk&t=90s) “later”',
+    ], 'the generated "Checkpoint 1:30" note only repeats the time beside it');
+});
 check('a text node is walked up to its row', () => {
     const row = { nodeType: 1, classList: { contains: (c) => c === ReaderTranscript.ROW_CLASS }, dataset: { i: '4' } };
     const span = { nodeType: 1, classList: { contains: () => false }, parentNode: row };

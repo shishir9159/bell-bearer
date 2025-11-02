@@ -29,6 +29,8 @@
     const ReaderTranscript = ns.ReaderTranscript || req('./reader-transcript.js');
     const Bookmarks = ns.Bookmarks || req('../shared/bookmarks.js');
     const Settings = ns.Settings || req('../shared/settings.js');
+    const Time = ns.Time || req('../shared/time.js');
+    const Markdown = ns.Markdown || req('./markdown.js');
 
     const ROOT_ID = 'bb-reader';
     const SLOT_ID = 'bb-reader-slot';
@@ -47,6 +49,9 @@
     /** How long the checkpoint toast, and its Undo, stays up. */
     const TOAST_MS = 6000;
 
+    /** A note is written this long after the last keystroke, not on every one. */
+    const NOTE_DEBOUNCE_MS = 400;
+
     /** Keys that scroll the column, which count as the user scrolling it. */
     const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
 
@@ -64,13 +69,39 @@
                     <section class="bb-reader-transcript" aria-label="Transcript">
                         <p class="bb-reader-empty">Loading the transcript…</p>
                     </section>
+                    <section class="bb-reader-notes" aria-label="Checkpoints">
+                        <header class="bb-rn-head">
+                            <h3 class="bb-rn-title">Checkpoints <span class="bb-rn-count"></span></h3>
+                            <button type="button" class="bb-rn-copy" title="Copy every checkpoint as a Markdown list">Copy</button>
+                        </header>
+                        <ol class="bb-rn-list"></ol>
+                    </section>
                 </aside>
             </div>
             <div class="bb-reader-toast" role="status" aria-live="polite" hidden><span
                  class="bb-reader-toast-text"></span><button type="button" class="bb-reader-toast-act"></button></div>`;
     }
 
-    function createReader({ player, watcher, getVideo, getSettings, transcripts, recorder }) {
+    const spanText = (bookmark) => (typeof bookmark.start === 'number' && typeof bookmark.end === 'number'
+        ? `${Time.formatTime(bookmark.start)} – ${Time.formatTime(bookmark.end)}`
+        : Time.formatTime(Bookmarks.bookmarkTime(bookmark)));
+
+    function noteHtml(bookmark) {
+        const esc = Dom.escapeHtml;
+        const said = bookmark.subtitle && bookmark.subtitle !== 'null' ? bookmark.subtitle : '';
+        return `
+            <li class="bb-rn-item" data-key="${Dom.escapeAttr(Bookmarks.bookmarkKey(bookmark))}">
+                <div class="bb-rn-row">
+                    <button type="button" class="bb-rn-time" title="Play from here">${esc(spanText(bookmark))}</button>
+                    <button type="button" class="bb-rn-delete" aria-label="Delete this checkpoint" title="Delete">&times;</button>
+                </div>
+                ${said ? `<blockquote class="bb-rn-quote">${esc(said)}</blockquote>` : ''}
+                <textarea class="bb-rn-note" rows="2" placeholder="Add a note…"
+                          aria-label="Note">${esc(bookmark.note || '')}</textarea>
+            </li>`;
+    }
+
+    function createReader({ player, watcher, getVideo, getSettings, transcripts, recorder, copyText }) {
         /**
          * The open reader, or null. A fresh object per open, so an answer that
          * arrives after a close — the transcript fetch, the skin read — can
@@ -184,6 +215,8 @@
                 rows: [],
                 checkpoints: [],
                 unwatch: null,
+                notesShape: null,
+                pending: new Map(),
                 active: -1,
                 handsOffAt: 0,
             };
@@ -209,6 +242,13 @@
             // passage whenever the drag paused with the button still held.
             column.addEventListener('pointerup', onSelectEnd);
             column.addEventListener('keyup', (event) => { if (event.key === 'Shift') onSelectEnd(); });
+            const notes = element.querySelector('.bb-rn-list');
+            notes.addEventListener('click', onNotesClick);
+            notes.addEventListener('input', onNoteInput);
+            notes.addEventListener('focusout', (event) => {
+                if (event.target.classList.contains('bb-rn-note')) flushNote(mine, keyOf(event.target));
+            });
+            element.querySelector('.bb-rn-copy').addEventListener('click', copyNotes);
             element.querySelector('.bb-reader-toast-act').addEventListener('click', () => {
                 const act = mine.toastAction;
                 hideToast();
@@ -244,6 +284,107 @@
             const entry = videos.find((video) => video.id === mine.videoId);
             mine.checkpoints = entry ? entry.bookmarks : [];
             shade();
+            renderNotes();
+        }
+
+        // ---------------------------------------------------------- notes
+
+        const keyOf = (node) => {
+            const item = node && node.closest('.bb-rn-item');
+            return item ? item.dataset.key : '';
+        };
+
+        const findCheckpoint = (key) => session.checkpoints.find((b) => Bookmarks.bookmarkKey(b) === key);
+
+        /**
+         * The list is rebuilt only when which checkpoints there are changes.
+         * A note saved — which is every pause in typing — only refreshes the
+         * boxes nobody is typing in; rebuilding under the one in focus would
+         * throw the caret out of it mid-word.
+         */
+        function renderNotes() {
+            const list = session.element.querySelector('.bb-rn-list');
+            const shape = session.checkpoints.map((b) => Bookmarks.bookmarkKey(b)).join('|');
+            session.element.querySelector('.bb-rn-count').textContent =
+                session.checkpoints.length ? `(${session.checkpoints.length})` : '';
+
+            if (shape !== session.notesShape) {
+                session.notesShape = shape;
+                const focused = document.activeElement;
+                const keep = list.contains(focused) && focused.classList.contains('bb-rn-note')
+                    ? { key: keyOf(focused), at: focused.selectionStart } : null;
+                list.innerHTML = session.checkpoints.length
+                    ? session.checkpoints.map(noteHtml).join('')
+                    : '<li class="bb-rn-empty">Highlight a passage in the transcript to keep it here.</li>';
+                if (keep) {
+                    const box = list.querySelector(`.bb-rn-item[data-key="${CSS.escape(keep.key)}"] .bb-rn-note`);
+                    if (box) { box.focus(); box.setSelectionRange(keep.at, keep.at); }
+                }
+                return;
+            }
+            for (const box of list.querySelectorAll('.bb-rn-note')) {
+                const key = keyOf(box);
+                if (box === document.activeElement || session.pending.has(key)) continue;
+                const checkpoint = findCheckpoint(key);
+                if (checkpoint && box.value !== (checkpoint.note || '')) box.value = checkpoint.note || '';
+            }
+        }
+
+        function onNotesClick(event) {
+            const key = keyOf(event.target);
+            const checkpoint = key && findCheckpoint(key);
+            if (!checkpoint) return;
+            if (event.target.closest('.bb-rn-time')) {
+                player.seekTo(typeof checkpoint.start === 'number' ? checkpoint.start : checkpoint.time);
+            } else if (event.target.closest('.bb-rn-delete')) {
+                deleteCheckpoint(checkpoint);
+            }
+        }
+
+        /**
+         * Typing a note writes it once the typing stops, through the same
+         * serialised update every other writer uses — not once a keystroke.
+         */
+        function onNoteInput(event) {
+            if (!event.target.classList.contains('bb-rn-note')) return;
+            const mine = session;
+            const key = keyOf(event.target);
+            const pending = mine.pending.get(key);
+            if (pending) clearTimeout(pending.timer);
+            mine.pending.set(key, {
+                note: event.target.value,
+                timer: setTimeout(() => flushNote(mine, key), NOTE_DEBOUNCE_MS),
+            });
+        }
+
+        function flushNote(mine, key) {
+            const pending = mine.pending.get(key);
+            if (!pending) return;
+            clearTimeout(pending.timer);
+            mine.pending.delete(key);
+            Bookmarks.update((videos) => Bookmarks.editBookmark(videos, mine.videoId, key, { note: pending.note }));
+        }
+
+        async function deleteCheckpoint(checkpoint) {
+            const mine = session;
+            const key = Bookmarks.bookmarkKey(checkpoint);
+            await Bookmarks.update((videos) => Bookmarks.removeBookmarkById(videos, mine.videoId, key));
+            if (!mine.alive) return;
+            showToast('Checkpoint deleted', 'Undo', () => {
+                const video = getVideo() || { id: mine.videoId };
+                Bookmarks.update((videos) => Bookmarks.addBookmarks(videos, video, [checkpoint]).videos);
+            });
+        }
+
+        async function copyNotes() {
+            if (!session.checkpoints.length) {
+                showToast('No checkpoints to copy yet');
+                return;
+            }
+            const video = getVideo() || { id: session.videoId };
+            const text = Markdown.checkpointList(video, session.checkpoints, Time.formatTime);
+            const ok = await copyText(text);
+            if (session) showToast(ok ? 'Copied as Markdown' : 'Could not reach the clipboard');
         }
 
         /** Shade the rows each checkpoint covers — by time, never by DOM position. */
@@ -409,6 +550,8 @@
         function close() {
             if (!session) return;
             const done = session;
+            // A note typed a moment ago is written, not lost with the panel.
+            for (const key of Array.from(done.pending.keys())) flushNote(done, key);
             done.alive = false;
             clearTimeout(done.toastTimer);
             if (done.unwatch) done.unwatch();

@@ -23,6 +23,31 @@
         return `[${escapeLabel(label)}](${url})`;
     }
 
+    /**
+     * A video's checkpoints as a timestamped Markdown list, the shape these
+     * notes were always meant to be exported in:
+     *
+     *     ## [Title](watch url)
+     *     - [1:02](watch url at 1:02) “what was said” — your note
+     *
+     * The note Ctrl+B used to write by itself ("Checkpoint 1:02 - 1:15") is
+     * left out: it only repeats the timestamp beside it.
+     */
+    function checkpointList(video, bookmarks, formatTime) {
+        const lines = [`## ${link(video.title || video.id, YouTube.watchUrl(video.id, 0))}`, ''];
+        for (const bookmark of bookmarks || []) {
+            const at = typeof bookmark.start === 'number' ? bookmark.start : bookmark.time;
+            const said = String(bookmark.subtitle || '').replace(/\s+/g, ' ').trim();
+            const note = String(bookmark.note || '').replace(/\s+/g, ' ').trim();
+            const own = note && !/^(Checkpoint|Segment:) \d/.test(note) ? note : '';
+            let line = `- ${link(formatTime(at), YouTube.watchUrl(video.id, at))}`;
+            if (said && said !== 'null') line += ` “${said}”`;
+            if (own) line += ` — ${own}`;
+            lines.push(line);
+        }
+        return lines.join('\n');
+    }
+
     function createMarkdown({ site, pageInfo }) {
         /** The anchor most recently right-clicked, for its visible text. */
         let lastContextLink = null;
@@ -116,7 +141,7 @@
         return { trackContextLinks, buildPageMarkdown, buildLinkMarkdown, copy };
     }
 
-    const Markdown = { createMarkdown, escapeLabel };
+    const Markdown = { createMarkdown, escapeLabel, checkpointList };
 
     root.BB = root.BB || {};
     root.BB.Markdown = Markdown;
