@@ -313,7 +313,8 @@
             const layout = layoutOf(getSettings().readerLayout);
             element.dataset.layout = layout;
             applyType(element);
-            element.querySelector('.bb-reader-tools').innerHTML = layoutsHtml(layout);
+            element.querySelector('.bb-reader-tools').innerHTML =
+                '<select class="bb-reader-lang" aria-label="Transcript language" hidden></select>' + layoutsHtml(layout);
             // Dressed for the page's light or dark from the first frame, and
             // for the skin as soon as storage answers.
             Theme.dress(element, { theme: Theme.pageTheme(), skin: 'default' });
@@ -396,7 +397,12 @@
 
             Theme.appearance().then((look) => { if (mine.alive) Theme.dress(element, look); }).catch(() => {});
             transcripts.fetch(video.id).then((transcript) => {
-                if (mine.alive) hydrate(transcript);
+                if (!mine.alive) return;
+                hydrate(transcript);
+                if (transcript) offerLanguages(mine, transcript.languageCode);
+            });
+            element.querySelector('.bb-reader-lang').addEventListener('change', (event) => {
+                switchLanguage(mine, event.target.value);
             });
             // A checkpoint saved, edited or deleted anywhere — this reader,
             // Ctrl+B, the dashboard in another tab — lands here.
@@ -543,6 +549,33 @@
             session.rows = Array.from(column.querySelectorAll(`.${ReaderTranscript.ROW_CLASS}`));
             shade();
             follow(player.currentTime());
+        }
+
+        // ------------------------------------------------------ languages
+
+        /** A picker, but only for a video with more than one caption language. */
+        async function offerLanguages(mine, current) {
+            const found = transcripts.list ? await transcripts.list(mine.videoId) : [];
+            if (!mine.alive || found.length < 2) return;
+            const picker = mine.element.querySelector('.bb-reader-lang');
+            picker.innerHTML = found.map((track) =>
+                `<option value="${Dom.escapeAttr(track.code)}">${Dom.escapeHtml(track.label)}</option>`).join('');
+            picker.value = found.some((track) => track.code === current) ? current : found[0].code;
+            picker.hidden = false;
+        }
+
+        /**
+         * Draw the transcript in another language, through the same cached,
+         * one-fetch-at-a-time wrapper. The checkpoints stay on the right
+         * lines without anything being moved, because they are anchored by
+         * time and the new rows are shaded by theirs.
+         */
+        async function switchLanguage(mine, code) {
+            const column = mine.element.querySelector('.bb-reader-transcript');
+            column.innerHTML = '<p class="bb-reader-empty">Loading the transcript…</p>';
+            mine.rows = [];
+            const transcript = await transcripts.fetch(mine.videoId, { language: code });
+            if (mine.alive) hydrate(transcript);
         }
 
         // ------------------------------------------ seeking and following

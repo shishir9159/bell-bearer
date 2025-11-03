@@ -14,8 +14,14 @@
     function createTranscripts({ getPreferredLanguage, notify }) {
         const api = typeof YouTubeTranscriptApi !== 'undefined' ? new YouTubeTranscriptApi() : null;
 
-        /** videoId -> FetchedTranscript (insertion-ordered, oldest first). */
+        /**
+         * videoId -> FetchedTranscript (insertion-ordered, oldest first). A
+         * track asked for by language is filed as `videoId|code`, so the one
+         * the reader switched to does not replace the one checkpoints use.
+         */
         const cache = new Map();
+        /** videoId -> Promise of the tracks it has, asked for once per video. */
+        const tracks = new Map();
         /** videoId -> Promise, so concurrent callers share one network fetch. */
         const inflight = new Map();
         /** Videos with no captions at all — a normal state, not an error. */
@@ -31,16 +37,19 @@
          * the video has no captions — checkpoints still work, they just carry
          * no subtitle text.
          */
-        function fetch(videoId) {
+        function fetch(videoId, { language = '' } = {}) {
             if (!api || !videoId || unavailable.has(videoId)) return Promise.resolve(null);
-            if (cache.has(videoId)) return Promise.resolve(cache.get(videoId));
-            if (inflight.has(videoId)) return inflight.get(videoId);
+            const key = language ? `${videoId}|${language}` : videoId;
+            if (cache.has(key)) return Promise.resolve(cache.get(key));
+            if (inflight.has(key)) return inflight.get(key);
 
             const preferred = getPreferredLanguage();
-            const request = api.fetch(videoId, { languages: [preferred, 'en'] })
+            const request = api.fetch(videoId, { languages: language ? [language] : [preferred, 'en'] })
                 .then((transcript) => {
-                    remember(videoId, transcript);
-                    warnOnLanguageMismatch(transcript, preferred);
+                    remember(key, transcript);
+                    // Asked for by name, it is the language wanted; only the
+                    // default pick can land somewhere unexpected.
+                    if (!language) warnOnLanguageMismatch(transcript, preferred);
                     return transcript;
                 })
                 .catch((error) => {
@@ -56,10 +65,37 @@
                     }
                     return null;
                 })
-                .finally(() => inflight.delete(videoId));
+                .finally(() => inflight.delete(key));
 
-            inflight.set(videoId, request);
+            inflight.set(key, request);
             return request;
+        }
+
+        /**
+         * The caption tracks a video has, as `[{ code, label }]`, one per
+         * language — a video with both a written and an auto-generated track
+         * in one language lists it once, the way fetch() picks it. Empty when
+         * there are none or they cannot be read.
+         */
+        function list(videoId) {
+            if (!api || !videoId || unavailable.has(videoId)) return Promise.resolve([]);
+            if (!tracks.has(videoId)) {
+                tracks.set(videoId, api.listTranscripts(videoId).then((found) => {
+                    const seen = new Set();
+                    return (found || []).filter((track) => {
+                        if (!track || !track.languageCode || seen.has(track.languageCode)) return false;
+                        seen.add(track.languageCode);
+                        return true;
+                    }).map((track) => ({
+                        code: track.languageCode,
+                        label: `${track.language || track.languageCode}${track.isGenerated ? ' (auto-generated)' : ''}`,
+                    }));
+                }).catch(() => {
+                    tracks.delete(videoId);
+                    return [];
+                }));
+            }
+            return tracks.get(videoId);
         }
 
         function warnOnLanguageMismatch(transcript, preferred) {
@@ -96,7 +132,7 @@
             inflight.delete(videoId);
         }
 
-        return { fetch, prefetch, textInRange, forget, get available() { return !!api; } };
+        return { fetch, list, prefetch, textInRange, forget, get available() { return !!api; } };
     }
 
     const Transcripts = { createTranscripts, MAX_CACHED };

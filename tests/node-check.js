@@ -335,6 +335,42 @@ check('an old whole-second checkpoint and a point in time both shade sensibly', 
     eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ time: 7 }]), [0, 0, 1, 0], 'a point shades the line playing then');
     eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ note: 'no time at all' }]), [0, 0, 0, 0]);
 });
+checkAsync('a transcript asked for by language is its own fetch, and tracks are listed once', async () => {
+    const asked = [];
+    let listed = 0;
+    globalThis.YouTubeTranscriptApi = class {
+        fetch(id, { languages }) {
+            asked.push(languages.join(','));
+            return Promise.resolve({ videoId: id, languageCode: languages[0], language: languages[0], snippets: [] });
+        }
+        listTranscripts() {
+            listed++;
+            return Promise.resolve([
+                { languageCode: 'en', language: 'English' },
+                { languageCode: 'en', language: 'English', isGenerated: true },
+                { languageCode: 'de', language: 'German', isGenerated: true },
+            ]);
+        }
+    };
+    try {
+        const Transcripts = require('../src/content/transcripts.js');
+        const wrapper = Transcripts.createTranscripts({ getPreferredLanguage: () => 'en', notify() {} });
+        const plain = await wrapper.fetch('v');
+        const german = await wrapper.fetch('v', { language: 'de' });
+        assert(plain !== german, 'the German track replaced the default one');
+        await wrapper.fetch('v', { language: 'de' });
+        eq(asked, ['en,en', 'de'], 'a cached language was fetched again');
+
+        eq(await wrapper.list('v'), [
+            { code: 'en', label: 'English' },
+            { code: 'de', label: 'German (auto-generated)' },
+        ], 'one entry per language, the way fetch picks it');
+        await wrapper.list('v');
+        eq(listed, 1);
+    } finally {
+        delete globalThis.YouTubeTranscriptApi;
+    }
+});
 check('checkpoints copy out as a timestamped markdown list', () => {
     globalThis.BB.YouTube = globalThis.BB.YouTube || require('../src/shared/youtube.js');
     const Markdown = require('../src/content/markdown.js');

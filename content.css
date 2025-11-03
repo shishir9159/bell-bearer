@@ -2966,6 +2966,19 @@ html.bb-reader-open body { overflow: hidden !important; }
 }
 
 
+.bb-reader-lang {
+    max-width: 180px;
+    padding: 5px 8px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-input-bg);
+    color: var(--bb-text);
+    font: inherit;
+    font-size: 12px;
+}
+
+.bb-reader-lang[hidden] { display: none; }
+
 .bb-reader-layouts {
     display: flex;
     border: 1px solid var(--bb-border);
