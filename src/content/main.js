@@ -517,6 +517,9 @@
     const TYPER_SURFACES = ['typerTrack', 'typerCaret', 'typerCaretSmooth', 'typerCaretBlink',
         'typerSound', 'typerSoundVoice', 'typerSoundVolume', 'typerErrorSound', 'shortcuts'];
 
+    /** And what an open YouTube reader has to follow without being closed. */
+    const READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'skin'];
+
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&
             values.pouchButtonStyle !== settings.pouchButtonStyle;
@@ -527,6 +530,8 @@
         const leetSurfacesChanged = LEET_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
         const typerSurfacesChanged = TYPER_SURFACES.some((key) =>
+            key in values && values[key] !== settings[key]);
+        const readerSurfacesChanged = READER_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
 
         Object.assign(settings, values);
@@ -544,6 +549,7 @@
         // And again for TypeRacer's, which has to stop measuring the race
         // already in progress rather than waiting for the next page.
         if (typerSurfacesChanged && typerUi) typerUi.refreshSurfaces();
+        if (readerSurfacesChanged && reader) reader.refresh();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
         if (timeLimit) timeLimit.sync();

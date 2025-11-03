@@ -68,6 +68,29 @@
     const layoutOf = (id) => (LAYOUT_IDS.includes(id) ? id : 'split');
 
     /**
+     * The transcript's type — size, leading and measure, the three things
+     * that decide whether a column reads as prose or as a wall. Each is a
+     * setting with the range its control offers, clamped here too, since a
+     * number field will hold whatever is typed into it.
+     */
+    const TYPE = Object.freeze({
+        readerFontSize: Object.freeze({ prop: '--bb-reader-size', unit: 'px', min: 12, max: 24 }),
+        readerLineHeight: Object.freeze({ prop: '--bb-reader-leading', unit: '', min: 1.2, max: 2 }),
+        readerLineWidth: Object.freeze({ prop: '--bb-reader-measure', unit: 'em', min: 30, max: 60 }),
+    });
+
+    /** The three as CSS custom properties, `{ '--bb-reader-size': '16px', … }`. */
+    function typeStyle(settings) {
+        const out = {};
+        for (const [key, { prop, unit, min, max }] of Object.entries(TYPE)) {
+            const number = Number(settings && settings[key]);
+            const value = Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : Settings.DEFAULTS[key];
+            out[prop] = `${value}${unit}`;
+        }
+        return out;
+    }
+
+    /**
      * What each layout lets you drag, as a percentage: the video's width in
      * split, its height in stacked, the drawer's width in theatre, the corner
      * player's width in focus. Each layout keeps its own, because the width
@@ -289,6 +312,7 @@
             element.innerHTML = shellHtml(video.title);
             const layout = layoutOf(getSettings().readerLayout);
             element.dataset.layout = layout;
+            applyType(element);
             element.querySelector('.bb-reader-tools').innerHTML = layoutsHtml(layout);
             // Dressed for the page's light or dark from the first frame, and
             // for the skin as soon as storage answers.
@@ -670,6 +694,21 @@
             document.documentElement.classList.remove(OPEN_CLASS);
         }
 
+        function applyType(element) {
+            for (const [prop, value] of Object.entries(typeStyle(getSettings()))) element.style.setProperty(prop, value);
+        }
+
+        /**
+         * A setting changed. The type is re-applied and the skin re-read, so
+         * an open reader follows the dashboard without being closed.
+         */
+        function refresh() {
+            if (!session) return;
+            const mine = session;
+            applyType(mine.element);
+            Theme.appearance().then((look) => { if (mine.alive) Theme.dress(mine.element, look); }).catch(() => {});
+        }
+
         // --------------------------------------------------------- sizing
 
         /** The current layout's size, into the one custom property CSS reads. */
@@ -793,7 +832,7 @@
         }
 
         return {
-            open, close, toggle, onNavigate, setLayout,
+            open, close, toggle, onNavigate, setLayout, refresh,
             get isOpen() { return !!session; },
             /** For the specs. */
             get element() { return session ? session.element : null; },
@@ -802,7 +841,7 @@
 
     const Reader = {
         createReader, ROOT_ID, SLOT_ID, PLAYER_ID, OPEN_CLASS, HANDS_OFF_MS, LAYOUTS, LAYOUT_IDS,
-        SIZE_DEFAULTS, SIZE_RANGE, clampSize, readSizes, sizeAt,
+        SIZE_DEFAULTS, SIZE_RANGE, clampSize, readSizes, sizeAt, TYPE, typeStyle,
     };
 
     root.BB = root.BB || {};

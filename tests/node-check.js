@@ -2902,6 +2902,27 @@ check('a drag is read off the edge each layout sizes from', () => {
     eq(Reader.sizeAt('theatre', box, 700, 0), 30, 'the drawer grows toward the left');
     eq(Reader.sizeAt('focus', box, 580, 0), 40, 'the corner player sits 20px in from the edge');
 });
+check('the reader type is clamped to the ranges its controls offer', () => {
+    const Reader = require('../src/content/reader.js');
+    eq(Reader.typeStyle(globalThis.BB.Settings.DEFAULTS),
+        { '--bb-reader-size': '16px', '--bb-reader-leading': '1.6', '--bb-reader-measure': '44em' });
+    eq(Reader.typeStyle({ readerFontSize: 90, readerLineHeight: 0.5, readerLineWidth: 'x' }),
+        { '--bb-reader-size': '24px', '--bb-reader-leading': '1.2', '--bb-reader-measure': '44em' });
+
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    for (const [key, { min, max }] of Object.entries(Reader.TYPE)) {
+        const control = (new RegExp(`<input[^>]*id="${key}"[^>]*>`).exec(html) || [''])[0];
+        assert(control.includes(`min="${min}"`) && control.includes(`max="${max}"`),
+            `${key} offers a range the reader does not draw: ${control}`);
+    }
+});
+check('an open reader hears about every setting that changes how it looks', () => {
+    const main = require('fs').readFileSync(`${__dirname}/../src/content/main.js`, 'utf8');
+    const list = /READER_SURFACES = \[([^\]]*)\]/.exec(main)[1];
+    for (const key of Object.keys(require('../src/content/reader.js').TYPE)) {
+        assert(list.includes(`'${key}'`), `${key} only takes effect after a reload`);
+    }
+});
 check('every typeracer setting has a control carrying its key as an id', () => {
     // This is the whole binding. src/page/settings-form.js matches a control
     // to a setting by id and nothing else, so a setting with no element is a

@@ -234,6 +234,12 @@
         // The layout a new reader opens in; switching in the reader itself
         // updates it. One of Reader.LAYOUT_IDS.
         readerLayout: 'split', // 'split' | 'stacked' | 'theatre' | 'focus'
+        // The transcript column's type: size in px, leading as a multiple,
+        // and measure — the width of a line — in em. The ranges the controls
+        // offer are the ones Reader.TYPE clamps to.
+        readerFontSize: 16,
+        readerLineHeight: 1.6,
+        readerLineWidth: 44,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
