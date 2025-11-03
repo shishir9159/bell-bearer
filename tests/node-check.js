@@ -2884,6 +2884,24 @@ check('the reader layout list offers exactly the layouts the reader draws', () =
     eq(offered, require('../src/content/reader.js').LAYOUT_IDS.slice());
     eq(globalThis.BB.Settings.DEFAULTS.readerLayout, 'split');
 });
+check('reader sizes are clamped on the way in, whatever the store holds', () => {
+    const Reader = require('../src/content/reader.js');
+    eq(Reader.readSizes({ split: 2 }).split, 25, 'a two-percent video');
+    eq(Reader.readSizes({ focus: 400 }).focus, 85);
+    eq(Reader.readSizes({ stacked: 'wide' }).stacked, Reader.SIZE_DEFAULTS.stacked);
+    eq(Reader.readSizes(null), Reader.SIZE_DEFAULTS, 'an empty store is every default');
+    eq(Object.keys(Reader.readSizes({ sideways: 50 })), Reader.LAYOUT_IDS.slice(), 'an unknown layout was kept');
+    eq(Reader.clampSize(50, 'nope'), 50);
+    eq(Reader.clampSize(undefined, 'nope'), Reader.SIZE_DEFAULTS.split, 'an unknown layout has no default of its own');
+});
+check('a drag is read off the edge each layout sizes from', () => {
+    const Reader = require('../src/content/reader.js');
+    const box = { left: 0, top: 100, right: 1000, width: 1000, height: 500 };
+    eq(Reader.sizeAt('split', box, 600, 0), 60);
+    eq(Reader.sizeAt('stacked', box, 0, 350), 50);
+    eq(Reader.sizeAt('theatre', box, 700, 0), 30, 'the drawer grows toward the left');
+    eq(Reader.sizeAt('focus', box, 580, 0), 40, 'the corner player sits 20px in from the edge');
+});
 check('every typeracer setting has a control carrying its key as an id', () => {
     // This is the whole binding. src/page/settings-form.js matches a control
     // to a setting by id and nothing else, so a setting with no element is a

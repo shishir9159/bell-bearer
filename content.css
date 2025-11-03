@@ -3076,6 +3076,103 @@ html.bb-reader-open body { overflow: hidden !important; }
     margin-right: calc(var(--bb-reader-share, 30) * 1% + 20px);
 }
 
+/* ---- Resizing. The divider sits on the edge each layout lets you drag,
+   placed off the same --bb-reader-share the grid is sized from, so the two
+   cannot disagree. Wider than it looks, because an edge you have to hunt
+   for with the pointer is one nobody drags. */
+.bb-reader-divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--bb-reader-share, 62) * 1%);
+    width: 12px;
+    margin-left: -6px;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 3;
+}
+
+.bb-reader-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 4px;
+    width: 4px;
+    height: 44px;
+    margin-top: -22px;
+    border-radius: 2px;
+    background: var(--bb-border-strong);
+    opacity: .55;
+    transition: opacity .12s;
+}
+
+.bb-reader-divider:hover::after,
+.bb-reader-divider:focus-visible::after,
+.bb-reader.is-resizing .bb-reader-divider::after { opacity: 1; background: var(--bb-accent); }
+
+.bb-reader-divider:focus-visible { outline: none; }
+
+.bb-reader[data-layout="stacked"] .bb-reader-divider {
+    top: calc(var(--bb-reader-share, 55) * 1%);
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 12px;
+    margin: -6px 0 0;
+    cursor: row-resize;
+}
+
+.bb-reader[data-layout="stacked"] .bb-reader-divider::after {
+    top: 4px;
+    left: 50%;
+    width: 44px;
+    height: 4px;
+    margin: 0 0 0 -22px;
+}
+
+/* In theatre the handle is the drawer's left edge, so it is only there
+   while the drawer is out — and holding it keeps the drawer out. */
+.bb-reader[data-layout="theatre"] .bb-reader-divider {
+    left: auto;
+    right: calc(var(--bb-reader-share, 34) * 1%);
+    margin: 0 -6px 0 0;
+    display: none;
+}
+
+.bb-reader[data-layout="theatre"] .bb-reader-body:has(.bb-reader-side:hover, .bb-reader-side:focus-within, .bb-reader-divider:hover) .bb-reader-divider,
+.bb-reader[data-layout="theatre"].is-resizing .bb-reader-divider { display: block; }
+
+.bb-reader[data-layout="theatre"] .bb-reader-body:has(.bb-reader-divider:hover) .bb-reader-side,
+.bb-reader[data-layout="theatre"].is-resizing .bb-reader-side { transform: none; }
+
+/* In focus the divider gives way to a grip on the corner player itself. */
+.bb-reader[data-layout="focus"] .bb-reader-divider { display: none; }
+
+.bb-reader-grip { display: none; }
+
+.bb-reader[data-layout="focus"] .bb-reader-grip {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 22px;
+    height: 22px;
+    cursor: nwse-resize;
+    touch-action: none;
+    z-index: 3;
+    background: linear-gradient(135deg, var(--bb-accent) 0 30%, transparent 30%);
+    opacity: .7;
+}
+
+.bb-reader[data-layout="focus"] .bb-reader-grip:hover { opacity: 1; }
+
+/* While dragging, nothing animates and nothing gets selected, and the page
+   under the pointer — the video included — cannot take the drag away. */
+.bb-reader.is-resizing,
+.bb-reader.is-resizing * { user-select: none; transition: none !important; }
+.bb-reader.is-resizing .bb-reader-screen { pointer-events: none; }
+
 @media (prefers-reduced-motion: reduce) {
     .bb-reader[data-layout="theatre"] .bb-reader-side { transition: none; }
     .bb-reader-toast { animation: none; }

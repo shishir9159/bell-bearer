@@ -342,6 +342,11 @@
         typerRaces: 'bbTyperRaces',
         typerGrams: 'bbTyperGrams',
         typerDays: 'bbTyperDays',
+
+        // The YouTube reader's player size, one percentage per layout, set
+        // by dragging and so not a setting a control could bind to. Shape
+        // owned by src/content/reader.js — see readSizes there.
+        readerSizes: 'bbReaderSizes',
     });
 
     function withDefaults(stored, keys) {

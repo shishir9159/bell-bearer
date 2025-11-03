@@ -67,6 +67,69 @@
 
     const layoutOf = (id) => (LAYOUT_IDS.includes(id) ? id : 'split');
 
+    /**
+     * What each layout lets you drag, as a percentage: the video's width in
+     * split, its height in stacked, the drawer's width in theatre, the corner
+     * player's width in focus. Each layout keeps its own, because the width
+     * that is right beside a transcript is wrong for a pinned corner.
+     *
+     * Percentages and never pixels, so a window resized between sessions
+     * cannot put the video off the screen.
+     */
+    const SIZE_DEFAULTS = Object.freeze({ split: 62, stacked: 55, theatre: 34, focus: 30 });
+    const SIZE_RANGE = Object.freeze([25, 85]);
+
+    /** One layout's size, clamped — on read as well as on write. */
+    function clampSize(value, layout) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return SIZE_DEFAULTS[layoutOf(layout)];
+        return Math.round(Math.min(SIZE_RANGE[1], Math.max(SIZE_RANGE[0], number)) * 10) / 10;
+    }
+
+    /**
+     * The stored sizes, every layout present and in range. A hand-edited
+     * store holding `{ split: 2 }` reads back at the floor, not as a video
+     * two percent wide.
+     */
+    function readSizes(raw) {
+        const stored = raw && typeof raw === 'object' ? raw : {};
+        const out = {};
+        for (const id of LAYOUT_IDS) out[id] = id in stored ? clampSize(stored[id], id) : SIZE_DEFAULTS[id];
+        return out;
+    }
+
+    /**
+     * The size a pointer at (x, y) asks for, against the reader body's box.
+     * Read once when the drag starts: nothing here measures during it.
+     */
+    function sizeAt(layout, box, x, y) {
+        const across = (at) => (at / box.width) * 100;
+        switch (layout) {
+            case 'stacked': return ((y - box.top) / box.height) * 100;
+            case 'theatre': return across(box.right - x);
+            // The grip is the corner player's left edge, 20px in from the side.
+            case 'focus': return across(box.right - 20 - x);
+            default: return across(x - box.left);
+        }
+    }
+
+    async function loadSizes() {
+        try {
+            const stored = await chrome.storage.local.get([Settings.DATA.readerSizes]);
+            return readSizes(stored[Settings.DATA.readerSizes]);
+        } catch (_) {
+            // The extension reloaded under this page; the defaults still draw.
+            return readSizes(null);
+        }
+    }
+
+    async function saveSize(layout, value) {
+        const sizes = await loadSizes();
+        sizes[layoutOf(layout)] = clampSize(value, layout);
+        try { await chrome.storage.local.set({ [Settings.DATA.readerSizes]: sizes }); } catch (_) { /* context gone */ }
+        return sizes;
+    }
+
     function layoutsHtml(current) {
         return `<div class="bb-reader-layouts" role="radiogroup" aria-label="Layout">${LAYOUTS.map((layout) => `
             <button type="button" role="radio" class="bb-reader-layout" data-layout="${layout.id}"
@@ -86,7 +149,10 @@
                 <button type="button" class="bb-reader-close" aria-label="Close the reader" title="Close (Esc)">&times;</button>
             </header>
             <div class="bb-reader-body">
-                <div class="bb-reader-stage"><div class="bb-reader-screen"></div></div>
+                <div class="bb-reader-stage"><div class="bb-reader-screen"></div><div class="bb-reader-grip"
+                     title="Drag to resize"></div></div>
+                <div class="bb-reader-divider" role="separator" tabindex="0" aria-label="Resize the video"
+                     title="Drag to resize"></div>
                 <aside class="bb-reader-side">
                     <section class="bb-reader-transcript" aria-label="Transcript">
                         <p class="bb-reader-empty">Loading the transcript…</p>
@@ -242,6 +308,7 @@
                 unwatch: null,
                 notesShape: null,
                 pending: new Map(),
+                sizes: null,
                 active: -1,
                 handsOffAt: 0,
             };
@@ -255,6 +322,15 @@
             element.querySelector('.bb-reader-layouts').addEventListener('click', (event) => {
                 const button = event.target.closest('.bb-reader-layout');
                 if (button) setLayout(button.dataset.layout);
+            });
+            for (const handle of element.querySelectorAll('.bb-reader-divider, .bb-reader-grip')) {
+                handle.addEventListener('pointerdown', onDragStart);
+                handle.addEventListener('keydown', onHandleKey);
+            }
+            loadSizes().then((sizes) => {
+                if (!mine.alive) return;
+                mine.sizes = sizes;
+                applySize();
             });
             document.addEventListener('keydown', onKey, true);
             document.addEventListener('timeupdate', onTime, { capture: true, passive: true });
@@ -594,6 +670,80 @@
             document.documentElement.classList.remove(OPEN_CLASS);
         }
 
+        // --------------------------------------------------------- sizing
+
+        /** The current layout's size, into the one custom property CSS reads. */
+        function applySize() {
+            const layout = session.element.dataset.layout;
+            const size = session.sizes ? session.sizes[layout] : SIZE_DEFAULTS[layout];
+            session.element.style.setProperty('--bb-reader-share', String(size));
+            const divider = session.element.querySelector('.bb-reader-divider');
+            divider.setAttribute('aria-valuenow', String(Math.round(size)));
+            divider.setAttribute('aria-orientation', layout === 'stacked' ? 'horizontal' : 'vertical');
+        }
+
+        /**
+         * Drag the divider: the pointer is captured, each move writes the
+         * custom property and nothing else, and the size is stored once, on
+         * release. The body's box is read at the start and not again.
+         */
+        function onDragStart(event) {
+            if (event.button !== 0 || !session) return;
+            event.preventDefault();
+            const mine = session;
+            const handle = event.currentTarget;
+            const layout = mine.element.dataset.layout;
+            const box = mine.element.querySelector('.bb-reader-body').getBoundingClientRect();
+            let size = mine.sizes ? mine.sizes[layout] : SIZE_DEFAULTS[layout];
+            // A pointer the browser no longer counts as down cannot be
+            // captured, and throwing here would leave a half-started drag.
+            try { handle.setPointerCapture(event.pointerId); } catch (_) { /* moves still reach the handle */ }
+            mine.element.classList.add('is-resizing');
+
+            const move = (at) => {
+                size = clampSize(sizeAt(layout, box, at.clientX, at.clientY), layout);
+                mine.element.style.setProperty('--bb-reader-share', String(size));
+            };
+            const up = () => {
+                handle.removeEventListener('pointermove', move);
+                handle.removeEventListener('pointerup', up);
+                handle.removeEventListener('pointercancel', up);
+                mine.element.classList.remove('is-resizing');
+                commitSize(mine, layout, size);
+            };
+            handle.addEventListener('pointermove', move);
+            handle.addEventListener('pointerup', up);
+            handle.addEventListener('pointercancel', up);
+        }
+
+        /**
+         * The arrow keys, for anyone not dragging: the one that moves the
+         * handle toward the transcript grows the video, and in theatre and
+         * focus — where what you size sits on the right — that is Left.
+         */
+        const ARROWS = Object.freeze({
+            split: { ArrowRight: 2, ArrowLeft: -2 },
+            stacked: { ArrowDown: 2, ArrowUp: -2 },
+            theatre: { ArrowLeft: 2, ArrowRight: -2 },
+            focus: { ArrowLeft: 2, ArrowRight: -2 },
+        });
+
+        function onHandleKey(event) {
+            if (!session || !session.sizes) return;
+            const layout = session.element.dataset.layout;
+            const step = ARROWS[layout][event.key];
+            if (!step) return;
+            event.preventDefault();
+            commitSize(session, layout, clampSize(session.sizes[layout] + step, layout));
+        }
+
+        function commitSize(mine, layout, size) {
+            if (mine.sizes) mine.sizes[layout] = size;
+            if (mine.alive) applySize();
+            nudge();
+            saveSize(layout, size);
+        }
+
         /**
          * Switch layout live, and remember it as the one the next reader opens
          * in. The transcript is not fetched again and nothing is redrawn: the
@@ -607,6 +757,7 @@
                 button.setAttribute('aria-checked', String(button.dataset.layout === layout));
             }
             Settings.set({ readerLayout: layout });
+            applySize();
             nudge();
         }
 
@@ -649,7 +800,10 @@
         };
     }
 
-    const Reader = { createReader, ROOT_ID, SLOT_ID, PLAYER_ID, OPEN_CLASS, HANDS_OFF_MS, LAYOUTS, LAYOUT_IDS };
+    const Reader = {
+        createReader, ROOT_ID, SLOT_ID, PLAYER_ID, OPEN_CLASS, HANDS_OFF_MS, LAYOUTS, LAYOUT_IDS,
+        SIZE_DEFAULTS, SIZE_RANGE, clampSize, readSizes, sizeAt,
+    };
 
     root.BB = root.BB || {};
     root.BB.Reader = Reader;
