@@ -129,6 +129,10 @@
 <script src="cookie-banner.test.js"></script>
 <script src="leetcode.test.js"></script>
 <script src="typeracer.test.js"></script>
+<!-- Last, because it loads content.css for the specs that need the reader
+     laid out, and a stylesheet loaded earlier would restyle every fixture
+     after it. -->
+<script src="reader.test.js"></script>
 
 <script>
     (async () => {
