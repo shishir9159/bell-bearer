@@ -68,6 +68,7 @@
             };
 
             on('dashboardBtn', 'click', () => openDashboard(ChessSites.get(this.site) ? `#site/${this.site}` : ''));
+            on('openReaderBtn', 'click', () => this.openReader());
 
             // The daily-limit override. It draws itself or stays hidden, and
             // is not a chess-panel control: the limit can bite while you are
@@ -175,6 +176,7 @@
             document.body.dataset.bbSite = this.site;
 
             document.getElementById('youtubePanel').hidden = this.site !== 'youtube';
+            if (this.site === 'youtube') this.setupReaderBar();
             const chessSite = ChessSites.get(this.site);
             document.getElementById('chessPanel').hidden = !chessSite;
 
@@ -203,6 +205,39 @@
                 // without this it shows a list that is already out of date.
                 Settings.watch(Leet.KEYS, () => view.render());
             }
+        }
+
+        // ----------------------------------------------------- reader bar
+
+        /**
+         * The reader needs a video to read, so the button is only live on a
+         * watch page — and says why when it is not, rather than sitting there
+         * greyed out with no explanation.
+         */
+        async setupReaderBar() {
+            const button = document.getElementById('openReaderBtn');
+            const note = document.getElementById('readerBarNote');
+            const tab = await TabActions.activeTab();
+            let onVideo = false;
+            try {
+                onVideo = !!window.BB.YouTube.extractVideoId(tab.url) && /^\/(watch|live)\b/.test(new URL(tab.url).pathname);
+            } catch (_) { /* no tab, or not a URL */ }
+            button.disabled = !onVideo;
+            note.textContent = onVideo
+                ? 'The player, its transcript and your notes, side by side'
+                : 'Open a video to read it beside its transcript';
+        }
+
+        async openReader() {
+            const note = document.getElementById('readerBarNote');
+            const tab = await TabActions.activeTab();
+            if (await TabActions.openReader(tab)) {
+                window.close();
+                return;
+            }
+            // A tab opened before the extension was installed or reloaded
+            // has no content script to answer.
+            note.textContent = 'Reload the YouTube tab first — Bell Bearer is not running in it yet';
         }
 
         // ------------------------------------------------------ speed bar

@@ -2959,6 +2959,17 @@ check('an open reader hears about every setting that changes how it looks', () =
         assert(list.includes(`'${key}'`), `${key} only takes effect after a reload`);
     }
 });
+check('the popup’s reader button reaches something that opens the reader', () => {
+    const fs = require('fs');
+    const html = fs.readFileSync(`${__dirname}/../popup.html`, 'utf8');
+    const popup = fs.readFileSync(`${__dirname}/../popup.js`, 'utf8');
+    const main = fs.readFileSync(`${__dirname}/../src/content/main.js`, 'utf8');
+    assert(html.includes('id="openReaderBtn"'), 'no button');
+    assert(popup.includes("on('openReaderBtn'"), 'the button is not wired');
+    assert(/action: 'openReader'/.test(fs.readFileSync(`${__dirname}/../src/page/tab-actions.js`, 'utf8')),
+        'the popup does not ask the page');
+    assert(main.includes("case 'openReader':"), 'the page does not answer');
+});
 check('every typeracer setting has a control carrying its key as an id', () => {
     // This is the whole binding. src/page/settings-form.js matches a control
     // to a setting by id and nothing else, so a setting with no element is a

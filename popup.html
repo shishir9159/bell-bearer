@@ -48,6 +48,13 @@
              shortcut, the transcript they attach to) — shown only when the
              active tab is on YouTube. See popup.js#applySiteLayout. -->
         <div id="youtubePanel" hidden>
+            <!-- The first per-site action in the popup rather than a setting:
+                 it does something to the page, so it sits up here with the
+                 speed bar rather than in the dashboard. -->
+            <div class="reader-bar" id="readerBar">
+                <button id="openReaderBtn" class="btn-reader" type="button" disabled>Open the reader</button>
+                <span class="reader-bar-note" id="readerBarNote" aria-live="polite"></span>
+            </div>
             <div class="main-content" id="mainContent">
                 <div class="video-list" id="videoList"></div>
 

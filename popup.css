@@ -214,6 +214,44 @@ header h1 {
 }
 
 
+/* The reader button: the same accent-soft ground as the speed bar above it,
+   because both act on the page rather than on the list below. */
+.reader-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--border);
+}
+
+.btn-reader {
+    flex-shrink: 0;
+    padding: 5px 12px;
+    border: 1px solid var(--accent);
+    border-radius: var(--btn-radius);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-reader:hover { background: var(--accent-hover); }
+.btn-reader:disabled {
+    background: var(--surface-3);
+    border-color: transparent;
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.reader-bar-note {
+    min-width: 0;
+    color: var(--text-muted);
+    font-size: 11.5px;
+}
+
 /* The speed icon. It paints with currentColor, so it takes the skin's accent
    ink the way the other controls on an accent-soft ground do, and follows a
    theme change without anything having to redraw it. */

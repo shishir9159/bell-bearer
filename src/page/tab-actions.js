@@ -125,7 +125,18 @@
         return (await inject(tab.id, seekInPage, [seconds])) === true;
     }
 
-    const TabActions = { activeTab, findVideoTab, getRate, stepRate, seek };
+    /**
+     * Open the reader in `tab`. There is no injected fallback, unlike the
+     * speed and seek actions above: the reader is the content script's own
+     * surface, and without it there is nothing to open. True when it opened.
+     */
+    async function openReader(tab) {
+        if (!tab || tab.id == null) return false;
+        const answer = await ask(tab.id, { action: 'openReader' });
+        return !!(answer && answer.ok);
+    }
+
+    const TabActions = { activeTab, findVideoTab, getRate, stepRate, seek, openReader };
 
     root.BB = root.BB || {};
     root.BB.TabActions = TabActions;
