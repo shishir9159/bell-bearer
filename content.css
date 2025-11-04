@@ -3186,6 +3186,53 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-reader.is-resizing * { user-select: none; transition: none !important; }
 .bb-reader.is-resizing .bb-reader-screen { pointer-events: none; }
 
+/* ---- The skins. Everything above is tokens, so the palette and the type
+   already follow the skin; what is left is the shape and the one colour
+   that is not a token — the checkpoint wash, which is highlighter yellow on
+   the default skin and has to be something else wherever yellow would clash
+   or vanish. Each light rule is paired with its night state, the way the X
+   panel's are. */
+
+/* Night on the default skin: the same yellow reads muddy over a dark page,
+   so it is lighter and thinner. */
+.bb-reader.bb-themed[data-bb-theme="dark"] { --bb-reader-mark-1: rgba(255, 214, 90, .10); --bb-reader-mark-2: rgba(255, 214, 90, .17); --bb-reader-mark-3: rgba(255, 214, 90, .24); }
+
+/* Riso prints in its two inks, so the wash is the pink and the playing line
+   the blue. */
+.bb-reader.bb-themed[data-bb-skin="riso"] { --bb-reader-mark-1: rgba(255, 72, 176, .12); --bb-reader-mark-2: rgba(255, 72, 176, .20); --bb-reader-mark-3: rgba(255, 72, 176, .30); }
+.bb-reader.bb-themed[data-bb-skin="riso"][data-bb-theme="dark"] { --bb-reader-mark-1: rgba(255, 92, 187, .14); --bb-reader-mark-2: rgba(255, 92, 187, .22); --bb-reader-mark-3: rgba(255, 92, 187, .32); }
+.bb-reader.bb-themed[data-bb-skin="riso"] .bb-rt-row.is-active { background-color: rgba(31, 95, 208, .12); }
+.bb-reader.bb-themed[data-bb-skin="riso"][data-bb-theme="dark"] .bb-rt-row.is-active { background-color: rgba(96, 150, 255, .18); }
+
+/* Medieval rubricates: the wash is the red ink, faint, on the parchment. */
+.bb-reader.bb-themed[data-bb-skin="medieval"] { --bb-reader-mark-1: rgba(156, 43, 22, .08); --bb-reader-mark-2: rgba(156, 43, 22, .14); --bb-reader-mark-3: rgba(156, 43, 22, .21); }
+.bb-reader.bb-themed[data-bb-skin="medieval"][data-bb-theme="dark"] { --bb-reader-mark-1: rgba(216, 102, 63, .12); --bb-reader-mark-2: rgba(216, 102, 63, .19); --bb-reader-mark-3: rgba(216, 102, 63, .27); }
+
+/* Deco is gilt: the wash is the gold. */
+.bb-reader.bb-themed[data-bb-skin="deco"] { --bb-reader-mark-1: rgba(185, 148, 71, .14); --bb-reader-mark-2: rgba(185, 148, 71, .23); --bb-reader-mark-3: rgba(185, 148, 71, .33); }
+.bb-reader.bb-themed[data-bb-skin="deco"][data-bb-theme="dark"] { --bb-reader-mark-1: rgba(214, 178, 98, .12); --bb-reader-mark-2: rgba(214, 178, 98, .20); --bb-reader-mark-3: rgba(214, 178, 98, .28); }
+
+/* Medieval sets the transcript as a manuscript would: the serif, and a
+   touch more leading than the setting asks for, which Cardo needs. */
+.bb-reader.bb-themed[data-bb-skin="medieval"] .bb-rt-rows { line-height: calc(var(--bb-reader-leading, 1.6) + .1); }
+
+/* The two square-cornered skins square these off too, the way they do
+   every other surface we inject. */
+.bb-reader.bb-themed[data-bb-skin="riso"] :is(.bb-reader-close, .bb-reader-layouts, .bb-reader-lang, .bb-rt-row,
+    .bb-reader-toast, .bb-reader-toast-act, .bb-rn-copy, .bb-rn-time, .bb-rn-delete, .bb-rn-note),
+.bb-reader.bb-themed[data-bb-skin="deco"] :is(.bb-reader-close, .bb-reader-layouts, .bb-reader-lang, .bb-rt-row,
+    .bb-reader-toast, .bb-reader-toast-act, .bb-rn-copy, .bb-rn-time, .bb-rn-delete, .bb-rn-note),
+.bb-reader.bb-themed[data-bb-skin="riso"][data-layout="focus"] .bb-reader-stage,
+.bb-reader.bb-themed[data-bb-skin="deco"][data-layout="focus"] .bb-reader-stage { border-radius: 0; }
+
+.bb-reader.bb-themed[data-bb-skin="medieval"] :is(.bb-reader-close, .bb-reader-layouts, .bb-reader-lang, .bb-rt-row,
+    .bb-reader-toast, .bb-reader-toast-act, .bb-rn-copy, .bb-rn-time, .bb-rn-delete, .bb-rn-note),
+.bb-reader.bb-themed[data-bb-skin="medieval"][data-layout="focus"] .bb-reader-stage { border-radius: 3px; }
+
+/* Riso draws its borders as hard ink rather than as a tint, and the toast
+   is the one surface here that floats, so it gets the heavier one. */
+.bb-reader.bb-themed[data-bb-skin="riso"] .bb-reader-toast { border: 2px solid var(--bb-border-strong); }
+
 @media (prefers-reduced-motion: reduce) {
     .bb-reader[data-layout="theatre"] .bb-reader-side { transition: none; }
     .bb-reader-toast { animation: none; }
@@ -3298,13 +3345,20 @@ html.bb-reader-open body { overflow: hidden !important; }
 /* A line inside a checkpoint: a rule in the margin and a wash that deepens
    with each checkpoint over it, up to three, rather than one colour for any
    number. The wash sits under the playing line's, so the two read together. */
-.bb-rt-row[data-bb-marks] {
-    box-shadow: inset 3px 0 0 var(--bb-accent);
-    background-image: linear-gradient(var(--bb-reader-mark, rgba(255, 196, 0, .16)), var(--bb-reader-mark, rgba(255, 196, 0, .16)));
+.bb-reader {
+    --bb-reader-mark-1: rgba(255, 196, 0, .16);
+    --bb-reader-mark-2: rgba(255, 196, 0, .26);
+    --bb-reader-mark-3: rgba(255, 196, 0, .36);
 }
 
-.bb-rt-row[data-bb-marks="2"] { --bb-reader-mark: rgba(255, 196, 0, .26); }
-.bb-rt-row[data-bb-marks="3"] { --bb-reader-mark: rgba(255, 196, 0, .36); }
+.bb-rt-row[data-bb-marks] {
+    --bb-reader-mark: var(--bb-reader-mark-1);
+    box-shadow: inset 3px 0 0 var(--bb-accent);
+    background-image: linear-gradient(var(--bb-reader-mark), var(--bb-reader-mark));
+}
+
+.bb-rt-row[data-bb-marks="2"] { --bb-reader-mark: var(--bb-reader-mark-2); }
+.bb-rt-row[data-bb-marks="3"] { --bb-reader-mark: var(--bb-reader-mark-3); }
 
 /* The notes pane: docked under the transcript, never more than two fifths
    of the column, and scrolling on its own so a long list does not push the
