@@ -313,6 +313,7 @@
             const layout = layoutOf(getSettings().readerLayout);
             element.dataset.layout = layout;
             applyType(element);
+            applyChrome(element);
             element.querySelector('.bb-reader-tools').innerHTML =
                 '<select class="bb-reader-lang" aria-label="Transcript language" hidden></select>' + layoutsHtml(layout);
             // Dressed for the page's light or dark from the first frame, and
@@ -732,6 +733,23 @@
         }
 
         /**
+         * Over YouTube's header, or under it. Kept, the reader starts where
+         * the masthead ends — measured once here, not tracked — so search
+         * stays one click away.
+         */
+        function applyChrome(element) {
+            const keep = getSettings().readerHideChrome === false;
+            element.classList.toggle('is-under-masthead', keep);
+            if (!keep) {
+                element.style.top = '';
+                return;
+            }
+            const bar = document.getElementById('masthead-container');
+            const height = bar ? bar.getBoundingClientRect().height : 0;
+            element.style.top = `${height || 56}px`;
+        }
+
+        /**
          * A setting changed. The type is re-applied and the skin re-read, so
          * an open reader follows the dashboard without being closed.
          */
@@ -739,6 +757,8 @@
             if (!session) return;
             const mine = session;
             applyType(mine.element);
+            applyChrome(mine.element);
+            nudge();
             Theme.appearance().then((look) => { if (mine.alive) Theme.dress(mine.element, look); }).catch(() => {});
         }
 

@@ -518,7 +518,7 @@
         'typerSound', 'typerSoundVoice', 'typerSoundVolume', 'typerErrorSound', 'shortcuts'];
 
     /** And what an open YouTube reader has to follow without being closed. */
-    const READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'skin'];
+    const READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'readerHideChrome', 'skin'];
 
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&

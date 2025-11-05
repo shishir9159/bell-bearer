@@ -2930,6 +2930,12 @@ html.bb-reader-open body { overflow: hidden !important; }
     font-size: 14px;
 }
 
+/* Under YouTube's header rather than over it. The top is set in script to
+   where the masthead ends; the layer drops beneath the masthead's own 2020
+   so the search suggestions it opens can fall over the reader rather than
+   behind it. */
+.bb-reader.is-under-masthead { z-index: 2019; }
+
 .bb-reader-bar {
     display: flex;
     align-items: center;

@@ -539,6 +539,27 @@
         });
     });
 
+    suite('reader — youtube’s header', () => {
+        test('it covers the header by default, and starts under it when asked', async () => {
+            await loadStyles();
+            const page = stagePage();
+            const masthead = document.createElement('div');
+            masthead.id = 'masthead-container';
+            masthead.style.height = '64px';
+            page.home.parentNode.appendChild(masthead);
+
+            const { reader, values } = makeReader();
+            reader.open();
+            assertEqual(reader.element.getBoundingClientRect().top, 0);
+            values.readerHideChrome = false;
+            reader.refresh();
+            assertEqual(reader.element.getBoundingClientRect().top, 64, 'the header was covered anyway');
+            assert(Number(getComputedStyle(reader.element).zIndex) < 2020, 'the header’s menus would open behind the reader');
+            reader.close();
+            teardown();
+        });
+    });
+
     suite('reader — skins', () => {
         test('the panel is dressed in each skin, and squared off where the skin is square', async () => {
             await loadStyles();

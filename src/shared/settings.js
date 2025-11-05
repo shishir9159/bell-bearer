@@ -240,6 +240,9 @@
         readerFontSize: 16,
         readerLineHeight: 1.6,
         readerLineWidth: 44,
+        // The reader covers YouTube's header as well as the page. Off, it
+        // starts under the header instead, so search stays in reach.
+        readerHideChrome: true,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
