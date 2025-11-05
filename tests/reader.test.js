@@ -379,6 +379,199 @@
         });
     });
 
+    suite('reader — layouts', () => {
+        test('it opens in the layout the setting names, and an unknown one falls back', () => {
+            stagePage();
+            let { reader } = makeReader({ settings: { readerLayout: 'focus' } });
+            reader.open();
+            assertEqual(reader.element.dataset.layout, 'focus');
+            reader.close();
+            ({ reader } = makeReader({ settings: { readerLayout: 'sideways' } }));
+            reader.open();
+            assertEqual(reader.element.dataset.layout, 'split');
+            reader.close();
+            teardown();
+        });
+
+        test('every layout gives the player room, and switching fetches nothing again', async () => {
+            MockChrome.reset({ localStore: {} });
+            await loadStyles();
+            const page = stagePage();
+            const { reader, fetches } = makeReader({ transcript: makeTranscript(10) });
+            reader.open();
+            await settle();
+            for (const id of Reader().LAYOUT_IDS) {
+                reader.element.querySelector(`.bb-reader-layout[data-layout="${id}"]`).click();
+                assertEqual(reader.element.dataset.layout, id);
+                const box = page.player.getBoundingClientRect();
+                assert(box.width > 100 && box.height > 50, `${id} left the player ${box.width}×${box.height}`);
+                assert(reader.element.contains(page.player), `${id} lost the player`);
+            }
+            assertEqual(fetches(), 1, 'switching layout fetched the transcript again');
+            assertEqual(reader.element.querySelectorAll('.bb-rt-row').length, 10, 'switching redrew the transcript');
+            await waitFor(async () => (await window.BB.Settings.get(['readerLayout'])).readerLayout === 'focus',
+                'the last layout to be remembered');
+            reader.close();
+            teardown();
+        });
+    });
+
+    suite('reader — sizing', () => {
+        /** Press on a handle, move to (x, y) and let go. */
+        function drag(handle, x, y) {
+            const at = (type, cx, cy) => handle.dispatchEvent(new PointerEvent(type, {
+                bubbles: true, button: 0, pointerId: 1, clientX: cx, clientY: cy,
+            }));
+            const box = handle.getBoundingClientRect();
+            at('pointerdown', box.left + 2, box.top + 2);
+            at('pointermove', x, y);
+            at('pointerup', x, y);
+        }
+
+        const share = (reader) => Number(reader.element.style.getPropertyValue('--bb-reader-share'));
+
+        test('each layout comes back at the size it was dragged to', async () => {
+            MockChrome.reset({ localStore: {} });
+            await loadStyles();
+            stagePage();
+            let { reader } = makeReader({ settings: { readerLayout: 'split' } });
+            reader.open();
+            await waitFor(() => share(reader) === Reader().SIZE_DEFAULTS.split, 'the default size');
+
+            const body = reader.element.querySelector('.bb-reader-body').getBoundingClientRect();
+            drag(reader.element.querySelector('.bb-reader-divider'), body.left + body.width * 0.5, body.top + 10);
+            assertEqual(share(reader), 50, 'the drag did not size the video');
+
+            reader.setLayout('stacked');
+            assertEqual(share(reader), Reader().SIZE_DEFAULTS.stacked, 'stacked took split’s size');
+            drag(reader.element.querySelector('.bb-reader-divider'), body.left + 10, body.top + body.height * 0.4);
+            assertEqual(share(reader), 40);
+            await waitFor(async () => {
+                const stored = (await chrome.storage.local.get(['bbReaderSizes'])).bbReaderSizes;
+                return stored && stored.split === 50 && stored.stacked === 40;
+            }, 'both sizes to be stored');
+            reader.close();
+
+            ({ reader } = makeReader({ settings: { readerLayout: 'split' } }));
+            reader.open();
+            await waitFor(() => share(reader) === 50, 'split to come back at its own size');
+            reader.close();
+            teardown();
+        });
+
+        test('a drag past the edge stops at the bounds', async () => {
+            MockChrome.reset({ localStore: {} });
+            await loadStyles();
+            stagePage();
+            const { reader } = makeReader();
+            reader.open();
+            await settle();
+            const body = reader.element.querySelector('.bb-reader-body').getBoundingClientRect();
+            drag(reader.element.querySelector('.bb-reader-divider'), body.left + 3, body.top + 10);
+            assertEqual(share(reader), Reader().SIZE_RANGE[0]);
+            reader.close();
+            teardown();
+        });
+    });
+
+    suite('reader — caption languages', () => {
+        test('switching language redraws the transcript and the checkpoints stay on their lines', async () => {
+            MockChrome.reset({ localStore: {} });
+            await window.BB.Bookmarks.save([{ id: 'vid00000001', title: 'A talk', url: 'u', bookmarks: [
+                { id: 'a', time: 6, start: 6, end: 9 } ] }]);
+            stagePage();
+            const english = makeTranscript(6);
+            // The same talk in German, cut into different lines.
+            const german = { languageCode: 'de', snippets: [0, 2, 4, 6.5, 8, 11, 14].map((start, i) =>
+                ({ text: `Zeile ${i}`, start, duration: 2 })) };
+            const fetched = [];
+            const { reader } = makeReader({ transcripts: {
+                fetch: (id, { language } = {}) => {
+                    fetched.push(language || '');
+                    return Promise.resolve(language === 'de' ? german : english);
+                },
+                list: () => Promise.resolve([{ code: 'en', label: 'English' }, { code: 'de', label: 'German' }]),
+            } });
+            reader.open();
+            const picker = reader.element.querySelector('.bb-reader-lang');
+            await waitFor(() => !picker.hidden, 'the picker for a video with two languages');
+            await waitFor(() => reader.element.querySelector('[data-bb-marks]'), 'the English shading');
+
+            picker.value = 'de';
+            picker.dispatchEvent(new Event('change'));
+            await waitFor(() => /Zeile/.test(reader.element.querySelector('.bb-reader-transcript').textContent), 'the German lines');
+            const marked = Array.from(reader.element.querySelectorAll('[data-bb-marks] .bb-rt-text'), (n) => n.textContent);
+            assertDeepEqual(marked, ['Zeile 3', 'Zeile 4'], 'the checkpoint moved off its time');
+            assertDeepEqual(fetched, ['', 'de']);
+            reader.close();
+            teardown();
+        });
+
+        test('a video with one language offers no picker', async () => {
+            stagePage();
+            const { reader } = makeReader({ transcript: makeTranscript(3) });
+            reader.open();
+            await settle();
+            assert(reader.element.querySelector('.bb-reader-lang').hidden);
+            reader.close();
+            teardown();
+        });
+    });
+
+    suite('reader — typography', () => {
+        test('the transcript takes its type from the settings, and follows a change', async () => {
+            await loadStyles();
+            stagePage();
+            const { reader, values } = makeReader({
+                transcript: makeTranscript(3), settings: { readerFontSize: 20, readerLineHeight: 1.8 },
+            });
+            reader.open();
+            await settle();
+            const rows = reader.element.querySelector('.bb-rt-rows');
+            assertEqual(getComputedStyle(rows).fontSize, '20px');
+            assertEqual(getComputedStyle(rows).lineHeight, '36px');
+
+            values.readerFontSize = 14;
+            reader.refresh();
+            assertEqual(getComputedStyle(rows).fontSize, '14px', 'an open reader did not follow the setting');
+            reader.close();
+            teardown();
+        });
+    });
+
+    suite('reader — skins', () => {
+        test('the panel is dressed in each skin, and squared off where the skin is square', async () => {
+            await loadStyles();
+            for (const skin of ['default', 'riso', 'medieval', 'deco']) {
+                MockChrome.reset({ localStore: { skin } });
+                stagePage();
+                const { reader } = makeReader({ transcript: makeTranscript(3) });
+                reader.open();
+                await waitFor(() => reader.element.dataset.bbSkin === skin, `the ${skin} skin`);
+                assert(reader.element.classList.contains('bb-themed'), 'not themed at all');
+                assert(['light', 'dark'].includes(reader.element.dataset.bbTheme), 'no light or dark');
+                const radius = getComputedStyle(reader.element.querySelector('.bb-reader-close')).borderTopLeftRadius;
+                if (skin === 'riso' || skin === 'deco') assertEqual(radius, '0px', `${skin} kept round corners`);
+                else assert(radius !== '0px', `${skin} lost its corners`);
+                reader.close();
+                teardown();
+            }
+        });
+
+        test('a skin changed while the reader is open reaches it', async () => {
+            MockChrome.reset({ localStore: { skin: 'default' } });
+            stagePage();
+            const { reader } = makeReader();
+            reader.open();
+            await waitFor(() => reader.element.dataset.bbSkin === 'default', 'the first skin');
+            await chrome.storage.local.set({ skin: 'medieval' });
+            reader.refresh();
+            await waitFor(() => reader.element.dataset.bbSkin === 'medieval', 'the new skin');
+            reader.close();
+            teardown();
+        });
+    });
+
     suite('reader — opening and closing', () => {
         test('Escape closes, but leaves a field first', () => {
             stagePage();
