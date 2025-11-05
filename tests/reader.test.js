@@ -198,6 +198,187 @@
         });
     });
 
+    /** Select from one line's text to another's, and let go of the mouse. */
+    async function highlight(reader, from, to, { fromOffset = 0, toOffset } = {}) {
+        const texts = reader.element.querySelectorAll('.bb-rt-text');
+        const start = texts[from].firstChild;
+        const end = texts[to].firstChild;
+        const range = document.createRange();
+        range.setStart(start, fromOffset);
+        range.setEnd(end, toOffset == null ? end.length : toOffset);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        texts[to].dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    }
+
+    const saved = async () => {
+        const videos = await window.BB.Bookmarks.load();
+        return videos.length ? videos[0].bookmarks : [];
+    };
+
+    async function waitFor(predicate, what, ms = 3000) {
+        const started = Date.now();
+        while (!(await predicate())) {
+            if (Date.now() - started > ms) throw new Error(`timed out waiting for ${what}`);
+            await new Promise((done) => setTimeout(done, 10));
+        }
+    }
+
+    suite('reader — highlight to checkpoint', () => {
+        test('selecting lines saves exactly what was selected, and Undo takes it back', async () => {
+            MockChrome.reset({ localStore: {} });
+            stagePage();
+            const { reader } = makeReader({ transcript: makeTranscript(10) });
+            reader.open();
+            await settle();
+            await highlight(reader, 2, 3, { fromOffset: 5, toOffset: 6 });
+            await waitFor(async () => (await saved()).length === 1, 'the checkpoint to be saved');
+
+            const [checkpoint] = await saved();
+            assertEqual(checkpoint.start, 6, 'the first line’s start');
+            assertEqual(checkpoint.end, 11.5, 'the last line’s end');
+            assertEqual(checkpoint.subtitle, '2 of the talk, said at 6 seconds. Line 3', 'not what was selected');
+            assertEqual(checkpoint.note, '');
+            assert(checkpoint.id, 'saved without an id');
+            assert(window.getSelection().isCollapsed, 'the selection was left up');
+
+            const toast = reader.element.querySelector('.bb-reader-toast');
+            assert(!toast.hidden, 'no toast');
+            toast.querySelector('button').click();
+            await waitFor(async () => (await saved()).length === 0, 'Undo to remove it');
+            reader.close();
+            teardown();
+        });
+
+        test('two highlights beginning in the same second both survive', async () => {
+            MockChrome.reset({ localStore: {} });
+            stagePage();
+            const { reader } = makeReader({ transcript: makeTranscript(10) });
+            reader.open();
+            await settle();
+            await highlight(reader, 4, 4, { toOffset: 6 });
+            await waitFor(async () => (await saved()).length === 1, 'the first');
+            await highlight(reader, 4, 5);
+            await waitFor(async () => (await saved()).length === 2, 'the second to survive');
+            reader.close();
+            teardown();
+        });
+
+        test('the same passage twice is one checkpoint', async () => {
+            MockChrome.reset({ localStore: {} });
+            stagePage();
+            const { reader } = makeReader({ transcript: makeTranscript(10) });
+            reader.open();
+            await settle();
+            await highlight(reader, 1, 1);
+            await waitFor(async () => (await saved()).length === 1, 'the first');
+            await highlight(reader, 1, 1);
+            await waitFor(() => /already/i.test(reader.element.querySelector('.bb-reader-toast').textContent), 'the repeat to be noticed');
+            assertEqual((await saved()).length, 1);
+            reader.close();
+            teardown();
+        });
+
+        test('checkpoints already saved are shaded on the right lines, and follow changes', async () => {
+            MockChrome.reset({ localStore: {} });
+            await window.BB.Bookmarks.save([{ id: 'vid00000001', title: 'A talk', url: 'u', bookmarks: [
+                { id: 'a', time: 6, start: 6, end: 12 }, { id: 'b', time: 9, start: 9, end: 12 } ] }]);
+            stagePage();
+            const { reader } = makeReader({ transcript: makeTranscript(10) });
+            reader.open();
+            await waitFor(() => reader.element.querySelector('[data-bb-marks]'), 'the shading');
+            const marks = () => Array.from(reader.element.querySelectorAll('.bb-rt-row'), (row) => row.dataset.bbMarks || '0');
+            assertDeepEqual(marks().slice(0, 5), ['0', '0', '1', '2', '0']);
+
+            await window.BB.Bookmarks.update((videos) => window.BB.Bookmarks.removeBookmarkById(videos, 'vid00000001', 'b'));
+            await waitFor(() => marks()[3] === '1', 'a checkpoint deleted elsewhere to come off');
+            reader.close();
+            teardown();
+        });
+
+        test('with saving on selection off, the toast offers Save instead', async () => {
+            MockChrome.reset({ localStore: {} });
+            stagePage();
+            const { reader } = makeReader({ transcript: makeTranscript(10), settings: { readerAutoCheckpoint: false } });
+            reader.open();
+            await settle();
+            await highlight(reader, 1, 1);
+            await new Promise((done) => setTimeout(done, 100));
+            assertEqual((await saved()).length, 0, 'saved without being asked');
+            const button = reader.element.querySelector('.bb-reader-toast button');
+            assert(/save/i.test(button.textContent), 'no Save offered');
+            button.click();
+            await waitFor(async () => (await saved()).length === 1, 'Save to save it');
+            reader.close();
+            teardown();
+        });
+    });
+
+    suite('reader — notes', () => {
+        const seed = () => window.BB.Bookmarks.save([{ id: 'vid00000001', title: 'A talk', url: 'u', bookmarks: [
+            { id: 'a', time: 6, start: 6, end: 9, subtitle: 'first said', note: '' },
+            // From before ids, with the note Ctrl+B used to write for you.
+            { time: 12, start: 12, end: 15, timestamp: 1700000000000, subtitle: 'second said', note: 'Checkpoint 0:12 - 0:15' },
+        ] }]);
+
+        test('the checkpoints are listed in time order with what was said', async () => {
+            MockChrome.reset({ localStore: {} });
+            await seed();
+            stagePage();
+            const { reader } = makeReader({ transcript: makeTranscript(10) });
+            reader.open();
+            await waitFor(() => reader.element.querySelectorAll('.bb-rn-item').length === 2, 'the list');
+            const items = reader.element.querySelectorAll('.bb-rn-item');
+            assert(/first said/.test(items[0].textContent) && /second said/.test(items[1].textContent));
+            assertEqual(reader.element.querySelector('.bb-rn-count').textContent, '(2)');
+            reader.close();
+            teardown();
+        });
+
+        test('a note is written once the typing stops, and closing does not lose one', async () => {
+            MockChrome.reset({ localStore: {} });
+            await seed();
+            stagePage();
+            const { reader } = makeReader({ transcript: makeTranscript(10) });
+            reader.open();
+            await waitFor(() => reader.element.querySelectorAll('.bb-rn-note').length === 2, 'the list');
+            const boxes = reader.element.querySelectorAll('.bb-rn-note');
+
+            boxes[0].focus();
+            boxes[0].value = 'worth rewatching';
+            boxes[0].dispatchEvent(new Event('input', { bubbles: true }));
+            assertEqual((await saved())[0].note, '', 'written on the keystroke rather than after it');
+            await waitFor(async () => (await saved())[0].note === 'worth rewatching', 'the note to be written');
+            assert(document.activeElement === reader.element.querySelector('.bb-rn-note'),
+                'saving threw the caret out of the box being typed in');
+
+            // The old record has no id; it is found by what never changes.
+            const legacy = reader.element.querySelectorAll('.bb-rn-note')[1];
+            legacy.value = 'edited';
+            legacy.dispatchEvent(new Event('input', { bubbles: true }));
+            reader.close();
+            await waitFor(async () => (await saved())[1].note === 'edited', 'the pending note to be written on close');
+            teardown();
+        });
+
+        test('deleting a checkpoint can be undone', async () => {
+            MockChrome.reset({ localStore: {} });
+            await seed();
+            stagePage();
+            const { reader } = makeReader({ transcript: makeTranscript(10) });
+            reader.open();
+            await waitFor(() => reader.element.querySelectorAll('.bb-rn-item').length === 2, 'the list');
+            reader.element.querySelector('.bb-rn-delete').click();
+            await waitFor(async () => (await saved()).length === 1, 'the delete');
+            await waitFor(() => reader.element.querySelectorAll('.bb-rn-item').length === 1, 'the list to follow');
+            reader.element.querySelector('.bb-reader-toast button').click();
+            await waitFor(async () => (await saved()).length === 2, 'Undo to put it back');
+            reader.close();
+            teardown();
+        });
+    });
+
     suite('reader — opening and closing', () => {
         test('Escape closes, but leaves a field first', () => {
             stagePage();
