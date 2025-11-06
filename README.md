@@ -14,6 +14,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 ## Features
 
 - **Checkpoint Creation**: Hold Ctrl+B to create checkpoints while watching YouTube videos
+- **Reader**: YouTube's own player beside the video's transcript — highlight a passage to keep it, and write a note against it
 - **Visual Feedback**: Snappy notifications for bookmark duration
 - **Bookmark Management**: Clean interface to view and manage all bookmarks
 - **Quick Navigation**: Jump to the bookmarked timestamp with a single click
@@ -76,6 +77,7 @@ while you are typing in a field.
 | --- | --- |
 | Hold `Ctrl + B` | Create a checkpoint over the passage you held it for |
 | `Ctrl + Shift + S` | Mark a segment start; press again to mark its end |
+| `Ctrl + Alt + R` | Open or close the reader on a YouTube video |
 | `Alt + 1…9` | Skip forward that many seconds |
 | `Shift + 1…9` | Skip back that many seconds |
 | `Ctrl + Shift + 1…9` | Temporary 3x boost for that many seconds |
@@ -111,6 +113,62 @@ for the same reason Skim and the link hints are: a bare-Shift letter is a large
 claim to make on somebody's keyboard without telling them first. It does nothing
 anywhere but YouTube, x.com and leetcode.com, so on every other site the key
 stays a plain capital P.
+
+## The reader
+
+Checkpoints used to be recorded blind: hold `Ctrl + B`, let go, and whatever the
+transcript said was stapled to the span — with no way to read the transcript
+while you worked, see the checkpoints you already had, or write a note. The
+reader is the missing half. Open it from the popup's **Open the reader** button
+or with `Ctrl + Alt + R` on any video; `Esc` or the × puts the page back.
+
+**It is YouTube's own player, moved rather than copied.** `#movie_player` is
+lifted into the reader and put back where it came from on close, so the video
+keeps playing from where it was — at the speed, quality, volume and captions it
+had, picture-in-picture included — and can be any size you like, because it is
+the same element. Nothing on YouTube's page is removed or rebuilt. Two of
+YouTube's habits are answered rather than fought: it sizes its control bar off a
+window resize, so the reader sends one when the player moves; and it fullscreens
+its own container rather than the player, so for the length of a fullscreen the
+player goes home and comes back after.
+
+**Highlight a passage to keep it.** Select transcript text and let go: that is a
+checkpoint, saved on the spot with an **Undo** in the corner — the Undo is what
+makes saving without asking safe. It keeps exactly what you selected, half a
+sentence if that is what you took, and spans the lines it touched. Highlighting
+the same passage twice is one checkpoint. Turn **Highlighting saves a
+checkpoint** off in Settings and the same selection offers a **Save** button
+instead.
+
+**The checkpoints are anchored by time.** A checkpoint's start and end already
+say which lines it covers, so they are shaded on the transcript by time rather
+than by any position in the page — and stay on the right lines when you switch
+caption language, where the lines are cut differently. Overlapping checkpoints
+shade deeper rather than fighting.
+
+**Notes.** Under the transcript is the video's checkpoints in time order: the
+time (click to play from it), what was said, and a note you can type straight
+into — written once you stop typing, not once a keystroke, and never lost by
+closing the reader mid-word. It is the first place in the extension that edits a
+checkpoint's note at all; the dashboard shows it. Deleting one has an Undo too,
+and **Copy** puts the lot on the clipboard as a timestamped Markdown list.
+
+**Four layouts**, switched from the reader's own header and remembered:
+
+| Layout | Shape |
+| --- | --- |
+| Split | Video beside the transcript, notes docked under it. The default. |
+| Stacked | Video centred on top, transcript and notes in one column below. |
+| Theatre | Video fills the reader; the transcript is a drawer from the right that slides out on hover and hides itself after. |
+| Focus | Transcript first, set for reading, with the video pinned in the corner — at 30% of the width by default, deliberately bigger than a thumbnail. |
+
+Drag the divider — or the grip on the corner player in Focus — to size the
+video, and each layout remembers its own size, as a percentage so a window
+resized in between can never push it off the screen. The transcript follows the
+video, and leaves you alone for a few seconds whenever you scroll it yourself;
+click any line to play from it. Its text size, line spacing and line length are
+in Settings, beside whether the reader covers YouTube's header or starts under
+it so search stays in reach.
 
 ## Skim
 
@@ -403,7 +461,14 @@ letter pairs at the end and the stream is thrown away.
 
 **No page-world script.** chess.com and LeetCode each need one because the board
 object and `window.fetch` only exist in the page's own world. Keystrokes are DOM
-events, which a capture-phase listener in the isolated world sees in full.
+events, which a capture-phase listener in the isolated world sees in full — and
+only the ones typed into the race box count, so a word said in TypeRacer's chat
+mid-race is not a mistake in the quote.
+
+**A race ends when the keystrokes say it has**: every character of the quote in,
+and nothing wrong left in the box. The results panel is waited on for a moment
+as the cross-check, and a scoreboard still on screen from the race before is
+neither taken as the end of this one nor filed against it.
 
 ### What the tables say
 
@@ -678,7 +743,9 @@ src/content/    injected into every page
   time-limit.js    counts the day on any limited site, and covers it
   roster.js        reads a roster off the site's pages, and works through one
   checkpoints.js   recording and saving checkpoints
-  transcripts.js   transcript fetching and caching
+  transcripts.js   transcript fetching and caching, per video and per language
+  reader.js        the reader: the adopted player, layouts, sizing, highlights, notes
+  reader-transcript.js  the reader's transcript rows, and which rows a time or a selection covers
   site.js          which site, and which <video> on it
   chess.js         in a chess game: clock warning, spoken moves, clear arrows
   youtube-ui.js    the pouch button, the drawer entry, the topics sheet, the pouch panel
@@ -769,15 +836,27 @@ Chrome's storage API is used with the following data structure format:
       url: "https://youtube.com/watch?v=video_id",
       bookmarks: [
         {
-          time: 120, // in seconds
+          id: "cp_…",         // absent on checkpoints from before ids
+          time: 120,          // whole seconds, for links
+          start: 120.34,      // a span, to the hundredth when highlighted
+          end: 131.9,
           timestamp: 1234567890,
-          note: "Checkpoint description"
+          title: "the first sixty characters of what was said",
+          subtitle: "what the transcript said over the span",
+          note: "your own note, edited in the reader"
         }
       ]
     }
-  ]
+  ],
+  // The reader's player size in each layout, a percentage, set by dragging.
+  bbReaderSizes: { split: 62, stacked: 55, theatre: 34, focus: 30 }
 }
 ```
+
+Two checkpoints are the same one when their ids match. Records from before ids
+still compare by time, exactly as they always did, so re-importing an old export
+adds nothing — and a new checkpoint is never swallowed by an old one that merely
+begins in the same second. Nothing on disk is rewritten to add an id.
 
 The X pouch is four keys rather than two, because people and posts keep
 independent topic lists and array order is the display order:
