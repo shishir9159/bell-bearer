@@ -216,8 +216,9 @@
          * settings page each get their own grid, so a future site shows up
          * in both the moment it is added to that one file.
          */
-        renderSiteGrids() {
-            const html = SiteIcons.list().map(siteCardHtml).join('');
+        async renderSiteGrids() {
+            const { siteOrder } = await Settings.get(['siteOrder']);
+            const html = SiteIcons.list(siteOrder).map(siteCardHtml).join('');
             const dashboardGrid = document.getElementById('sitesGrid');
             const settingsGrid = document.getElementById('settingsSitesGrid');
             if (dashboardGrid) dashboardGrid.innerHTML = html;
@@ -751,7 +752,7 @@
      */
     function siteCardHtml(site) {
         return `
-            <button class="site-card" type="button" data-site="${Dom.escapeAttr(site.id)}"
+            <button class="site-card" type="button" data-site="${Dom.escapeAttr(site.id)}" data-tint="${SiteIcons.tint(site.id)}"
                     aria-label="${Dom.escapeAttr(site.name)}" title="${Dom.escapeAttr(site.name)}">
                 <span class="site-card-icon">${SiteIcons.svg(site.id, { size: 84 })}</span>
             </button>`;

@@ -88,8 +88,30 @@
 
     const ORDER = ['youtube', 'chess', 'lichess', 'twitter', 'reddit', 'leetcode', 'typeracer'];
 
-    function list() {
-        return ORDER.map((id) => SITES[id]);
+    /**
+     * The sites in the order they are shown: the user's own, dragged into
+     * place on the dashboard, then any site it does not name yet — a site
+     * added after the order was saved turns up at the end rather than
+     * nowhere. Unknown and repeated ids in a saved order are passed over.
+     */
+    function list(order) {
+        const seen = new Set();
+        const mine = (Array.isArray(order) ? order : []).filter((id) => {
+            if (!SITES[id] || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+        });
+        return mine.concat(ORDER.filter((id) => !seen.has(id))).map((id) => SITES[id]);
+    }
+
+    /**
+     * Which of the skin's four tints a site's card sits on — fixed per site
+     * rather than per slot, so a card dragged elsewhere keeps its colour
+     * instead of the whole row repainting under the pointer.
+     */
+    function tint(id) {
+        const at = ORDER.indexOf(id);
+        return (at < 0 ? 0 : at % 4) + 1;
     }
 
     function get(id) {
@@ -103,7 +125,7 @@
         return `<svg viewBox="${site.viewBox}" width="${size}" height="${size}" aria-hidden="true" focusable="false"><path fill="${site.color}" d="${site.path}"/></svg>`;
     }
 
-    const SiteIcons = { list, get, svg };
+    const SiteIcons = { list, get, svg, tint, ORDER: Object.freeze(ORDER.slice()) };
 
     root.BB = root.BB || {};
     root.BB.SiteIcons = SiteIcons;

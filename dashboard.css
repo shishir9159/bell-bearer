@@ -198,11 +198,13 @@ header h1 {
 
 /* Each card sits on its own tint, taken in turn from the skin's four, so the
    launcher reads as a set of distinct places rather than a row of identical
-   blank boxes — and changes color with the skin like everything else. */
-.site-card:nth-child(4n+1) { background: var(--site-tint-1); }
-.site-card:nth-child(4n+2) { background: var(--site-tint-2); }
-.site-card:nth-child(4n+3) { background: var(--site-tint-3); }
-.site-card:nth-child(4n+4) { background: var(--site-tint-4); }
+   blank boxes — and changes color with the skin like everything else. The
+   tint belongs to the site (data-tint, from SiteIcons.tint) rather than to
+   the slot: by :nth-child, reordering the sites repainted every card. */
+.site-card[data-tint="1"] { background: var(--site-tint-1); }
+.site-card[data-tint="2"] { background: var(--site-tint-2); }
+.site-card[data-tint="3"] { background: var(--site-tint-3); }
+.site-card[data-tint="4"] { background: var(--site-tint-4); }
 
 .site-card-icon {
     display: flex;

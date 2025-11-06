@@ -5312,6 +5312,12 @@ const dayRecord = (at = T0) =>
     });
 
     check('typeracer is in the launcher', () => {
+        eq(SiteIcons.list(['typeracer', 'youtube']).map((s) => s.id).slice(0, 3), ['typeracer', 'youtube', 'chess'],
+            'a saved order first, then every site it does not name');
+        eq(SiteIcons.list(['nope', 'chess', 'chess']).length, SiteIcons.ORDER.length, 'unknown and repeated ids were kept');
+        eq(SiteIcons.list(null).map((s) => s.id), SiteIcons.ORDER.slice());
+        eq(SiteIcons.ORDER.map((id) => SiteIcons.tint(id)).slice(0, 5), [1, 2, 3, 4, 1], 'the tint belongs to the site');
+        eq(globalThis.BB.Settings.DEFAULTS.siteOrder, []);
         eq(SiteIcons.get('typeracer').name, 'TypeRacer');
         assert(SiteIcons.list().some((site) => site.id === 'typeracer'), 'not in ORDER');
         assert(SiteIcons.svg('typeracer').includes('<svg'), 'draws nothing');

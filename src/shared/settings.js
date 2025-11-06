@@ -36,6 +36,11 @@
         // above the order whatever it is — see src/shared/pins.js.
         dashboardSort: 'recent', // 'recent' | 'oldest' | 'title' | 'most'
 
+        // The site launcher's order, as dragged on the dashboard or in
+        // Settings — one order for both. Empty is SiteIcons' own order, and a
+        // site this does not name yet is shown after the ones it does.
+        siteOrder: [],
+
         // The pouch sheet's "All" rail row covers the channels in the pouch.
         // Turning this on widens it to every channel the account subscribes
         // to; it is remembered so the sheet reopens the way it was left.
