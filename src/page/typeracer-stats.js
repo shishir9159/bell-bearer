@@ -204,7 +204,8 @@
             <table class="stat-table typer-grams">
                 <thead><tr>
                     <th>Gram</th><th class="col-num">Mean</th><th class="col-num">WPM</th>
-                    <th class="col-num">Seen</th><th class="typer-ratio-col">Against your own</th>
+                    <th class="col-num">Seen</th><th class="col-num" title="Times you missed going for it">Slips</th>
+                    <th class="typer-ratio-col">Against your own</th>
                 </tr></thead>
                 <tbody>${rows.map((row) => `
                     <tr>
@@ -212,7 +213,28 @@
                         <td class="col-num">${esc(String(row.meanMs))}ms</td>
                         <td class="col-num">${esc(String(row.wpm))}</td>
                         <td class="col-num">${esc(String(row.n))}</td>
+                        <td class="col-num">${esc(String(row.err || 0))}</td>
                         <td class="typer-ratio-col">${ratioBar(row)}<span class="typer-ratio-num">${esc(row.ratio.toFixed(2))}&times;</span></td>
+                    </tr>`).join('')}</tbody>
+            </table>`;
+    }
+
+    function slipTable(rows) {
+        if (!rows.length) {
+            return '<p class="stat-sub">No pair has tripped you twice yet. The slips come out as the races add up.</p>';
+        }
+        return `
+            <table class="stat-table typer-slips">
+                <thead><tr>
+                    <th>Going for</th><th class="col-num">Slips</th><th class="col-num">Clean</th>
+                    <th class="col-num">Slip rate</th>
+                </tr></thead>
+                <tbody>${rows.map((row) => `
+                    <tr>
+                        <td><span class="typer-gram">${gramGlyph(row.gram)}</span></td>
+                        <td class="col-num">${esc(String(row.err))}</td>
+                        <td class="col-num">${esc(String(row.n))}</td>
+                        <td class="col-num">${esc((row.rate * 100).toFixed(1))}%</td>
                     </tr>`).join('')}</tbody>
             </table>`;
     }
@@ -279,6 +301,16 @@
                     that is slow when both pairs inside it are fast is a different problem from a slow pair,
                     and a different thing to drill.</p>
                 ${gramTable(trigrams, minSamples, 'rolls')}
+            </div>
+            <div class="stat-panel">
+                <h3>Where you slip</h3>
+                <p class="stat-sub">The pairs you were in the middle of when a key went wrong — the character
+                    before it right, the one it was going for missed on the first try. A slip straight after
+                    another is left out: the second is the first one's fault, not the pair's.</p>
+                <div class="typer-slip-grid">
+                    <div><h4>Pairs</h4>${slipTable(Typer.slips(state, 'bi'))}</div>
+                    <div><h4>Rolls</h4>${slipTable(Typer.slips(state, 'tri'))}</div>
+                </div>
             </div>
             <div class="stat-panel">
                 <h3>Most mistyped</h3>
@@ -525,6 +557,6 @@
 
     BB.TyperStats = {
         mountAll, mountPanel, mountSettings, RANGES, TREND_WINDOW, HEAT,
-        human, sinceOf, placeText, gramGlyph, ratioBar,
+        human, sinceOf, placeText, gramGlyph, ratioBar, slipTable,
     };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

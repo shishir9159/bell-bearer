@@ -3101,6 +3101,11 @@ body[data-skin="deco"] .bb-plate {
 
 .typer-ratio-col { width: 190px; white-space: nowrap; }
 
+/* Pairs and rolls side by side where there is room for both, stacked where
+   there is not. */
+.typer-slip-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px 28px; }
+.typer-slip-grid h4 { margin: 4px 0 6px; font-size: 12px; color: var(--text-muted); font-weight: 600; }
+
 /* The .chess-wdl track, with one fill rather than three. No colour of its
    own beyond the accent, so a skin change is followed without redrawing. */
 .typer-ratio { display: inline-flex; width: 110px; vertical-align: middle; }

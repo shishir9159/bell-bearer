@@ -164,6 +164,11 @@
         // interval from every table it would otherwise have entered.
         const slots = [];
         let depth = 0;
+        // What each position asked for, and whether the first key that
+        // landed there was right. Kept apart from `slots`, which a retype
+        // overwrites: a slip is decided by the first attempt, not the last.
+        const firstTry = [];
+        const wanted = [];
 
         for (const raw of asArray(events)) {
             const at = Number(raw && raw.at);
@@ -202,9 +207,27 @@
                 entry.subs[hit] = (entry.subs[hit] || 0) + 1;
             }
 
+            if (firstTry[depth] === undefined) {
+                firstTry[depth] = ok;
+                wanted[depth] = String(raw.expected == null ? '' : raw.expected).slice(0, 1) || '?';
+            }
+
             const before = slots[depth];
             slots[depth] = { ch, at, ok, dirty: !!before };
             depth++;
+        }
+
+        // The slips: a position got wrong on its first attempt straight after
+        // one got right, filed against the pair — and the roll — the fingers
+        // were in the middle of. Only after a clean one, because the second
+        // mistake of a run is the first one's fault, not the pair's. Keyed
+        // by what was due, not what was hit: `err` on "th" means "going for
+        // th, you missed", which is the thing worth drilling.
+        const clearTry = (index) => firstTry[index] === true;
+        for (let i = 1; i < firstTry.length; i++) {
+            if (firstTry[i] !== false || !clearTry(i - 1)) continue;
+            bump(bi, foldGram([wanted[i - 1], wanted[i]])).err++;
+            if (i >= 2 && clearTry(i - 2)) bump(tri, foldGram([wanted[i - 2], wanted[i - 1], wanted[i]])).err++;
         }
 
         const clean = (index) => {
@@ -299,9 +322,13 @@
     function evict(table, cap) {
         const entries = Object.entries(asObject(table));
         if (entries.length <= cap) return Object.fromEntries(entries);
+        // Readings and slips both count as knowing a gram. A pair you slip on
+        // every time never gets a clean reading, so by `n` alone it was the
+        // first thing thrown out — exactly the pair the slips table is for.
+        const weight = (entry) => count(entry.n) + count(entry.err);
         const gone = new Set(entries
-            .filter(([, entry]) => count(entry.n) < KEEP_N)
-            .sort((a, b) => count(a[1].n) - count(b[1].n) || (a[0] < b[0] ? -1 : 1))
+            .filter(([, entry]) => weight(entry) < KEEP_N)
+            .sort((a, b) => weight(a[1]) - weight(b[1]) || (a[0] < b[0] ? -1 : 1))
             .slice(0, entries.length - cap)
             .map(([gram]) => gram));
         return Object.fromEntries(entries.filter(([gram]) => !gone.has(gram)));
@@ -552,6 +579,7 @@
             rows.push({
                 gram,
                 n,
+                err: count(entry.err),
                 meanMs: round1(meanMs),
                 baseline: round1(baseline),
                 overall: round1(overall),
@@ -562,6 +590,28 @@
         // Ties broken by sample count and then alphabetically, so the table
         // does not reshuffle itself between two repaints of the same data.
         rows.sort((a, b) => b.ratio - a.ratio || b.n - a.n || (a.gram < b.gram ? -1 : 1));
+        return rows.slice(0, Math.max(1, count(limit)));
+    }
+
+    /**
+     * The pairs (or rolls) you slip on, most slips first.
+     *
+     * `rate` is slips over every time the gram was attempted from a clean
+     * start — its slips plus its clean readings. A few readings are lost to
+     * the interval bounds, so it errs slightly high, never low. `minSlips`
+     * keeps a single fumble from naming a gram at all.
+     */
+    function slips(state, kind = 'bi', { limit = 12, minSlips = 2 } = {}) {
+        const grams = asObject(asObject(state).grams);
+        const table = asObject(kind === 'tri' ? grams.tri : grams.bi);
+        const rows = [];
+        for (const [gram, entry] of Object.entries(table)) {
+            const err = count(entry && entry.err);
+            if (err < Math.max(1, count(minSlips))) continue;
+            const n = count(entry.n);
+            rows.push({ gram, err, n, rate: Math.round((err / (err + n)) * 1000) / 1000 });
+        }
+        rows.sort((a, b) => b.err - a.err || b.rate - a.rate || (a.gram < b.gram ? -1 : 1));
         return rows.slice(0, Math.max(1, count(limit)));
     }
 
@@ -727,7 +777,7 @@
     const Typer = {
         RACE_CAP, KEEP_DAYS, GRAM_CAP, GRAM_CAP_TRI, KEEP_N, OUTLIER_MS, FLOOR_MS,
         MIN_SAMPLES, MISTYPE_MIN_DUE, DAY_MS, METRICS,
-        slowest, mistyped, baselineFor, wpmFor, heatDays, streak, drill, drillChunk,
+        slowest, slips, mistyped, baselineFor, wpmFor, heatDays, streak, drill, drillChunk,
         dayKey, blank, blankGrams, foldChar, foldGram, prune, cleanRace,
         gramsFrom, mergeGrams, pruneGrams, recordRace, cleanWpmOf, correctionCost, summarize,
         load, update, record,

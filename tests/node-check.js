@@ -1361,8 +1361,11 @@ check('an interval spanning a backspace is credited to nothing', () => {
     // retyped position measure how long the fix took, not how fast the pair
     // is, so neither belongs in a table about speed.
     const grams = gramsOf('the', 'tx<he');
-    eq(Object.keys(grams.bi), []);
-    eq(Object.keys(grams.tri), []);
+    // The miss itself is filed as a slip on "th", with no reading beside it.
+    const read = (table) => Object.keys(table).filter((gram) => table[gram].n > 0);
+    eq(read(grams.bi), []);
+    eq(read(grams.tri), []);
+    eq(grams.bi.th.err, 1);
     eq(grams.errors, 1);
 });
 check('a stare and a key repeat are both dropped', () => {
@@ -1391,6 +1394,49 @@ check('a character typed twice was due twice', () => {
     const grams = gramsOf('the', 'tg<he');
     eq(grams.chars.h.due, 2);
     eq(grams.chars.h.wrong, 1);
+});
+
+console.log('\n# typeracer — slips');
+check('a first-try miss after a clean key is a slip on the pair and the roll being typed', () => {
+    // "thx<e": going for "e" after a clean "th", "x" was hit.
+    const { bi, tri } = gramsOf('the quick', 'thx<e');
+    eq(bi.he.err, 1, 'the pair going for e');
+    eq(tri.the.err, 1, 'the roll going for e');
+    eq((bi.th && bi.th.err) || 0, 0, 'the clean pair before it was blamed');
+});
+check('the retype that fixed it is not a second slip, and a run of misses is one', () => {
+    const { bi } = gramsOf('the quick', 'txx<<he');
+    eq(bi.th.err, 1, 'going for h');
+    eq((bi.he && bi.he.err) || 0, 0, 'the second miss of the run was filed against the pair after');
+});
+check('slips are keyed by what was due, folded like everything else', () => {
+    const { bi } = gramsOf('The quick', 'Tx<he');
+    eq(bi.th.err, 1);
+});
+check('a clean race has no slips at all', () => {
+    const { bi, tri } = gramsOf('the quick', 'the quick');
+    eq(Object.values(bi).concat(Object.values(tri)).reduce((sum, e) => sum + e.err, 0), 0);
+});
+check('slips merge like every other sum, and rank by count then rate', () => {
+    let grams = Typer.blankGrams();
+    for (let i = 0; i < 3; i++) grams = Typer.mergeGrams(grams, gramsOf('the quick', 'thx<e quick'));
+    const state = { races: [], days: {}, grams };
+    const [top] = Typer.slips(state, 'bi');
+    eq(top.gram, 'he');
+    eq(top.err, 3);
+    eq(top.rate, 1, 'three slips and no clean readings is every attempt');
+    eq(Typer.slips(state, 'bi', { minSlips: 4 }), [], 'under the floor a gram is not named');
+});
+check('a pair you always slip on is not evicted for having no clean readings', () => {
+    const grams = Typer.blankGrams();
+    for (let i = 0; i < Typer.GRAM_CAP + 10; i++) grams.bi[`x${i}`] = { n: 1, ms: 100, err: 0 };
+    grams.bi.zq = { n: 0, ms: 0, err: Typer.KEEP_N };
+    assert(Typer.pruneGrams(grams).bi.zq, 'the slips table lost the pair it exists for');
+});
+check('the slowest-pairs rows carry their slips for the table', () => {
+    const grams = Typer.blankGrams();
+    grams.bi.th = { n: 10, ms: 2400, err: 4 };
+    eq(Typer.slowest({ grams }, 'bi', { minSamples: 1 })[0].err, 4);
 });
 
 console.log('\n# typeracer — merging and evicting');
