@@ -6,14 +6,42 @@
  * that moves further lifts the card off the grid, and the lifted card stays
  * with the pointer until it is let go, wherever the pointer wanders.
  *
- * Slots are hit-tested against each card's layout box (offsetLeft/Top), so
- * the copy under the pointer never gets in the way of finding them.
+ * What makes it feel like picking something up rather than moving a box:
+ *
+ *   - the lifted card rides a spring toward the pointer rather than being
+ *     nailed to it, so it trails a hair behind a fast flick and catches up;
+ *   - it tilts with the pointer's swing and rights itself as the pointer
+ *     slows, like something held at one corner;
+ *   - the other cards glide out of its way (FLIP: measured before and after
+ *     the move, then animated from one to the other), and a glide that is
+ *     interrupted by the next move carries on from wherever it had got to,
+ *     because the "before" is measured with the glide still in it;
+ *   - on release it settles into its slot instead of vanishing into it.
+ *
+ * Slots are hit-tested against each card's *layout* box (offsetLeft/Top),
+ * which a glide in progress does not move. Hit-testing the animated boxes
+ * made a card swap back and forth while its neighbour was still sliding
+ * past the pointer.
+ *
+ * Reduced motion keeps the drag and drops the flourishes: no tilt, no
+ * spring, no glides.
  */
 (function (root) {
     'use strict';
 
     /** Movement under this is a click, not a drag. */
     const DRAG_PX = 6;
+    /** How far the lifted card closes on the pointer each frame. */
+    const SPRING = 0.38;
+    /** Degrees of tilt per pixel-per-frame of sideways swing, and the most. */
+    const TILT = 0.7;
+    const MAX_TILT = 9;
+    const GLIDE_MS = 240;
+    const SETTLE_MS = 220;
+    const EASE = 'cubic-bezier(.2, .8, .2, 1)';
+
+    const still = () => !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
     /** The ids of `grid`'s cards, in the order they stand. */
     const idsOf = (grid, selector) => Array.from(grid.querySelectorAll(selector), (card) => card.dataset.site);
 
@@ -103,18 +131,30 @@
                 grabY: y - box.top,
                 gx: box.left, gy: box.top,
                 px: event.clientX, py: event.clientY,
+                tilt: 0,
                 start: idsOf(grid, selector),
                 frame: 0,
+                calm: still(),
             };
             place();
+            // Lifted: a touch larger, as if it came up off the page.
+            requestAnimationFrame(() => { if (drag) drag.body.classList.add('is-up'); });
             drag.frame = requestAnimationFrame(tick);
         }
 
-        /** One frame: follow the pointer, and find the slot under it. */
+        /** One frame: follow the pointer, swing, find the slot, scroll the page. */
         function tick() {
             if (!drag) return;
-            drag.gx = drag.px - drag.grabX;
-            drag.gy = drag.py - drag.grabY;
+            const aimX = drag.px - drag.grabX;
+            const aimY = drag.py - drag.grabY;
+            const k = drag.calm ? 1 : SPRING;
+            const dx = (aimX - drag.gx) * k;
+            drag.gx += dx;
+            drag.gy += (aimY - drag.gy) * k;
+            // The swing is the sideways speed, eased so it settles rather
+            // than snapping upright the moment the pointer stops.
+            const want = drag.calm ? 0 : Math.max(-MAX_TILT, Math.min(MAX_TILT, dx * TILT));
+            drag.tilt += (want - drag.tilt) * 0.25;
             place();
             seek();
             drag.frame = requestAnimationFrame(tick);
@@ -122,6 +162,7 @@
 
         function place() {
             drag.ghost.style.transform = `translate3d(${drag.gx}px, ${drag.gy}px, 0)`;
+            drag.body.style.setProperty('--tilt', `${drag.tilt.toFixed(2)}deg`);
         }
 
         // ------------------------------------------------ finding the slot
@@ -144,14 +185,47 @@
             if (!over || over === drag.card) return;
             const from = all.indexOf(drag.card);
             const to = all.indexOf(over);
-            grid.insertBefore(drag.card, to > from ? over.nextSibling : over);
+            glide(() => grid.insertBefore(drag.card, to > from ? over.nextSibling : over));
+        }
+
+        /**
+         * Move cards in the DOM and let them glide there. The "before" boxes
+         * include any glide still running, so an interrupted glide carries
+         * on from where it had got to instead of jumping.
+         */
+        function glide(mutate) {
+            const all = cards();
+            const before = new Map(all.map((card) => [card, card.getBoundingClientRect()]));
+            mutate();
+            if (drag && drag.calm) return;
+            const moving = [];
+            for (const card of all) {
+                if (drag && card === drag.card) continue;
+                const was = before.get(card);
+                const now = card.getBoundingClientRect();
+                const dx = was.left - now.left;
+                const dy = was.top - now.top;
+                if (!dx && !dy) continue;
+                card.style.transition = 'none';
+                card.style.transform = `translate(${dx}px, ${dy}px)`;
+                moving.push(card);
+            }
+            if (!moving.length) return;
+            void grid.offsetWidth; // one reflow, so every card starts from its inverted place
+            for (const card of moving) {
+                card.style.transition = `transform ${GLIDE_MS}ms ${EASE}`;
+                card.style.transform = '';
+                clearTimeout(card.__bbGlide);
+                card.__bbGlide = setTimeout(() => { card.style.transition = ''; }, GLIDE_MS + 20);
+            }
         }
 
         // -------------------------------------------------------- landing
 
         /**
-         * Let go: the copy gives way to the card in its slot. Cancelled — the
-         * pointer lost to the browser — the cards go back where they started.
+         * Let go. The copy settles onto the slot and only then gives way to
+         * the card underneath; cancelled (Escape, a lost pointer), the cards
+         * go back to where they started first.
          */
         function land(cancelled) {
             const done = drag;
@@ -159,15 +233,27 @@
             cancelAnimationFrame(done.frame);
 
             if (cancelled) {
-                done.start.forEach((id) => {
+                glide(() => done.start.forEach((id) => {
                     const card = grid.querySelector(`${selector}[data-site="${CSS.escape(id)}"]`);
                     if (card) grid.appendChild(card);
-                });
+                }));
             }
 
-            done.ghost.remove();
-            done.card.classList.remove('is-drag-origin');
-            document.documentElement.classList.remove('is-dragging-site');
+            const slot = done.card.getBoundingClientRect();
+            const finish = () => {
+                done.ghost.remove();
+                done.card.classList.remove('is-drag-origin');
+                document.documentElement.classList.remove('is-dragging-site');
+            };
+            if (done.calm) {
+                finish();
+            } else {
+                done.ghost.style.transition = `transform ${SETTLE_MS}ms ${EASE}`;
+                done.ghost.style.transform = `translate3d(${slot.left}px, ${slot.top}px, 0)`;
+                done.body.classList.remove('is-up');
+                done.body.style.setProperty('--tilt', '0deg');
+                setTimeout(finish, SETTLE_MS);
+            }
 
             // The click that ends a drag is not a click on the card.
             const swallow = (event) => { event.stopPropagation(); event.preventDefault(); };
