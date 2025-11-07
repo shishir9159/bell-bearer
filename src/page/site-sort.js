@@ -38,12 +38,25 @@
     const MAX_TILT = 9;
     const GLIDE_MS = 240;
     const SETTLE_MS = 220;
+    /** Within this of the window's edge the page scrolls under the drag. */
+    const EDGE_PX = 48;
     const EASE = 'cubic-bezier(.2, .8, .2, 1)';
 
     const still = () => !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
     /** The ids of `grid`'s cards, in the order they stand. */
     const idsOf = (grid, selector) => Array.from(grid.querySelectorAll(selector), (card) => card.dataset.site);
+
+    /**
+     * Where a card should move to, as an index into `ids`, for a keyboard
+     * move of `step` from `from`. Pure, and clamped at both ends.
+     */
+    function moved(ids, from, step) {
+        const next = ids.slice();
+        const to = Math.max(0, Math.min(next.length - 1, from + step));
+        next.splice(to, 0, next.splice(from, 1)[0]);
+        return next;
+    }
 
     /**
      * Make `grid`'s cards draggable. `onOrder(ids)` is told the new order
@@ -97,6 +110,7 @@
             window.removeEventListener('pointermove', onMove, true);
             window.removeEventListener('pointerup', onUp, true);
             window.removeEventListener('pointercancel', onCancel, true);
+            window.removeEventListener('keydown', onKey, true);
         }
 
         // ------------------------------------------------------- lifting
@@ -157,12 +171,19 @@
             drag.tilt += (want - drag.tilt) * 0.25;
             place();
             seek();
+            edgeScroll();
             drag.frame = requestAnimationFrame(tick);
         }
 
         function place() {
             drag.ghost.style.transform = `translate3d(${drag.gx}px, ${drag.gy}px, 0)`;
             drag.body.style.setProperty('--tilt', `${drag.tilt.toFixed(2)}deg`);
+        }
+
+        function edgeScroll() {
+            const y = drag.py;
+            if (y < EDGE_PX) window.scrollBy(0, -Math.ceil((EDGE_PX - y) / 4));
+            else if (y > window.innerHeight - EDGE_PX) window.scrollBy(0, Math.ceil((y - window.innerHeight + EDGE_PX) / 4));
         }
 
         // ------------------------------------------------ finding the slot
@@ -231,6 +252,7 @@
             const done = drag;
             drag = null;
             cancelAnimationFrame(done.frame);
+            window.removeEventListener('keydown', onKey, true);
 
             if (cancelled) {
                 glide(() => done.start.forEach((id) => {
@@ -264,16 +286,48 @@
             if (!cancelled && order.join() !== done.start.join()) onOrder(order);
         }
 
+        function onKey(event) {
+            if (event.key !== 'Escape' || !drag) return;
+            event.preventDefault();
+            event.stopPropagation();
+            land(true);
+            release();
+        }
+
+        /**
+         * Alt+Arrow moves the focused card one place, for anyone not using
+         * a pointer — the same order, saved the same way.
+         */
+        function onCardKey(event) {
+            if (!event.altKey || drag) return;
+            const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[event.key];
+            const card = event.target.closest(selector);
+            if (!step || !card) return;
+            event.preventDefault();
+            const ids = idsOf(grid, selector);
+            const next = moved(ids, ids.indexOf(card.dataset.site), step);
+            if (next.join() === ids.join()) return;
+            glide(() => next.forEach((id) => grid.appendChild(grid.querySelector(`${selector}[data-site="${CSS.escape(id)}"]`))));
+            card.focus();
+            onOrder(next);
+        }
+
+        const onDownCapture = (event) => {
+            onDown(event);
+            if (press) window.addEventListener('keydown', onKey, true);
+        };
         // A native drag of the card's <svg> would fight ours.
         const noNativeDrag = (event) => { if (event.target.closest(selector)) event.preventDefault(); };
 
-        grid.addEventListener('pointerdown', onDown);
+        grid.addEventListener('pointerdown', onDownCapture);
+        grid.addEventListener('keydown', onCardKey);
         grid.addEventListener('dragstart', noNativeDrag);
 
         return function detach() {
             if (drag) land(true);
             release();
-            grid.removeEventListener('pointerdown', onDown);
+            grid.removeEventListener('pointerdown', onDownCapture);
+            grid.removeEventListener('keydown', onCardKey);
             grid.removeEventListener('dragstart', noNativeDrag);
         };
     }
@@ -281,7 +335,7 @@
     /** Whether a drag is under way anywhere on this page. */
     const dragging = () => document.documentElement.classList.contains('is-dragging-site');
 
-    const SiteSort = { attach, dragging, DRAG_PX };
+    const SiteSort = { attach, moved, dragging, DRAG_PX };
 
     root.BB = root.BB || {};
     root.BB.SiteSort = SiteSort;
