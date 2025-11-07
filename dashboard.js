@@ -206,6 +206,7 @@
             this.wireVideosContainer();
             this.wireTopicsContainer();
             this.wireSiteWorkspace();
+            this.wireSiteSorting();
         }
 
         // -------------------------------------------------- site launcher
@@ -218,11 +219,31 @@
          */
         async renderSiteGrids() {
             const { siteOrder } = await Settings.get(['siteOrder']);
+            // A drag in progress owns its grid; the order it lands on comes
+            // back through the watch below and redraws both then.
+            if (window.BB.SiteSort && window.BB.SiteSort.dragging()) return;
             const html = SiteIcons.list(siteOrder).map(siteCardHtml).join('');
             const dashboardGrid = document.getElementById('sitesGrid');
             const settingsGrid = document.getElementById('settingsSitesGrid');
             if (dashboardGrid) dashboardGrid.innerHTML = html;
             if (settingsGrid) settingsGrid.innerHTML = html;
+        }
+
+        /**
+         * Both launchers can be dragged into your own order, and it is one
+         * order: dragging on the dashboard reorders the settings launcher
+         * too, and the other way round, because both are drawn from the
+         * single `siteOrder` setting.
+         */
+        wireSiteSorting() {
+            const SiteSort = window.BB.SiteSort;
+            if (!SiteSort) return;
+            const save = (ids) => Settings.set({ siteOrder: ids });
+            for (const id of ['sitesGrid', 'settingsSitesGrid']) {
+                const grid = document.getElementById(id);
+                if (grid) SiteSort.attach(grid, { onOrder: save });
+            }
+            Settings.watch(['siteOrder'], () => this.renderSiteGrids());
         }
 
         /**

@@ -170,6 +170,9 @@ header h1 {
    Bearer works with. Large and colored on purpose — this is meant to read as
    a launcher for many sites, not a single YouTube screen with a label on it. */
 .sites-grid {
+    /* Positioned so it is the cards' offset parent: src/page/site-sort.js
+       hit-tests a drag against their layout boxes, measured from here. */
+    position: relative;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 16px;
@@ -205,6 +208,43 @@ header h1 {
 .site-card[data-tint="2"] { background: var(--site-tint-2); }
 .site-card[data-tint="3"] { background: var(--site-tint-3); }
 .site-card[data-tint="4"] { background: var(--site-tint-4); }
+
+/* ---- Dragging a card into place (src/page/site-sort.js). */
+
+/* The slot the lifted card will land in: its outline, left behind. */
+.site-card.is-drag-origin {
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--border);
+    box-shadow: none;
+    transform: none;
+}
+
+.site-card.is-drag-origin > * { opacity: 0; }
+
+/* The copy that follows the pointer. */
+.site-card-ghost {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 10000;
+    pointer-events: none;
+    will-change: transform;
+}
+
+.site-card-ghost .site-card-lifted {
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    border-color: var(--accent);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, .22), 0 4px 10px rgba(0, 0, 0, .12);
+}
+
+/* While a card is held nothing else reacts to the pointer, nothing gets
+   selected, and the hand says so. */
+html.is-dragging-site,
+html.is-dragging-site * { cursor: grabbing !important; user-select: none; }
+html.is-dragging-site .site-card:hover { transform: none; box-shadow: var(--card-shadow); }
 
 .site-card-icon {
     display: flex;
