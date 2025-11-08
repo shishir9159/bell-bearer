@@ -34,6 +34,21 @@
 
     const BUTTON_ID = 'bb-add-to-subscriptions-btn';
     const PLAYLIST_BUTTON_ID = 'bb-follow-playlist-btn';
+
+    /**
+     * Kept armed for a few passes after it has placed the button, rather
+     * than finishing the moment it has.
+     *
+     * Opening the playlist from a video inside it is an SPA navigation
+     * that leaves the watch page's own playlist panel in the document —
+     * with our button still in it — while the /playlist header is built
+     * alongside. Finishing at the first sight of the button meant it was
+     * declared done while sitting in the panel of the page you had just
+     * left, and the playlist page got none until a reload. So each pass
+     * re-checks that the button is in the header that is on screen now,
+     * and moves it when it is not.
+     */
+    const PLAYLIST_SETTLE = 20;
     const GUIDE_ID = 'bb-guide-entry';
     const CONTEXT_LOST = 'Bell Bearer was updated — please refresh this page.';
 
@@ -277,20 +292,6 @@
          * matters. Following one puts its new entries in the strip at the
          * bottom of the pouch sheet.
          */
-        /**
-         * Kept armed for a few passes after it has placed the button, rather
-         * than finishing the moment it has.
-         *
-         * Opening the playlist from a video inside it is an SPA navigation
-         * that leaves the watch page's own playlist panel in the document —
-         * with our button still in it — while the /playlist header is built
-         * alongside. Finishing at the first sight of the button meant it was
-         * declared done while sitting in the panel of the page you had just
-         * left, and the playlist page got none until a reload. So each pass
-         * re-checks that the button is in the header that is on screen now,
-         * and moves it when it is not.
-         */
-        const PLAYLIST_SETTLE = 20;
         let playlistTries = 0;
 
         function injectPlaylistButton(href) {
@@ -739,7 +740,7 @@
     const YouTubeUi = {
         createYouTubeUi,
         firstMatch, isVisible, PLAYLIST_HEADER_SELECTORS, SUBSCRIBE_SELECTORS,
-        BUTTON_ID, GUIDE_ID, PLAYLIST_BUTTON_ID,
+        BUTTON_ID, GUIDE_ID, PLAYLIST_BUTTON_ID, PLAYLIST_SETTLE,
         RANGES: PouchSheet.RANGES, SORTS: PouchSheet.SORTS,
         ALL_TOPICS: PouchSheet.ALL_TOPICS, PER_CHANNEL: PouchSheet.PER_CHANNEL,
     };

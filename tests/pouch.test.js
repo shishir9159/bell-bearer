@@ -157,7 +157,11 @@ suite('the follow-playlist button', () => {
         watchPage('/@someone');
 
         try {
-            assertEqual(pouchUi().injectPlaylistButton(WITH_PLAYLIST), true);
+            // Placing the button does not finish the task: it stays armed for
+            // a few passes in case an SPA navigation builds a new header
+            // beside the old one — see PLAYLIST_SETTLE in youtube-ui.js.
+            const ui = pouchUi();
+            assertEqual(ui.injectPlaylistButton(WITH_PLAYLIST), false, 'finished the moment it placed the button');
             await MockChrome.settle();
 
             const button = document.getElementById('bb-follow-playlist-btn');
@@ -167,6 +171,15 @@ suite('the follow-playlist button', () => {
             assertEqual(button.dataset.playlistId, 'PLcourse');
             assertEqual(button.querySelector('.bb-pf-label').textContent, 'Follow');
             assertEqual(button.getAttribute('aria-pressed'), 'false');
+
+            // Left alone in the header on screen, it settles and finishes,
+            // and it is the same button throughout rather than a new one.
+            let done = false;
+            for (let pass = 0; pass < window.BB.YouTubeUi.PLAYLIST_SETTLE && !done; pass++) {
+                done = ui.injectPlaylistButton(WITH_PLAYLIST);
+            }
+            assert(done, 'the task never settled');
+            assert(document.getElementById('bb-follow-playlist-btn') === button, 'the button was rebuilt while settling');
         } finally { clearWatchPage(); }
     });
 
