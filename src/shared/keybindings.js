@@ -52,6 +52,13 @@
         // Ctrl+Alt, the cluster chess and LeetCode already use: the bare-Shift
         // letters belong to Skim, and Ctrl+Shift+R is the browser's reload.
         { id: 'reader-mode', scope: 'youtube', kind: 'key', label: 'Open or close the distraction-free reader', combo: { ctrl: true, alt: true, code: 'KeyR', key: 'r' } },
+        // Bare arrows, which is a large claim — but they are only ever
+        // claimed on a Shorts page with the setting on. Everywhere else the
+        // dispatcher matches them, sees the feature is not running here, and
+        // hands the key straight back to the page. On Shorts YouTube itself
+        // binds only ↑ and ↓, to change short.
+        { id: 'shorts-back', scope: 'youtube', kind: 'key', needs: 'shortsSeek', label: 'Shorts — skip back', combo: { code: 'ArrowLeft', key: 'ArrowLeft' } },
+        { id: 'shorts-forward', scope: 'youtube', kind: 'key', needs: 'shortsSeek', label: 'Shorts — skip forward', combo: { code: 'ArrowRight', key: 'ArrowRight' } },
 
         { id: 'chess-clear-arrows', scope: 'chess', kind: 'key', label: 'Clear every arrow drawn on the board', combo: { alt: true, code: 'KeyC', key: 'c' } },
 

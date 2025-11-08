@@ -248,6 +248,13 @@
         // The reader covers YouTube's header as well as the page. Off, it
         // starts under the header instead, so search stays in reach.
         readerHideChrome: true,
+
+        // YouTube Shorts has no way to skip within a short — ↑ and ↓ change
+        // short, and nothing seeks. On, ← and → skip back and forward by
+        // shortsSeekSeconds (1–30) while a Shorts page is open, and are left
+        // to the page everywhere else. Rebindable in Shortcuts.
+        shortsSeek: false,
+        shortsSeekSeconds: 5,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

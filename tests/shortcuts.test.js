@@ -131,6 +131,73 @@ suite('shortcuts: typing guard', () => {
     });
 });
 
+suite('shortcuts: skipping in shorts', () => {
+    /** The real dispatcher, on the real window, with the page's answers faked. */
+    function withDispatcher({ shortsSeek = true, onShorts = true } = {}, run) {
+        const skips = [];
+        const uninstall = K.install({
+            hasVideo: () => true,
+            featureOn: (name) => (name === 'shortsSeek' ? shortsSeek : false),
+            onShorts: () => onShorts,
+            shortsSkip: (direction) => skips.push(direction),
+            stopRecording() {},
+        }, { canRecord: () => false });
+        try {
+            return run(skips);
+        } finally {
+            uninstall();
+        }
+    }
+
+    const press = (code, target = document.body) => {
+        const event = new KeyboardEvent('keydown', { code, key: code, bubbles: true, cancelable: true });
+        target.dispatchEvent(event);
+        return event;
+    };
+
+    test('the arrows skip back and forward on a Shorts page', () => {
+        withDispatcher({}, (skips) => {
+            const forward = press('ArrowRight');
+            press('ArrowLeft');
+            assertDeepEqual(skips, [1, -1]);
+            assert(forward.defaultPrevented, 'the page also acted on the key');
+        });
+    });
+
+    test('everywhere else, and with the setting off, the arrows are the page’s', () => {
+        withDispatcher({ onShorts: false }, (skips) => {
+            assert(!press('ArrowRight').defaultPrevented, 'an arrow was taken off a page that is not Shorts');
+            assertDeepEqual(skips, []);
+        });
+        withDispatcher({ shortsSeek: false }, (skips) => {
+            assert(!press('ArrowLeft').defaultPrevented);
+            assertDeepEqual(skips, []);
+        });
+    });
+
+    test('an arrow typed in a comment box moves the caret, not the short', () => {
+        const box = document.createElement('textarea');
+        document.body.appendChild(box);
+        try {
+            withDispatcher({}, (skips) => {
+                press('ArrowLeft', box);
+                assertDeepEqual(skips, []);
+            });
+        } finally { box.remove(); }
+    });
+
+    test('the short skipped is the active one, not a preloaded neighbour', () => {
+        const host = document.createElement('div');
+        host.innerHTML = `
+            <ytd-reel-video-renderer><video style="display:block;width:200px;height:300px" data-n="1"></video></ytd-reel-video-renderer>
+            <ytd-reel-video-renderer is-active><video style="display:block;width:200px;height:300px" data-n="2"></video></ytd-reel-video-renderer>`;
+        document.body.appendChild(host);
+        try {
+            assertEqual(window.BB.Site.activeShortsVideo().dataset.n, '2');
+        } finally { host.remove(); }
+    });
+});
+
 suite('shortcuts: digit parsing', () => {
     test('reads 1-9 from either the number row or the numpad', () => {
         assertEqual(K.digitOf({ code: 'Digit1' }), 1);

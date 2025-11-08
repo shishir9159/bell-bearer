@@ -85,7 +85,47 @@
         };
     }
 
-    const Site = { detectSite, createPlayerLocator, PLAYER_SELECTORS };
+    /**
+     * The short that is playing, newest spelling first. Shorts preloads the
+     * renderers either side of the one on screen, some with a <video> of
+     * their own, so "the first video" is not good enough: the active
+     * renderer is asked for, and failing every spelling, the playing,
+     * on-screen, largest video wins the same way the locator above decides.
+     */
+    const SHORTS_SELECTORS = [
+        'ytd-reel-video-renderer[is-active] video',
+        '#shorts-player video',
+        'ytd-shorts video.html5-main-video',
+    ];
+
+    function isShortsPath(pathname = window.location.pathname) {
+        return /^\/shorts\/[^/]+/.test(String(pathname || ''));
+    }
+
+    function activeShortsVideo(scope = document) {
+        for (const selector of SHORTS_SELECTORS) {
+            const found = Array.from(scope.querySelectorAll(selector)).find(isUsable);
+            if (found) return found;
+        }
+        const videos = Array.from(scope.querySelectorAll('video')).filter(isUsable);
+        return videos.length ? videos.reduce((best, video) => (score(video) > score(best) ? video : best)) : null;
+    }
+
+    /**
+     * Where a skip of `delta` seconds from `now` lands: never before the
+     * start, and forward only as far as just short of the end — a short
+     * loops, and a seek to its very end starts it over, which reads as the
+     * skip having gone backwards.
+     */
+    function shortsSeekTo(now, delta, duration) {
+        const target = Math.max(0, (Number(now) || 0) + delta);
+        return Number.isFinite(duration) && duration > 0 ? Math.min(target, Math.max(0, duration - 0.25)) : target;
+    }
+
+    const Site = {
+        detectSite, createPlayerLocator, PLAYER_SELECTORS,
+        SHORTS_SELECTORS, isShortsPath, activeShortsVideo, shortsSeekTo,
+    };
 
     root.BB = root.BB || {};
     root.BB.Site = Site;

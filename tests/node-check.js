@@ -5343,6 +5343,37 @@ const dayRecord = (at = T0) =>
         assert(SiteIcons.svg('leetcode').includes('<svg'), 'draws nothing');
     });
 
+    check('the shorts keys are the arrows, and only exist while the setting is on', () => {
+        const Keybindings = require('../src/shared/keybindings.js');
+        const ids = (settings) => Keybindings.list({}, 'youtube', settings).map((b) => b.id);
+        assert(!ids({ shortsSeek: false }).includes('shorts-forward'), 'on the keyboard map while switched off');
+        assert(ids({ shortsSeek: true }).includes('shorts-back') && ids({ shortsSeek: true }).includes('shorts-forward'));
+        eq(Keybindings.resolve({}, 'shorts-back').combo.code, 'ArrowLeft');
+        eq(Keybindings.resolve({}, 'shorts-forward').combo.code, 'ArrowRight');
+        for (const id of ['shorts-back', 'shorts-forward']) {
+            eq(Keybindings.conflicts({}, id, Keybindings.resolve({}, id).combo), []);
+        }
+    });
+    check('a shorts skip lands inside the short', () => {
+        const Site = require('../src/content/site.js');
+        eq(Site.shortsSeekTo(10, 5, 40), 15);
+        eq(Site.shortsSeekTo(2, -5, 40), 0, 'went before the start');
+        eq(Site.shortsSeekTo(38, 5, 40), 39.75, 'ran into the end, where a short starts over');
+        eq(Site.shortsSeekTo(3, 5, NaN), 8, 'a duration not known yet does not stop the skip');
+        assert(Site.isShortsPath('/shorts/abcDEF12345'));
+        assert(!Site.isShortsPath('/shorts') && !Site.isShortsPath('/watch'), 'not a short');
+    });
+    check('the shorts setting has its controls, in the youtube panel, bounded as the code is', () => {
+        const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+        const from = html.indexOf('id="youtubeSettingsPanel"');
+        const panel = html.slice(from, html.indexOf('class="settings-section"', from));
+        assert(/<input type="checkbox" id="shortsSeek">/.test(panel), 'no switch');
+        const seconds = (/<input[^>]*id="shortsSeekSeconds"[^>]*>/.exec(panel) || [''])[0];
+        assert(/min="1"/.test(seconds) && /max="30"/.test(seconds), `unbounded: ${seconds}`);
+        eq(globalThis.BB.Settings.DEFAULTS.shortsSeek, false);
+        eq(globalThis.BB.Settings.DEFAULTS.shortsSeekSeconds, 5);
+    });
+
     check('the leetcode shortcuts are bound under their own scope', () => {
         const Keybindings = require('../src/shared/keybindings.js');
         eq(Keybindings.SCOPES.leetcode, 'LeetCode');

@@ -65,6 +65,9 @@
         // is what a bare Shift+F must do when Skim is not turned on.
         const feature = (name) => () => !!(actions.featureOn && actions.featureOn(name));
         const hasPouch = () => !!(actions.canOpenPouch && actions.canOpenPouch());
+        // Only on a Shorts page: the arrows are the page's everywhere else,
+        // the watch page's own ±5s seek included.
+        const onShorts = () => feature('shortsSeek')() && !!(actions.onShorts && actions.onShorts());
 
         const rows = [
             ['skim-find', { enabled: feature('skimMode'), run: () => actions.openSkim('page') }],
@@ -89,6 +92,8 @@
             ['speed-down', { enabled: hasVideo, run: () => actions.slower() }],
             ['speed-reset', { enabled: hasVideo, run: () => actions.resetSpeed() }],
             ['reader-mode', { noRepeat: true, enabled: canRecord, run: () => actions.toggleReader && actions.toggleReader() }],
+            ['shorts-back', { enabled: onShorts, run: () => actions.shortsSkip(-1) }],
+            ['shorts-forward', { enabled: onShorts, run: () => actions.shortsSkip(1) }],
         ];
 
         return rows.map(([name, row]) => ({

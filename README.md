@@ -78,6 +78,7 @@ while you are typing in a field.
 | Hold `Ctrl + B` | Create a checkpoint over the passage you held it for |
 | `Ctrl + Shift + S` | Mark a segment start; press again to mark its end |
 | `Ctrl + Alt + R` | Open or close the reader on a YouTube video |
+| `←` / `→` | Shorts: skip back / forward within the short — off until **Settings › YouTube** turns it on, and only ever on a Shorts page |
 | `Alt + 1…9` | Skip forward that many seconds |
 | `Shift + 1…9` | Skip back that many seconds |
 | `Ctrl + Shift + 1…9` | Temporary 3x boost for that many seconds |

@@ -608,6 +608,19 @@
                             </select>
                         </div>
 
+                        <p class="settings-hint">Shorts has no way to skip within a short — <kbd>↑</kbd> and <kbd>↓</kbd> change short, and nothing seeks. With this on, <kbd>←</kbd> and <kbd>→</kbd> skip back and forward while a Shorts page is open; everywhere else the arrow keys are left alone. Both keys can be rebound under Shortcuts.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="shortsSeek">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="shortsSeek">Skip back and forward in Shorts with the arrow keys</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="shortsSeekSeconds">Seconds per skip</label>
+                            <input type="number" id="shortsSeekSeconds" min="1" max="30" step="1">
+                        </div>
+
                         <p class="settings-hint">The reader puts YouTube's own player beside the video's transcript, with your checkpoints under it — the same player, moved rather than copied, so it keeps playing, at the speed and with the captions it had. Open it from the popup or with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>.</p>
                         <div class="settings-option">
                             <label class="setting-label" for="readerLayout">Open the reader in</label>

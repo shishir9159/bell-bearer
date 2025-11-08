@@ -36,7 +36,7 @@
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
-    const notify = (message, type) => Notify.show(message, type);
+    const notify = (message, type, durationMs) => Notify.show(message, type, durationMs);
 
     /** Settings mirror, kept current by the storage listener below. */
     const settings = { ...Settings.DEFAULTS };
@@ -123,6 +123,8 @@
         stopRecording: () => recorder.stopRecording(),
         toggleSegment: () => recorder.toggleSegment(),
         toggleReader: () => reader && reader.toggle(),
+        onShorts: () => site === 'youtube' && Site.isShortsPath(),
+        shortsSkip: (direction) => skipShort(direction),
         openSkim: (source) => skim.show(source),
         openHints,
         // Two sites draw a pouch, and the shortcut opens whichever one this
@@ -136,6 +138,19 @@
         getShortcut: (id) => Keybindings.resolve(settings.shortcuts, id),
         paused: () => skim.isOpen() || hints.isOn(),
     });
+
+    /**
+     * Skip within the short on screen. Not through `player`: its locator
+     * memoises one element, and on Shorts the element changes with every
+     * swipe, so the short playing is found afresh on each press.
+     */
+    function skipShort(direction) {
+        const video = Site.activeShortsVideo();
+        if (!video) return;
+        const step = Math.max(1, Math.min(30, Math.round(Number(settings.shortsSeekSeconds)) || 5));
+        video.currentTime = Site.shortsSeekTo(video.currentTime, direction * step, video.duration);
+        notify(`${direction > 0 ? '+' : '−'}${step}s`, 'info', 900);
+    }
 
     player.attach();
     markdown.trackContextLinks();
