@@ -5500,6 +5500,102 @@ const dayRecord = (at = T0) =>
         eq(ChatTree.fence('x = 1\n', 'python'), '```python\nx = 1\n```');
         eq(ChatTree.fence('```js\nf()\n```', 'md'), '````md\n```js\nf()\n```\n````');
     });
+    // ------------------------------------------------- reading chatgpt's tree
+
+    console.log('\n# reading a chatgpt conversation');
+
+    const ChatgptFormat = require('../src/shared/chatgpt-format.js');
+
+    /**
+     * backend-api/conversation/<id> as it answers: a synthetic root, a hidden
+     * system message and the custom instructions above the first prompt; an
+     * answer that searched, reasoned and then wrote, as five raw messages; a
+     * regenerate of it; and a prompt with an image whose answer ran code.
+     */
+    function chatgptRaw() {
+        const msg = (id, role, content, { t = 1700000000, recipient = 'all', metadata = {} } = {}) =>
+            ({ id, author: { role }, create_time: t, content, recipient, metadata });
+        const node = (id, parent, children, message) => ({ id, parent, children, message });
+        const text = (s) => ({ content_type: 'text', parts: [s] });
+        const cite = 'citeturn0search3';
+        const stray = 'navlistturn0news1';
+        return {
+            conversation_id: 'conv-1', title: 'Flaky login test', create_time: 1700000000.5, update_time: 1700000900,
+            current_node: 'a2b',
+            mapping: {
+                'client-created-root': node('client-created-root', null, ['sys'], null),
+                sys: node('sys', 'client-created-root', ['ctx'], msg('sys', 'system', text(''),
+                    { metadata: { is_visually_hidden_from_conversation: true } })),
+                ctx: node('ctx', 'sys', ['u1'], msg('ctx', 'user', { content_type: 'user_editable_context' })),
+                u1: node('u1', 'ctx', ['a1', 'a1x'], msg('u1', 'user', text('Why is it flaky?'), { t: 1700000001 })),
+                a1: node('a1', 'u1', ['t1'], msg('a1', 'assistant', text('{"search_query":[{"q":"flaky login test"}]}'),
+                    { recipient: 'web.run' })),
+                t1: node('t1', 'a1', ['a1b'], msg('t1', 'tool', text('ten results'))),
+                a1b: node('a1b', 't1', ['a1c'], msg('a1b', 'assistant',
+                    { content_type: 'thoughts', thoughts: [{ summary: 'Looking', content: 'It races.' }] })),
+                a1c: node('a1c', 'a1b', ['a1d'], msg('a1c', 'assistant', { content_type: 'reasoning_recap', content: 'Thought for 4s' })),
+                a1d: node('a1d', 'a1c', ['u2'], msg('a1d', 'assistant', text(`## Cause\nA race.${cite} Stray${stray}.\n\n## Fix\nAwait it.`), {
+                    metadata: {
+                        model_slug: 'gpt-5-thinking',
+                        content_references: [{ matched_text: cite, type: 'grouped_webpages',
+                            items: [{ title: 'Race conditions', url: 'https://example.com/race' }] }],
+                    },
+                })),
+                a1x: node('a1x', 'u1', [], msg('a1x', 'assistant', text('Regenerated.'), { metadata: { model_slug: 'gpt-5' } })),
+                u2: node('u2', 'a1d', ['a2'], msg('u2', 'user',
+                    { content_type: 'multimodal_text', parts: [{ content_type: 'image_asset_pointer' }, 'Run this'] })),
+                a2: node('a2', 'u2', ['t2'], msg('a2', 'assistant', { content_type: 'code', language: 'unknown', text: 'print(1)' },
+                    { recipient: 'python' })),
+                t2: node('t2', 'a2', ['a2b'], msg('t2', 'tool', { content_type: 'execution_output', text: '1' })),
+                a2b: node('a2b', 't2', [], msg('a2b', 'assistant', text('It printed 1.'), { metadata: { model_slug: 'gpt-5' } })),
+            },
+        };
+    }
+
+    check('the synthetic root and everything hidden under it drop out', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        eq(conv.root, 'client-created-root');
+        eq(conv.nodes['client-created-root'].children, ['u1']);
+        assert(!conv.nodes.sys && !conv.nodes.ctx, 'a hidden message became a turn');
+        eq(ChatTree.activePath(conv), ['u1', 'a1', 'u2', 'a2']);
+    });
+    check('a tool chain is one turn, named for its first message and spanning all five', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        eq(conv.nodes.a1.ids, ['a1', 't1', 'a1b', 'a1c', 'a1d']);
+        eq(conv.nodes.a1.blocks.map((b) => b.kind), ['tool', 'thinking', 'thinking', 'text']);
+        eq(conv.nodes.a1.blocks[0].text, 'Searched the web: "flaky login test"');
+        eq(conv.nodes.a1.model, 'gpt-5-thinking');
+        eq(ChatTree.turnOf(conv, 'a1d'), 'a1');
+    });
+    check('a regenerate is a sibling of the answer it replaced', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        eq(ChatTree.forks(conv), ['u1']);
+        eq(ChatTree.siblingIndex(conv, 'a1x'), { index: 2, count: 2 });
+    });
+    check('reasoning stays out of the text, and code and its output are fenced', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        assert(!conv.nodes.a1.text.includes('It races'), 'the thinking leaked into the answer');
+        eq(conv.nodes.u2.text, '[image]\n\nRun this');
+        eq(conv.nodes.a2.text, '```python\nprint(1)\n```\n\n```output\n1\n```\n\nIt printed 1.');
+    });
+    check('citations become footnotes and no private-use character survives anywhere', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        assert(conv.nodes.a1.text.includes('A race.[^1] Stray.'), conv.nodes.a1.text);
+        eq(conv.nodes.a1.cites, [{ n: 1, title: 'Race conditions', url: 'https://example.com/race' }]);
+        eq(/[-]/.test(JSON.stringify(conv)), false);
+    });
+    check('times arrive as seconds from one endpoint and ISO from another', () => {
+        const conv = ChatgptFormat.normalize(chatgptRaw());
+        eq(conv.createdAt, 1700000000500);
+        eq(conv.nodes.u1.at, 1700000001000);
+        eq(conv.url, 'https://chatgpt.com/c/conv-1');
+        eq(ChatgptFormat.listItem({ id: 'x', title: ' ', update_time: '2025-11-09T10:00:00Z' }),
+            { id: 'x', title: 'Untitled chat', updatedAt: Date.parse('2025-11-09T10:00:00Z') });
+    });
+    check('an empty or broken answer from the api is an empty tree, not a throw', () => {
+        eq(ChatTree.activePath(ChatgptFormat.normalize(null)), []);
+    });
+
     check('a first line is cut on a word', () => {
         eq(ChatTree.firstLine('\n  hello   world\nmore'), 'hello world');
         const long = ChatTree.firstLine('word '.repeat(40), 30);

@@ -90,6 +90,7 @@
         "src/content/typeracer-ui.js",
         "src/shared/chat-sites.js",
         "src/shared/chat-tree.js",
+        "src/shared/chatgpt-format.js",
         "src/content/main.js"
       ],
       "css": [
