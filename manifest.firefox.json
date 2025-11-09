@@ -92,6 +92,7 @@
         "src/shared/typeracer.js",
         "src/content/typeracer-read.js",
         "src/content/typeracer-ui.js",
+        "src/shared/chat-sites.js",
         "src/content/main.js"
       ],
       "css": [

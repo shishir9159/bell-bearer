@@ -1,0 +1,103 @@
+/**
+ * The chat sites Bell Bearer works with, as one registry — the shape
+ * src/shared/chess-sites.js gives the two chess sites, and for its reason:
+ * everything the panel, the queue, the exports and the dashboard do is the
+ * same on every chat site, so a site's name, its settings keys and how its
+ * URLs read are looked up here rather than spelled out at each call site, and
+ * the sites cannot drift apart feature by feature.
+ *
+ * What is *not* here is anything about a site's markup or its API. That is
+ * the site's adapter (src/content/chatgpt-read.js), which the chat core is
+ * handed and never names. This file is pure and small enough that the service
+ * worker loads it too, to find a chat's tab and open one.
+ */
+(function (root) {
+    'use strict';
+
+    const SITES = Object.freeze({
+        chatgpt: Object.freeze({
+            id: 'chatgpt',
+            name: 'ChatGPT',
+            host: 'chatgpt.com',
+            prefix: 'chatgpt',
+            // The export's "## ChatGPT" — the site's own name for the other
+            // side of the conversation.
+            speaker: 'ChatGPT',
+            tabPatterns: Object.freeze(['*://chatgpt.com/*', '*://chat.openai.com/*']),
+            /**
+             * `/c/<id>`, and the same after a custom GPT's or a project's
+             * prefix: `/g/g-abc/c/<id>`, `/g/g-p-abc-name/c/<id>`. All of
+             * them are the one conversation.
+             */
+            convIdOf: (pathname) => {
+                const match = /(?:^|\/)c\/([A-Za-z0-9-]{8,})(?:[/?#]|$)/.exec(String(pathname || ''));
+                return match ? match[1] : null;
+            },
+            /** The empty page a new chat starts on: the home page, a GPT's, a project's. */
+            isNewChat: (pathname) => /^\/(?:g\/[^/]+(?:\/project)?\/?)?$/.test(String(pathname || '')),
+            chatUrl: (id, { model } = {}) => (id
+                ? `https://chatgpt.com/c/${encodeURIComponent(id)}`
+                : `https://chatgpt.com/${model ? `?model=${encodeURIComponent(model)}` : ''}`),
+        }),
+    });
+
+    function get(id) {
+        return SITES[id] || null;
+    }
+
+    function list() {
+        return Object.values(SITES);
+    }
+
+    /**
+     * Whole-site setting keys, one builder each, so the second site's set is
+     * the same list with a different prefix rather than six more names typed
+     * out by hand:
+     *   ('chatgpt', 'queueGap') → 'chatgptQueueGapSeconds'
+     */
+    const SITE_KEYS = Object.freeze({
+        composerTools: (p) => `${p}ComposerTools`,
+        limitSuggest: (p) => `${p}LimitSuggest`,
+        queueGap: (p) => `${p}QueueGapSeconds`,
+        queueOpenTab: (p) => `${p}QueueOpenTab`,
+        exportDollars: (p) => `${p}ExportDollars`,
+        exportThinking: (p) => `${p}ExportThinking`,
+    });
+
+    function siteKey(siteId, kind) {
+        const site = get(siteId);
+        const build = SITE_KEYS[kind];
+        if (!site || !build) return null;
+        return build(site.prefix);
+    }
+
+    /** Every setting key every chat site owns. Asserted against DEFAULTS. */
+    function allKeys() {
+        const out = [];
+        for (const site of list()) {
+            for (const kind of Object.keys(SITE_KEYS)) out.push(SITE_KEYS[kind](site.prefix));
+        }
+        return out;
+    }
+
+    /** Which chat site a URL is on, or null — for the worker, which has no page to ask. */
+    function siteOfUrl(url) {
+        let host = '';
+        try { host = new URL(String(url)).hostname.replace(/^www\./, ''); } catch (_) { return null; }
+        return list().find((site) => site.tabPatterns.some((pattern) =>
+            host === pattern.replace(/^\*:\/\//, '').replace(/\/\*$/, ''))) || null;
+    }
+
+    /** The conversation a tab's URL is showing, or null for a new chat or another page. */
+    function convIdOfUrl(siteId, url) {
+        const site = get(siteId);
+        if (!site) return null;
+        try { return site.convIdOf(new URL(String(url)).pathname); } catch (_) { return null; }
+    }
+
+    const ChatSites = { SITES, SITE_KEYS, get, list, siteKey, allKeys, siteOfUrl, convIdOfUrl };
+
+    root.BB = root.BB || {};
+    root.BB.ChatSites = ChatSites;
+    if (typeof module !== 'undefined' && module.exports) module.exports = ChatSites;
+})(typeof globalThis !== 'undefined' ? globalThis : this);

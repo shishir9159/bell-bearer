@@ -5386,6 +5386,49 @@ const dayRecord = (at = T0) =>
         }
     });
 
+    // ------------------------------------------------------ chat sites
+
+    console.log('\n# the chat site registry');
+
+    const ChatSites = require('../src/shared/chat-sites.js');
+
+    check('every chat setting the registry can name has a default', () => {
+        eq(ChatSites.allKeys().filter((key) => !(key in globalThis.BB.Settings.DEFAULTS)), []);
+        eq(ChatSites.siteKey('chatgpt', 'queueGap'), 'chatgptQueueGapSeconds');
+        eq(ChatSites.siteKey('chatgpt', 'nonsense'), null);
+        eq(ChatSites.siteKey('nowhere', 'queueGap'), null);
+    });
+    check('the composer buttons are asked for, not assumed', () => {
+        // They are drawn into somebody else's composer. The panel toggle and
+        // the hotkeys are how everything is reachable without them.
+        eq(globalThis.BB.Settings.DEFAULTS.chatgptComposerTools, false);
+    });
+    check('a chatgpt path gives up its conversation id however it is prefixed', () => {
+        const { convIdOf, isNewChat } = ChatSites.get('chatgpt');
+        const id = '6a864ad2-54d0-83e8-b47e-0716102a840c';
+        eq(convIdOf(`/c/${id}`), id);
+        eq(convIdOf(`/g/g-abc123/c/${id}`), id, 'a custom GPT');
+        eq(convIdOf(`/g/g-p-abc123-notes/c/${id}?model=x`), id, 'a project');
+        eq(convIdOf('/'), null);
+        eq(convIdOf('/codex'), null);
+        assert(isNewChat('/') && isNewChat('/g/g-abc123') && isNewChat('/g/g-p-abc-notes/project'));
+        assert(!isNewChat(`/c/${id}`) && !isNewChat('/gpts'), 'not a new chat');
+    });
+    check('a new chat can ask for its model, an existing one cannot', () => {
+        const { chatUrl } = ChatSites.get('chatgpt');
+        eq(chatUrl('abc'), 'https://chatgpt.com/c/abc');
+        eq(chatUrl(null), 'https://chatgpt.com/');
+        eq(chatUrl(null, { model: 'gpt-5' }), 'https://chatgpt.com/?model=gpt-5');
+        eq(chatUrl('abc', { model: 'gpt-5' }), 'https://chatgpt.com/c/abc');
+    });
+    check('the worker can tell which chat a tab is on from its url alone', () => {
+        eq(ChatSites.siteOfUrl('https://chatgpt.com/c/abc12345').id, 'chatgpt');
+        eq(ChatSites.siteOfUrl('https://chat.openai.com/').id, 'chatgpt');
+        eq(ChatSites.siteOfUrl('https://evil.example/chatgpt.com/'), null);
+        eq(ChatSites.convIdOfUrl('chatgpt', 'https://chatgpt.com/c/abc12345?x=1'), 'abc12345');
+        eq(ChatSites.convIdOfUrl('chatgpt', 'not a url'), null);
+    });
+
     console.log('\n' + '='.repeat(52));
     console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
     process.exit(failed ? 1 : 0);

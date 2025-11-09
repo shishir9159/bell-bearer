@@ -255,6 +255,27 @@
         // to the page everywhere else. Rebindable in Shortcuts.
         shortsSeek: false,
         shortsSeekSeconds: 5,
+
+        // Chat sites, one set per site; the key names come from
+        // src/shared/chat-sites.js#siteKey. Per site:
+        //   <site>ComposerTools — Prompts and Queue buttons beside the site's
+        //     own composer. Off, by the rule the X and LeetCode surfaces
+        //     follow; the hotkeys and the panel work either way;
+        //   <site>LimitSuggest — offer to hold or schedule prompts when the
+        //     site says a limit has been reached;
+        //   <site>QueueGapSeconds — the pause between one answer ending and
+        //     the next queued prompt going (at least 1);
+        //   <site>QueueOpenTab — a scheduled prompt that comes due with no tab
+        //     on that chat opens one, in the background, and sends there;
+        //   <site>ExportDollars — maths exported as $ and $$, which Obsidian
+        //     and GitHub render, rather than the \( \) and \[ \] the site writes;
+        //   <site>ExportThinking — reasoning summaries in an export.
+        chatgptComposerTools: false,
+        chatgptLimitSuggest: true,
+        chatgptQueueGapSeconds: 3,
+        chatgptQueueOpenTab: true,
+        chatgptExportDollars: true,
+        chatgptExportThinking: false,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
