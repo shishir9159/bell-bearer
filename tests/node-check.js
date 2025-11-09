@@ -5429,6 +5429,83 @@ const dayRecord = (at = T0) =>
         eq(ChatSites.convIdOfUrl('chatgpt', 'not a url'), null);
     });
 
+    // ------------------------------------------------- the conversation tree
+
+    console.log('\n# the conversation tree');
+
+    const ChatTree = require('../src/shared/chat-tree.js');
+
+    /**
+     * A chat with the two things that make it a tree: the second prompt was
+     * edited (u2a and u2b are siblings), and the answer to the edit was asked
+     * for three times, the page showing the second.
+     */
+    function chatFixture({ current = 'a2b2' } = {}) {
+        const n = (role, parent, children, text, at, extra) => ({ role, parent, children, text, at, ...extra });
+        return ChatTree.build({
+            site: 'chatgpt', id: 'c1', title: 'Flaky test', url: 'https://chatgpt.com/c/c1',
+            createdAt: 1000, updatedAt: 9000, root: 'r', current,
+            nodes: {
+                r: n('root', null, ['u1'], '', 0),
+                u1: n('user', 'r', ['a1'], 'Why is the login test flaky?\nIt fails one run in ten.', 1),
+                a1: n('assistant', 'u1', ['u2a', 'u2b'],
+                    '## Cause\nA race on the session.\n```sh\n# not a heading\n```\n### Fix\nAwait it.', 2, { model: 'gpt-5' }),
+                u2a: n('user', 'a1', ['a2a'], 'Retry it three times?', 10),
+                a2a: n('assistant', 'u2a', [], 'Retries hide it.', 11),
+                u2b: n('user', 'a1', ['a2b1', 'a2b2', 'a2b3', 'ghost'], 'What about mocking the clock?', 20),
+                a2b1: n('assistant', 'u2b', [], 'Mock it with fake timers.', 21),
+                a2b2: n('assistant', 'u2b', [], 'Freeze the clock.\n# Steps\nOne.', 22, { ids: ['a2b2', 'tool-1', 'a2b2-final'] }),
+                a2b3: n('assistant', 'u2b', [], 'Use a clock you inject.', 23),
+            },
+        });
+    }
+
+    check('a child that names no node is dropped rather than walked into', () => {
+        eq(chatFixture().nodes.u2b.children, ['a2b1', 'a2b2', 'a2b3']);
+    });
+    check('the forks are every edit and every regenerate', () => {
+        eq(ChatTree.forks(chatFixture()).sort(), ['a1', 'u2b']);
+    });
+    check('a sibling reads the way the page numbers it', () => {
+        eq(ChatTree.siblingIndex(chatFixture(), 'a2b2'), { index: 2, count: 3 });
+        eq(ChatTree.siblingIndex(chatFixture(), 'u2a'), { index: 1, count: 2 });
+        eq(ChatTree.siblingIndex(chatFixture(), 'u1'), { index: 1, count: 1 });
+    });
+    check('the path shown follows the current leaf, and never includes the root', () => {
+        eq(ChatTree.activePath(chatFixture()), ['u1', 'a1', 'u2b', 'a2b2']);
+        eq(ChatTree.pathTo(chatFixture(), 'a2a'), ['u1', 'a1', 'u2a', 'a2a']);
+    });
+    check('with no current leaf the newest branch is the one shown', () => {
+        const conv = chatFixture({ current: 'nowhere' });
+        eq(conv.current, null);
+        eq(ChatTree.activePath(conv), ['u1', 'a1', 'u2b', 'a2b3']);
+        eq(ChatTree.leafUnder(conv, 'u2a'), 'a2a');
+    });
+    check('a raw id the page drew is found in the turn that spans it', () => {
+        const conv = chatFixture();
+        eq(ChatTree.turnOf(conv, 'tool-1'), 'a2b2');
+        eq(ChatTree.turnOf(conv, 'a2b2-final'), 'a2b2');
+        eq(ChatTree.turnOf(conv, 'unknown'), null);
+    });
+    check('the outline is every prompt and every heading, and a # in a fence is neither', () => {
+        eq(ChatTree.outline(chatFixture()).map((e) => `${e.level}:${e.text}`), [
+            '0:Why is the login test flaky?', '2:Cause', '3:Fix', '0:What about mocking the clock?', '1:Steps',
+        ]);
+    });
+    check('a fence closes only on the same mark, at least as long', () => {
+        eq(ChatTree.headings('````md\n```\n# inside\n```\n````\n## After').map((h) => h.text), ['After']);
+        eq(ChatTree.headings('~~~\n# inside\n```\n~~~\n# Out').map((h) => h.text), ['Out']);
+    });
+    check('a code block survives a fence of its own inside it', () => {
+        eq(ChatTree.fence('x = 1\n', 'python'), '```python\nx = 1\n```');
+        eq(ChatTree.fence('```js\nf()\n```', 'md'), '````md\n```js\nf()\n```\n````');
+    });
+    check('a first line is cut on a word', () => {
+        eq(ChatTree.firstLine('\n  hello   world\nmore'), 'hello world');
+        const long = ChatTree.firstLine('word '.repeat(40), 30);
+        assert(long.length <= 30 && long.endsWith('…') && !/\s…$/.test(long), long);
+    });
+
     console.log('\n' + '='.repeat(52));
     console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
     process.exit(failed ? 1 : 0);
