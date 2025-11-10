@@ -389,6 +389,11 @@
         // by dragging and so not a setting a control could bind to. Shape
         // owned by src/content/reader.js — see readSizes there.
         readerSizes: 'bbReaderSizes',
+
+        // The chat panel on ChatGPT and Claude: whether it was left open and
+        // which tab it was on, so a reload puts it back the way it was.
+        // src/content/chat-ui.js owns the shape — { open, tab }.
+        chatPanel: 'bbChatPanel',
     });
 
     function withDefaults(stored, keys) {

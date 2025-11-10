@@ -5619,6 +5619,24 @@ const dayRecord = (at = T0) =>
             'skim.js would get undefined for ScrollTo at load');
     });
 
+    // ------------------------------------------------------ the chat panel
+
+    console.log('\n# the chat panel');
+
+    const ChatPanel = require('../src/content/chat-panel.js');
+
+    check('the panel docks only where the thread leaves it room', () => {
+        // A 768px thread centred in 1180px of main pane ends at 1234 on a
+        // 1440 window: 206px of margin, which a 340px panel would cover.
+        eq(ChatPanel.fitsBeside(1440, 1234), false);
+        eq(ChatPanel.fitsBeside(1920, 1344), true);
+        eq(ChatPanel.fitsBeside(1100, null), false, 'nothing to measure on a narrow window');
+        eq(ChatPanel.fitsBeside(1600, null), true, 'nothing to measure on a wide one');
+    });
+    check('the panel remembers itself under a key of its own', () => {
+        eq(globalThis.BB.Settings.DATA.chatPanel, 'bbChatPanel');
+    });
+
     // ------------------------------------------------- reading chatgpt.com
 
     console.log('\n# reading chatgpt.com');
