@@ -5500,6 +5500,12 @@ const dayRecord = (at = T0) =>
         eq(ChatTree.fence('x = 1\n', 'python'), '```python\nx = 1\n```');
         eq(ChatTree.fence('```js\nf()\n```', 'md'), '````md\n```js\nf()\n```\n````');
     });
+    check('a first line is cut on a word', () => {
+        eq(ChatTree.firstLine('\n  hello   world\nmore'), 'hello world');
+        const long = ChatTree.firstLine('word '.repeat(40), 30);
+        assert(long.length <= 30 && long.endsWith('…') && !/\s…$/.test(long), long);
+    });
+
     // ------------------------------------------------- reading chatgpt's tree
 
     console.log('\n# reading a chatgpt conversation');
@@ -5596,10 +5602,69 @@ const dayRecord = (at = T0) =>
         eq(ChatTree.activePath(ChatgptFormat.normalize(null)), []);
     });
 
-    check('a first line is cut on a word', () => {
-        eq(ChatTree.firstLine('\n  hello   world\nmore'), 'hello world');
-        const long = ChatTree.firstLine('word '.repeat(40), 30);
-        assert(long.length <= 30 && long.endsWith('…') && !/\s…$/.test(long), long);
+
+    // ------------------------------------------------- reading chatgpt.com
+
+    console.log('\n# reading chatgpt.com');
+
+    const ChatgptRead = require('../src/content/chatgpt-read.js');
+
+    check('a sibling count reads as k/n or it is not the sibling control', () => {
+        eq(ChatgptRead.readCount(' 2 / 3 '), { index: 2, count: 3 });
+        eq(ChatgptRead.readCount('2/3 answers'), null, 'prose that mentions a count');
+        eq(ChatgptRead.readCount('1/1'), null, 'a single sibling has no control');
+        eq(ChatgptRead.readCount('4/3'), null);
+    });
+    check('the turn selectors lead with the markup chatgpt.com draws now', () => {
+        // A <section> since 2026. The older spellings stay below it.
+        eq(ChatgptRead.SELECTORS.turn[0], 'section[data-testid^="conversation-turn-"]');
+        assert(ChatgptRead.SELECTORS.turn.some((s) => s.startsWith('article')), 'the old spelling was collapsed away');
+    });
+
+    /** A stand-in fetch that answers from a table and records what it was asked. */
+    function fakeFetch(routes) {
+        const calls = [];
+        const impl = async (url, options = {}) => {
+            calls.push({ url, auth: options.headers && options.headers.Authorization });
+            const route = Object.keys(routes).find((prefix) => url.startsWith(prefix));
+            const answer = route ? routes[route](calls.length) : { status: 404 };
+            return { ok: answer.status === 200, status: answer.status, json: async () => answer.body };
+        };
+        return { impl, calls };
+    }
+
+    await checkAsync('the token is fetched once, and once more on a 401', async () => {
+        let issued = 0;
+        let rejected = false;
+        const { impl, calls } = fakeFetch({
+            '/api/auth/session': () => ({ status: 200, body: { accessToken: `t${++issued}` } }),
+            '/backend-api/conversations': () => {
+                if (!rejected) { rejected = true; return { status: 401 }; }
+                return { status: 200, body: { items: [{ id: 'a', title: 'One', update_time: 1700000000 }], total: 40 } };
+            },
+        });
+        const api = ChatgptRead.createApi(impl);
+        const page = await api.listConversations({ offset: 0, limit: 1 });
+        eq(page, { items: [{ id: 'a', title: 'One', updatedAt: 1700000000000 }], total: 40 });
+        eq(calls.map((c) => c.url.split('?')[0]), ['/api/auth/session', '/backend-api/conversations',
+            '/api/auth/session', '/backend-api/conversations']);
+        eq(calls[3].auth, 'Bearer t2', 'the retry went out with the stale token');
+        await api.listConversations();
+        eq(calls.filter((c) => c.url === '/api/auth/session').length, 2, 'the token was not kept');
+    });
+    await checkAsync('a conversation arrives already in the tree shape', async () => {
+        const { impl } = fakeFetch({
+            '/api/auth/session': () => ({ status: 200, body: { accessToken: 't' } }),
+            '/backend-api/conversation/conv-1': () => ({ status: 200, body: chatgptRaw() }),
+        });
+        const conv = await ChatgptRead.createApi(impl).fetchConversation('conv-1');
+        eq(ChatTree.activePath(conv), ['u1', 'a1', 'u2', 'a2']);
+    });
+    await checkAsync('signed out is said as such, not as an empty list', async () => {
+        const { impl } = fakeFetch({ '/api/auth/session': () => ({ status: 200, body: {} }) });
+        let code = null;
+        try { await ChatgptRead.createApi(impl).listConversations(); } catch (error) { code = error.code; }
+        eq(code, 'signed-out');
     });
 
     console.log('\n' + '='.repeat(52));
