@@ -62,6 +62,7 @@
         "src/content/page-info.js",
         "src/content/player.js",
         "src/content/shortcuts.js",
+        "src/content/scroll-to.js",
         "src/content/skim.js",
         "src/content/link-hints.js",
         "src/content/time-limit.js",

@@ -5603,6 +5603,22 @@ const dayRecord = (at = T0) =>
     });
 
 
+    // ------------------------------------------------- landing on a turn
+
+    console.log('\n# the shared scroll helpers');
+
+    check('skim keeps no copy of the helpers it now shares', () => {
+        const source = readRepo('src/content/skim.js');
+        assert(!/function (innerScroller|isPinned|markArrival)\b/.test(source), 'a private copy is back');
+        assert(/ScrollTo\.markArrival\(pulse/.test(source), 'skim no longer marks its arrival');
+    });
+    check('the helpers load before the launcher that calls them', () => {
+        const js = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+        assert(js.indexOf('src/content/scroll-to.js') > -1, 'not shipped');
+        assert(js.indexOf('src/content/scroll-to.js') < js.indexOf('src/content/skim.js'),
+            'skim.js would get undefined for ScrollTo at load');
+    });
+
     // ------------------------------------------------- reading chatgpt.com
 
     console.log('\n# reading chatgpt.com');

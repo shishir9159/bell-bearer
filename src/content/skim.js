@@ -27,12 +27,11 @@
     const ns = root.BB || {};
     const Skim = ns.Skim || req('../shared/skim.js');
     const Dom = ns.Dom || req('../shared/dom.js');
+    const ScrollTo = ns.ScrollTo || req('./scroll-to.js');
 
     const PANEL_ID = 'bb-skim';
     const HIGHLIGHT = 'bb-skim-hit';
     const HIGHLIGHT_ACTIVE = 'bb-skim-hit-active';
-    /** How long the arrival marker follows a smooth scroll before giving up. */
-    const PULSE_MS = 900;
     const DEBOUNCE_MS = 120;
 
     const esc = (text) => (Dom ? Dom.escapeHtml(text) : String(text == null ? '' : text));
@@ -154,46 +153,20 @@
 
         // ------------------------------------------------------- the jump
 
-        /** The closest ancestor that scrolls on its own, or null. */
-        function innerScroller(element) {
-            for (let node = element; node && node !== document.body; node = node.parentElement) {
-                const style = getComputedStyle(node);
-                const scrolls = /(auto|scroll|overlay)/.test(style.overflowY);
-                if (scrolls && node.scrollHeight > node.clientHeight + 4) return node;
-            }
-            return null;
-        }
-
-        /** Is the match inside something the page keeps still while it scrolls? */
-        function isPinned(element) {
-            for (let node = element; node && node !== document.body; node = node.parentElement) {
-                const position = getComputedStyle(node).position;
-                if (position === 'sticky' || position === 'fixed') return true;
-            }
-            return false;
-        }
-
+        // Finding the scroller, opening a <details> and marking the arrival
+        // are src/content/scroll-to.js, shared with the chat outline. Where
+        // the window comes to rest is Skim's own: it steps out of the way of
+        // its own panel, which nothing else on the page has to.
         function jump(hit) {
             const element = hit.node.parentElement;
             if (!element) return;
 
-            // A collapsed section has no height to aim at, so it is opened
-            // before anything is measured — and left open afterwards.
-            for (let node = element; node; node = node.parentElement) {
-                if (node.tagName === 'DETAILS' && !node.open) node.open = true;
-            }
+            ScrollTo.openDetails(element);
 
             // Two scrolls, in order: the container brings the match into its
             // own view, then the page places the container.
-            const sub = innerScroller(element);
-            if (sub) {
-                const box = sub.getBoundingClientRect();
-                const inside = hit.range.getBoundingClientRect();
-                sub.scrollTo({
-                    top: sub.scrollTop + (inside.top - box.top) - sub.clientHeight / 2,
-                    behavior: 'smooth',
-                });
-            }
+            const sub = ScrollTo.innerScroller(element);
+            if (sub) ScrollTo.bring(sub, hit.range.getBoundingClientRect());
 
             const doc = document.scrollingElement || document.documentElement;
             const viewport = window.innerHeight || doc.clientHeight;
@@ -204,7 +177,7 @@
                 scrollMax: Math.max(0, doc.scrollHeight - viewport),
                 target: doc.scrollTop + rect.top,
                 height: panel ? panel.offsetHeight : 240,
-                pinned: isPinned(element),
+                pinned: ScrollTo.isPinned(element),
             });
 
             if (plan.pos !== pos) {
@@ -212,40 +185,10 @@
                 place();
             }
             if (plan.moved) window.scrollTo({ top: plan.scrollTop, behavior: 'smooth' });
-            markArrival(hit);
+            // The highlight says where the match is; the marker says that it
+            // just arrived, which is what the eye needs after the page moved.
+            ScrollTo.markArrival(pulse, () => hit.range.getBoundingClientRect());
             setFooter(`${crumbFor(hit.node)} · ${plan.note}`);
-        }
-
-        /**
-         * A box drawn over the match for a moment. The highlight itself says
-         * where the match is; this says that it just arrived, which is what
-         * the eye needs after the page has moved under it.
-         *
-         * It follows the scroll: the page is still gliding when this is
-         * drawn, so a box placed once would be left behind.
-         */
-        function markArrival(hit) {
-            if (!pulse) return;
-            const draw = () => {
-                const rect = hit.range.getBoundingClientRect();
-                pulse.style.left = `${Math.round(rect.left)}px`;
-                pulse.style.top = `${Math.round(rect.top)}px`;
-                pulse.style.width = `${Math.round(rect.width)}px`;
-                pulse.style.height = `${Math.round(rect.height)}px`;
-            };
-            draw();
-            pulse.hidden = false;
-            pulse.classList.remove('is-on');
-            void pulse.offsetWidth;
-            pulse.classList.add('is-on');
-
-            clearTimeout(markArrival.timer);
-            window.removeEventListener('scroll', draw, true);
-            window.addEventListener('scroll', draw, true);
-            markArrival.timer = setTimeout(() => {
-                window.removeEventListener('scroll', draw, true);
-                if (pulse) pulse.hidden = true;
-            }, PULSE_MS);
         }
 
         // ------------------------------------------------------ the model
