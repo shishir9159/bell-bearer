@@ -55,9 +55,10 @@
         skimMode: false,
         linkHints: false,
 
-        // Shift+P for the pouch overlay, on YouTube and on X. Off for the
-        // same reason as the two above: it claims a bare-Shift letter, which
-        // is not something to switch on for someone without being told.
+        // Shift+P for the pouch overlay, on YouTube, X and LeetCode, and for
+        // the chat panel on a chat site. Off for the same reason as the two
+        // above: it claims a bare-Shift letter, which is not something to
+        // switch on for someone without being told.
         pouchShortcut: false,
 
         // Legacy: the daily limit used to be two settings per site, which is

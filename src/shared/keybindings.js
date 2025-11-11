@@ -35,10 +35,11 @@
         { id: 'skim-actions', scope: 'general', kind: 'key', needs: 'skimMode', label: 'Skim — search browser actions', combo: { shift: true, code: 'KeyA', key: 'A' } },
         { id: 'link-hints', scope: 'general', kind: 'key', needs: 'linkHints', label: 'Label every link for the keyboard', combo: { shift: true, code: 'KeyL', key: 'L' } },
         // General rather than a scope of its own: it is one key opening the
-        // pouch, which YouTube, X and LeetCode each draw their own way. There
-        // is no scope for "three sites", and hiding it under `youtube` would
-        // take it off the keyboard map for two thirds of the places it works.
-        { id: 'open-pouch', scope: 'general', kind: 'key', needs: 'pouchShortcut', label: 'Open the pouch (YouTube, X and LeetCode)', combo: { shift: true, code: 'KeyP', key: 'P' } },
+        // pouch, which YouTube, X and LeetCode each draw their own way — and
+        // on a chat site the chat panel, which is that site's pouch. There is
+        // no scope for "four sites", and hiding it under `youtube` would take
+        // it off the keyboard map for most of the places it works.
+        { id: 'open-pouch', scope: 'general', kind: 'key', needs: 'pouchShortcut', label: 'Open the pouch (YouTube, X and LeetCode) or the chat panel (ChatGPT)', combo: { shift: true, code: 'KeyP', key: 'P' } },
         { id: 'copy-markdown-link', scope: 'general', kind: 'command', label: 'Copy this page as a Markdown link', combo: { ctrl: true, shift: true, code: 'KeyL', key: 'L' } },
 
         { id: 'record-checkpoint', scope: 'youtube', kind: 'key', label: 'Create checkpoint (hold and release)', combo: { ctrl: true, code: 'KeyB', key: 'b' } },

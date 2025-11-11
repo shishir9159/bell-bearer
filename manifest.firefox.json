@@ -98,6 +98,7 @@
         "src/shared/chatgpt-format.js",
         "src/content/chatgpt-read.js",
         "src/content/chat-panel.js",
+        "src/content/chat-ui.js",
         "src/content/main.js"
       ],
       "css": [

@@ -36,6 +36,7 @@
         // is where the site keeps its own stats, so the whole domain is
         // matched rather than the one subdomain.
         if (/(^|\.)typeracer\.com$/.test(host)) return 'typeracer';
+        if (/(^|\.)(chatgpt\.com|chat\.openai\.com)$/.test(host)) return 'chatgpt';
         return 'other';
     }
 

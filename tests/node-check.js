@@ -5273,6 +5273,17 @@ const dayRecord = (at = T0) =>
         eq(Site.detectSite('en.lichess.org'), 'lichess');
         eq(Site.detectSite('notlichess.org'), 'other');
     });
+    check('chatgpt is a site of its own, under both of its names', () => {
+        eq(Site.detectSite('chatgpt.com'), 'chatgpt');
+        eq(Site.detectSite('chat.openai.com'), 'chatgpt');
+        eq(Site.detectSite('openai.com'), 'other', 'the company site has no chat on it');
+        eq(Site.detectSite('notchatgpt.com'), 'other');
+    });
+    check('a chat site is wired through its adapter, and shift+p opens its panel', () => {
+        const main = readRepo('src/content/main.js');
+        assert(/CHAT_ADAPTERS = \{ chatgpt: /.test(main), 'chatgpt has no adapter in main.js');
+        assert(/return youtubeUi \|\| twitterUi \|\| leetUi \|\| chatUi;/.test(main), 'Shift+P would not reach the chat panel');
+    });
 
     check('leetcode.com is a site of its own', () => {
         eq(Site.detectSite('leetcode.com'), 'leetcode');

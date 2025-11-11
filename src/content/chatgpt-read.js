@@ -158,6 +158,24 @@
         return find('header');
     }
 
+    /**
+     * The right edge of the conversation column: the widest message, or the
+     * composer, whichever reaches further. Null with neither on the page.
+     */
+    function threadRight() {
+        const edges = [...document.querySelectorAll('[data-message-id]'), find('composer', document, { visible: true })]
+            .filter(Boolean)
+            .map((element) => element.getBoundingClientRect().right)
+            .filter((right) => right > 0);
+        return edges.length ? Math.max(...edges) : null;
+    }
+
+    /** Where the chat's own header ends, so the panel starts below it. */
+    function headerBottom() {
+        const header = find('header');
+        return header ? Math.max(0, header.getBoundingClientRect().bottom) : 56;
+    }
+
     function composerSlot() {
         const plus = find('composerTools');
         return plus ? plus.parentElement : null;
@@ -234,6 +252,8 @@
         stopButton,
         isStreaming: () => !!stopButton(),
         headerSlot,
+        headerBottom,
+        threadRight,
         composerSlot,
         signedOut: () => !!find('signIn', document, { visible: true }),
         chatUrl: (id, options) => SITE.chatUrl(id, options),

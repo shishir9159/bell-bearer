@@ -32,7 +32,7 @@
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
         CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
         Keybindings, SkimContent, LinkHints, TimeLimitContent, TwitterUi, TwitterAds,
-        RosterContent, LeetUi, TyperUi, Reader } = BB;
+        RosterContent, LeetUi, TyperUi, Reader, ChatUi, ChatSites, ChatgptRead } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -215,12 +215,17 @@
     let twitterAds = null;
     let leetUi = null;
     let typerUi = null;
+    let chatUi = null;
     /** The YouTube reader; built on YouTube only, and opened on demand. */
     let reader = null;
 
-    /** Whichever site's pouch surface this page has, or null for the rest. */
+    /**
+     * Whichever site's pouch surface this page has, or null for the rest. On
+     * a chat site the "pouch" is the chat panel: Shift+P is the one key that
+     * opens what Bell Bearer draws on a site, whatever that site's is.
+     */
     function pouchUi() {
-        return youtubeUi || twitterUi || leetUi;
+        return youtubeUi || twitterUi || leetUi || chatUi;
     }
 
     if (site === 'youtube') {
@@ -337,6 +342,35 @@
             if (location.pathname !== lastPath) {
                 lastPath = location.pathname;
                 typerUi.onNavigate();
+            }
+            return false;
+        });
+        window.addEventListener('popstate', () => watcher.schedule());
+    }
+
+    // ------------------------------------------------------- chat sites
+
+    /**
+     * The site's adapter — everything about its markup and its API — by id.
+     * The chat core never names a site, so a second chat site is one line
+     * here and one entry in src/shared/chat-sites.js.
+     */
+    const CHAT_ADAPTERS = { chatgpt: () => ChatgptRead.adapter };
+
+    if (ChatSites.get(site) && CHAT_ADAPTERS[site]) {
+        const watcher = DomWatch.createWatcher();
+
+        chatUi = ChatUi.createChatUi({ adapter: CHAT_ADAPTERS[site](), watcher, notify, getSettings: () => settings });
+        chatUi.install();
+
+        // The X treatment again: a single-page app with no navigation event
+        // of its own. Opening a chat rebuilds the thread, so the observer has
+        // fired by the time the path differs.
+        let lastPath = location.pathname;
+        watcher.add('chat-route', () => {
+            if (location.pathname !== lastPath) {
+                lastPath = location.pathname;
+                chatUi.onNavigate();
             }
             return false;
         });
