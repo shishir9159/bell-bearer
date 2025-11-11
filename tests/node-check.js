@@ -5654,6 +5654,49 @@ const dayRecord = (at = T0) =>
         eq(globalThis.BB.Settings.DATA.chatPanel, 'bbChatPanel');
     });
 
+    // ---------------------------------------------- moving the page to a turn
+
+    console.log('\n# reaching a turn');
+
+    const ChatNav = require('../src/content/chat-nav.js');
+
+    check('with nothing mounted a turn is looked for at its share of the thread', () => {
+        eq(ChatNav.estimateTop({ index: 10, total: 40, scrollHeight: 20000 }), 5000);
+        eq(ChatNav.estimateTop({ index: 0, total: 0, scrollHeight: 20000 }), 0);
+    });
+    check('with turns mounted it steps from the nearest by their average height', () => {
+        // Turns 20-22 are mounted, 300px apiece, from 6000 down.
+        const mounted = [{ index: 20, top: 6000, height: 300 }, { index: 21, top: 6300, height: 300 },
+            { index: 22, top: 6600, height: 300 }];
+        eq(ChatNav.estimateTop({ index: 30, total: 40, scrollHeight: 20000, mounted }), 9000);
+        eq(ChatNav.estimateTop({ index: 5, total: 40, scrollHeight: 20000, mounted }), 1500);
+        eq(ChatNav.estimateTop({ index: 0, total: 40, scrollHeight: 20000, mounted: [{ index: 3, top: 100, height: 900 }] }), 0,
+            'never above the top of the thread');
+    });
+
+    const path = ['u1', 'a1', 'u2', 'a2', 'u3', 'a3', 'u4', 'a4'];
+    const prompts = ['u1', 'u2', 'u3', 'u4'];
+    check('the next prompt is the first one below the reading line', () => {
+        const mounted = [{ id: 'a2', top: -400 }, { id: 'u3', top: 250 }, { id: 'a3', top: 400 }];
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: 1 }), 'u3');
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: -1 }), 'u2',
+            'none mounted above the line, so the path says which');
+    });
+    check('a prompt sitting on the line is where you are, not where you go', () => {
+        const mounted = [{ id: 'u2', top: 3 }, { id: 'a2', top: 90 }];
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: 1 }), 'u3');
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: -1 }), 'u1');
+    });
+    check('there is nothing past either end', () => {
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted: [{ id: 'a4', top: -50 }], direction: 1 }), null);
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted: [{ id: 'u1', top: 0 }], direction: -1 }), null);
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted: [], direction: 1 }), 'u1', 'an unmounted thread starts at the top');
+    });
+    check('a turn not on the path shown is not somewhere to go', () => {
+        const mounted = [{ id: 'elsewhere', top: 100 }, { id: 'u1', top: -10 }];
+        eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: 1 }), 'u2');
+    });
+
     // ------------------------------------------------- reading chatgpt.com
 
     console.log('\n# reading chatgpt.com');
