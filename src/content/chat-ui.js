@@ -21,6 +21,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('../shared/settings.js');
+    const Keybindings = ns.Keybindings || req('../shared/keybindings.js');
     const ChatTree = ns.ChatTree || req('../shared/chat-tree.js');
     const ChatPanel = ns.ChatPanel || req('./chat-panel.js');
     const ChatNav = ns.ChatNav || req('./chat-nav.js');
@@ -198,6 +199,57 @@
             });
         }
 
+        // ---------------------------------------------------------- hotkeys
+
+        /**
+         * Ctrl+Alt+J/K and the rest, on a capture-phase keydown of their own.
+         *
+         * Not through src/content/shortcuts.js, for leet-ui.js's reason: its
+         * isTypingTarget stands aside for every contenteditable, and a chat
+         * site's composer is one and has the focus nearly all the time. These
+         * have to fire with the caret in it. The panel itself is Shift+P —
+         * the pouch key, which does go through shortcuts.js and so types a P
+         * in the composer, as a capital letter should.
+         */
+        const HOTKEYS = {
+            'chat-next': () => step(1),
+            'chat-prev': () => step(-1),
+        };
+
+        /**
+         * AltGr is Ctrl+Alt as far as a keydown can tell on Windows, and it
+         * is how half of Europe types: AltGr+Q is @ on a German keyboard. A
+         * keystroke the browser says had AltGraph down, or that produced a
+         * symbol rather than its letter, is typing and is left alone.
+         */
+        function isAltGr(event) {
+            if (event.getModifierState && event.getModifierState('AltGraph')) return true;
+            return typeof event.key === 'string' && event.key.length === 1 && !/[\p{L}\p{N}]/u.test(event.key);
+        }
+
+        function onHotkey(event) {
+            // Every keystroke in the composer passes through here. A chat
+            // hotkey always carries a modifier — it fires in a text box — so
+            // a bare key is turned away before anything is resolved.
+            if (!event.ctrlKey && !event.altKey && !event.metaKey) return;
+            if (isAltGr(event)) return;
+            const shortcuts = getSettings().shortcuts;
+            for (const id of Object.keys(HOTKEYS)) {
+                const binding = Keybindings.resolve(shortcuts, id);
+                if (!binding || !binding.enabled || !Keybindings.matches(event, binding.combo, binding.kind)) continue;
+                event.preventDefault();
+                event.stopPropagation();
+                HOTKEYS[id]();
+                return;
+            }
+        }
+
+        /** The next or previous prompt, from wherever the reader is. */
+        function step(direction) {
+            if (!chat.conv) return Promise.resolve(false);
+            return ChatNav.step(adapter, chat.conv, direction);
+        }
+
         // ----------------------------------------------------------- toggle
 
         /**
@@ -256,6 +308,7 @@
             // The thread scrolls inside a container of its own, which a
             // capture listener on window hears without having to find it.
             window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+            document.addEventListener('keydown', onHotkey, true);
             // Put the panel back if it was left open — but only where it
             // docks. An overlay that opens by itself on page load covers the
             // chat you came to read.
@@ -275,6 +328,7 @@
             watcher.remove('chat-toggle');
             watcher.remove('chat-sync');
             window.removeEventListener('scroll', onScroll, { capture: true, passive: true });
+            document.removeEventListener('keydown', onHotkey, true);
             clearTimeout(refetchTimer);
             chat.token++;
             if (panel.isOpen()) panel.close();
@@ -308,7 +362,7 @@
         }
 
         return {
-            install, uninstall, onNavigate, openPouch, refreshSurfaces, panel, injectToggle, goTo,
+            install, uninstall, onNavigate, openPouch, refreshSurfaces, panel, injectToggle, goTo, onHotkey, isAltGr,
             conversation: () => chat.conv,
             reload: () => (chat.id ? load(chat.id) : Promise.resolve()),
         };

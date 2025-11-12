@@ -27,7 +27,9 @@
 (function (root) {
     'use strict';
 
-    const SCOPES = Object.freeze({ general: 'General', youtube: 'YouTube', chess: 'Chess.com', leetcode: 'LeetCode', typeracer: 'TypeRacer' });
+    const SCOPES = Object.freeze({
+        general: 'General', youtube: 'YouTube', chess: 'Chess.com', leetcode: 'LeetCode', typeracer: 'TypeRacer', chat: 'ChatGPT',
+    });
 
     const BINDINGS = Object.freeze([
         { id: 'skim-find', scope: 'general', kind: 'key', needs: 'skimMode', label: 'Skim — find within this page', combo: { shift: true, code: 'KeyF', key: 'F' } },
@@ -73,6 +75,14 @@
         // one fires with the caret inside the box you are racing in, where
         // every bare letter is a letter you meant to type.
         { id: 'typer-caret', scope: 'typeracer', kind: 'key', label: 'Cycle the typing caret style', combo: { ctrl: true, alt: true, code: 'KeyC', key: 'c' } },
+
+        // Ctrl+Alt for the reason the two clusters above use it: these fire
+        // with the caret in the chat's prompt box. conflicts() is checked
+        // across every scope, so C, M, R and T were already taken. Not
+        // Ctrl+Alt+arrows, which rotate the screen on a lot of Windows
+        // laptops. The panel itself is Shift+P, the pouch key.
+        { id: 'chat-next', scope: 'chat', kind: 'key', label: 'Jump to the next prompt', combo: { ctrl: true, alt: true, code: 'KeyJ', key: 'j' } },
+        { id: 'chat-prev', scope: 'chat', kind: 'key', label: 'Jump to the previous prompt', combo: { ctrl: true, alt: true, code: 'KeyK', key: 'k' } },
     ]);
 
     const BY_ID = Object.freeze(Object.fromEntries(BINDINGS.map((binding) => [binding.id, binding])));

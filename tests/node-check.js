@@ -5714,6 +5714,40 @@ const dayRecord = (at = T0) =>
         eq(ChatNav.pickNeighbour({ prompts, path, mounted, direction: 1 }), 'u2');
     });
 
+    // ------------------------------------------------------- chat hotkeys
+
+    console.log('\n# chat hotkeys');
+
+    check('the chat keys fire in the prompt box, so none is a bare letter and none clashes', () => {
+        const Keybindings = require('../src/shared/keybindings.js');
+        eq(Keybindings.SCOPES.chat, 'ChatGPT');
+        eq(Keybindings.list({}, 'chat').map((b) => b.id), ['chat-next', 'chat-prev']);
+        for (const binding of Keybindings.list({}, 'chat')) {
+            assert(binding.combo.ctrl && binding.combo.alt, `${binding.id} would fire while typing`);
+            assert(!/^Arrow/.test(binding.combo.code), 'Ctrl+Alt+arrows rotate the screen on Windows');
+            eq(Keybindings.conflicts({}, binding.id, binding.combo), []);
+        }
+    });
+    check('a chat hotkey is taken, and a symbol typed through AltGr is not', () => {
+        const ChatUi = require('../src/content/chat-ui.js');
+        const quiet = { add() {}, remove() {}, has: () => false, schedule() {}, stop() {} };
+        const ui = ChatUi.createChatUi({ adapter: { site: 'chatgpt' }, watcher: quiet, notify() {} });
+        const press = (key, { ctrl = true, alt = true, altGraph = false } = {}) => ({
+            code: 'KeyJ', key, ctrlKey: ctrl, altKey: alt, shiftKey: false, metaKey: false,
+            getModifierState: (name) => name === 'AltGraph' && altGraph,
+            preventDefault() { this.defaulted = true; },
+            stopPropagation() {},
+        });
+        const next = press('j');
+        ui.onHotkey(next);
+        eq(next.defaulted, true, 'Ctrl+Alt+J was left to the page');
+        for (const typed of [press('@'), press('j', { altGraph: true }), press('j', { ctrl: false, alt: false })]) {
+            ui.onHotkey(typed);
+            eq(typed.defaulted, undefined, `swallowed ${typed.key}`);
+        }
+        assert(!ui.isAltGr({ key: 'й', getModifierState: () => false }), 'a letter in another script is still that key');
+    });
+
     // ------------------------------------------------- reading chatgpt.com
 
     console.log('\n# reading chatgpt.com');
