@@ -5748,6 +5748,46 @@ const dayRecord = (at = T0) =>
         assert(!ui.isAltGr({ key: 'й', getModifierState: () => false }), 'a letter in another script is still that key');
     });
 
+    // ------------------------------------------------------ chat pins
+
+    console.log('\n# chat pins');
+
+    const ChatPins = require('../src/shared/chat-pins.js');
+
+    await checkAsync('a pin is kept by turn id, once, with its chat beside it', async () => {
+        clearStore();
+        const where = { site: 'chatgpt', conv: 'c1', title: 'Flaky test', url: 'https://chatgpt.com/c/c1' };
+        await ChatPins.pin({ ...where, node: 'a1', excerpt: '## Cause\nA **race** on the session.', now: 10 });
+        await ChatPins.pin({ ...where, node: 'a1', excerpt: 'again', now: 20 });
+        await ChatPins.pin({ ...where, node: 'a3', excerpt: 'Await it.', now: 30 });
+        const state = await ChatPins.load();
+        eq(ChatPins.forConv(state, 'chatgpt', 'c1').map((p) => p.node), ['a1', 'a3']);
+        eq(ChatPins.forConv(state, 'chatgpt', 'c1')[0].excerpt, 'Cause A race on the session.');
+        eq(state['chatgpt:c1'].title, 'Flaky test');
+        assert(ChatPins.isPinned(state, 'chatgpt', 'c1', 'a3') && !ChatPins.isPinned(state, 'chatgpt', 'c2', 'a3'));
+    });
+    await checkAsync('a label is the pin’s own, and the last unpin forgets the chat', async () => {
+        clearStore();
+        const where = { site: 'chatgpt', conv: 'c1' };
+        await ChatPins.pin({ ...where, node: 'a1', now: 1 });
+        await ChatPins.relabel({ ...where, node: 'a1', label: '  the fix  ' });
+        eq(ChatPins.forConv(await ChatPins.load(), 'chatgpt', 'c1')[0].label, 'the fix');
+        await ChatPins.unpin({ ...where, node: 'a1' });
+        eq(await ChatPins.load(), {});
+    });
+    await checkAsync('the dashboard gets every pin on a site, newest first', async () => {
+        clearStore();
+        await ChatPins.pin({ site: 'chatgpt', conv: 'c1', node: 'a1', now: 1 });
+        await ChatPins.pin({ site: 'chatgpt', conv: 'c2', node: 'b1', now: 5 });
+        await ChatPins.pin({ site: 'claude', conv: 'k1', node: 'z1', now: 9 });
+        const all = ChatPins.all(await ChatPins.load(), 'chatgpt');
+        eq(all.map((p) => `${p.conv}/${p.node}`), ['c2/b1', 'c1/a1']);
+    });
+    check('an excerpt drops fenced code rather than showing its fence', () => {
+        eq(ChatPins.excerptOf('```python\nprint(1)\n```\nThen [run it](https://x.y).'), 'Then run it.');
+        assert(ChatPins.excerptOf('word '.repeat(60)).length <= ChatPins.EXCERPT);
+    });
+
     // ------------------------------------------------- reading chatgpt.com
 
     console.log('\n# reading chatgpt.com');

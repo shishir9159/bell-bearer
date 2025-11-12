@@ -395,6 +395,11 @@
         // which tab it was on, so a reload puts it back the way it was.
         // src/content/chat-ui.js owns the shape — { open, tab }.
         chatPanel: 'bbChatPanel',
+
+        // Turns pinned in a chat on ChatGPT or Claude, keyed by site and
+        // conversation, with each chat's title and address beside its pins.
+        // src/shared/chat-pins.js owns the shape.
+        chatPins: 'bbChatPins',
     });
 
     function withDefaults(stored, keys) {

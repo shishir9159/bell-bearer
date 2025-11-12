@@ -92,6 +92,7 @@
         "src/shared/chat-sites.js",
         "src/shared/chat-tree.js",
         "src/shared/chatgpt-format.js",
+        "src/shared/chat-pins.js",
         "src/content/chatgpt-read.js",
         "src/content/chat-nav.js",
         "src/content/chat-panel.js",
