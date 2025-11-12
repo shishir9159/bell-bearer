@@ -108,6 +108,10 @@
             element.className = 'bb-chat-pulse';
             element.hidden = true;
             document.documentElement.appendChild(element);
+            // Dressed so it rings in the skin's accent. Looked up when first
+            // drawn rather than at load: theme.js may not be there in a spec.
+            const Theme = ns.Theme || root.BB.Theme;
+            if (Theme) Theme.appearance().then((look) => Theme.dress(element, look));
         }
         return element;
     }

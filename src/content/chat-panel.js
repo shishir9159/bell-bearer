@@ -233,7 +233,49 @@
     /** An empty tab's message, the same shape everywhere. */
     const emptyHtml = (text) => `<div class="bb-chat-empty"><p>${esc(text)}</p></div>`;
 
-    const ChatPanel = { createChatPanel, fitsBeside, emptyHtml, PANEL_ID, SCRIM_ID, KEEP, WIDTH };
+    // ------------------------------------------------------------ outline
+
+    /**
+     * The outline: every prompt, and under each answer its headings. A row is
+     * a button that reaches its turn — and its heading, when it is one.
+     */
+    function outlineHtml(entries) {
+        if (!entries.length) return emptyHtml('Nothing on this path yet.');
+        return `<ol class="bb-chat-outline">${entries.map((entry, index) => `
+            <li><button type="button" class="bb-chat-entry is-l${entry.level}" data-bb-chat-entry="${index}"
+                        data-bb-chat-reach="${Dom.escapeAttr(entry.id)}" data-bb-chat-heading="${Dom.escapeAttr(entry.heading || '')}"
+                        title="${Dom.escapeAttr(entry.text)}">
+                <span class="bb-chat-entry-text">${esc(entry.text)}</span>
+            </button></li>`).join('')}</ol>`;
+    }
+
+    /**
+     * Which outline row is the one being read: the last entry at or above
+     * `at` — the turn at the reading line and the heading within it. An
+     * answer read before any of its headings is still under its prompt.
+     */
+    function currentEntry(entries, path, at) {
+        if (!at) return -1;
+        const here = path.indexOf(at.id);
+        let chosen = -1;
+        let reached = false;
+        entries.forEach((entry, index) => {
+            const where = path.indexOf(entry.id);
+            if (where < here) chosen = index;
+            else if (where === here && !reached) {
+                if (entry.level === 0) chosen = index;
+                else if (at.heading) {
+                    chosen = index;
+                    reached = entry.heading === at.heading;
+                }
+            }
+        });
+        return chosen;
+    }
+
+    const ChatPanel = {
+        createChatPanel, fitsBeside, emptyHtml, outlineHtml, currentEntry, PANEL_ID, SCRIM_ID, KEEP, WIDTH,
+    };
 
     root.BB = root.BB || {};
     root.BB.ChatPanel = ChatPanel;

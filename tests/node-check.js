@@ -5650,6 +5650,23 @@ const dayRecord = (at = T0) =>
         const hard = block.match(/:\s*#[0-9a-f]{3,8}\b/gi) || [];
         eq(hard, [], `a colour was baked into the chat rules: ${hard.join(', ')}`);
     });
+    check('the outline row being read is the last one at or above the reading line', () => {
+        const conv = chatFixture();
+        const entries = ChatTree.outline(conv);  // u1, Cause, Fix, u2b, Steps
+        const path = ChatTree.activePath(conv);
+        eq(ChatPanel.currentEntry(entries, path, { id: 'u1', heading: '' }), 0);
+        eq(ChatPanel.currentEntry(entries, path, { id: 'a1', heading: '' }), 0, 'an answer above its first heading is its prompt');
+        eq(ChatPanel.currentEntry(entries, path, { id: 'a1', heading: 'Cause' }), 1);
+        eq(ChatPanel.currentEntry(entries, path, { id: 'a1', heading: 'Fix' }), 2);
+        eq(ChatPanel.currentEntry(entries, path, { id: 'a2b2', heading: '' }), 3);
+        eq(ChatPanel.currentEntry(entries, path, null), -1);
+    });
+    check('an outline row carries its turn and heading, and escapes what the chat wrote', () => {
+        const html = ChatPanel.outlineHtml([{ id: 'u"1', level: 0, text: '<b>hi</b>' }, { id: 'a1', level: 2, text: 'Fix', heading: 'Fix' }]);
+        assert(html.includes('data-bb-chat-reach="u&quot;1"') && html.includes('&lt;b&gt;hi&lt;/b&gt;'), html);
+        assert(html.includes('class="bb-chat-entry is-l2"') && html.includes('data-bb-chat-heading="Fix"'), html);
+        assert(ChatPanel.outlineHtml([]).includes('bb-chat-empty'));
+    });
     check('the panel remembers itself under a key of its own', () => {
         eq(globalThis.BB.Settings.DATA.chatPanel, 'bbChatPanel');
     });

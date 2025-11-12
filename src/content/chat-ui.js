@@ -9,9 +9,11 @@
  * src/content/chat-nav.js; this is the part that knows what is open and keeps
  * the three in step.
  *
- * The conversation is fetched when a chat is navigated into, kept for the
- * page's life and never stored: the site has it, and a copy in storage would
- * be a second history to go stale.
+ * The conversation is fetched when a chat is navigated into and fetched again,
+ * debounced, when an answer finishes or the page draws a turn the tree does
+ * not know — an edit, a regenerate, a prompt sent. It is kept for the page's
+ * life and never stored: the site has it, and a copy in storage would be a
+ * second history to go stale.
  */
 (function (root) {
     'use strict';
@@ -21,10 +23,13 @@
     const Settings = ns.Settings || req('../shared/settings.js');
     const ChatTree = ns.ChatTree || req('../shared/chat-tree.js');
     const ChatPanel = ns.ChatPanel || req('./chat-panel.js');
+    const ChatNav = ns.ChatNav || req('./chat-nav.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const TOGGLE_ID = 'bb-chat-toggle';
     const PANEL_KEY = Settings.DATA.chatPanel;
+    /** How long the page has to settle before an unknown turn means a refetch. */
+    const REFETCH_MS = 1500;
 
     const TOGGLE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10"></path><path d="M4 12h7"></path><path d="M4 18h10"></path><rect x="15.5" y="4" width="4.5" height="16" rx="1.2"></rect></svg>';
 
@@ -38,6 +43,10 @@
     function createChatUi({ adapter, watcher, notify, getSettings = () => Settings.DEFAULTS }) {
         /** The chat this page is on, and what we know of it. */
         const chat = { id: null, conv: null, error: '', loading: false, token: 0 };
+        let refetchTimer = 0;
+        let wasStreaming = false;
+        /** The unknown turns last refetched for, so a selector gone stale refetches once, not forever. */
+        let lastUnknown = '';
 
         const panel = ChatPanel.createChatPanel({
             site: adapter.site,
@@ -81,12 +90,43 @@
             repaint();
         }
 
+        function refetchSoon() {
+            clearTimeout(refetchTimer);
+            refetchTimer = setTimeout(() => { if (chat.id) load(chat.id); }, REFETCH_MS);
+        }
+
+        /**
+         * The watcher task that keeps the tree current. Never done: a chat
+         * grows for as long as the page is open.
+         *
+         * An answer finishing is the main cue. The other is a turn on the
+         * page that the tree has no node for — which is what an edited
+         * prompt looks like before anything else has said so.
+         */
+        function sync() {
+            const streaming = adapter.isStreaming();
+            if (wasStreaming && !streaming) refetchSoon();
+            wasStreaming = streaming;
+            if (streaming || !chat.id || !chat.conv || chat.loading) return false;
+            const turns = adapter.turnElements();
+            const unknown = turns.filter((element) => !adapter.turnIds(element, chat.conv).length).length;
+            const key = `${unknown}/${turns.length}`;
+            if (unknown && key !== lastUnknown) {
+                lastUnknown = key;
+                refetchSoon();
+            }
+            return false;
+        }
+
         // ------------------------------------------------------------ panel
 
         /** The panel's tabs. Each feature that has one adds it here. */
         function tabs() {
-            return [];
+            return [{ id: 'outline', label: 'Outline' }];
         }
+
+        const path = () => (chat.conv ? ChatTree.activePath(chat.conv) : []);
+        const outline = () => (chat.conv ? ChatTree.outline(chat.conv) : []);
 
         function heading() {
             if (!chat.id) return [adapter.isNewChat() ? 'New chat' : '', ''];
@@ -101,16 +141,61 @@
             if (!chat.id) return ChatPanel.emptyHtml('Open a conversation and its outline, branches and pins show up here.');
             if (chat.error) return ChatPanel.emptyHtml(chat.error);
             if (!chat.conv) return ChatPanel.emptyHtml('Reading the conversation…');
-            return '';
+            return ChatPanel.outlineHtml(outline());
         }
 
-        function onBodyClick() {}
+        function onBodyClick(event) {
+            const entry = event.target.closest('[data-bb-chat-reach]');
+            if (entry) goTo(entry.dataset.bbChatReach, entry.dataset.bbChatHeading);
+        }
+
+        /**
+         * Reach a turn from the panel. An overlaid panel steps aside first:
+         * it is covering the thread the turn is about to be shown in.
+         */
+        async function goTo(id, heading = '') {
+            if (!chat.conv) return false;
+            if (panel.isOpen() && !panel.docked) panel.close();
+            const landed = await ChatNav.reach(adapter, chat.conv, id, { heading });
+            if (!landed) notify('Could not find that turn on the page — scroll to it and try again', 'warning');
+            return landed;
+        }
 
         function repaint() {
             if (!panel.isOpen()) return;
             const [title, sub] = heading();
             panel.setHeading(title, sub);
             panel.render();
+            markCurrent();
+        }
+
+        /**
+         * Mark the outline row being read. Classes only, never a redraw: this
+         * runs on scroll, and a redraw would throw away the panel's own
+         * scroll position under the reader's pointer.
+         */
+        function markCurrent() {
+            const host = panel.element;
+            if (!host || !chat.conv || panel.tab !== 'outline') return;
+            const rows = host.querySelectorAll('[data-bb-chat-entry]');
+            if (!rows.length) return;
+            const at = ChatPanel.currentEntry(outline(), path(), ChatNav.current(adapter, chat.conv));
+            rows.forEach((row) => {
+                const on = Number(row.dataset.bbChatEntry) === at;
+                if (on === row.classList.contains('is-current')) return;
+                row.classList.toggle('is-current', on);
+                if (on) row.scrollIntoView({ block: 'nearest' });
+            });
+        }
+
+        let spyFrame = 0;
+        /** The thread scrolled. At most once a frame; nothing at all with the panel shut. */
+        function onScroll() {
+            if (spyFrame || !panel.isOpen()) return;
+            spyFrame = requestAnimationFrame(() => {
+                spyFrame = 0;
+                markCurrent();
+            });
         }
 
         // ----------------------------------------------------------- toggle
@@ -167,6 +252,10 @@
 
         function install() {
             watcher.add('chat-toggle', injectToggle);
+            watcher.add('chat-sync', sync);
+            // The thread scrolls inside a container of its own, which a
+            // capture listener on window hears without having to find it.
+            window.addEventListener('scroll', onScroll, { capture: true, passive: true });
             // Put the panel back if it was left open — but only where it
             // docks. An overlay that opens by itself on page load covers the
             // chat you came to read.
@@ -184,6 +273,9 @@
         /** For the specs, which build a fresh UI per test against one document. */
         function uninstall() {
             watcher.remove('chat-toggle');
+            watcher.remove('chat-sync');
+            window.removeEventListener('scroll', onScroll, { capture: true, passive: true });
+            clearTimeout(refetchTimer);
             chat.token++;
             if (panel.isOpen()) panel.close();
             const toggle = document.getElementById(TOGGLE_ID);
@@ -202,6 +294,7 @@
                 chat.error = '';
                 chat.token++;
                 chat.loading = false;
+                lastUnknown = '';
                 if (id) load(id);
             }
             panel.place();
@@ -215,13 +308,13 @@
         }
 
         return {
-            install, uninstall, onNavigate, openPouch, refreshSurfaces, panel, injectToggle,
+            install, uninstall, onNavigate, openPouch, refreshSurfaces, panel, injectToggle, goTo,
             conversation: () => chat.conv,
             reload: () => (chat.id ? load(chat.id) : Promise.resolve()),
         };
     }
 
-    const ChatUi = { createChatUi, TOGGLE_ID };
+    const ChatUi = { createChatUi, TOGGLE_ID, REFETCH_MS };
 
     root.BB = root.BB || {};
     root.BB.ChatUi = ChatUi;

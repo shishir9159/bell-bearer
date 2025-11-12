@@ -3670,6 +3670,64 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-chat-empty { padding: 18px 10px; color: var(--bb-sub); font-size: 12.5px; line-height: 1.5; text-align: center; }
 .bb-chat-empty p { margin: 0; }
 
+/* ------------------------------------------------------------- outline */
+
+.bb-chat-outline { list-style: none; margin: 0; padding: 0; }
+
+.bb-chat-entry {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    border: 0;
+    border-left: 2px solid transparent;
+    border-radius: 0 var(--bb-r-sm) var(--bb-r-sm) 0;
+    background: none;
+    color: var(--bb-text);
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.bb-chat-entry:hover { background: var(--bb-chip); }
+.bb-chat-entry.is-l0 { margin-top: 4px; font-weight: 600; }
+.bb-chat-entry.is-l1 { padding-left: 18px; color: var(--bb-sub); }
+.bb-chat-entry.is-l2 { padding-left: 28px; color: var(--bb-sub); }
+.bb-chat-entry.is-l3 { padding-left: 38px; color: var(--bb-faint); font-size: 12px; }
+
+/* Where the reader is. Follows the scroll, so it is a class rather than a
+   redraw — see markCurrent in src/content/chat-ui.js. */
+.bb-chat-entry.is-current {
+    border-left-color: var(--bb-accent);
+    background: var(--bb-accent-soft);
+    color: var(--bb-accent);
+}
+
+.bb-chat-entry-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The ring drawn round a turn the outline has just scrolled to. It sits on
+   <html>, dressed like everything else, and follows the thread's own smooth
+   scroll — see src/content/scroll-to.js. */
+.bb-chat-pulse {
+    position: fixed;
+    z-index: 2147482997;
+    pointer-events: none;
+    border-radius: var(--bb-r-sm);
+}
+
+.bb-chat-pulse.is-on { animation: bb-chat-pulse 900ms cubic-bezier(.2, .7, .3, 1) 1; }
+
+@keyframes bb-chat-pulse {
+    0% { box-shadow: 0 0 0 2px var(--bb-accent); }
+    70% { box-shadow: 0 0 0 10px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bb-chat-pulse.is-on { animation: none; box-shadow: 0 0 0 2px var(--bb-accent); }
+}
+
 /* Square-cornered skins square these too, as they do everything we inject. */
 .bb-chat-panel.bb-themed[data-bb-skin="riso"],
 .bb-chat-panel.bb-themed[data-bb-skin="deco"],
