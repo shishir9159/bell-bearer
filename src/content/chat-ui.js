@@ -23,11 +23,14 @@
     const Settings = ns.Settings || req('../shared/settings.js');
     const Keybindings = ns.Keybindings || req('../shared/keybindings.js');
     const ChatTree = ns.ChatTree || req('../shared/chat-tree.js');
+    const ChatPins = ns.ChatPins || req('../shared/chat-pins.js');
     const ChatPanel = ns.ChatPanel || req('./chat-panel.js');
     const ChatNav = ns.ChatNav || req('./chat-nav.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const TOGGLE_ID = 'bb-chat-toggle';
+    /** On a turn of the site's own that is pinned. Inert without content.css. */
+    const PINNED = 'data-bb-chat-pinned';
     const PANEL_KEY = Settings.DATA.chatPanel;
     /** How long the page has to settle before an unknown turn means a refetch. */
     const REFETCH_MS = 1500;
@@ -54,6 +57,7 @@
             tabs: () => tabs(),
             bodyHtml: (tab) => bodyHtml(tab),
             onBodyClick: (event, tab) => onBodyClick(event, tab),
+            onBodyKey: (event, tab) => onBodyKey(event, tab),
             threadRight: () => adapter.threadRight(),
             top: () => adapter.headerBottom() + 8,
             appearance: () => Theme.appearance(),
@@ -123,11 +127,88 @@
 
         /** The panel's tabs. Each feature that has one adds it here. */
         function tabs() {
-            return [{ id: 'outline', label: 'Outline' }];
+            return [{ id: 'outline', label: 'Outline' }, { id: 'pins', label: 'Pins' }];
         }
 
         const path = () => (chat.conv ? ChatTree.activePath(chat.conv) : []);
-        const outline = () => (chat.conv ? ChatTree.outline(chat.conv) : []);
+
+        /**
+         * The outline, with each pinned turn wearing its pin. A pinned answer
+         * that wrote no headings has no row of its own in an outline, so it is
+         * given one — otherwise the pin would have nowhere to show.
+         */
+        function outline() {
+            if (!chat.conv) return [];
+            const pinned = new Map(myPins().map((pin) => [pin.node, pin]));
+            const byTurn = new Map();
+            for (const entry of ChatTree.outline(chat.conv)) {
+                if (!byTurn.has(entry.id)) byTurn.set(entry.id, []);
+                byTurn.get(entry.id).push(entry);
+            }
+            const out = [];
+            for (const id of path()) {
+                const own = byTurn.get(id) || [];
+                const pin = pinned.get(id);
+                if (!own.length && pin) own.push({ id, level: 1, text: pin.label || pin.excerpt || 'Pinned answer' });
+                own.forEach((entry, index) => out.push(index === 0 && pin ? { ...entry, pinned: true } : entry));
+            }
+            return out;
+        }
+
+        // ------------------------------------------------------------- pins
+
+        let pinState = {};
+        let editingPin = null;
+        let unwatchPins = null;
+
+        const myPins = () => (chat.id ? ChatPins.forConv(pinState, adapter.site, chat.id) : []);
+
+        async function reloadPins() {
+            pinState = await ChatPins.load();
+            repaint();
+            markPinned();
+        }
+
+        /**
+         * Mark each pinned turn on the page. A watcher task, and never done:
+         * a virtualised thread unmounts a turn as it scrolls away and mounts a
+         * fresh element when it comes back, without the mark.
+         */
+        function markPinned() {
+            if (!chat.conv) return false;
+            for (const element of adapter.turnElements()) {
+                const pinned = adapter.turnIds(element, chat.conv)
+                    .some((id) => ChatPins.isPinned(pinState, adapter.site, chat.id, id));
+                if (pinned !== element.hasAttribute(PINNED)) element.toggleAttribute(PINNED, pinned);
+            }
+            return false;
+        }
+
+        /** Ctrl+Alt+P: pin the message being read, or unpin it if it already is. */
+        async function togglePin() {
+            if (!chat.conv) return;
+            const at = ChatNav.current(adapter, chat.conv);
+            if (!at) {
+                notify('Scroll a message into view first', 'warning');
+                return;
+            }
+            const where = { site: adapter.site, conv: chat.id, node: at.id };
+            if (ChatPins.isPinned(pinState, adapter.site, chat.id, at.id)) {
+                await ChatPins.unpin(where);
+                notify('Unpinned', 'info');
+                return;
+            }
+            await ChatPins.pin({
+                ...where, title: chat.conv.title, url: adapter.chatUrl(chat.id), excerpt: chat.conv.nodes[at.id].text,
+            });
+            notify('Pinned — it is in the panel’s Pins tab', 'success');
+        }
+
+        function saveLabel(input) {
+            const node = input.dataset.bbChatLabel;
+            editingPin = null;
+            ChatPins.relabel({ site: adapter.site, conv: chat.id, node, label: input.value });
+        }
 
         function heading() {
             if (!chat.id) return [adapter.isNewChat() ? 'New chat' : '', ''];
@@ -138,16 +219,46 @@
             return [chat.conv.title, `${plural(prompts, 'prompt')}${forks ? ` · ${plural(forks, 'branch point')}` : ''}`];
         }
 
-        function bodyHtml() {
+        function bodyHtml(tab) {
             if (!chat.id) return ChatPanel.emptyHtml('Open a conversation and its outline, branches and pins show up here.');
             if (chat.error) return ChatPanel.emptyHtml(chat.error);
             if (!chat.conv) return ChatPanel.emptyHtml('Reading the conversation…');
+            if (tab === 'pins') {
+                const onPath = new Set(path());
+                return ChatPanel.pinsHtml(myPins(), { onPath: (node) => onPath.has(node), editing: editingPin });
+            }
             return ChatPanel.outlineHtml(outline());
         }
 
         function onBodyClick(event) {
+            const unpin = event.target.closest('[data-bb-chat-unpin]');
+            if (unpin) {
+                ChatPins.unpin({ site: adapter.site, conv: chat.id, node: unpin.dataset.bbChatUnpin });
+                return;
+            }
+            const relabel = event.target.closest('[data-bb-chat-relabel]');
+            if (relabel) {
+                editingPin = relabel.dataset.bbChatRelabel;
+                repaint();
+                const input = panel.element && panel.element.querySelector('[data-bb-chat-label]');
+                if (input) { input.focus(); input.select(); }
+                return;
+            }
             const entry = event.target.closest('[data-bb-chat-reach]');
             if (entry) goTo(entry.dataset.bbChatReach, entry.dataset.bbChatHeading);
+        }
+
+        /** Enter names the pin and Escape leaves it as it was. */
+        function onBodyKey(event) {
+            const input = event.target.closest && event.target.closest('[data-bb-chat-label]');
+            if (!input) return;
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                saveLabel(input);
+            } else if (event.key === 'Escape') {
+                editingPin = null;
+                repaint();
+            }
         }
 
         /**
@@ -214,6 +325,7 @@
         const HOTKEYS = {
             'chat-next': () => step(1),
             'chat-prev': () => step(-1),
+            'chat-pin': () => togglePin(),
         };
 
         /**
@@ -305,6 +417,11 @@
         function install() {
             watcher.add('chat-toggle', injectToggle);
             watcher.add('chat-sync', sync);
+            watcher.add('chat-pin-marks', markPinned);
+            // A pin made in another tab, or taken off in the dashboard, is
+            // drawn here as it happens.
+            unwatchPins = Settings.watch([ChatPins.KEY], reloadPins);
+            reloadPins();
             // The thread scrolls inside a container of its own, which a
             // capture listener on window hears without having to find it.
             window.addEventListener('scroll', onScroll, { capture: true, passive: true });
@@ -327,6 +444,9 @@
         function uninstall() {
             watcher.remove('chat-toggle');
             watcher.remove('chat-sync');
+            watcher.remove('chat-pin-marks');
+            if (unwatchPins) unwatchPins();
+            document.querySelectorAll(`[${PINNED}]`).forEach((element) => element.removeAttribute(PINNED));
             window.removeEventListener('scroll', onScroll, { capture: true, passive: true });
             document.removeEventListener('keydown', onHotkey, true);
             clearTimeout(refetchTimer);

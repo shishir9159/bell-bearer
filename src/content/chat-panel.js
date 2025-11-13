@@ -63,7 +63,7 @@
      * @param {(element, look) => void} deps.dress
      * @param {(state: {open, tab}) => void} deps.onState   remembered by the caller
      */
-    function createChatPanel({ site, tabs, bodyHtml, onBodyClick, threadRight, top, appearance, dress, onState }) {
+    function createChatPanel({ site, tabs, bodyHtml, onBodyClick, onBodyKey, threadRight, top, appearance, dress, onState }) {
         let host = null;
         let scrim = null;
         let tab = null;
@@ -115,7 +115,9 @@
                 report();
             });
             host.querySelector('[data-bb-chat-close]').addEventListener('click', () => close());
-            host.querySelector('.bb-chat-body').addEventListener('click', (event) => onBodyClick(event, currentTab()));
+            const body = host.querySelector('.bb-chat-body');
+            body.addEventListener('click', (event) => onBodyClick(event, currentTab()));
+            if (onBodyKey) body.addEventListener('keydown', (event) => onBodyKey(event, currentTab()));
 
             appearance().then((look) => {
                 if (host) dress(host, look);
@@ -242,11 +244,42 @@
     function outlineHtml(entries) {
         if (!entries.length) return emptyHtml('Nothing on this path yet.');
         return `<ol class="bb-chat-outline">${entries.map((entry, index) => `
-            <li><button type="button" class="bb-chat-entry is-l${entry.level}" data-bb-chat-entry="${index}"
+            <li><button type="button" class="bb-chat-entry is-l${entry.level}${entry.pinned ? ' is-pinned' : ''}" data-bb-chat-entry="${index}"
                         data-bb-chat-reach="${Dom.escapeAttr(entry.id)}" data-bb-chat-heading="${Dom.escapeAttr(entry.heading || '')}"
                         title="${Dom.escapeAttr(entry.text)}">
+                ${entry.pinned ? `<span class="bb-chat-entry-pin" aria-label="Pinned">${PIN_ICON}</span>` : ''}
                 <span class="bb-chat-entry-text">${esc(entry.text)}</span>
             </button></li>`).join('')}</ol>`;
+    }
+
+    const PIN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M16 3v2h-1v5l2 2.5V15h-4.2v6l-.8 1-.8-1v-6H7v-2.5L9 10V5H8V3z"/></svg>';
+
+    /**
+     * This chat's pins. `onPath` says which can be reached as the page stands;
+     * a pin on another branch still lists, and says so.
+     */
+    function pinsHtml(pins, { onPath = () => true, editing = null } = {}) {
+        if (!pins.length) return emptyHtml('Nothing pinned in this chat. Ctrl+Alt+P pins the message you are reading.');
+        return `<ul class="bb-chat-pins">${pins.map((pin) => {
+            const node = Dom.escapeAttr(pin.node);
+            if (editing === pin.node) {
+                return `<li class="bb-chat-pin is-editing">
+                    <input type="text" class="bb-input bb-chat-pin-input" data-bb-chat-label="${node}"
+                           value="${Dom.escapeAttr(pin.label)}" placeholder="${Dom.escapeAttr(pin.excerpt)}" maxlength="80">
+                </li>`;
+            }
+            const away = onPath(pin.node) ? '' : '<span class="bb-chat-pin-away">on another branch</span>';
+            return `<li class="bb-chat-pin">
+                <button type="button" class="bb-chat-pin-open" data-bb-chat-reach="${node}">
+                    <span class="bb-chat-pin-label">${esc(pin.label || pin.excerpt || 'Pinned message')}</span>
+                    ${pin.label && pin.excerpt ? `<span class="bb-chat-pin-sub">${esc(pin.excerpt)}</span>` : ''}${away}
+                </button>
+                <button type="button" class="bb-chat-pin-act" data-bb-chat-relabel="${node}" title="Name this pin" aria-label="Name this pin">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>
+                </button>
+                <button type="button" class="bb-chat-pin-act" data-bb-chat-unpin="${node}" title="Unpin" aria-label="Unpin">${CLOSE_ICON}</button>
+            </li>`;
+        }).join('')}</ul>`;
     }
 
     /**
@@ -274,7 +307,7 @@
     }
 
     const ChatPanel = {
-        createChatPanel, fitsBeside, emptyHtml, outlineHtml, currentEntry, PANEL_ID, SCRIM_ID, KEEP, WIDTH,
+        createChatPanel, fitsBeside, emptyHtml, outlineHtml, pinsHtml, currentEntry, PANEL_ID, SCRIM_ID, KEEP, WIDTH,
     };
 
     root.BB = root.BB || {};

@@ -3675,7 +3675,9 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-chat-outline { list-style: none; margin: 0; padding: 0; }
 
 .bb-chat-entry {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 5px;
     width: 100%;
     box-sizing: border-box;
     padding: 5px 8px;
@@ -3704,7 +3706,70 @@ html.bb-reader-open body { overflow: hidden !important; }
     color: var(--bb-accent);
 }
 
-.bb-chat-entry-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-chat-entry-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bb-chat-entry-pin { display: grid; flex: 0 0 12px; color: var(--bb-accent); }
+.bb-chat-entry-pin svg { width: 12px; height: 12px; }
+
+/* --------------------------------------------------------------- pins */
+
+.bb-chat-pins { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.bb-chat-pin {
+    display: flex;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-card);
+}
+
+.bb-chat-pin.is-editing { padding: 6px; }
+
+.bb-chat-pin-open {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 7px;
+    border: 0;
+    background: none;
+    color: var(--bb-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.bb-chat-pin-open:hover .bb-chat-pin-label { color: var(--bb-accent); }
+.bb-chat-pin-label { font-size: 12.5px; font-weight: 600; line-height: 1.35; }
+.bb-chat-pin-sub { font-size: 11.5px; color: var(--bb-sub); line-height: 1.35; }
+.bb-chat-pin-away { font-size: 10.5px; color: var(--bb-faint); font-style: italic; }
+
+.bb-chat-pin-act {
+    display: grid;
+    place-items: center;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 26px;
+    margin-top: 3px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--bb-r-sm);
+    background: none;
+    color: var(--bb-faint);
+    cursor: pointer;
+}
+
+.bb-chat-pin-act:hover { background: var(--bb-chip); color: var(--bb-text); }
+.bb-chat-pin-act svg { width: 14px; height: 14px; }
+.bb-chat-pin-input { font-size: 12.5px; }
+
+/* A pinned turn on the page itself. A bar down its left edge in the page's
+   own ink, drawn with a shadow so nothing about the site's layout moves —
+   the turn may be a row a virtualiser has positioned absolutely. */
+[data-bb-chat-pinned] { box-shadow: inset 3px 0 0 color-mix(in srgb, currentColor 45%, transparent); }
 
 /* The ring drawn round a turn the outline has just scrolled to. It sits on
    <html>, dressed like everything else, and follows the thread's own smooth
@@ -3732,6 +3797,10 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-chat-panel.bb-themed[data-bb-skin="riso"],
 .bb-chat-panel.bb-themed[data-bb-skin="deco"],
 .bb-themed[data-bb-skin="riso"] .bb-chat-close,
-.bb-themed[data-bb-skin="deco"] .bb-chat-close { border-radius: 0; }
+.bb-themed[data-bb-skin="deco"] .bb-chat-close,
+.bb-themed[data-bb-skin="riso"] .bb-chat-pin,
+.bb-themed[data-bb-skin="deco"] .bb-chat-pin,
+.bb-themed[data-bb-skin="riso"] .bb-chat-pin-act,
+.bb-themed[data-bb-skin="deco"] .bb-chat-pin-act { border-radius: 0; }
 
 .bb-chat-panel.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }
