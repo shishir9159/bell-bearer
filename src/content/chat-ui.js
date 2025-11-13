@@ -121,7 +121,43 @@
                 lastUnknown = key;
                 refetchSoon();
             }
+            // The site's own arrows were used: follow the page rather than
+            // go on describing a branch it no longer shows. Not mid-switch,
+            // when the page is between branches on purpose.
+            const stray = !switching && ChatNav.strayTurn(adapter, chat.conv);
+            if (stray) {
+                chat.conv = { ...chat.conv, current: ChatTree.leafUnder(chat.conv, stray) };
+                repaint();
+            }
             return false;
+        }
+
+        let switching = false;
+
+        /**
+         * Switch the page to the branch `target` is on. A tree the page has
+         * moved past is refetched once and the walk tried again; after that,
+         * whatever stopped it is said rather than worked around.
+         */
+        async function switchBranch(target) {
+            if (switching || !chat.conv) return false;
+            switching = true;
+            try {
+                let result = await ChatNav.switchTo(adapter, chat.conv, target);
+                if (!result.ok && result.stale) {
+                    await load(chat.id);
+                    if (chat.conv && chat.conv.nodes[target]) result = await ChatNav.switchTo(adapter, chat.conv, target);
+                }
+                if (!result.ok) {
+                    notify(result.reason, 'warning');
+                    return false;
+                }
+                chat.conv = { ...chat.conv, current: ChatTree.leafUnder(chat.conv, target) };
+                repaint();
+                return true;
+            } finally {
+                switching = false;
+            }
         }
 
         // ------------------------------------------------------------ panel
@@ -227,7 +263,7 @@
             if (tab === 'tree') {
                 const forks = ChatTree.forks(chat.conv).length;
                 const hint = forks
-                    ? `${plural(forks, 'branch point')}. The path the page shows is marked.`
+                    ? `${plural(forks, 'branch point')}. The path the page shows is marked; click any turn to switch the page to it.`
                     : 'No branches yet — edit a prompt or ask for another answer and one starts here.';
                 return `<p class="bb-chat-hint">${hint}</p>
                     <div class="bb-chat-tree-wrap">${ChatTreeView.render(ChatTree.layout(chat.conv))}</div>`;
@@ -255,6 +291,13 @@
             }
             const entry = event.target.closest('[data-bb-chat-reach]');
             if (entry) goTo(entry.dataset.bbChatReach, entry.dataset.bbChatHeading);
+            const node = event.target.closest('[data-bb-chat-node]');
+            if (node) {
+                // A folded run goes to its first turn; there is no branch
+                // inside one to switch to.
+                const id = node.dataset.bbChatNode.replace(/^run:/, '');
+                goTo(id);
+            }
         }
 
         /** Enter names the pin and Escape leaves it as it was. */
@@ -277,6 +320,9 @@
         async function goTo(id, heading = '') {
             if (!chat.conv) return false;
             if (panel.isOpen() && !panel.docked) panel.close();
+            // On another branch — a pin, a node in the tree: switch to it,
+            // which lands on it as its last step.
+            if (!path().includes(id)) return switchBranch(id);
             const landed = await ChatNav.reach(adapter, chat.conv, id, { heading });
             if (!landed) notify('Could not find that turn on the page — scroll to it and try again', 'warning');
             return landed;
@@ -492,6 +538,8 @@
 
         return {
             install, uninstall, onNavigate, openPouch, refreshSurfaces, panel, injectToggle, goTo, onHotkey, isAltGr,
+            // The watcher's task, for the specs, which have no watcher running.
+            syncNow: sync,
             conversation: () => chat.conv,
             reload: () => (chat.id ? load(chat.id) : Promise.resolve()),
         };

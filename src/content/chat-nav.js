@@ -187,7 +187,107 @@
         return { id: turn.id, heading };
     }
 
-    const ChatNav = { estimateTop, pickNeighbour, reach, step, current, mountedTurn, readingLine, headingIn, PULSE_ID };
+    // ---------------------------------------------------------- switching
+
+    /** The conversation as the page shows it down to `id`, whatever the server last said. */
+    const showing = (conv, id) => ({ ...conv, current: id });
+
+    /** The mounted turn drawing any of `ids` — a fork's children, of which the page shows one. */
+    function mountedAny(adapter, conv, ids) {
+        return adapter.turnElements().find((element) =>
+            adapter.turnIds(element, conv).some((id) => ids.includes(id))) || null;
+    }
+
+    async function until(check, { ms = 3000, every = 50 } = {}) {
+        const started = Date.now();
+        for (;;) {
+            const value = check();
+            if (value) return value;
+            if (Date.now() - started > ms) return null;
+            await settle(every);
+        }
+    }
+
+    /**
+     * Make the page show `target`, by clicking its own `< k/n >` arrows.
+     *
+     * The walk goes down the target's path, top to bottom. At each fork on
+     * it: bring the fork into view, read the page's count off the child it
+     * shows, click prev or next the difference, and wait until the count has
+     * moved before the next click — the page re-renders the turn under the
+     * pointer and a click on the old element does nothing. Then the next
+     * fork down. Nothing between two forks can differ, so reaching each fork
+     * by its place on the target's own path is right however the page has
+     * been switched above it.
+     *
+     * A count that disagrees with the tree means the tree is stale: the
+     * result says so and the caller refetches and asks again. Anything else
+     * unexpected stops the walk where it is and says why. It never guesses.
+     *
+     * Resolves { ok: true } or { ok: false, stale?, reason }.
+     */
+    async function switchTo(adapter, conv, target, { wait = settle } = {}) {
+        const path = ChatTree.pathTo(conv, target);
+        if (!path.length) return { ok: false, reason: 'That turn is not in this conversation.' };
+
+        for (const id of path) {
+            const turn = ChatTree.node(conv, id);
+            const parent = ChatTree.node(conv, turn.parent);
+            if (!parent || parent.children.length < 2) continue;
+
+            // The fork: bring its parent into view, and the child the page
+            // shows under it comes with it.
+            if (parent.role === 'root') {
+                const scroller = adapter.scroller();
+                if (scroller) scroller.scrollTo({ top: 0 });
+                await wait();
+            } else if (!(await reach(adapter, showing(conv, parent.id), parent.id, { wait }))) {
+                return { ok: false, reason: 'Could not bring that branch point into view.' };
+            }
+
+            const find = () => {
+                const element = mountedAny(adapter, conv, parent.children);
+                if (element && adapter.revealSiblingNav) adapter.revealSiblingNav(element);
+                return element && adapter.siblingNav(element);
+            };
+            let nav = await until(find, { ms: 1500 });
+            if (!nav) return { ok: false, reason: 'The page is not showing its arrows at that branch point.' };
+            if (nav.count !== parent.children.length) return { ok: false, stale: true, reason: 'The page has branches the panel has not seen yet.' };
+
+            const want = ChatTree.siblingIndex(conv, id).index;
+            while (nav.index !== want) {
+                const from = nav.index;
+                (want < from ? nav.prev : nav.next).click();
+                nav = await until(() => {
+                    const now = find();
+                    return now && now.index !== from ? now : null;
+                });
+                if (!nav) return { ok: false, reason: 'The page did not move when its arrow was clicked.' };
+            }
+        }
+
+        await reach(adapter, showing(conv, target), target, { wait });
+        return { ok: true };
+    }
+
+    /**
+     * The turn the page is showing that the tree says is not on its path, if
+     * there is one — which is what it looks like when someone has used the
+     * site's own arrows. The deepest such turn, so the whole switched branch
+     * is followed rather than its first step.
+     */
+    function strayTurn(adapter, conv) {
+        const onPath = new Set(ChatTree.activePath(conv));
+        let stray = null;
+        for (const element of adapter.turnElements()) {
+            for (const id of adapter.turnIds(element, conv)) if (!onPath.has(id)) stray = id;
+        }
+        return stray;
+    }
+
+    const ChatNav = {
+        estimateTop, pickNeighbour, reach, step, current, mountedTurn, readingLine, headingIn, switchTo, strayTurn, PULSE_ID,
+    };
 
     root.BB = root.BB || {};
     root.BB.ChatNav = ChatNav;
