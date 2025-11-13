@@ -5748,6 +5748,46 @@ const dayRecord = (at = T0) =>
         assert(!ui.isAltGr({ key: 'й', getModifierState: () => false }), 'a letter in another script is still that key');
     });
 
+    // ----------------------------------------------------- the branch tree
+
+    console.log('\n# the branch tree');
+
+    const ChatTreeView = require('../src/content/chat-tree-view.js');
+
+    check('a forkless run folds into one segment, and forks, leaves and the current turn stay', () => {
+        const nodes = { r: { role: 'root', parent: null, children: ['t1'] } };
+        for (let i = 1; i <= 40; i++) {
+            nodes[`t${i}`] = { role: i % 2 ? 'user' : 'assistant', parent: i === 1 ? 'r' : `t${i - 1}`,
+                children: i < 40 ? [`t${i + 1}`] : [], text: `turn ${i}`, at: i };
+        }
+        nodes.t30.children.push('x31');
+        nodes.x31 = { role: 'user', parent: 't30', children: [], text: 'an edit', at: 99 };
+        const drawn = ChatTree.layout(ChatTree.build({ root: 'r', current: 't40', nodes }));
+        eq(drawn.nodes.map((n) => String(n.run || n.id)).sort(), ['28', '8', 't1', 't30', 't31', 't40', 'x31'],
+            'the kept turns, and the two runs by their length');
+        eq(drawn.height, 6, 'forty turns drawn six deep');
+        eq(drawn.width, 2);
+        eq(drawn.nodes.find((n) => n.id === 'x31').sib, { index: 2, count: 2 });
+        assert(drawn.nodes.find((n) => n.id === 'run:t2').onPath, 'the run on the path is not marked as on it');
+        eq(ChatTree.layout(ChatTree.build({ root: 'r', current: 't40', nodes }), { compress: false }).height, 40);
+    });
+    check('a parent sits over the middle of its children', () => {
+        const drawn = ChatTree.layout(chatFixture());
+        const at = (id) => drawn.nodes.find((n) => n.id === id);
+        eq([at('a2b1').x, at('a2b2').x, at('a2b3').x], [1, 2, 3]);
+        eq(at('u2b').x, 2);
+        eq(at('a1').x, (at('u2a').x + at('u2b').x) / 2);
+        eq(at('a2b2').sib, { index: 2, count: 3 });
+    });
+    check('the tree is drawn in classes, never in colours, and labels each fork k/n', () => {
+        const svg = ChatTreeView.render(ChatTree.layout(chatFixture()), { picked: ['a2b1'] });
+        assert(svg.includes('>2/3<'), 'a regenerate has no k/n');
+        assert(/data-bb-chat-node="a2b1"/.test(svg) && svg.includes('is-picked'), 'the picked node is not marked');
+        eq(svg.match(/#[0-9a-f]{3,8}\b|rgba?\(|fill="(?!none)|stroke="/gi), null);
+        assert(ChatTreeView.render(ChatTree.layout(chatFixture())).includes('<title>What about mocking the clock?</title>'));
+        eq(ChatTreeView.render({ nodes: [], edges: [] }), '');
+    });
+
     // ------------------------------------------------------ chat pins
 
     console.log('\n# chat pins');

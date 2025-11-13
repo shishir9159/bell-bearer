@@ -198,9 +198,88 @@
         return out;
     }
 
+    // ------------------------------------------------------------- layout
+
+    /**
+     * The tree, placed for drawing: depth down, leaves left to right, a
+     * parent centred over its children — a tidy tree.
+     *
+     * `compress` folds a run of turns with no fork anywhere near it into one
+     * segment labelled with its length. A real chat is two hundred deep and
+     * three wide, and drawn plainly it is a vertical line with a comb at the
+     * bottom; folded, the forks are what you see. A turn is kept out of a run
+     * when it is a fork, the first turn of a branch, a leaf, or the one the
+     * page is showing; runs of one are not worth folding.
+     *
+     * Coordinates are in slots, not pixels: the view decides the spacing.
+     */
+    function layout(conv, { compress = true } = {}) {
+        const onPath = new Set(activePath(conv));
+        const rootNode = node(conv, conv && conv.root);
+        if (!rootNode) return { nodes: [], edges: [], width: 0, height: 0 };
+
+        const foldable = (n) => {
+            const parent = node(conv, n.parent);
+            return compress && n.children.length === 1 && !!parent && parent.role !== 'root' &&
+                parent.children.length === 1 && n.id !== conv.current;
+        };
+
+        // The drawn tree: a slot per kept turn, and a slot per run of two or
+        // more foldable turns in a row.
+        const make = (ids) => {
+            const first = node(conv, ids[0]);
+            const sib = ids.length === 1 && node(conv, first.parent) && node(conv, first.parent).children.length > 1
+                ? siblingIndex(conv, first.id) : null;
+            return {
+                id: ids.length > 1 ? `run:${ids[0]}` : first.id,
+                ids,
+                run: ids.length > 1 ? ids.length : 0,
+                role: ids.length > 1 ? 'run' : first.role,
+                onPath: ids.every((id) => onPath.has(id)),
+                fork: first.children.length > 1,
+                sib,
+                text: ids.length > 1 ? `${ids.length} turns` : firstLine(first.text, 60),
+                kids: [],
+            };
+        };
+        const grow = (id) => {
+            const ids = [id];
+            let at = node(conv, id);
+            while (foldable(at) && foldable(node(conv, at.children[0]))) {
+                at = node(conv, at.children[0]);
+                ids.push(at.id);
+            }
+            const slot = make(ids);
+            slot.kids = at.children.map(grow);
+            return slot;
+        };
+        const tops = rootNode.children.map(grow);
+
+        const nodes = [];
+        const edges = [];
+        let leaf = 0;
+        let depth = 0;
+        const place = (slot, y, parent) => {
+            if (slot.kids.length) {
+                slot.kids.forEach((kid) => place(kid, y + 1, slot));
+                slot.x = (slot.kids[0].x + slot.kids[slot.kids.length - 1].x) / 2;
+            } else {
+                slot.x = leaf++;
+            }
+            slot.y = y;
+            depth = Math.max(depth, y);
+            if (parent) edges.push({ from: parent.id, to: slot.id, onPath: parent.onPath && slot.onPath });
+            const { kids, ...drawn } = slot;
+            nodes.push(drawn);
+        };
+        tops.forEach((slot) => place(slot, 0, null));
+
+        return { nodes, edges, width: leaf, height: nodes.length ? depth + 1 : 0 };
+    }
+
     const ChatTree = {
         ROLES, makeNode, build, node, pathTo, leafUnder, activePath, forks, siblingIndex, turnOf,
-        proseLines, headings, firstLine, fence, outline,
+        proseLines, headings, firstLine, fence, outline, layout,
     };
 
     root.BB = root.BB || {};

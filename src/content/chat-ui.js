@@ -26,6 +26,7 @@
     const ChatPins = ns.ChatPins || req('../shared/chat-pins.js');
     const ChatPanel = ns.ChatPanel || req('./chat-panel.js');
     const ChatNav = ns.ChatNav || req('./chat-nav.js');
+    const ChatTreeView = ns.ChatTreeView || req('./chat-tree-view.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const TOGGLE_ID = 'bb-chat-toggle';
@@ -127,7 +128,7 @@
 
         /** The panel's tabs. Each feature that has one adds it here. */
         function tabs() {
-            return [{ id: 'outline', label: 'Outline' }, { id: 'pins', label: 'Pins' }];
+            return [{ id: 'outline', label: 'Outline' }, { id: 'tree', label: 'Tree' }, { id: 'pins', label: 'Pins' }];
         }
 
         const path = () => (chat.conv ? ChatTree.activePath(chat.conv) : []);
@@ -223,6 +224,14 @@
             if (!chat.id) return ChatPanel.emptyHtml('Open a conversation and its outline, branches and pins show up here.');
             if (chat.error) return ChatPanel.emptyHtml(chat.error);
             if (!chat.conv) return ChatPanel.emptyHtml('Reading the conversation…');
+            if (tab === 'tree') {
+                const forks = ChatTree.forks(chat.conv).length;
+                const hint = forks
+                    ? `${plural(forks, 'branch point')}. The path the page shows is marked.`
+                    : 'No branches yet — edit a prompt or ask for another answer and one starts here.';
+                return `<p class="bb-chat-hint">${hint}</p>
+                    <div class="bb-chat-tree-wrap">${ChatTreeView.render(ChatTree.layout(chat.conv))}</div>`;
+            }
             if (tab === 'pins') {
                 const onPath = new Set(path());
                 return ChatPanel.pinsHtml(myPins(), { onPath: (node) => onPath.has(node), editing: editingPin });

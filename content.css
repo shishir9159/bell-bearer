@@ -3711,6 +3711,30 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-chat-entry-pin { display: grid; flex: 0 0 12px; color: var(--bb-accent); }
 .bb-chat-entry-pin svg { width: 12px; height: 12px; }
 
+.bb-chat-hint { margin: 2px 4px 8px; font-size: 11.5px; color: var(--bb-faint); line-height: 1.45; }
+
+/* --------------------------------------------------------------- tree */
+
+/* Painted entirely from here — src/content/chat-tree-view.js writes classes
+   and geometry, never a colour. A prompt is a ring, an answer a dot, and the
+   path the page shows is the accent. */
+.bb-chat-tree-wrap { overflow: auto; padding-bottom: 6px; }
+.bb-chat-tree { display: block; margin: 0 auto; font-family: var(--bb-font); }
+.bb-tree-edge { fill: none; stroke: var(--bb-border-strong); stroke-width: 1.5; }
+.bb-tree-edge.is-path { stroke: var(--bb-accent); stroke-width: 2; }
+.bb-tree-node { cursor: pointer; }
+.bb-tree-hit { fill: transparent; }
+.bb-tree-node:hover .bb-tree-hit { fill: var(--bb-chip); }
+.bb-tree-node.is-user .bb-tree-dot { fill: var(--bb-panel-solid); stroke: var(--bb-sub); stroke-width: 2; }
+.bb-tree-node.is-assistant .bb-tree-dot { fill: var(--bb-sub); }
+.bb-tree-node.is-path.is-user .bb-tree-dot { stroke: var(--bb-accent); }
+.bb-tree-node.is-path.is-assistant .bb-tree-dot { fill: var(--bb-accent); }
+.bb-tree-run { fill: var(--bb-chip); stroke: var(--bb-border-strong); }
+.bb-tree-node.is-path .bb-tree-run { stroke: var(--bb-accent); }
+.bb-tree-count { font-size: 9px; font-weight: 700; fill: var(--bb-sub); }
+.bb-tree-sib { font-size: 9.5px; fill: var(--bb-faint); }
+.bb-tree-node.is-picked .bb-tree-hit { fill: var(--bb-accent-soft); stroke: var(--bb-accent); stroke-dasharray: 3 2; }
+
 /* --------------------------------------------------------------- pins */
 
 .bb-chat-pins { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
