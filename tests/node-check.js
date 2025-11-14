@@ -5845,6 +5845,62 @@ const dayRecord = (at = T0) =>
         assert(!ChatCompare.bodyHtml(conv, 'a2b1', 'a2b2', 'inline').includes('<img'), 'markup from an answer reached the page');
     });
 
+    // ------------------------------------------------------- chat export
+
+    console.log('\n# exporting a chat');
+
+    const ChatExport = require('../src/shared/chat-export.js');
+
+    check('maths becomes dollars in prose and is left alone inside code', () => {
+        eq(ChatExport.toDollars('Area is \\( \\pi r^2 \\).'), 'Area is $\\pi r^2$.');
+        eq(ChatExport.toDollars('\\[\nE = mc^2\n\\]'), '$$\nE = mc^2\n$$');
+        const code = 'Match with `\\(x\\)` or:\n```regex\n\\(\\d+\\)\n```\nand \\(y\\).';
+        eq(ChatExport.toDollars(code), 'Match with `\\(x\\)` or:\n```regex\n\\(\\d+\\)\n```\nand $y$.');
+    });
+    check('a table passes through byte for byte', () => {
+        const table = '| a | b |\n|---|:-:|\n| `x|y` | \\(z\\) |';
+        const conv = chatFixture();
+        conv.nodes.a2b2.text = table;
+        conv.nodes.a2b2.blocks = [];
+        assert(ChatExport.markdown(conv, { dollars: false }).includes(table), 'the table was rewritten');
+    });
+    check('code keeps its language, and an answer quoting a fence gets a longer one', () => {
+        const md = ChatExport.markdown(ChatgptFormat.normalize(chatgptRaw()), { now: 0 });
+        assert(md.includes('```python\nprint(1)\n```'), 'the language was lost');
+        const conv = chatFixture();
+        conv.nodes.a2b2.blocks = [{ kind: 'code', lang: 'md', text: '```js\nf()\n```' }];
+        assert(ChatExport.markdown(conv).includes('````md\n```js\nf()\n```\n````'), 'the inner fence closed the outer one');
+    });
+    check('a chatgpt export reads as front matter, then You and ChatGPT turn by turn', () => {
+        const md = ChatExport.markdown(ChatgptFormat.normalize(chatgptRaw()), { now: Date.UTC(2025, 10, 9) });
+        assert(md.startsWith('---\ntitle: "Flaky login test"\nsite: ChatGPT\nurl: https://chatgpt.com/c/conv-1\n'), md.slice(0, 120));
+        assert(md.includes('models: ["gpt-5-thinking","gpt-5"]') && md.includes('exported: 2025-11-09T00:00:00.000Z'));
+        eq((md.match(/^## You$/gm) || []).length, 2);
+        eq((md.match(/^## ChatGPT$/gm) || []).length, 2);
+        assert(md.includes('A race.[^1]') && md.includes('[^1]: [Race conditions](https://example.com/race)'), 'no footnote');
+        assert(md.includes('*Searched the web: "flaky login test"*'), 'the search was dropped');
+        assert(!md.includes('It races') && !md.includes('<details>'), 'thinking was exported unasked');
+        assert(ChatExport.markdown(ChatgptFormat.normalize(chatgptRaw()), { thinking: true })
+            .includes('<details><summary>Thought for 4s</summary>\n\n**Looking**\nIt races.\n\n</details>'));
+        eq(/[\uE000-\uF8FF]/.test(md), false);
+    });
+    check('the json is the path shown, or the whole tree when asked', () => {
+        const conv = chatFixture();
+        const active = ChatExport.json(conv, { now: 0 });
+        eq(active.type, 'bell-bearer-chat');
+        eq(Object.keys(active.nodes).sort(), ['a1', 'a2b2', 'r', 'u1', 'u2b']);
+        eq(active.nodes.a1.children, ['u2b'], 'a branch not exported is still listed as a child');
+        eq(Object.keys(ChatExport.json(conv, { branches: 'all' }).nodes).length, 9);
+        eq(ChatExport.json(conv, { raw: { x: 1 } }).raw, { x: 1 });
+    });
+    check('a file name is dated and something Windows will save', () => {
+        const conv = { title: 'Why: "is" <this> a/b\\c|d?* flaky...', createdAt: new Date(2025, 10, 9, 12).getTime() };
+        const name = ChatExport.fileName(conv, 'md');
+        eq(name, '2025-11-09 Why is this a b c d flaky.md');
+        assert(!/[<>:"/\\|?*]/.test(name));
+        assert(ChatExport.fileName({ title: 'x'.repeat(400), createdAt: 1 }, 'json').length <= 120);
+    });
+
     // ------------------------------------------------------ chat pins
 
     console.log('\n# chat pins');
