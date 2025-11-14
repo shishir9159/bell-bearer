@@ -5788,6 +5788,42 @@ const dayRecord = (at = T0) =>
         eq(ChatTreeView.render({ nodes: [], edges: [] }), '');
     });
 
+    // ------------------------------------------------ comparing two answers
+
+    console.log('\n# comparing two answers');
+
+    const ChatDiff = require('../src/shared/chat-diff.js');
+
+    check('identical answers are one unchanged piece', () => {
+        eq(ChatDiff.diff('same words here', 'same words here'), [{ op: '=', text: 'same words here' }]);
+        eq(ChatDiff.diff('', ''), []);
+    });
+    check('a changed word is one out and one in, with its whitespace', () => {
+        eq(ChatDiff.diff('Freeze the clock first.', 'Freeze the timer first.'),
+            [{ op: '=', text: 'Freeze the ' }, { op: '-', text: 'clock ' }, { op: '+', text: 'timer ' }, { op: '=', text: 'first.' }]);
+    });
+    check('the pieces rejoin into both inputs exactly, whatever the whitespace', () => {
+        const pairs = [
+            ['  lead\n\n- one\n- two  \n', 'lead\n- one\n-  three\n'],
+            ['a b c d e f g', 'x a c d f g y'],
+            ['', 'all new'],
+            ['all gone', ''],
+        ];
+        for (const [a, b] of pairs) {
+            const ops = ChatDiff.diff(a, b);
+            eq(ChatDiff.rejoin(ops, 'a'), a, 'the first side');
+            eq(ChatDiff.rejoin(ops, 'b'), b, 'the second side');
+        }
+    });
+    check('past the cap it diffs by line, and past that it shows the two whole', () => {
+        const a = Array.from({ length: 30 }, (_, i) => `line ${i} alpha beta gamma`).join('\n');
+        const b = Array.from({ length: 30 }, (_, i) => i % 2 ? `line ${i} alpha beta gamma` : `rewritten ${i} delta`).join('\n');
+        const byLine = ChatDiff.compare(a, b, { wordEdits: 5 });
+        eq(byLine.unit, 'line');
+        eq(ChatDiff.rejoin(byLine.ops, 'b'), b);
+        eq(ChatDiff.compare(a, b, { wordEdits: 5, lineEdits: 3 }).unit, 'whole');
+    });
+
     // ------------------------------------------------------ chat pins
 
     console.log('\n# chat pins');
