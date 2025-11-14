@@ -27,6 +27,7 @@
     const ChatPanel = ns.ChatPanel || req('./chat-panel.js');
     const ChatNav = ns.ChatNav || req('./chat-nav.js');
     const ChatTreeView = ns.ChatTreeView || req('./chat-tree-view.js');
+    const ChatCompare = ns.ChatCompare || req('./chat-compare.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const TOGGLE_ID = 'bb-chat-toggle';
@@ -263,10 +264,10 @@
             if (tab === 'tree') {
                 const forks = ChatTree.forks(chat.conv).length;
                 const hint = forks
-                    ? `${plural(forks, 'branch point')}. The path the page shows is marked; click any turn to switch the page to it.`
+                    ? `${plural(forks, 'branch point')}. The path the page shows is marked; click any turn to switch the page to it, or shift-click two to compare them.`
                     : 'No branches yet — edit a prompt or ask for another answer and one starts here.';
                 return `<p class="bb-chat-hint">${hint}</p>
-                    <div class="bb-chat-tree-wrap">${ChatTreeView.render(ChatTree.layout(chat.conv))}</div>`;
+                    <div class="bb-chat-tree-wrap">${ChatTreeView.render(ChatTree.layout(chat.conv), { picked })}</div>`;
             }
             if (tab === 'pins') {
                 const onPath = new Set(path());
@@ -294,10 +295,29 @@
             const node = event.target.closest('[data-bb-chat-node]');
             if (node) {
                 // A folded run goes to its first turn; there is no branch
-                // inside one to switch to.
+                // inside one to switch to, and nothing in one to compare.
                 const id = node.dataset.bbChatNode.replace(/^run:/, '');
-                goTo(id);
+                if (event.shiftKey) pick(node.dataset.bbChatNode);
+                else goTo(id);
             }
+        }
+
+        /** Turns shift-clicked in the tree, waiting for a second to compare with. */
+        let picked = [];
+
+        function pick(id) {
+            if (/^run:/.test(id)) return;
+            picked = picked.includes(id) ? picked.filter((one) => one !== id) : [...picked, id];
+            if (picked.length === 2) {
+                const [a, b] = picked;
+                picked = [];
+                ChatCompare.open({
+                    conv: chat.conv, a, b,
+                    appearance: () => Theme.appearance(),
+                    dress: (element, look) => Theme.dress(element, look),
+                });
+            }
+            repaint();
         }
 
         /** Enter names the pin and Escape leaves it as it was. */

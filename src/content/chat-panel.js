@@ -189,6 +189,9 @@
          */
         function onKeyDown(event) {
             if (event.key !== 'Escape' || !host) return;
+            // A dialog of ours over the page — the comparison — takes its
+            // own Escape first.
+            if (document.querySelector('.bb-modal-overlay')) return;
             const inside = host.contains(event.target);
             if (inside && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
             if (docked && !inside) return;

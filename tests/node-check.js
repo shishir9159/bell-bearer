@@ -5824,6 +5824,27 @@ const dayRecord = (at = T0) =>
         eq(ChatDiff.compare(a, b, { wordEdits: 5, lineEdits: 3 }).unit, 'whole');
     });
 
+    const ChatCompare = require('../src/content/chat-compare.js');
+
+    check('two regenerates share their prompt, which is shown once', () => {
+        const html = ChatCompare.bodyHtml(chatFixture(), 'a2b1', 'a2b3');
+        eq((html.match(/The prompt</g) || []).length, 1);
+        assert(html.includes('>1/3<') && html.includes('>3/3<'), 'the two are not named as the page names them');
+        assert(html.includes('<del>Mock ') && html.includes('<ins>Use '), html);
+    });
+    check('branches that split at an edit lead with the edit', () => {
+        // A prompt picked stands for its answer.
+        const html = ChatCompare.bodyHtml(chatFixture(), 'u2a', 'u2b');
+        assert(html.includes('The prompts differ'), 'the edited prompts are not diffed');
+        eq(ChatCompare.sides(chatFixture(), 'u2b').answer.id, 'a2b3', 'a prompt stands for its newest answer');
+        assert(html.includes('Retries hide it.'), 'the first branch’s answer is missing');
+    });
+    check('what the chat wrote is escaped in a comparison', () => {
+        const conv = chatFixture();
+        conv.nodes.a2b1.text = '<img src=x onerror=alert(1)>';
+        assert(!ChatCompare.bodyHtml(conv, 'a2b1', 'a2b2', 'inline').includes('<img'), 'markup from an answer reached the page');
+    });
+
     // ------------------------------------------------------ chat pins
 
     console.log('\n# chat pins');

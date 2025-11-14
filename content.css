@@ -3735,6 +3735,40 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-tree-sib { font-size: 9.5px; fill: var(--bb-faint); }
 .bb-tree-node.is-picked .bb-tree-hit { fill: var(--bb-accent-soft); stroke: var(--bb-accent); stroke-dasharray: 3 2; }
 
+/* ------------------------------------------------------------- compare */
+
+/* The Markdown source rather than a rendering: a diff is about the words,
+   and a rendered code block would hide the one character that changed. */
+.bb-chat-compare-panel { max-width: 1100px; }
+.bb-chat-compare-panel .bb-panel-head h3 { flex: 1; }
+.bb-chat-compare-modes { display: flex; gap: 4px; }
+.bb-chat-compare-modes .bb-btn { padding: 5px 12px; font-size: 12px; }
+.bb-chat-compare-body { max-height: calc(100vh - 170px); overflow-y: auto; }
+.bb-chat-compare-prompt { margin-bottom: 14px; }
+.bb-chat-compare-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.bb-chat-compare-cols.is-inline { grid-template-columns: 1fr; }
+.bb-chat-compare-note { margin: 0 0 10px; font-size: 12px; color: var(--bb-sub); }
+
+.bb-chat-compare-text {
+    padding: 10px 12px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-card);
+    color: var(--bb-text);
+    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.bb-chat-compare-text del { background: var(--bb-danger-bg); color: var(--bb-danger); }
+.bb-chat-compare-text ins { background: var(--bb-accent-soft); color: var(--bb-accent); text-decoration-thickness: 1px; }
+
+@media (max-width: 760px) {
+    .bb-chat-compare-cols { grid-template-columns: 1fr; }
+}
+
 /* --------------------------------------------------------------- pins */
 
 .bb-chat-pins { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -3825,6 +3859,8 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-themed[data-bb-skin="riso"] .bb-chat-pin,
 .bb-themed[data-bb-skin="deco"] .bb-chat-pin,
 .bb-themed[data-bb-skin="riso"] .bb-chat-pin-act,
-.bb-themed[data-bb-skin="deco"] .bb-chat-pin-act { border-radius: 0; }
+.bb-themed[data-bb-skin="deco"] .bb-chat-pin-act,
+.bb-themed[data-bb-skin="riso"] .bb-chat-compare-text,
+.bb-themed[data-bb-skin="deco"] .bb-chat-compare-text { border-radius: 0; }
 
 .bb-chat-panel.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }
