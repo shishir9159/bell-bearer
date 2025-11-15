@@ -5901,6 +5901,58 @@ const dayRecord = (at = T0) =>
         assert(ChatExport.fileName({ title: 'x'.repeat(400), createdAt: 1 }, 'json').length <= 120);
     });
 
+    // ------------------------------------------------------------- zip
+
+    console.log('\n# the zip writer');
+
+    const Zip = require('../src/shared/zip.js');
+
+    /** Just enough of a zip reader to check one: the central directory, and each entry's bytes. */
+    function readZip(bytes) {
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const end = bytes.length - 22;
+        assert(view.getUint32(end, true) === 0x06054B50, 'no end-of-directory record where it should be');
+        const count = view.getUint16(end + 10, true);
+        let at = view.getUint32(end + 16, true);
+        const out = [];
+        for (let i = 0; i < count; i++) {
+            assert(view.getUint32(at, true) === 0x02014B50, `entry ${i} is not a directory record`);
+            const flags = view.getUint16(at + 8, true);
+            const size = view.getUint32(at + 24, true);
+            const nameLength = view.getUint16(at + 28, true);
+            const local = view.getUint32(at + 42, true);
+            const name = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength));
+            const start = local + 30 + view.getUint16(local + 26, true);
+            out.push({ name, size, utf8: !!(flags & 0x0800), crc: view.getUint32(at + 16, true), data: bytes.subarray(start, start + size) });
+            at += 46 + nameLength;
+        }
+        return out;
+    }
+
+    check('the checksum is the standard CRC-32', () => {
+        eq(Zip.crc32(new TextEncoder().encode('The quick brown fox jumps over the lazy dog')).toString(16), '414fa339');
+        eq(Zip.crc32(new Uint8Array(0)), 0);
+    });
+    check('an archive reads back with the same names, sizes and bytes', () => {
+        const files = [
+            { name: 'index.md', data: '# Chats\n', at: new Date(2025, 10, 13, 10, 5, 8).getTime() },
+            { name: '2025-11-09 Café — naïve.md', data: 'Ünïcödé body', at: Date.now() },
+            { name: 'raw.bin', data: new Uint8Array([0, 255, 7]) },
+        ];
+        const read = readZip(Zip.build(files));
+        eq(read.map((entry) => entry.name), files.map((file) => file.name));
+        eq(read.map((entry) => entry.size), [8, 16, 3]);
+        assert(read.every((entry) => entry.utf8), 'a name is not flagged as UTF-8');
+        eq(new TextDecoder().decode(read[1].data), 'Ünïcödé body');
+        eq(Array.from(read[2].data), [0, 255, 7]);
+        eq(read[0].crc, Zip.crc32(new TextEncoder().encode('# Chats\n')));
+    });
+    check('a DOS time stamp keeps the local time, to the two seconds it can', () => {
+        const { time, date } = Zip.dosTime(new Date(2025, 10, 13, 10, 5, 9).getTime());
+        eq([time >> 11, (time >> 5) & 63, (time & 31) * 2], [10, 5, 8]);
+        eq([(date >> 9) + 1980, (date >> 5) & 15, date & 31], [2025, 11, 13]);
+    });
+
     // ------------------------------------------------------ chat pins
 
     console.log('\n# chat pins');

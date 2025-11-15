@@ -94,6 +94,7 @@
         "src/shared/chatgpt-format.js",
         "src/shared/chat-diff.js",
         "src/shared/chat-export.js",
+        "src/shared/zip.js",
         "src/shared/chat-pins.js",
         "src/content/chatgpt-read.js",
         "src/content/chat-nav.js",
