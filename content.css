@@ -3614,7 +3614,51 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 .bb-chat-sub { margin: 2px 0 0; font-size: 11.5px; color: var(--bb-faint); }
 .bb-chat-sub:empty { display: none; }
-.bb-chat-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+.bb-chat-actions { position: relative; display: flex; gap: 4px; flex: 0 0 auto; }
+
+.bb-chat-act {
+    padding: 5px 10px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: none;
+    color: var(--bb-sub);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bb-chat-act:hover,
+.bb-chat-act.is-on { border-color: var(--bb-border-strong); color: var(--bb-text); background: var(--bb-chip); }
+
+.bb-chat-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+    padding: 4px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-panel-solid);
+    box-shadow: var(--bb-shadow);
+}
+
+.bb-chat-menu button {
+    padding: 7px 10px;
+    border: 0;
+    border-radius: var(--bb-r-sm);
+    background: none;
+    color: var(--bb-text);
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.bb-chat-menu button:hover { background: var(--bb-accent-soft); color: var(--bb-accent); }
 .bb-chat-actions:empty { display: none; }
 
 .bb-chat-close {
@@ -3861,6 +3905,10 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-themed[data-bb-skin="riso"] .bb-chat-pin-act,
 .bb-themed[data-bb-skin="deco"] .bb-chat-pin-act,
 .bb-themed[data-bb-skin="riso"] .bb-chat-compare-text,
-.bb-themed[data-bb-skin="deco"] .bb-chat-compare-text { border-radius: 0; }
+.bb-themed[data-bb-skin="deco"] .bb-chat-compare-text,
+.bb-themed[data-bb-skin="riso"] .bb-chat-act,
+.bb-themed[data-bb-skin="deco"] .bb-chat-act,
+.bb-themed[data-bb-skin="riso"] .bb-chat-menu,
+.bb-themed[data-bb-skin="deco"] .bb-chat-menu { border-radius: 0; }
 
 .bb-chat-panel.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }

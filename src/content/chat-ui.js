@@ -21,7 +21,10 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('../shared/settings.js');
+    const Dom = ns.Dom || req('../shared/dom.js');
     const Keybindings = ns.Keybindings || req('../shared/keybindings.js');
+    const ChatSites = ns.ChatSites || req('../shared/chat-sites.js');
+    const ChatExport = ns.ChatExport || req('../shared/chat-export.js');
     const ChatTree = ns.ChatTree || req('../shared/chat-tree.js');
     const ChatPins = ns.ChatPins || req('../shared/chat-pins.js');
     const ChatPanel = ns.ChatPanel || req('./chat-panel.js');
@@ -41,12 +44,22 @@
 
     const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+    /** The clipboard, when main.js has not handed over the Markdown module's. */
+    async function defaultCopy(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (_) {
+            return false;
+        }
+    }
+
     /**
      * `getSettings` reads the content script's settings mirror, and defaults
      * to the schema's own defaults — so a caller that passes none gets the
      * extension at rest rather than a quietly different set.
      */
-    function createChatUi({ adapter, watcher, notify, getSettings = () => Settings.DEFAULTS }) {
+    function createChatUi({ adapter, watcher, notify, getSettings = () => Settings.DEFAULTS, copyText = defaultCopy }) {
         /** The chat this page is on, and what we know of it. */
         const chat = { id: null, conv: null, error: '', loading: false, token: 0 };
         let refetchTimer = 0;
@@ -60,6 +73,7 @@
             bodyHtml: (tab) => bodyHtml(tab),
             onBodyClick: (event, tab) => onBodyClick(event, tab),
             onBodyKey: (event, tab) => onBodyKey(event, tab),
+            onHeadClick: (event) => onHeadClick(event),
             threadRight: () => adapter.threadRight(),
             top: () => adapter.headerBottom() + 8,
             appearance: () => Theme.appearance(),
@@ -320,6 +334,63 @@
             repaint();
         }
 
+        // ----------------------------------------------------------- export
+
+        let menuOpen = false;
+
+        const setting = (kind) => getSettings()[ChatSites.siteKey(adapter.site, kind)];
+
+        /** The header's actions: Export, and the menu under it when open. */
+        function actionsHtml() {
+            if (!chat.conv) return '';
+            const menu = menuOpen ? `
+                <div class="bb-chat-menu" role="menu">
+                    <button type="button" role="menuitem" data-bb-chat-export="md">Markdown file</button>
+                    <button type="button" role="menuitem" data-bb-chat-export="json">JSON, every branch</button>
+                    <button type="button" role="menuitem" data-bb-chat-export="copy">Copy as Markdown</button>
+                </div>` : '';
+            return `<button type="button" class="bb-chat-act${menuOpen ? ' is-on' : ''}" data-bb-chat-menu="1"
+                            aria-haspopup="menu" aria-expanded="${menuOpen}">Export</button>${menu}`;
+        }
+
+        function onHeadClick(event) {
+            if (event.target.closest('[data-bb-chat-menu]')) {
+                menuOpen = !menuOpen;
+                repaint();
+                return;
+            }
+            const item = event.target.closest('[data-bb-chat-export]');
+            if (!item) return;
+            menuOpen = false;
+            repaint();
+            exportChat(item.dataset.bbChatExport);
+        }
+
+        /**
+         * Markdown is the path the page shows, with the site's maths and
+         * reasoning settings applied; JSON is the whole tree. The chat is the
+         * one in memory — the site's own history, never a copy we stored.
+         */
+        async function exportChat(format) {
+            const conv = chat.conv;
+            if (!conv) return;
+            if (format === 'json') {
+                Dom.download(ChatExport.fileName(conv, 'json'),
+                    JSON.stringify(ChatExport.json(conv, { branches: 'all' }), null, 2), 'application/json');
+                return;
+            }
+            const text = ChatExport.markdown(conv, {
+                dollars: setting('exportDollars') !== false,
+                thinking: setting('exportThinking') === true,
+            });
+            if (format === 'copy') {
+                const ok = await copyText(text);
+                notify(ok ? 'Copied the chat as Markdown' : 'Could not copy — try the Markdown file', ok ? 'success' : 'warning');
+                return;
+            }
+            Dom.download(ChatExport.fileName(conv, 'md'), text, 'text/markdown');
+        }
+
         /** Enter names the pin and Escape leaves it as it was. */
         function onBodyKey(event) {
             const input = event.target.closest && event.target.closest('[data-bb-chat-label]');
@@ -352,6 +423,7 @@
             if (!panel.isOpen()) return;
             const [title, sub] = heading();
             panel.setHeading(title, sub);
+            panel.setActions(actionsHtml());
             panel.render();
             markCurrent();
         }

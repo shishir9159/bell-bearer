@@ -360,7 +360,10 @@
     if (ChatSites.get(site) && CHAT_ADAPTERS[site]) {
         const watcher = DomWatch.createWatcher();
 
-        chatUi = ChatUi.createChatUi({ adapter: CHAT_ADAPTERS[site](), watcher, notify, getSettings: () => settings });
+        chatUi = ChatUi.createChatUi({
+            adapter: CHAT_ADAPTERS[site](), watcher, notify, getSettings: () => settings,
+            copyText: (text) => markdown.copy(text),
+        });
         chatUi.install();
 
         // The X treatment again: a single-page app with no navigation event

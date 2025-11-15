@@ -74,7 +74,28 @@
         return root;
     }
 
-    const Dom = { escapeHtml, escapeAttr, safeUrl, safeUrlAttr, holdFocus };
+    /**
+     * Offer `data` — a string, or bytes — as a file to save.
+     *
+     * The one implementation of the anchor-clicking this takes: the extension
+     * pages' Ui.downloadText calls it, and the chat exports call it from
+     * inside a site's own page, where page/ui.js is not loaded. A string is
+     * saved as UTF-8; bytes (a zip) as they are, with no charset claimed.
+     */
+    function download(filename, data, type = 'text/plain') {
+        const blob = new Blob([data], { type: typeof data === 'string' ? `${type};charset=utf-8` : type });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        // Give the download a tick to start before the URL is invalidated.
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    const Dom = { escapeHtml, escapeAttr, safeUrl, safeUrlAttr, holdFocus, download };
 
     root.BB = root.BB || {};
     root.BB.Dom = Dom;

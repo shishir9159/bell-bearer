@@ -148,23 +148,12 @@
     // --------------------------------------------------------------- files
 
     /**
-     * Offer `text` as a download of `type`. Revokes the object URL when done.
-     *
-     * The two wrappers below are what callers use; this exists because the
-     * roster lists are plain text and the backup is JSON, and the six lines of
-     * anchor-clicking in the middle are the same either way.
+     * Offer `text` as a download of `type`. The two wrappers below are what
+     * callers use; the anchor-clicking itself is Dom.download, which the chat
+     * exports share from inside a site's page.
      */
     function downloadText(filename, text, type = 'text/plain') {
-        const blob = new Blob([text], { type: `${type};charset=utf-8` });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        // Give the download a tick to start before the URL is invalidated.
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        Dom.download(filename, String(text), type);
     }
 
     const downloadJson = (filename, data) =>

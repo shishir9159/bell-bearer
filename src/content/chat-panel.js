@@ -63,7 +63,7 @@
      * @param {(element, look) => void} deps.dress
      * @param {(state: {open, tab}) => void} deps.onState   remembered by the caller
      */
-    function createChatPanel({ site, tabs, bodyHtml, onBodyClick, onBodyKey, threadRight, top, appearance, dress, onState }) {
+    function createChatPanel({ site, tabs, bodyHtml, onBodyClick, onBodyKey, onHeadClick, threadRight, top, appearance, dress, onState }) {
         let host = null;
         let scrim = null;
         let tab = null;
@@ -115,6 +115,7 @@
                 report();
             });
             host.querySelector('[data-bb-chat-close]').addEventListener('click', () => close());
+            if (onHeadClick) host.querySelector('.bb-chat-actions').addEventListener('click', onHeadClick);
             const body = host.querySelector('.bb-chat-body');
             body.addEventListener('click', (event) => onBodyClick(event, currentTab()));
             if (onBodyKey) body.addEventListener('keydown', (event) => onBodyKey(event, currentTab()));
