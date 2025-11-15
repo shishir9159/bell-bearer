@@ -105,6 +105,7 @@
         "src/content/chat-tree-view.js",
         "src/content/chat-compare.js",
         "src/content/chat-panel.js",
+        "src/content/chat-library.js",
         "src/content/chat-ui.js",
         "src/content/main.js"
       ],

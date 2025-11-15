@@ -5953,6 +5953,32 @@ const dayRecord = (at = T0) =>
         eq([(date >> 9) + 1980, (date >> 5) & 15, date & 31], [2025, 11, 13]);
     });
 
+    // ------------------------------------------------------ bulk export
+
+    console.log('\n# bulk chat export');
+
+    const ChatLibrary = require('../src/content/chat-library.js');
+
+    check('chats are fetched about a second apart, and a 429 doubles the wait', () => {
+        eq([ChatLibrary.pace(() => 0), ChatLibrary.pace(() => 1)], [900, 1600]);
+        eq([1, 2, 3].map(ChatLibrary.backoff), [5000, 10000, 20000]);
+        eq(ChatLibrary.STRIKES, 3);
+    });
+    check('the archive has an index, and two chats with one name do not overwrite each other', () => {
+        const one = chatFixture();
+        const two = { ...chatFixture(), id: 'c2' };
+        const files = ChatLibrary.archive([one, two], { site: 'chatgpt', format: 'both', now: new Date(2025, 10, 13).getTime() });
+        eq(files.map((f) => f.name), ['index.md', '1970-01-01 Flaky test.md', '1970-01-01 Flaky test.json',
+            '1970-01-01 Flaky test (2).md', '1970-01-01 Flaky test (2).json']);
+        assert(files[0].data.startsWith('# ChatGPT export — 2025-11-13\n\n2 chats.'), files[0].data);
+        assert(files[0].data.includes('[md](1970-01-01%20Flaky%20test%20(2).md)'), 'the index does not link the renamed file');
+        eq(ChatLibrary.zipName('chatgpt', new Date(2025, 10, 13).getTime()), 'chatgpt-export-2025-11-13.zip');
+    });
+    check('a markdown-only archive has no json in it', () => {
+        const files = ChatLibrary.archive([chatFixture()], { site: 'chatgpt', format: 'md' });
+        eq(files.filter((f) => f.name.endsWith('.json')), []);
+    });
+
     // ------------------------------------------------------ chat pins
 
     console.log('\n# chat pins');
