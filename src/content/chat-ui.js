@@ -31,6 +31,7 @@
     const ChatNav = ns.ChatNav || req('./chat-nav.js');
     const ChatTreeView = ns.ChatTreeView || req('./chat-tree-view.js');
     const ChatCompare = ns.ChatCompare || req('./chat-compare.js');
+    const ChatLibrary = ns.ChatLibrary || req('./chat-library.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const TOGGLE_ID = 'bb-chat-toggle';
@@ -342,7 +343,8 @@
 
         /** The header's actions: Export, and the menu under it when open. */
         function actionsHtml() {
-            if (!chat.conv) return '';
+            const libraryButton = '<button type="button" class="bb-chat-act" data-bb-chat-library="1" title="Pick chats from your history and save them as one zip">Library</button>';
+            if (!chat.conv) return libraryButton;
             const menu = menuOpen ? `
                 <div class="bb-chat-menu" role="menu">
                     <button type="button" role="menuitem" data-bb-chat-export="md">Markdown file</button>
@@ -350,10 +352,22 @@
                     <button type="button" role="menuitem" data-bb-chat-export="copy">Copy as Markdown</button>
                 </div>` : '';
             return `<button type="button" class="bb-chat-act${menuOpen ? ' is-on' : ''}" data-bb-chat-menu="1"
-                            aria-haspopup="menu" aria-expanded="${menuOpen}">Export</button>${menu}`;
+                            aria-haspopup="menu" aria-expanded="${menuOpen}">Export</button>${menu}${libraryButton}`;
         }
 
+        const library = ChatLibrary.createLibrary({
+            adapter, notify, getSettings,
+            appearance: () => Theme.appearance(),
+            dress: (element, look) => Theme.dress(element, look),
+        });
+
         function onHeadClick(event) {
+            if (event.target.closest('[data-bb-chat-library]')) {
+                menuOpen = false;
+                repaint();
+                library.open();
+                return;
+            }
             if (event.target.closest('[data-bb-chat-menu]')) {
                 menuOpen = !menuOpen;
                 repaint();

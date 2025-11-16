@@ -3813,6 +3813,37 @@ html.bb-reader-open body { overflow: hidden !important; }
     .bb-chat-compare-cols { grid-template-columns: 1fr; }
 }
 
+/* ------------------------------------------------------------- library */
+
+.bb-chat-library .bb-panel-body { display: flex; flex-direction: column; gap: 10px; }
+
+.bb-chat-lib-list {
+    max-height: 52vh;
+    overflow-y: auto;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+}
+
+.bb-chat-lib-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--bb-border);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.bb-chat-lib-row:last-child { border-bottom: 0; }
+.bb-chat-lib-row:hover { background: var(--bb-chip); }
+.bb-chat-lib-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-chat-lib-when { flex: 0 0 auto; font-size: 11.5px; color: var(--bb-faint); }
+.bb-chat-lib-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.bb-chat-lib-note,
+.bb-chat-lib-progress { flex: 1; min-width: 12em; font-size: 12px; color: var(--bb-sub); }
+.bb-chat-lib-format { width: auto; padding: 6px 8px; }
+.bb-chat-library .bb-muted { padding: 12px; }
+
 /* --------------------------------------------------------------- pins */
 
 .bb-chat-pins { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
