@@ -5979,6 +5979,50 @@ const dayRecord = (at = T0) =>
         eq(files.filter((f) => f.name.endsWith('.json')), []);
     });
 
+    // ------------------------------------------------- prompt templates
+
+    console.log('\n# prompt templates');
+
+    const PromptTemplates = require('../src/shared/prompt-templates.js');
+
+    await checkAsync('the starters are seeded when the key is absent, and not when it is empty', async () => {
+        clearStore();
+        const first = await PromptTemplates.load();
+        eq(first.length, 10);
+        eq(first[0].name, 'Code review');
+        eq(store.bbPromptTemplates.length, 10, 'the seed was not written, so it would seed again');
+        clearStore();
+        store.bbPromptTemplates = [];
+        eq(await PromptTemplates.load(), [], 'someone who deleted all ten got them back');
+    });
+    await checkAsync('restoring the starters puts back only what is missing', async () => {
+        clearStore();
+        const all = await PromptTemplates.load();
+        await PromptTemplates.remove(all[2].id);
+        await PromptTemplates.create({ name: 'Mine', body: 'Explain {{thing}}' });
+        const back = await PromptTemplates.restoreStarters();
+        eq(back.length, 11);
+        eq(back.filter((t) => t.id === all[2].id).length, 1);
+        eq(back[9].name, 'Mine', 'restoring reordered what was there');
+    });
+    check('fields are asked for once each, in order, and the selection is never asked', () => {
+        eq(PromptTemplates.fields('Compare {{options}} for {{ goal }} — {{options}} again, on {{selection}}'), ['options', 'goal']);
+        eq(PromptTemplates.fill('Why {{code}}? See {{selection}}. {{missing}}.', { code: 'x()', selection: 'this part' }),
+            'Why x()? See this part. .');
+        assert(PromptTemplates.STARTERS.every((t) => /\S/.test(t.body) && t.body.length < PromptTemplates.BODY_CAP));
+    });
+    check('a site sees its own templates and the unfiled ones, last used first', () => {
+        const state = [
+            { id: 'a', name: 'Anywhere', body: 'x', usedAt: 1 },
+            { id: 'b', name: 'Also ChatGPT', body: 'x', sites: ['chatgpt'] },
+            { id: 'c', name: 'ChatGPT only', body: 'a review of it', sites: ['chatgpt'], usedAt: 5 },
+            { id: 'd', name: 'Nowhere real', body: 'x', sites: ['myspace'] },
+        ];
+        eq(PromptTemplates.forSite(state, 'chatgpt').map((t) => t.id), ['c', 'a', 'b', 'd'],
+            'a site that no longer exists is dropped, which leaves the template for every site');
+        eq(PromptTemplates.search(state, 'chatgpt', 'REVIEW').map((t) => t.id), ['c']);
+    });
+
     // ------------------------------------------------------ chat pins
 
     console.log('\n# chat pins');

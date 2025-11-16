@@ -400,6 +400,11 @@
         // conversation, with each chat's title and address beside its pins.
         // src/shared/chat-pins.js owns the shape.
         chatPins: 'bbChatPins',
+
+        // Prompt templates for the chat sites, in display order. Ten starters
+        // are seeded the first time — only when the key is absent, never when
+        // it is empty. src/shared/prompt-templates.js owns the shape.
+        promptTemplates: 'bbPromptTemplates',
     });
 
     function withDefaults(stored, keys) {
