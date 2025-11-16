@@ -6063,6 +6063,19 @@ const dayRecord = (at = T0) =>
         assert(ChatPins.excerptOf('word '.repeat(60)).length <= ChatPins.EXCERPT);
     });
 
+    // ------------------------------------------------------ the composer
+
+    console.log('\n# the composer');
+
+    check('a prompt is only ever typed and sent by the page, never posted by us', () => {
+        // The sites' send endpoints want tokens only their own page mints.
+        // Anything else is a request they are built to refuse, and one that
+        // looks exactly like the automation they are watching for.
+        const source = readRepo('src/content/composer.js');
+        assert(!/\bfetch\(|XMLHttpRequest|sendBeacon/.test(source), 'the composer makes a request');
+        assert(!/new KeyboardEvent/.test(source), 'the composer sends a synthetic Enter');
+    });
+
     // ------------------------------------------------- reading chatgpt.com
 
     console.log('\n# reading chatgpt.com');

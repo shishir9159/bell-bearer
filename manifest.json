@@ -97,6 +97,7 @@
         "src/shared/zip.js",
         "src/shared/chat-pins.js",
         "src/shared/prompt-templates.js",
+        "src/content/composer.js",
         "src/content/chatgpt-read.js",
         "src/content/chat-nav.js",
         "src/content/chat-tree-view.js",
