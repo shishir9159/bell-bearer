@@ -14,6 +14,8 @@
 (function (root) {
     'use strict';
 
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+
     const SITES = Object.freeze({
         chatgpt: Object.freeze({
             id: 'chatgpt',
@@ -95,7 +97,57 @@
         try { return site.convIdOf(new URL(String(url)).pathname); } catch (_) { return null; }
     }
 
-    const ChatSites = { SITES, SITE_KEYS, get, list, siteKey, allKeys, siteOfUrl, convIdOfUrl };
+    // ------------------------------------------------------ limit notices
+
+    /**
+     * What each site says when a limit is reached, several spellings each,
+     * newest first — the same rule as the selector tables, because the
+     * wording changes as often as the markup does.
+     *
+     *   model    which model ran out, when the site names one
+     *   blocked  nothing can be sent at all until the reset. Without one of
+     *            these the notice is a fallback: the site carries on, with a
+     *            smaller model, until the time it names
+     */
+    const LIMITS = Object.freeze({
+        chatgpt: Object.freeze({
+            // A model's name can have a dot in it (GPT-4.5), so the sentence
+            // ends at a dot followed by a space, not at the first dot.
+            model: [/hit the \w+ plan limit for (.+?)\.(?:\s|$)/i, /limit for ([\w.-]+(?:[ -][\w.]+)?)\b/i],
+            blocked: [/reached (?:our|your|the) (?:usage |message )?limit/i, /you've hit your limit/i, /too many requests/i],
+        }),
+    });
+
+    /** Lazily, as chess-sites.js looks up its readers: prompt-queue.js loads after this. */
+    const queue = () => (root.BB && root.BB.PromptQueue) || req('./prompt-queue.js');
+
+    /**
+     * A limit notice's text, read: { model, until, blocked }, or null for
+     * text that is not a limit notice. `until` is null when no time could be
+     * read, which is said as such rather than guessed.
+     */
+    function readLimit(siteId, text, now = Date.now()) {
+        const rules = LIMITS[siteId];
+        const said = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!rules || !/limit|too many requests/i.test(said)) return null;
+        const first = (patterns) => {
+            for (const pattern of patterns) {
+                const match = pattern.exec(said);
+                if (match) return match[1] ? match[1].trim() : match[0];
+            }
+            return null;
+        };
+        // From the first word that introduces a time, so a number in the
+        // model's name is never read as one.
+        const when = /\b(?:resets?|until|after|in|at|tomorrow|available again)\b[\s\S]*$/i.exec(said);
+        return {
+            model: first(rules.model) || '',
+            until: queue().parseReset(when ? when[0] : '', now),
+            blocked: !!first(rules.blocked),
+        };
+    }
+
+    const ChatSites = { SITES, SITE_KEYS, LIMITS, get, list, siteKey, allKeys, siteOfUrl, convIdOfUrl, readLimit };
 
     root.BB = root.BB || {};
     root.BB.ChatSites = ChatSites;

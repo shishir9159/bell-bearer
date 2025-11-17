@@ -6093,6 +6093,50 @@ const dayRecord = (at = T0) =>
         eq(PromptQueue.clean(state, 1000 + PromptQueue.KEEP_DONE_MS).items.length, 0);
     });
 
+    // --------------------------------------------------- when limits reset
+
+    console.log('\n# reading when a chat limit resets');
+
+    /** 18:00 today, built with setHours so the check runs in any time zone. */
+    const clock = (hours, minutes = 0, days = 0) => {
+        const d = new Date(2025, 10, 13);
+        d.setDate(d.getDate() + days);
+        d.setHours(hours, minutes, 0, 0);
+        return d.getTime();
+    };
+    const T18 = clock(18);
+
+    check('a clock time later today is today, and one already past is tomorrow', () => {
+        eq(PromptQueue.parseReset('after 7:42 PM', T18), clock(19, 42));
+        eq(PromptQueue.parseReset('after 7:42 PM', clock(20)), clock(19, 42, 1));
+        eq(PromptQueue.parseReset('until 3 PM', T18), clock(15, 0, 1));
+        eq(PromptQueue.parseReset('at 23:05', T18), clock(23, 5));
+        eq(PromptQueue.parseReset('resets at 12 a.m.', T18), clock(0, 0, 1));
+    });
+    check('relative times, tomorrow and a weekday are read too', () => {
+        eq(PromptQueue.parseReset('in 2 hours 13 minutes', T18), T18 + (2 * 60 + 13) * 60000);
+        eq(PromptQueue.parseReset('try again in 45 minutes', T18), T18 + 45 * 60000);
+        eq(PromptQueue.parseReset('tomorrow at 9 AM', T18), clock(9, 0, 1));
+        // 13 November 2025 is a Thursday.
+        eq(PromptQueue.parseReset('Monday at 9 AM', T18), clock(9, 0, 4));
+        eq(PromptQueue.parseReset('Thursday at 5 PM', T18), clock(17, 0, 7), 'this Thursday has gone');
+    });
+    check('what is not a time is null, never a guess', () => {
+        eq(PromptQueue.parseReset('soon', T18), null);
+        eq(PromptQueue.parseReset('', T18), null);
+        eq(PromptQueue.parseReset('at 25:00', T18), null);
+        eq(PromptQueue.parseReset('your weekly limit resets Monday', T18), null, 'a day with no time on it');
+    });
+    check('a chatgpt limit notice gives up its model, its time and whether it blocks', () => {
+        const fallback = ChatSites.readLimit('chatgpt',
+            'You\'ve hit the Free plan limit for GPT-4.5. Responses will use another model until your limit resets after 7:42 PM.', T18);
+        eq(fallback, { model: 'GPT-4.5', until: clock(19, 42), blocked: false });
+        const blocked = ChatSites.readLimit('chatgpt', 'You\'ve reached our limit of messages per hour. Please try again in 30 minutes.', T18);
+        eq(blocked, { model: '', until: T18 + 30 * 60000, blocked: true });
+        eq(ChatSites.readLimit('chatgpt', 'Nothing to see', T18), null);
+        eq(ChatSites.readLimit('nowhere', 'limit', T18), null);
+    });
+
     // ------------------------------------------------------ chat pins
 
     console.log('\n# chat pins');

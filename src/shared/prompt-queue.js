@@ -217,8 +217,56 @@
         return { ...state, leases };
     }
 
+    // ------------------------------------------------------- reset times
+
+    const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+    /**
+     * When a limit notice says the limit resets, as epoch milliseconds in
+     * local time — the sites print local times — or null.
+     *
+     * Reads "after 7:42 PM", "until 3 PM", "at 15:00", "in 2 hours 13
+     * minutes", "tomorrow at 9 AM" and "Monday at 9 AM". A clock time already
+     * past today means tomorrow. Anything it cannot read is null and never a
+     * guess: a hold until the wrong time is worse than asking.
+     */
+    function parseReset(text, now = Date.now()) {
+        const s = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if (!s) return null;
+
+        const rel = /\bin (?:(\d+)\s*(?:hours?|hrs?|h)\b)?\s*(?:and\s*)?(?:(\d+)\s*(?:minutes?|mins?|m)\b)?/.exec(s);
+        if (rel && (rel[1] || rel[2])) return now + (Number(rel[1] || 0) * 60 + Number(rel[2] || 0)) * 60000;
+
+        const clock = /\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\b\.?|\b(\d{1,2}):(\d{2})\b/.exec(s);
+        if (!clock) return null;
+        let hour;
+        let minute;
+        if (clock[3]) {
+            hour = Number(clock[1]);
+            minute = Number(clock[2] || 0);
+            if (hour < 1 || hour > 12) return null;
+            hour = (hour % 12) + (clock[3] === 'p' ? 12 : 0);
+        } else {
+            hour = Number(clock[4]);
+            minute = Number(clock[5]);
+            if (hour > 23) return null;
+        }
+        if (minute > 59) return null;
+
+        const at = new Date(now);
+        at.setHours(hour, minute, 0, 0);
+        const weekday = WEEKDAYS.findIndex((day) => new RegExp(`\\b${day}\\b`).test(s));
+        if (/\btomorrow\b/.test(s)) at.setDate(at.getDate() + 1);
+        else if (weekday >= 0) {
+            let ahead = (weekday - at.getDay() + 7) % 7;
+            if (ahead === 0 && at.getTime() <= now) ahead = 7;
+            at.setDate(at.getDate() + ahead);
+        } else if (at.getTime() <= now) at.setDate(at.getDate() + 1);
+        return at.getTime();
+    }
+
     const PromptQueue = {
-        KEY, KEYS: [KEY], LEASE_MS, STALE_MS, KEEP_DONE_MS, STATUSES,
+        KEY, KEYS: [KEY], LEASE_MS, STALE_MS, KEEP_DONE_MS, STATUSES, parseReset,
         blank, clean, load, update, newId, chatKey, keyOf, itemsFor, next, nextWake, due,
         add, patch, remove, move, bind, hold, unhold, pause, holdStale, canClaim, claim, release,
     };
