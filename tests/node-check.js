@@ -6023,6 +6023,76 @@ const dayRecord = (at = T0) =>
         eq(PromptTemplates.search(state, 'chatgpt', 'REVIEW').map((t) => t.id), ['c']);
     });
 
+    // ------------------------------------------------------ prompt queue
+
+    console.log('\n# the prompt queue');
+
+    const PromptQueue = require('../src/shared/prompt-queue.js');
+
+    /** A queue built by the module's own functions, with the ids made readable. */
+    function queueOf(...specs) {
+        let state = PromptQueue.blank();
+        for (const [id, spec] of specs) {
+            const made = PromptQueue.add(state, { site: 'chatgpt', conv: 'c1', text: id, now: 1, ...spec });
+            state = { ...made.state, items: made.state.items.map((item) => (item.id === made.item.id ? { ...item, id } : item)) };
+        }
+        return state;
+    }
+
+    check('a chat sends its first waiting prompt, and one scheduled later holds back the rest', () => {
+        const state = queueOf(['p1', {}], ['p2', { notBefore: 5000 }], ['p3', {}], ['other', { conv: 'c2' }]);
+        eq(PromptQueue.next(state, 'chatgpt', 'c1', 100).id, 'p1');
+        const after = PromptQueue.patch(state, 'p1', { status: 'sent', sentAt: 100 });
+        eq(PromptQueue.next(after, 'chatgpt', 'c1', 100), null, 'p3 jumped the scheduled p2');
+        eq(PromptQueue.next(after, 'chatgpt', 'c1', 5000).id, 'p2');
+        eq(PromptQueue.next(after, 'chatgpt', 'c2', 100).id, 'other', 'two chats wait on each other');
+    });
+    check('a hold stops a whole site and a pause stops one chat', () => {
+        const state = queueOf(['p1', {}], ['q1', { conv: 'c2' }]);
+        const held = PromptQueue.hold(state, 'chatgpt', 1000, 'GPT-5 limit');
+        eq(PromptQueue.next(held, 'chatgpt', 'c1', 999), null);
+        eq(PromptQueue.next(held, 'chatgpt', 'c1', 1000).id, 'p1', 'the hold did not end at its time');
+        const paused = PromptQueue.pause(state, 'chatgpt:c1');
+        eq(PromptQueue.next(paused, 'chatgpt', 'c1', 1), null);
+        eq(PromptQueue.next(paused, 'chatgpt', 'c2', 1).id, 'q1');
+        eq(PromptQueue.next(PromptQueue.pause(paused, 'chatgpt:c1', false), 'chatgpt', 'c1', 1).id, 'p1');
+    });
+    check('the worker wakes at the earliest schedule or hold end, and not for nothing', () => {
+        const state = queueOf(['p1', { notBefore: 9000 }], ['p2', { notBefore: 4000 }]);
+        eq(PromptQueue.nextWake(state, 1000), 4000);
+        eq(PromptQueue.nextWake(PromptQueue.hold(state, 'chatgpt', 2500), 1000), 2500);
+        eq(PromptQueue.nextWake(PromptQueue.hold(PromptQueue.blank(), 'chatgpt', 2500), 1000), null, 'a hold with nothing behind it');
+        eq(PromptQueue.due(state, 5000).map((item) => item.id), ['p2']);
+    });
+    check('two pages cannot both hold one chat’s queue until the lease runs out', () => {
+        const state = PromptQueue.claim(PromptQueue.blank(), 'chatgpt:c1', 'page-a', 0);
+        assert(PromptQueue.canClaim(state, 'chatgpt:c1', 'page-a', 10));
+        assert(!PromptQueue.canClaim(state, 'chatgpt:c1', 'page-b', 10));
+        assert(PromptQueue.canClaim(state, 'chatgpt:c1', 'page-b', PromptQueue.LEASE_MS));
+        assert(PromptQueue.canClaim(state, 'chatgpt:c2', 'page-b', 10), 'another chat waited on this one');
+        eq(PromptQueue.release(state, 'chatgpt:c1', 'page-b').leases['chatgpt:c1'].by, 'page-a', 'a page let go of a lease it did not hold');
+        eq(PromptQueue.release(state, 'chatgpt:c1', 'page-a').leases, {});
+    });
+    check('a new chat’s chain follows the first prompt to the chat it made', () => {
+        const state = queueOf(['n1', { conv: null, chain: 'pc_x' }], ['n2', { conv: null, chain: 'pc_x' }], ['m1', { conv: null, chain: 'pc_y' }]);
+        eq(PromptQueue.next(state, 'chatgpt', null, 1).id, 'n1');
+        const bound = PromptQueue.bind(state, 'pc_x', 'c9');
+        eq(PromptQueue.itemsFor(bound, 'chatgpt', 'c9').map((item) => item.id), ['n1', 'n2']);
+        eq(PromptQueue.itemsFor(bound, 'chatgpt', null).map((item) => item.id), ['m1']);
+        eq(PromptQueue.chatKey('chatgpt', null, 'pc_y'), 'chatgpt:new:pc_y');
+    });
+    check('a schedule that passed while the browser was shut is held for a yes', () => {
+        const state = queueOf(['late', { notBefore: 1000 }], ['fresh', { notBefore: 1000 + PromptQueue.STALE_MS }], ['now', {}]);
+        const out = PromptQueue.holdStale(state, 1001 + PromptQueue.STALE_MS);
+        eq(out.items.map((item) => item.status), ['held', 'waiting', 'waiting']);
+        assert(/browser was shut/.test(out.items[0].note));
+    });
+    check('what has finished is kept a day and then let go', () => {
+        const state = PromptQueue.patch(queueOf(['p1', {}]), 'p1', { status: 'sent', sentAt: 1000 });
+        eq(PromptQueue.clean(state, 1000 + 1000).items.length, 1);
+        eq(PromptQueue.clean(state, 1000 + PromptQueue.KEEP_DONE_MS).items.length, 0);
+    });
+
     // ------------------------------------------------------ chat pins
 
     console.log('\n# chat pins');

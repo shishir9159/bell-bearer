@@ -405,6 +405,12 @@
         // are seeded the first time — only when the key is absent, never when
         // it is empty. src/shared/prompt-templates.js owns the shape.
         promptTemplates: 'bbPromptTemplates',
+
+        // Prompts queued behind an answer or scheduled for later, the holds a
+        // usage limit puts on a site, and which page is sending each chat's.
+        // In storage because the tab that queued a prompt may be long gone by
+        // the time it is due. src/shared/prompt-queue.js owns the shape.
+        promptQueue: 'bbPromptQueue',
     });
 
     function withDefaults(stored, keys) {
