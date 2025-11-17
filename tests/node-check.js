@@ -5721,7 +5721,7 @@ const dayRecord = (at = T0) =>
     check('the chat keys fire in the prompt box, so none is a bare letter and none clashes', () => {
         const Keybindings = require('../src/shared/keybindings.js');
         eq(Keybindings.SCOPES.chat, 'ChatGPT');
-        eq(Keybindings.list({}, 'chat').map((b) => b.id), ['chat-next', 'chat-prev', 'chat-pin']);
+        eq(Keybindings.list({}, 'chat').map((b) => b.id), ['chat-next', 'chat-prev', 'chat-pin', 'chat-prompts']);
         for (const binding of Keybindings.list({}, 'chat')) {
             assert(binding.combo.ctrl && binding.combo.alt, `${binding.id} would fire while typing`);
             assert(!/^Arrow/.test(binding.combo.code), 'Ctrl+Alt+arrows rotate the screen on Windows');

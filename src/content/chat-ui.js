@@ -32,6 +32,7 @@
     const ChatTreeView = ns.ChatTreeView || req('./chat-tree-view.js');
     const ChatCompare = ns.ChatCompare || req('./chat-compare.js');
     const ChatLibrary = ns.ChatLibrary || req('./chat-library.js');
+    const ChatPicker = ns.ChatPicker || req('./chat-picker.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const TOGGLE_ID = 'bb-chat-toggle';
@@ -487,7 +488,16 @@
             'chat-next': () => step(1),
             'chat-prev': () => step(-1),
             'chat-pin': () => togglePin(),
+            'chat-prompts': () => picker.toggle(),
         };
+
+        const picker = ChatPicker.createPicker({
+            site: adapter.site,
+            composer: () => adapter.composer(),
+            notify,
+            appearance: () => Theme.appearance(),
+            dress: (element, look) => Theme.dress(element, look),
+        });
 
         /**
          * AltGr is Ctrl+Alt as far as a keydown can tell on Windows, and it
@@ -611,6 +621,7 @@
             window.removeEventListener('scroll', onScroll, { capture: true, passive: true });
             document.removeEventListener('keydown', onHotkey, true);
             clearTimeout(refetchTimer);
+            picker.close();
             chat.token++;
             if (panel.isOpen()) panel.close();
             const toggle = document.getElementById(TOGGLE_ID);

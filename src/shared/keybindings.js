@@ -84,6 +84,7 @@
         { id: 'chat-next', scope: 'chat', kind: 'key', label: 'Jump to the next prompt', combo: { ctrl: true, alt: true, code: 'KeyJ', key: 'j' } },
         { id: 'chat-prev', scope: 'chat', kind: 'key', label: 'Jump to the previous prompt', combo: { ctrl: true, alt: true, code: 'KeyK', key: 'k' } },
         { id: 'chat-pin', scope: 'chat', kind: 'key', label: 'Pin the message in view', combo: { ctrl: true, alt: true, code: 'KeyP', key: 'p' } },
+        { id: 'chat-prompts', scope: 'chat', kind: 'key', label: 'Insert a prompt template', combo: { ctrl: true, alt: true, code: 'KeyI', key: 'i' } },
     ]);
 
     const BY_ID = Object.freeze(Object.fromEntries(BINDINGS.map((binding) => [binding.id, binding])));
