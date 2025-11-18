@@ -3909,6 +3909,80 @@ html.bb-reader-open body { overflow: hidden !important; }
     color: var(--bb-faint);
 }
 
+/* --------------------------------------------------------------- queue */
+
+/* The strip sits in the page's own flow, just above the composer, so the
+   thread above it makes room rather than being covered. */
+.bb-chat-q {
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r);
+    background: var(--bb-panel-solid);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    font-size: 12.5px;
+}
+
+.bb-chat-q-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--bb-faint);
+}
+
+.bb-chat-q-pause {
+    padding: 3px 9px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: none;
+    color: var(--bb-sub);
+    font: inherit;
+    font-size: 11px;
+    text-transform: none;
+    letter-spacing: 0;
+    cursor: pointer;
+}
+
+.bb-chat-q-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; max-height: 30vh; overflow-y: auto; }
+.bb-chat-q-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 3px 0; }
+.bb-chat-q-when { flex: 0 0 auto; min-width: 4.5em; font-size: 11px; color: var(--bb-faint); }
+.bb-chat-q-row.is-sending .bb-chat-q-when { color: var(--bb-accent); }
+.bb-chat-q-row.is-failed .bb-chat-q-when,
+.bb-chat-q-row.is-held .bb-chat-q-when { color: var(--bb-danger); }
+.bb-chat-q-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-chat-q-note { flex-basis: 100%; padding-left: calc(4.5em + 8px); font-size: 11px; color: var(--bb-sub); }
+.bb-chat-q-acts { display: flex; gap: 1px; flex: 0 0 auto; }
+
+.bb-chat-q-act {
+    display: grid;
+    place-items: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: var(--bb-r-sm);
+    background: none;
+    color: var(--bb-faint);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bb-chat-q-act:hover { background: var(--bb-chip); color: var(--bb-text); }
+.bb-chat-q-act svg { width: 13px; height: 13px; }
+.bb-chat-q-row.is-editing { flex-direction: column; align-items: stretch; }
+.bb-chat-q-edit { font-size: 12.5px; resize: vertical; }
+.bb-chat-q-edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
 /* --------------------------------------------------------------- pins */
 
 .bb-chat-pins { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -4007,6 +4081,8 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-themed[data-bb-skin="riso"] .bb-chat-menu,
 .bb-themed[data-bb-skin="deco"] .bb-chat-menu,
 .bb-chat-picker.bb-themed[data-bb-skin="riso"],
-.bb-chat-picker.bb-themed[data-bb-skin="deco"] { border-radius: 0; }
+.bb-chat-picker.bb-themed[data-bb-skin="deco"],
+.bb-chat-q.bb-themed[data-bb-skin="riso"],
+.bb-chat-q.bb-themed[data-bb-skin="deco"] { border-radius: 0; }
 
 .bb-chat-panel.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }
