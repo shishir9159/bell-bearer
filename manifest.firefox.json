@@ -111,6 +111,7 @@
         "src/content/chat-library.js",
         "src/content/chat-picker.js",
         "src/content/chat-runner.js",
+        "src/content/chat-queue-view.js",
         "src/content/chat-ui.js",
         "src/content/main.js"
       ],

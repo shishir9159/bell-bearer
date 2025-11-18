@@ -36,10 +36,12 @@
     const ChatRunner = ns.ChatRunner || req('./chat-runner.js');
     const Composer = ns.Composer || req('./composer.js');
     const PromptQueue = ns.PromptQueue || req('../shared/prompt-queue.js');
+    const ChatQueueView = ns.ChatQueueView || req('./chat-queue-view.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const TOGGLE_ID = 'bb-chat-toggle';
 
+    const STRIP_ID = 'bb-chat-queue';
     /** On a turn of the site's own that is pinned. Inert without content.css. */
     const PINNED = 'data-bb-chat-pinned';
     const PANEL_KEY = Settings.DATA.chatPanel;
@@ -185,7 +187,7 @@
 
         /** The panel's tabs. Each feature that has one adds it here. */
         function tabs() {
-            return [{ id: 'outline', label: 'Outline' }, { id: 'tree', label: 'Tree' }, { id: 'pins', label: 'Pins' }];
+            return [{ id: 'outline', label: 'Outline' }, { id: 'tree', label: 'Tree' }, { id: 'pins', label: 'Pins' }, { id: 'queue', label: 'Queue' }];
         }
 
         const path = () => (chat.conv ? ChatTree.activePath(chat.conv) : []);
@@ -278,6 +280,11 @@
         }
 
         function bodyHtml(tab) {
+            // The queue is the one tab a new chat has: prompts queued there
+            // make the chat.
+            if (tab === 'queue') {
+                return queueListHtml(true) || ChatPanel.emptyHtml('Nothing queued. Ctrl+Alt+Q queues what is in the prompt box to go when the answer being written is finished.');
+            }
             if (!chat.id) return ChatPanel.emptyHtml('Open a conversation and its outline, branches and pins show up here.');
             if (chat.error) return ChatPanel.emptyHtml(chat.error);
             if (!chat.conv) return ChatPanel.emptyHtml('Reading the conversation…');
@@ -296,7 +303,11 @@
             return ChatPanel.outlineHtml(outline());
         }
 
-        function onBodyClick(event) {
+        function onBodyClick(event, tab) {
+            if (tab === 'queue') {
+                onQueueClick(event);
+                return;
+            }
             const unpin = event.target.closest('[data-bb-chat-unpin]');
             if (unpin) {
                 ChatPins.unpin({ site: adapter.site, conv: chat.id, node: unpin.dataset.bbChatUnpin });
@@ -525,6 +536,71 @@
             runner.tick();
         }
 
+        // --------------------------------------------------- queue strip
+
+        let queueState = PromptQueue.blank();
+        let editingItem = null;
+        let unwatchQueue = null;
+
+        /** This chat's items: its own, or on the new-chat page every unbound chain. */
+        const myItems = () => PromptQueue.itemsFor(queueState, adapter.site, adapter.convIdOf());
+        const myKey = () => {
+            const first = myItems()[0];
+            return first ? PromptQueue.keyOf(first) : PromptQueue.chatKey(adapter.site, adapter.convIdOf(), 'none');
+        };
+        const writeQueue = (mutate) => PromptQueue.update(mutate);
+
+        async function reloadQueue() {
+            queueState = await PromptQueue.load();
+            drawStrip();
+            if (panel.tab === 'queue') repaint();
+        }
+
+        function queueListHtml(head) {
+            return ChatQueueView.listHtml(myItems(), { paused: !!queueState.paused[myKey()], editing: editingItem, head });
+        }
+
+        /**
+         * The strip above the composer, whenever this chat has anything
+         * queued. A watcher task and never done: the site rebuilds the area
+         * round its composer on its own schedule, strip and all.
+         */
+        function drawStrip() {
+            const html = queueListHtml(true);
+            let strip = document.getElementById(STRIP_ID);
+            const box = adapter.composerBox();
+            if (!html || !box) {
+                if (strip) strip.remove();
+                return false;
+            }
+            if (!strip) {
+                strip = document.createElement('div');
+                strip.id = STRIP_ID;
+                strip.className = 'bb-chat-q';
+                strip.setAttribute(ChatPanel.KEEP, '1');
+                Dom.holdFocus(strip);
+                strip.addEventListener('click', onQueueClick);
+                Theme.appearance().then((look) => { if (strip.isConnected) Theme.dress(strip, look); });
+            }
+            if (strip.nextElementSibling !== box) box.parentElement.insertBefore(strip, box);
+            if (strip.dataset.bbDrawn !== html) {
+                strip.innerHTML = html;
+                strip.dataset.bbDrawn = html;
+            }
+            return false;
+        }
+
+        function onQueueClick(event) {
+            const next = ChatQueueView.onClick(event, { items: myItems(), key: myKey(), write: writeQueue, editing: editingItem });
+            if (next !== editingItem) {
+                editingItem = next;
+                drawStrip();
+                repaint();
+                const field = document.querySelector(`#${STRIP_ID} [data-bb-q-text], #bb-chat-panel [data-bb-q-text]`);
+                if (field) field.focus();
+            }
+        }
+
         const picker = ChatPicker.createPicker({
             site: adapter.site,
             composer: () => adapter.composer(),
@@ -628,6 +704,9 @@
             unwatchPins = Settings.watch([ChatPins.KEY], reloadPins);
             reloadPins();
             runner.start();
+            watcher.add('chat-queue-strip', drawStrip);
+            unwatchQueue = Settings.watch([PromptQueue.KEY], reloadQueue);
+            reloadQueue();
             // The thread scrolls inside a container of its own, which a
             // capture listener on window hears without having to find it.
             window.addEventListener('scroll', onScroll, { capture: true, passive: true });
@@ -658,6 +737,10 @@
             clearTimeout(refetchTimer);
             picker.close();
             runner.stop();
+            watcher.remove('chat-queue-strip');
+            if (unwatchQueue) unwatchQueue();
+            const strip = document.getElementById(STRIP_ID);
+            if (strip) strip.remove();
             chat.token++;
             if (panel.isOpen()) panel.close();
             const toggle = document.getElementById(TOGGLE_ID);

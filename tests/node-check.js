@@ -6093,6 +6093,46 @@ const dayRecord = (at = T0) =>
         eq(PromptQueue.clean(state, 1000 + PromptQueue.KEEP_DONE_MS).items.length, 0);
     });
 
+    // -------------------------------------------------------- queue strip
+
+    console.log('\n# the queue strip');
+
+    const ChatQueueView = require('../src/content/chat-queue-view.js');
+
+    check('the strip lists what is still to go, and says when each goes', () => {
+        const now = new Date(2025, 10, 13, 18).getTime();
+        let state = queueOf(['p1', {}], ['p2', { notBefore: new Date(2025, 10, 13, 19, 42).getTime() }], ['p3', {}]);
+        state = PromptQueue.patch(state, 'p3', { status: 'sent', sentAt: now });
+        const html = ChatQueueView.listHtml(state.items, { now });
+        assert(html.includes('2 queued'), 'a sent prompt is counted as queued');
+        assert(html.includes('>next<') && /at 7:42/.test(html), html);
+        eq(ChatQueueView.listHtml([], { now }), '', 'an empty strip should not be drawn at all');
+        assert(ChatQueueView.listHtml(state.items, { paused: true, now }).includes('data-bb-q="resume"'));
+    });
+    check('what a row’s buttons ask for is done to the queue', () => {
+        let state = queueOf(['p1', {}], ['p2', {}], ['p3', {}]);
+        const write = (mutate) => { state = mutate(state); };
+        const press = (verb, id, editing = null) => ChatQueueView.onClick(
+            { target: { closest: () => ({ dataset: { bbQ: verb, bbQId: id }, closest: () => null }) } },
+            { items: state.items, key: 'chatgpt:c1', write, editing });
+        press('up', 'p3');
+        eq(state.items.map((i) => i.id), ['p1', 'p3', 'p2']);
+        press('down', 'p1');
+        eq(state.items.map((i) => i.id), ['p3', 'p1', 'p2']);
+        press('remove', 'p1');
+        eq(state.items.map((i) => i.id), ['p3', 'p2']);
+        eq(press('edit', 'p2'), 'p2', 'edit did not open the row');
+        press('pause');
+        eq(state.paused, { 'chatgpt:c1': true });
+        state = PromptQueue.patch(state, 'p2', { status: 'failed', note: 'no box' });
+        press('retry', 'p2');
+        eq([state.items[1].status, state.items[1].note, state.paused], ['waiting', '', {}], 'a retry should unpause too');
+    });
+    check('a prompt someone wrote is escaped in the strip', () => {
+        const html = ChatQueueView.listHtml(queueOf(['<b>x</b>', { text: '<img src=x onerror=alert(1)>' }]).items);
+        assert(!html.includes('<img'), 'markup from a prompt reached the page');
+    });
+
     // --------------------------------------------------- when limits reset
 
     console.log('\n# reading when a chat limit resets');

@@ -176,6 +176,12 @@
         return header ? Math.max(0, header.getBoundingClientRect().bottom) : 56;
     }
 
+    /** The composer's own frame, which the queue strip sits just above. */
+    function composerBox() {
+        const box = composer();
+        return box ? (box.closest('form') || box.parentElement) : null;
+    }
+
     function composerSlot() {
         const plus = find('composerTools');
         return plus ? plus.parentElement : null;
@@ -255,6 +261,7 @@
         headerBottom,
         threadRight,
         composerSlot,
+        composerBox,
         signedOut: () => !!find('signIn', document, { visible: true }),
         chatUrl: (id, options) => SITE.chatUrl(id, options),
     });
