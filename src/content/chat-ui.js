@@ -33,9 +33,13 @@
     const ChatCompare = ns.ChatCompare || req('./chat-compare.js');
     const ChatLibrary = ns.ChatLibrary || req('./chat-library.js');
     const ChatPicker = ns.ChatPicker || req('./chat-picker.js');
+    const ChatRunner = ns.ChatRunner || req('./chat-runner.js');
+    const Composer = ns.Composer || req('./composer.js');
+    const PromptQueue = ns.PromptQueue || req('../shared/prompt-queue.js');
     const Theme = ns.Theme || req('./theme.js');
 
     const TOGGLE_ID = 'bb-chat-toggle';
+
     /** On a turn of the site's own that is pinned. Inert without content.css. */
     const PINNED = 'data-bb-chat-pinned';
     const PANEL_KEY = Settings.DATA.chatPanel;
@@ -489,7 +493,37 @@
             'chat-prev': () => step(-1),
             'chat-pin': () => togglePin(),
             'chat-prompts': () => picker.toggle(),
+            'chat-queue': () => queueBox(),
         };
+
+        // ------------------------------------------------------------ queue
+
+        // This page's name on the queue's lease: fresh per UI, which on a
+        // real page is once per load.
+        const runner = ChatRunner.createRunner({ adapter, pageId: Math.random().toString(36).slice(2, 10), notify, getSettings });
+
+        /**
+         * Ctrl+Alt+Q: take what is in the box and queue it behind the answer
+         * being written. On the new-chat page it joins the chain already
+         * waiting there, so "ask these three in a new chat" stays one chat.
+         */
+        async function queueBox() {
+            const box = adapter.composer();
+            const text = box ? Composer.read(box).trim() : '';
+            if (!text) {
+                notify('Nothing in the prompt box to queue', 'warning');
+                return;
+            }
+            const conv = adapter.convIdOf();
+            await PromptQueue.update((state) => {
+                const waiting = !conv && PromptQueue.itemsFor(state, adapter.site, null).find((item) => item.status === 'waiting');
+                const model = conv ? '' : new URLSearchParams(location.search).get('model') || '';
+                return PromptQueue.add(state, { site: adapter.site, conv, chain: waiting ? waiting.chain : undefined, text, model }).state;
+            });
+            Composer.clear(box);
+            notify(adapter.isStreaming() ? 'Queued — it goes when this answer finishes' : 'Queued', 'success');
+            runner.tick();
+        }
 
         const picker = ChatPicker.createPicker({
             site: adapter.site,
@@ -593,6 +627,7 @@
             // drawn here as it happens.
             unwatchPins = Settings.watch([ChatPins.KEY], reloadPins);
             reloadPins();
+            runner.start();
             // The thread scrolls inside a container of its own, which a
             // capture listener on window hears without having to find it.
             window.addEventListener('scroll', onScroll, { capture: true, passive: true });
@@ -622,6 +657,7 @@
             document.removeEventListener('keydown', onHotkey, true);
             clearTimeout(refetchTimer);
             picker.close();
+            runner.stop();
             chat.token++;
             if (panel.isOpen()) panel.close();
             const toggle = document.getElementById(TOGGLE_ID);
@@ -645,6 +681,7 @@
             }
             panel.place();
             repaint();
+            runner.tick();
         }
 
         /** A setting changed in the dashboard; both directions, on the open page. */
@@ -657,6 +694,9 @@
             install, uninstall, onNavigate, openPouch, refreshSurfaces, panel, injectToggle, goTo, onHotkey, isAltGr,
             // The watcher's task, for the specs, which have no watcher running.
             syncNow: sync,
+            /** The worker says a scheduled prompt is due: look now rather than at the next cue. */
+            wakeQueue: () => runner.tick(),
+            runner,
             conversation: () => chat.conv,
             reload: () => (chat.id ? load(chat.id) : Promise.resolve()),
         };

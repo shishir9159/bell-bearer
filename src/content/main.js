@@ -196,6 +196,14 @@
                 sendResponse({ ok: true });
                 break;
 
+            // The worker's alarm: a scheduled prompt for a chat this tab is
+            // on has come due. The page would find it on its next look
+            // anyway; this is so it does not wait for one.
+            case 'promptQueueWake':
+                if (chatUi) chatUi.wakeQueue();
+                sendResponse({ ok: !!chatUi });
+                break;
+
             case 'copyLinkAsMarkdown':
                 markdown.copy(markdown.buildLinkMarkdown(message.linkUrl, message.selectionText)).then((ok) => {
                     if (ok) notify('Copied link as Markdown', 'success');
