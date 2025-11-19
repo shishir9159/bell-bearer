@@ -6153,6 +6153,15 @@ const dayRecord = (at = T0) =>
         assert(!html.includes('<img'), 'markup from a prompt reached the page');
     });
 
+    check('the worker loads the same scripts in Chrome and Firefox, the queue among them', () => {
+        const chrome = [...readRepo('background.js').matchAll(/'(src\/[^']+)'/g)].map((m) => m[1]);
+        const firefox = JSON.parse(readRepo('manifest.firefox.json')).background.scripts;
+        eq(firefox, chrome);
+        assert(chrome.indexOf('src/shared/prompt-queue.js') < chrome.indexOf('src/background/prompt-queue.js'),
+            'the worker would get undefined for PromptQueue at load');
+        assert(chrome.indexOf('src/shared/chat-sites.js') < chrome.indexOf('src/background/prompt-queue.js'));
+    });
+
     // --------------------------------------------------- when limits reset
 
     console.log('\n# reading when a chat limit resets');

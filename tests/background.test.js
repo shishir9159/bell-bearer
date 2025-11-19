@@ -227,3 +227,49 @@ suite('background: protobuf / gRPC-Web encoding', () => {
         assertEqual(payload[1], 0, 'with zero length');
     });
 });
+
+suite('background: the prompt queue worker', () => {
+    const Worker = () => window.BB.PromptQueueWorker;
+    const item = (extra) => Object.assign({
+        id: 'q1', site: 'chatgpt', conv: 'abc12345', chain: 'pc_1', text: 'Later', model: '',
+        notBefore: 0, status: 'waiting', note: '', createdAt: 1, sentAt: 0,
+    }, extra);
+
+    test('a queue change keeps one alarm, at the earliest a prompt is due', async () => {
+        M.reset();
+        const soon = Date.now() + 3600000;
+        await chrome.storage.local.set({ bbPromptQueue: { items: [item({ notBefore: soon + 5000 }), item({ id: 'q2', notBefore: soon })] } });
+        await M.settle();
+        assertEqual(M.state.alarms[Worker().ALARM].when, soon);
+        await chrome.storage.local.set({ bbPromptQueue: { items: [] } });
+        await M.settle();
+        assertEqual(M.state.alarms[Worker().ALARM], undefined, 'the alarm outlived the queue');
+    });
+
+    test('a due prompt whose chat is open wakes that tab, and opens nothing', async () => {
+        M.reset({
+            tabs: [{ id: 5, index: 0, windowId: 100, url: 'https://chatgpt.com/c/abc12345' },
+                { id: 6, index: 1, windowId: 100, url: 'https://chatgpt.com/c/other' }],
+            localStore: { bbPromptQueue: { items: [item({ notBefore: Date.now() - 1000 })] } },
+        });
+        await Worker().wake();
+        assertDeepEqual(M.state.messages, [{ tabId: 5, message: { action: 'promptQueueWake' } }]);
+        assertEqual(M.state.created.length, 0);
+    });
+
+    test('with no tab on that chat, one is opened in the background', async () => {
+        M.reset({ localStore: { bbPromptQueue: { items: [item({ notBefore: Date.now() - 1000 }), item({ id: 'q2', notBefore: Date.now() - 500 })] } } });
+        await Worker().wake();
+        assertDeepEqual(M.state.created, [{ url: 'https://chatgpt.com/c/abc12345', active: false }], 'one tab per chat, not per prompt');
+    });
+
+    test('a new chat’s prompt opens the new-chat page with its model, and the setting can say no', async () => {
+        M.reset({ localStore: { bbPromptQueue: { items: [item({ conv: null, model: 'gpt-5', notBefore: Date.now() - 1000 })] } } });
+        await Worker().wake();
+        assertDeepEqual(M.state.created, [{ url: 'https://chatgpt.com/?model=gpt-5', active: false }]);
+
+        M.reset({ localStore: { chatgptQueueOpenTab: false, bbPromptQueue: { items: [item({ notBefore: Date.now() - 1000 })] } } });
+        await Worker().wake();
+        assertEqual(M.state.created.length, 0, 'a tab was opened with the setting off');
+    });
+});

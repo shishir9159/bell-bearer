@@ -30,12 +30,15 @@
         worker, so the parts are listed here the same way manifest.firefox.json
         lists them. Keep the three lists in step. -->
 <script src="../src/shared/settings.js"></script>
+<script src="../src/shared/chat-sites.js"></script>
+<script src="../src/shared/prompt-queue.js"></script>
 <script src="../src/shared/activity.js"></script>
 <script src="../src/background/proto.js"></script>
 <script src="../src/background/sowon.js"></script>
 <script src="../src/background/context-menus.js"></script>
 <script src="../src/background/commands.js"></script>
 <script src="../src/background/activity-heartbeat.js"></script>
+<script src="../src/background/prompt-queue.js"></script>
 <script src="../transcript.js"></script>
 
 <!-- Shared modules, loaded in dependency order (as the manifest loads them). -->
@@ -117,15 +120,15 @@
 <script src="../src/page/site-sort.js"></script>
 
 <!-- The chat sites: a site-neutral core, and one adapter per site that holds
-     everything about that site's markup and its API. In manifest order. -->
-<script src="../src/shared/chat-sites.js"></script>
+     everything about that site's markup and its API. In manifest order, less
+     chat-sites.js and prompt-queue.js, which are loaded above with the worker
+     that shares them. -->
 <script src="../src/shared/chat-tree.js"></script>
 <script src="../src/shared/chatgpt-format.js"></script>
 <script src="../src/shared/chat-diff.js"></script>
 <script src="../src/shared/chat-export.js"></script>
 <script src="../src/shared/zip.js"></script>
 <script src="../src/shared/prompt-templates.js"></script>
-<script src="../src/shared/prompt-queue.js"></script>
 <script src="../src/shared/chat-pins.js"></script>
 <script src="../src/content/chatgpt-read.js"></script>
 <script src="../src/content/chat-nav.js"></script>

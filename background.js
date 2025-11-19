@@ -11,6 +11,8 @@
  */
 importScripts(
     'src/shared/settings.js',
+    'src/shared/chat-sites.js',
+    'src/shared/prompt-queue.js',
     'src/shared/activity.js',
     'src/shared/chess.js',
     'src/shared/lichess.js',
@@ -26,4 +28,5 @@ importScripts(
     'src/background/chess-limits.js',
     'src/background/trials.js',
     'src/background/skim.js',
+    'src/background/prompt-queue.js',
 );

@@ -15,7 +15,7 @@
         command: [], actionClicked: [],
         tabsActivated: [], tabsCreated: [], tabsRemoved: [], tabsUpdated: [],
         storageChanged: [], windowsFocusChanged: [], tabGroupsUpdated: [],
-        contextMenuClicked: [],
+        contextMenuClicked: [], alarm: [],
     };
 
     const state = {
@@ -26,6 +26,8 @@
         fetchCalls: [],
         menus: [],
         messages: [],
+        alarms: {},
+        created: [],
         // Set to true to make the mocked fetch reject (simulates sowon being down).
         failFetch: false,
         // Forced error for the next tabs.move call, e.g. Chrome's transient
@@ -52,7 +54,17 @@
         });
         return out;
     }
-    const evt = (arr) => ({ addListener: (f) => arr.push(f) });
+    // removeListener too: Settings.watch hands back an unsubscribe that
+    // calls it, and without it every UI a spec builds and tears down stays
+    // subscribed to storage for the rest of the run, answering changes made
+    // for the tests after it.
+    const evt = (arr) => ({
+        addListener: (f) => arr.push(f),
+        removeListener: (f) => {
+            const at = arr.indexOf(f);
+            if (at >= 0) arr.splice(at, 1);
+        },
+    });
 
     /**
      * Chrome MV3 (and Firefox) give every callback API a promise form when the
@@ -73,7 +85,28 @@
         };
     }
 
+    /** A match pattern, as tabs.query takes one: `*://chatgpt.com/*`. */
+    function matchesUrl(url, patterns) {
+        return [].concat(patterns).some((pattern) => {
+            const [, scheme, host, path] = /^(\*|[a-z]+):\/\/([^/]*)(\/.*)$/.exec(pattern) || [];
+            if (!scheme) return false;
+            const glob = (text) => text.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+            const re = new RegExp(`^${scheme === '*' ? 'https?' : scheme}://${glob(host)}${glob(path)}$`);
+            return re.test(String(url || ''));
+        });
+    }
+
     const chrome = {
+        alarms: {
+            create: (name, info) => { state.alarms[name] = Object.assign({ name }, info); },
+            clear: dual((name, cb) => {
+                const had = !!state.alarms[name];
+                delete state.alarms[name];
+                soon(() => cb(had));
+            }),
+            get: dual((name, cb) => soon(() => cb(state.alarms[name]))),
+            onAlarm: evt(listeners.alarm),
+        },
         runtime: {
             onInstalled: evt(listeners.runtimeInstalled),
             onStartup: evt(listeners.runtimeStartup),
@@ -124,6 +157,7 @@
                 chrome.runtime.lastError = undefined;
             })),
             query: dual((q, cb) => soon(() => cb(state.tabs.filter((t) =>
+                (q.url === undefined || matchesUrl(t.url, q.url)) &&
                 (q.windowId === undefined || t.windowId === q.windowId) &&
                 (q.active === undefined || t.active === q.active) &&
                 (q.currentWindow === undefined || true) &&
@@ -150,7 +184,7 @@
                 state.messages.push({ tabId: id, message: msg });
                 soon(() => cb({ ok: true }));
             }),
-            create: dual((props, cb) => soon(() => cb({ id: 999 }))),
+            create: dual((props, cb) => { state.created.push(props); soon(() => cb({ id: 999 })); }),
             update: dual((id, props, cb) => soon(() => cb({}))),
         },
         windows: {
@@ -187,6 +221,8 @@
             state.fetchCalls = [];
             state.menus = [];
             state.messages = [];
+            state.alarms = {};
+            state.created = [];
             state.failFetch = !!opts.failFetch;
             state.moveErrorsRemaining = opts.moveErrorsRemaining || 0;
             chrome.tabGroups = opts.tabGroups;
@@ -201,6 +237,7 @@
             installed: () => listeners.runtimeInstalled.forEach((f) => f({ reason: 'install' })),
             startup: () => listeners.runtimeStartup.forEach((f) => f()),
             menuClicked: (info, tab) => listeners.contextMenuClicked.forEach((f) => f(info, tab)),
+            alarm: (name) => listeners.alarm.forEach((f) => f({ name })),
         },
 
         menuIds: () => state.menus.map((m) => m.id),
