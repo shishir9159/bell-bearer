@@ -3982,6 +3982,9 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-chat-q-row.is-editing { flex-direction: column; align-items: stretch; }
 .bb-chat-q-edit { font-size: 12.5px; resize: vertical; }
 .bb-chat-q-edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.bb-chat-q-when-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.bb-chat-q-when-form .bb-btn { padding: 5px 11px; font-size: 12px; }
+.bb-chat-q-at { width: auto; padding: 5px 8px; font-size: 12px; }
 
 /* --------------------------------------------------------------- pins */
 

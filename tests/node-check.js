@@ -6128,6 +6128,26 @@ const dayRecord = (at = T0) =>
         press('retry', 'p2');
         eq([state.items[1].status, state.items[1].note, state.paused], ['waiting', '', {}], 'a retry should unpause too');
     });
+    check('a queued prompt can be sent now, in an hour, or at a time picked', () => {
+        const T = new Date(2025, 10, 13, 18).getTime();
+        let state = queueOf(['p1', {}]);
+        const write = (mutate) => { state = mutate(state); };
+        const press = (verb, extra = {}) => ChatQueueView.onClick({ target: { closest: () => ({
+            dataset: { bbQ: verb, bbQId: 'p1', ...extra },
+            closest: () => ({ querySelector: () => ({ value: '2025-11-13T21:30' }) }),
+        }) } }, { items: state.items, key: 'chatgpt:c1', write, editing: null, now: () => T });
+        eq(press('when'), 'when:p1', 'the time editor did not open');
+        eq(press('hour'), null);
+        eq(state.items[0].notBefore, T + 3600000);
+        press('at');
+        eq(state.items[0].notBefore, new Date(2025, 10, 13, 21, 30).getTime(), 'a picked time is local time');
+        press('reset', { bbQAt: String(T + 5000) });
+        eq(state.items[0].notBefore, T + 5000 + 60000, 'a reset is rounded; a minute after it is the first safe send');
+        press('now');
+        eq(state.items[0].notBefore, 0);
+        const form = ChatQueueView.listHtml(state.items, { editing: 'when:p1', now: T, resetAt: T + 5000 });
+        assert(form.includes('type="datetime-local"') && form.includes('When the limit resets'), form);
+    });
     check('a prompt someone wrote is escaped in the strip', () => {
         const html = ChatQueueView.listHtml(queueOf(['<b>x</b>', { text: '<img src=x onerror=alert(1)>' }]).items);
         assert(!html.includes('<img'), 'markup from a prompt reached the page');
