@@ -3986,6 +3986,41 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-chat-q-when-form .bb-btn { padding: 5px 11px; font-size: 12px; }
 .bb-chat-q-at { width: auto; padding: 5px 8px; font-size: 12px; }
 
+/* --------------------------------------------------------------- limit */
+
+.bb-chat-limit {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0 0 8px;
+    padding: 7px 10px;
+    border: 1px solid var(--bb-accent);
+    border-radius: var(--bb-r);
+    background: var(--bb-accent-soft);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    font-size: 12.5px;
+}
+
+.bb-chat-limit span { flex: 1; min-width: 12em; }
+
+.bb-chat-limit button {
+    padding: 4px 10px;
+    border: 1px solid var(--bb-border-strong);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-panel-solid);
+    color: var(--bb-text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bb-chat-limit button:hover { border-color: var(--bb-accent); color: var(--bb-accent); }
+.bb-chat-limit .bb-chat-limit-x { padding: 2px 8px; border-color: transparent; background: none; color: var(--bb-faint); }
+
 /* --------------------------------------------------------------- pins */
 
 .bb-chat-pins { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -4086,6 +4121,8 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-chat-picker.bb-themed[data-bb-skin="riso"],
 .bb-chat-picker.bb-themed[data-bb-skin="deco"],
 .bb-chat-q.bb-themed[data-bb-skin="riso"],
-.bb-chat-q.bb-themed[data-bb-skin="deco"] { border-radius: 0; }
+.bb-chat-q.bb-themed[data-bb-skin="deco"],
+.bb-chat-limit.bb-themed[data-bb-skin="riso"],
+.bb-chat-limit.bb-themed[data-bb-skin="deco"] { border-radius: 0; }
 
 .bb-chat-panel.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }

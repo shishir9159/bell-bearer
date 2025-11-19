@@ -42,6 +42,7 @@
     const TOGGLE_ID = 'bb-chat-toggle';
 
     const STRIP_ID = 'bb-chat-queue';
+    const CHIP_ID = 'bb-chat-limit';
     /** On a turn of the site's own that is pinned. Inert without content.css. */
     const PINNED = 'data-bb-chat-pinned';
     const PANEL_KEY = Settings.DATA.chatPanel;
@@ -557,7 +558,9 @@
         }
 
         function queueListHtml(head) {
-            return ChatQueueView.listHtml(myItems(), { paused: !!queueState.paused[myKey()], editing: editingItem, head });
+            return ChatQueueView.listHtml(myItems(), {
+                paused: !!queueState.paused[myKey()], editing: editingItem, head, resetAt: limit && limit.until,
+            });
         }
 
         /**
@@ -599,6 +602,103 @@
                 const field = document.querySelector(`#${STRIP_ID} [data-bb-q-text], #bb-chat-panel [data-bb-q-text]`);
                 if (field) field.focus();
             }
+        }
+
+        // ------------------------------------------------------------ limit
+
+        /** The site's limit notice, read: { text, model, until, blocked }, or null. */
+        let limit = null;
+        /** The reset time of a chip that was waved away; it stays away until the time changes. */
+        let dismissedAt = 0;
+        let heldUntil = 0;
+
+        const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+        /**
+         * The watcher task: read the notice, hold the queue on one that blocks
+         * sending outright, and offer the chip on one that only falls back to
+         * a smaller model. Never done — notices come and go.
+         */
+        function watchLimit() {
+            const text = adapter.limitNotice();
+            const read = text ? ChatSites.readLimit(adapter.site, text) : null;
+            const was = limit && `${limit.until}/${limit.blocked}`;
+            limit = read ? { ...read, text } : null;
+            if (limit && limit.blocked) holdForLimit(limit);
+            if (was !== (limit && `${limit.until}/${limit.blocked}`)) drawStrip();
+            drawChip();
+            return false;
+        }
+
+        /**
+         * A blocking notice holds the site's queue by itself, until a minute
+         * past the time it names — the reset is rounded, and a send a minute
+         * early is a wasted one. With no time to read, a quarter of an hour,
+         * and then it is looked at again.
+         */
+        function holdForLimit(read) {
+            const until = (read.until || Date.now() + 15 * 60000) + 60000;
+            if (until === heldUntil) return;
+            heldUntil = until;
+            writeQueue((state) => PromptQueue.hold(state, adapter.site, until, read.model ? `${read.model} limit` : 'usage limit'));
+        }
+
+        function drawChip() {
+            let chip = document.getElementById(CHIP_ID);
+            const box = adapter.composerBox();
+            const held = !!(limit && limit.blocked);
+            const offer = !!(limit && limit.until && !held && setting('limitSuggest') !== false && dismissedAt !== limit.until);
+            if (!box || !(held || offer)) {
+                if (chip) chip.remove();
+                return;
+            }
+            const name = (ChatSites.get(adapter.site) || {}).name || 'The site';
+            const html = held
+                ? `<span>${Dom.escapeHtml(name)} says a limit has been reached — your queue is held${limit.until ? ` until ${Dom.escapeHtml(clock(limit.until))}` : ' for now'}.</span>`
+                : `<span>${Dom.escapeHtml(limit.model || 'The better model')} is back after ${Dom.escapeHtml(clock(limit.until))}</span>
+                   <button type="button" data-bb-limit="hold">Hold my queue until then</button>
+                   <button type="button" data-bb-limit="later">Queue this for then</button>
+                   <button type="button" class="bb-chat-limit-x" data-bb-limit="dismiss" aria-label="Dismiss">×</button>`;
+            if (!chip) {
+                chip = document.createElement('div');
+                chip.id = CHIP_ID;
+                chip.className = 'bb-chat-limit';
+                chip.setAttribute(ChatPanel.KEEP, '1');
+                Dom.holdFocus(chip);
+                chip.addEventListener('click', onChipClick);
+                Theme.appearance().then((look) => { if (chip.isConnected) Theme.dress(chip, look); });
+            }
+            const before = document.getElementById(STRIP_ID) || box;
+            if (chip.nextElementSibling !== before) before.parentElement.insertBefore(chip, before);
+            if (chip.dataset.bbDrawn !== html) {
+                chip.innerHTML = html;
+                chip.dataset.bbDrawn = html;
+            }
+        }
+
+        async function onChipClick(event) {
+            const button = event.target.closest('[data-bb-limit]');
+            if (!button || !limit) return;
+            const until = limit.until + 60000;
+            const verb = button.dataset.bbLimit;
+            if (verb === 'dismiss') dismissedAt = limit.until;
+            if (verb === 'hold') {
+                await writeQueue((state) => PromptQueue.hold(state, adapter.site, until, `${limit.model || 'model'} limit`));
+                notify(`Your queue waits until ${clock(until)}`, 'success');
+            }
+            if (verb === 'later') {
+                const box = adapter.composer();
+                const text = box ? Composer.read(box).trim() : '';
+                if (!text) { notify('Nothing in the prompt box to queue', 'warning'); return; }
+                const conv = adapter.convIdOf();
+                // A new chat can say which model it wants in its address, so
+                // the scheduled tab opens on the model that was out.
+                const model = conv ? '' : String(limit.model || '').toLowerCase().replace(/\s+/g, '-');
+                await writeQueue((state) => PromptQueue.add(state, { site: adapter.site, conv, text, model, notBefore: until }).state);
+                Composer.clear(box);
+                notify(`Queued for ${clock(until)}`, 'success');
+            }
+            drawChip();
         }
 
         const picker = ChatPicker.createPicker({
@@ -705,6 +805,7 @@
             reloadPins();
             runner.start();
             watcher.add('chat-queue-strip', drawStrip);
+            watcher.add('chat-limit', watchLimit);
             unwatchQueue = Settings.watch([PromptQueue.KEY], reloadQueue);
             reloadQueue();
             // The thread scrolls inside a container of its own, which a
@@ -738,6 +839,9 @@
             picker.close();
             runner.stop();
             watcher.remove('chat-queue-strip');
+            watcher.remove('chat-limit');
+            const chip = document.getElementById(CHIP_ID);
+            if (chip) chip.remove();
             if (unwatchQueue) unwatchQueue();
             const strip = document.getElementById(STRIP_ID);
             if (strip) strip.remove();
@@ -777,6 +881,7 @@
             install, uninstall, onNavigate, openPouch, refreshSurfaces, panel, injectToggle, goTo, onHotkey, isAltGr,
             // The watcher's task, for the specs, which have no watcher running.
             syncNow: sync,
+            limitNow: watchLimit,
             /** The worker says a scheduled prompt is due: look now rather than at the next cue. */
             wakeQueue: () => runner.tick(),
             runner,

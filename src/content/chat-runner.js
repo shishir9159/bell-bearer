@@ -165,13 +165,21 @@
                 await sleep(gapMs());
 
                 const stopped = userStopped;
+                // A limit reached by this very prompt. The page's own watcher
+                // would hold the queue too, but it runs on animation frames
+                // and this may be a background tab, which has none.
+                const notice = adapter.limitNotice && adapter.limitNotice();
+                const limit = notice ? ChatSites.readLimit(site, notice, now()) : null;
+                const blocked = !!(limit && limit.blocked);
                 await write((s) => {
                     let out = PromptQueue.patch(s, item.id, { status: 'sent', sentAt: now() });
                     if (stopped) out = PromptQueue.pause(out, PromptQueue.keyOf({ ...item, conv: adapter.convIdOf() || item.conv }));
+                    if (blocked) out = PromptQueue.hold(out, site, (limit.until || now() + 15 * 60000) + 60000, 'usage limit');
                     return PromptQueue.release(out, key, pageId);
                 });
                 if (stopped) notify('Queue paused — you stopped that answer. Resume it from the queue when you are ready.', 'info');
-                return !stopped;
+                if (blocked) notify('A usage limit was reached — the queue waits for it to reset', 'warning');
+                return !stopped && !blocked;
             } finally {
                 clearInterval(renew);
                 current = null;

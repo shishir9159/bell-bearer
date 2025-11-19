@@ -70,6 +70,12 @@
             'form button[aria-label*="Add photos" i]',
         ],
         signIn: ['[data-testid="login-button"]', 'a[href*="/auth/login"]', 'button[data-testid="signup-button"]'],
+        /**
+         * Where a limit notice has been seen: a banner over the composer, or
+         * an alert. Broad on purpose, because the wording is what is believed
+         * — see limitNotice.
+         */
+        limitNotice: ['[data-testid*="limit" i]', '[role="alert"]', '[role="status"]', '#thread-bottom-container div', '#thread-bottom div'],
     });
 
     const shown = (element) => !!element && (typeof element.getClientRects !== 'function' || element.getClientRects().length > 0);
@@ -176,6 +182,26 @@
         return header ? Math.max(0, header.getBoundingClientRect().bottom) : 56;
     }
 
+    /**
+     * The limit notice's text, or null. The selectors only say where to
+     * look; what is believed is text that ChatSites.readLimit reads as a
+     * limit. Anything holding the composer is passed over, so a prompt being
+     * typed about rate limits is never mistaken for one.
+     */
+    function limitNotice() {
+        const box = composer();
+        for (const selector of SELECTORS.limitNotice) {
+            let found = [];
+            try { found = document.querySelectorAll(selector); } catch (_) { continue; }
+            for (const element of found) {
+                if (box && element.contains(box)) continue;
+                const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+                if (text.length > 20 && text.length < 400 && ChatSites.readLimit('chatgpt', text)) return text;
+            }
+        }
+        return null;
+    }
+
     /** The composer's own frame, which the queue strip sits just above. */
     function composerBox() {
         const box = composer();
@@ -262,6 +288,7 @@
         threadRight,
         composerSlot,
         composerBox,
+        limitNotice,
         signedOut: () => !!find('signIn', document, { visible: true }),
         chatUrl: (id, options) => SITE.chatUrl(id, options),
     });
