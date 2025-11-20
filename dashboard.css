@@ -3210,3 +3210,42 @@ body[data-skin="deco"] .bb-plate {
 }
 
 .typer-drill .btn-secondary { flex: none; }
+
+/* =====================================================================
+   Chat sites — the Pins, Prompts and Queue panels (src/page/chat-views.js)
+   ===================================================================== */
+
+.chat-view-list { display: flex; flex-direction: column; gap: 8px; }
+
+.chat-view-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 11px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    background: var(--surface);
+}
+
+.chat-view-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.chat-view-title { font-size: 13.5px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.chat-view-sub { font-size: 11.5px; color: var(--text-faint); }
+.chat-view-excerpt { font-size: 12px; color: var(--text-muted, var(--text-faint)); line-height: 1.5; }
+.chat-view-actions { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; }
+
+/* Unpinning has an Undo rather than a confirmation: taking a pin off is
+   quick and common, and putting it back should be as quick. */
+.chat-view-undo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--accent-soft-2, var(--border));
+    border-radius: var(--card-radius);
+    background: var(--accent-soft);
+    font-size: 12.5px;
+}
+
+.chat-view-undo[hidden] { display: none; }

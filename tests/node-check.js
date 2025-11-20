@@ -6153,6 +6153,26 @@ const dayRecord = (at = T0) =>
         assert(!html.includes('<img'), 'markup from a prompt reached the page');
     });
 
+    check('chatgpt is in the launcher, in the page’s ink rather than a brand mark', () => {
+        const SiteIcons = require('../src/shared/site-icons.js');
+        eq(SiteIcons.get('chatgpt').name, 'ChatGPT');
+        eq(SiteIcons.get('chatgpt').color, 'currentColor');
+        assert(SiteIcons.list().some((site) => site.id === 'chatgpt'), 'not in ORDER');
+    });
+    check('the chatgpt workspace has a panel behind every tab', () => {
+        const html = readRepo('dashboard.html');
+        const dashboard = readRepo('dashboard.js');
+        const tabs = /chatgpt: \[([\s\S]*?)\],/.exec(dashboard)[1];
+        for (const [, id] of tabs.matchAll(/panel: '([^']+)'/g)) {
+            assert(html.includes(`id="${id}"`), `${id} is opened by a tab but is not in the page`);
+        }
+        assert(html.indexOf('src/page/chat-views.js') < html.indexOf('dashboard.js"'), 'the views load after the page that mounts them');
+    });
+    check('a pin opens its chat with the turn named in the address', () => {
+        require('../src/page/chat-views.js');
+        eq(globalThis.BB.ChatViews.pinUrl({ site: 'chatgpt', conv: 'abc12345', node: 'n/1', url: '' }),
+            'https://chatgpt.com/c/abc12345#bb-node=n%2F1');
+    });
     check('a chat setting that changes the page reaches the page that is open', () => {
         const main = readRepo('src/content/main.js');
         assert(/const CHAT_SURFACES = \[[\s\S]*?'composerTools', 'limitSuggest'[\s\S]*?\];/.test(main), 'the chat surfaces are not listed');

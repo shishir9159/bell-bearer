@@ -62,6 +62,11 @@
             { id: 'weak', label: 'Weak spots', panel: 'typerWeakPanel' },
             { id: 'practice', label: 'Practice', panel: 'typerPracticePanel' },
         ],
+        chatgpt: [
+            // Pinned turns are made on chatgpt.com and looked through here —
+            // the dashboard has no session there to read a chat with.
+            { id: 'pins', label: 'Pins', panel: 'chatgptPinsPanel' },
+        ],
     };
 
     /**
@@ -138,6 +143,7 @@
             if (window.BB.LeetTemplatesView) window.BB.LeetTemplatesView.mountAll();
             if (window.BB.TyperStats) window.BB.TyperStats.mountAll();
             if (window.BB.RosterView) window.BB.RosterView.mountAll();
+            if (window.BB.ChatViews) window.BB.ChatViews.mountAll();
             document.querySelectorAll('[data-chess-games]').forEach((panel) => {
                 const site = panel.dataset.chessGames;
                 this.chessViews[site] = ChessStats.mountPanel(panel, {

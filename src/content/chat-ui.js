@@ -119,6 +119,29 @@
                 if (token === chat.token) chat.loading = false;
             }
             repaint();
+            land();
+        }
+
+        /**
+         * `#bb-node=<id>`: the dashboard opened a pin. Read once, taken off
+         * the address — a reload should not jump again — and reached once the
+         * conversation is in, switching branch first if the pin is on another.
+         */
+        let landing = null;
+
+        function readLanding() {
+            const match = /^#bb-node=(.+)$/.exec(location.hash || '');
+            if (!match) return;
+            landing = decodeURIComponent(match[1]);
+            try { history.replaceState(history.state, '', location.pathname + location.search); } catch (_) { /* a sandboxed page */ }
+        }
+
+        function land() {
+            if (!landing || !chat.conv) return;
+            const id = landing;
+            landing = null;
+            if (chat.conv.nodes[id]) goTo(id);
+            else notify('That pinned message is no longer in this chat', 'warning');
         }
 
         function refetchSoon() {
@@ -849,6 +872,7 @@
             watcher.add('chat-composer-tools', injectTools);
             unwatchQueue = Settings.watch([PromptQueue.KEY], reloadQueue);
             reloadQueue();
+            readLanding();
             // The thread scrolls inside a container of its own, which a
             // capture listener on window hears without having to find it.
             window.addEventListener('scroll', onScroll, { capture: true, passive: true });

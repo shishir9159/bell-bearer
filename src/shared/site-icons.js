@@ -76,6 +76,16 @@
             viewBox: '0 0 24 24',
             path: 'M2 4h3v3h-3zM6.25 4h3v3h-3zM10.5 4h3v3h-3zM14.75 4h3v3h-3zM19 4h3v3h-3zM4.125 8.25h3v3h-3zM8.375 8.25h3v3h-3zM12.625 8.25h3v3h-3zM16.875 8.25h3v3h-3zM2 12.5h3v3h-3zM6.25 12.5h3v3h-3zM10.5 12.5h3v3h-3zM14.75 12.5h3v3h-3zM19 12.5h3v3h-3zM6.25 16.75h11.5v3h-11.5z',
         },
+        chatgpt: {
+            id: 'chatgpt',
+            name: 'ChatGPT',
+            description: 'An outline and a branch tree for long chats, pins, prompt templates, a prompt queue and exports',
+            // A plain speech bubble rather than OpenAI's mark, in the page's
+            // ink like the other marks that are not a brand colour.
+            color: 'currentColor',
+            viewBox: '0 0 24 24',
+            path: 'M4.5 3h15A2.5 2.5 0 0 1 22 5.5v10a2.5 2.5 0 0 1-2.5 2.5H10l-4.6 3.7A.9.9 0 0 1 4 21v-3h.5A2.5 2.5 0 0 1 2 15.5v-10A2.5 2.5 0 0 1 4.5 3zm3 6.25a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5zm4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5zm4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5z',
+        },
         reddit: {
             id: 'reddit',
             name: 'Reddit',
@@ -86,7 +96,7 @@
         },
     };
 
-    const ORDER = ['youtube', 'chess', 'lichess', 'twitter', 'reddit', 'leetcode', 'typeracer'];
+    const ORDER = ['youtube', 'chess', 'lichess', 'twitter', 'reddit', 'leetcode', 'typeracer', 'chatgpt'];
 
     /**
      * The sites in the order they are shown: the user's own, dragged into
