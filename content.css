@@ -3986,6 +3986,26 @@ html.bb-reader-open body { overflow: hidden !important; }
 .bb-chat-q-when-form .bb-btn { padding: 5px 11px; font-size: 12px; }
 .bb-chat-q-at { width: auto; padding: 5px 8px; font-size: 12px; }
 
+/* ------------------------------------------------------ composer tools */
+
+/* Guests among the site's own composer buttons: its ink, its size, none of
+   our colours — like the toggle in its header. */
+.bb-chat-tools { display: inline-flex; gap: 2px; margin: 0 4px; }
+
+.bb-chat-tool {
+    padding: 5px 9px;
+    border: 1px solid rgba(128, 128, 128, .35);
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12.5px;
+    cursor: pointer;
+    opacity: .85;
+}
+
+.bb-chat-tool:hover { opacity: 1; background: rgba(128, 128, 128, .14); }
+
 /* --------------------------------------------------------------- limit */
 
 .bb-chat-limit {

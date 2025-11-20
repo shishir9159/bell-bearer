@@ -577,6 +577,16 @@
     const TYPER_SURFACES = ['typerTrack', 'typerCaret', 'typerCaretSmooth', 'typerCaretBlink',
         'typerSound', 'typerSoundVoice', 'typerSoundVolume', 'typerErrorSound', 'shortcuts'];
 
+    /**
+     * And a chat site's: the composer buttons and the limit chip, for every
+     * chat site — and 'shortcuts', since the chat hotkeys are resolved per
+     * keystroke but a rebind should still reach an open page.
+     */
+    const CHAT_SURFACES = [
+        ...ChatSites.list().flatMap((one) => ['composerTools', 'limitSuggest'].map((kind) => ChatSites.siteKey(one.id, kind))),
+        'shortcuts',
+    ];
+
     /** And what an open YouTube reader has to follow without being closed. */
     const READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'readerHideChrome', 'skin'];
 
@@ -592,6 +602,8 @@
         const typerSurfacesChanged = TYPER_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
         const readerSurfacesChanged = READER_SURFACES.some((key) =>
+            key in values && values[key] !== settings[key]);
+        const chatSurfacesChanged = CHAT_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
 
         Object.assign(settings, values);
@@ -610,6 +622,7 @@
         // already in progress rather than waiting for the next page.
         if (typerSurfacesChanged && typerUi) typerUi.refreshSurfaces();
         if (readerSurfacesChanged && reader) reader.refresh();
+        if (chatSurfacesChanged && chatUi) chatUi.refreshSurfaces();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
         if (timeLimit) timeLimit.sync();

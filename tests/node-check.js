@@ -6153,6 +6153,11 @@ const dayRecord = (at = T0) =>
         assert(!html.includes('<img'), 'markup from a prompt reached the page');
     });
 
+    check('a chat setting that changes the page reaches the page that is open', () => {
+        const main = readRepo('src/content/main.js');
+        assert(/const CHAT_SURFACES = \[[\s\S]*?'composerTools', 'limitSuggest'[\s\S]*?\];/.test(main), 'the chat surfaces are not listed');
+        assert(/chatSurfacesChanged && chatUi\) chatUi\.refreshSurfaces\(\)/.test(main), 'nothing repaints them');
+    });
     check('the worker loads the same scripts in Chrome and Firefox, the queue among them', () => {
         const chrome = [...readRepo('background.js').matchAll(/'(src\/[^']+)'/g)].map((m) => m[1]);
         const firefox = JSON.parse(readRepo('manifest.firefox.json')).background.scripts;

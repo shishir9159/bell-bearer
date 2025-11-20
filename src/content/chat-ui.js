@@ -43,6 +43,7 @@
 
     const STRIP_ID = 'bb-chat-queue';
     const CHIP_ID = 'bb-chat-limit';
+    const TOOLS_ID = 'bb-chat-tools';
     /** On a turn of the site's own that is pinned. Inert without content.css. */
     const PINNED = 'data-bb-chat-pinned';
     const PANEL_KEY = Settings.DATA.chatPanel;
@@ -701,6 +702,45 @@
             drawChip();
         }
 
+        // ---------------------------------------------------- composer tools
+
+        /**
+         * Prompts and Queue beside the site's own composer buttons. Off until
+         * asked for (`<site>ComposerTools`), by the rule the X and LeetCode
+         * surfaces follow: it is the extension drawing into somebody else's
+         * composer. The hotkeys and the panel reach both either way.
+         *
+         * Never done: the composer is rebuilt on every navigation.
+         */
+        function injectTools() {
+            const placed = document.getElementById(TOOLS_ID);
+            if (setting('composerTools') !== true) {
+                if (placed) placed.remove();
+                return false;
+            }
+            const slot = adapter.composerSlot();
+            if (!slot || (placed && slot.contains(placed))) return false;
+            if (placed) placed.remove();
+            const tools = document.createElement('span');
+            tools.id = TOOLS_ID;
+            tools.className = 'bb-chat-tools';
+            tools.setAttribute(ChatPanel.KEEP, '1');
+            tools.innerHTML = `
+                <button type="button" class="bb-chat-tool" data-bb-tool="prompts" title="Insert a prompt template (Ctrl+Alt+I)">Prompts</button>
+                <button type="button" class="bb-chat-tool" data-bb-tool="queue" title="Queue what is in the box (Ctrl+Alt+Q)">Queue</button>`;
+            Dom.holdFocus(tools);
+            tools.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-bb-tool]');
+                if (!button) return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (button.dataset.bbTool === 'prompts') picker.toggle();
+                else queueBox();
+            });
+            slot.appendChild(tools);
+            return false;
+        }
+
         const picker = ChatPicker.createPicker({
             site: adapter.site,
             composer: () => adapter.composer(),
@@ -806,6 +846,7 @@
             runner.start();
             watcher.add('chat-queue-strip', drawStrip);
             watcher.add('chat-limit', watchLimit);
+            watcher.add('chat-composer-tools', injectTools);
             unwatchQueue = Settings.watch([PromptQueue.KEY], reloadQueue);
             reloadQueue();
             // The thread scrolls inside a container of its own, which a
@@ -840,6 +881,9 @@
             runner.stop();
             watcher.remove('chat-queue-strip');
             watcher.remove('chat-limit');
+            watcher.remove('chat-composer-tools');
+            const tools = document.getElementById(TOOLS_ID);
+            if (tools) tools.remove();
             const chip = document.getElementById(CHIP_ID);
             if (chip) chip.remove();
             if (unwatchQueue) unwatchQueue();
@@ -873,6 +917,11 @@
 
         /** A setting changed in the dashboard; both directions, on the open page. */
         function refreshSurfaces() {
+            // Both directions, on the page already open: a switch that only
+            // took effect on the next load would read as a switch that did
+            // nothing. Turning a surface off is the half that needs code.
+            injectTools();
+            drawChip();
             repaint();
             watcher.schedule();
         }
