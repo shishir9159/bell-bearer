@@ -66,6 +66,8 @@
             // Pinned turns are made on chatgpt.com and looked through here —
             // the dashboard has no session there to read a chat with.
             { id: 'pins', label: 'Pins', panel: 'chatgptPinsPanel' },
+            // One list for every chat site; each site's tab shows it.
+            { id: 'prompts', label: 'Prompts', panel: 'chatgptPromptsPanel' },
         ],
     };
 

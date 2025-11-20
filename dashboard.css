@@ -3249,3 +3249,8 @@ body[data-skin="deco"] .bb-plate {
 }
 
 .chat-view-undo[hidden] { display: none; }
+
+.chat-prompt-body { min-height: 180px; margin-top: 8px; font-family: inherit; line-height: 1.5; resize: vertical; }
+.chat-prompt-sites { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; font-size: 12.5px; }
+.chat-prompt-sites label { display: inline-flex; align-items: center; gap: 5px; }
+.chat-prompt-hint { color: var(--text-faint); font-size: 12px; }
