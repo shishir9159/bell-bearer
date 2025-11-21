@@ -3254,3 +3254,7 @@ body[data-skin="deco"] .bb-plate {
 .chat-prompt-sites { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; font-size: 12.5px; }
 .chat-prompt-sites label { display: inline-flex; align-items: center; gap: 5px; }
 .chat-prompt-hint { color: var(--text-faint); font-size: 12px; }
+
+.chat-view-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.chat-view-group > .chat-view-sub { padding: 0 2px; }
+.chat-queue-at { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }

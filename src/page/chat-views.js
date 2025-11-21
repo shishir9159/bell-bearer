@@ -224,6 +224,95 @@
         return { reload };
     }
 
+    // --------------------------------------------------------------- queue
+
+    const two = (n) => String(n).padStart(2, '0');
+    const localInput = (ms) => {
+        const at = new Date(ms);
+        return `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}T${two(at.getHours())}:${two(at.getMinutes())}`;
+    };
+    const when = (ms) => new Date(ms).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    const firstLine = (text) => (String(text || '').split('\n').find((line) => line.trim()) || '').trim().slice(0, 120);
+
+    /**
+     * Every prompt still to go on a site, by chat, and any hold on the site.
+     * The dashboard can reschedule, cancel and release — and "Send now" opens
+     * the chat with the prompt due, because only the chat's own page can send.
+     */
+    function mountQueue(host, siteId) {
+        const { PromptQueue } = BB;
+        const site = ChatSites.get(siteId);
+        let state = PromptQueue.blank();
+
+        host.innerHTML = `
+            <div class="subscriptions-header"><h2>Queue</h2></div>
+            <p class="x-pouch-hint">Prompts queued behind an answer or scheduled for later. A chat's queue goes in order; a
+               scheduled one holds back the ones after it. A scheduled prompt whose chat is not open opens it in a background
+               tab — and may go up to a minute late, because the browser wakes a background tab about once a minute.</p>
+            <div class="chat-view-list"></div>`;
+        const list = host.querySelector('.chat-view-list');
+
+        function paint() {
+            const now = Date.now();
+            const hold = state.holds[siteId];
+            const items = state.items.filter((item) => item.site === siteId && item.status !== 'sent');
+            const chats = new Map();
+            for (const item of items) {
+                const key = PromptQueue.keyOf(item);
+                if (!chats.has(key)) chats.set(key, []);
+                chats.get(key).push(item);
+            }
+            const held = hold && hold.until > now ? `
+                <div class="chat-view-undo"><span>${esc(site.name)}'s queue is held until ${esc(when(hold.until))}${hold.reason ? ` — ${esc(hold.reason)}` : ''}.</span>
+                    <button type="button" class="btn-small" data-chat-release-site="1">Release</button></div>` : '';
+            list.innerHTML = held + ([...chats.entries()].map(([key, rows]) => `
+                <div class="chat-view-group">
+                    <div class="chat-view-sub">${rows[0].conv ? `<a href="${Dom.safeUrlAttr(site.chatUrl(rows[0].conv))}" target="_blank" rel="noopener noreferrer">A chat</a>` : 'A new chat'}${state.paused[key] ? ' · paused' : ''}</div>
+                    ${rows.map((item) => `
+                    <div class="chat-view-row" data-chat-item="${att(item.id)}">
+                        <div class="chat-view-main">
+                            <span class="chat-view-title">${esc(firstLine(item.text))}</span>
+                            <span class="chat-view-sub">${esc(item.status === 'waiting' ? (item.notBefore > now ? `at ${when(item.notBefore)}` : 'next') : item.status)}${item.note ? ` — ${esc(item.note)}` : ''}</span>
+                        </div>
+                        <div class="chat-view-actions">
+                            <input type="datetime-local" class="chat-queue-at" value="${localInput(item.notBefore > now ? item.notBefore : now + 3600000)}" aria-label="When it goes">
+                            <button type="button" class="btn-small" data-chat-at="1">Set</button>
+                            <button type="button" class="btn-small" data-chat-send-now="1">Send now</button>
+                            <button type="button" class="btn-small delete" data-chat-cancel="1">Cancel</button>
+                        </div>
+                    </div>`).join('')}
+                </div>`).join('') || '<div class="empty-inline"><span>Nothing queued.</span></div>');
+        }
+
+        const write = (mutate) => PromptQueue.update(mutate);
+
+        list.addEventListener('click', async (event) => {
+            if (event.target.closest('[data-chat-release-site]')) return void write((s) => PromptQueue.unhold(s, siteId));
+            const row = event.target.closest('[data-chat-item]');
+            const item = row && state.items.find((one) => one.id === row.dataset.chatItem);
+            if (!item) return;
+            // Whatever it was — held, failed, paused — the person has now said when.
+            const ready = (s, notBefore) => PromptQueue.pause(PromptQueue.patch(s, item.id, { status: 'waiting', note: '', notBefore }), PromptQueue.keyOf(item), false);
+            if (event.target.closest('[data-chat-cancel]')) await write((s) => PromptQueue.remove(s, item.id));
+            if (event.target.closest('[data-chat-at]')) {
+                const at = new Date(row.querySelector('.chat-queue-at').value).getTime();
+                if (Number.isFinite(at)) await write((s) => ready(s, at > Date.now() ? at : 0));
+            }
+            if (event.target.closest('[data-chat-send-now]')) {
+                await write((s) => ready(s, 0));
+                try {
+                    await chrome.tabs.create({ url: site.chatUrl(item.conv, { model: item.model }), active: true });
+                } catch (_) { Ui.toast('Could not open the chat', 'error'); }
+            }
+        });
+
+        async function reload() {
+            state = await PromptQueue.load();
+            paint();
+        }
+        return { reload };
+    }
+
     /** Fill every chat panel on the page and keep each current. */
     function mountAll(scope = document) {
         const watched = [];
@@ -238,9 +327,15 @@
             view.reload();
             watched.push([BB.PromptTemplates.KEYS, view]);
         });
+        scope.querySelectorAll('[data-chat-queue]').forEach((host) => {
+            if (!ChatSites.get(host.dataset.chatQueue)) return;
+            const view = mountQueue(host, host.dataset.chatQueue);
+            view.reload();
+            watched.push([BB.PromptQueue.KEYS, view]);
+        });
         // A pin made on the site, in another tab, arrives while this is open.
         for (const [keys, view] of watched) Settings.watch(keys, () => view.reload());
     }
 
-    BB.ChatViews = { mountAll, mountPins, mountPrompts, pinUrl };
+    BB.ChatViews = { mountAll, mountPins, mountPrompts, mountQueue, pinUrl };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

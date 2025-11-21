@@ -68,6 +68,7 @@
             { id: 'pins', label: 'Pins', panel: 'chatgptPinsPanel' },
             // One list for every chat site; each site's tab shows it.
             { id: 'prompts', label: 'Prompts', panel: 'chatgptPromptsPanel' },
+            { id: 'queue', label: 'Queue', panel: 'chatgptQueuePanel' },
         ],
     };
 
