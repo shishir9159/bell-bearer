@@ -118,6 +118,8 @@
             if (Skin) await Skin.install().catch(() => {});
             // The chess settings are drawn, so they must exist before binding.
             ChessSettings.mountAll();
+            // And the chat sites' panels, whose control ids are their keys.
+            if (window.BB.ChatSettings) window.BB.ChatSettings.mountAll();
             // And the same for the TypeRacer voice list, whose <option>s come
             // from the sound module rather than from the page.
             if (window.BB.TyperStats) window.BB.TyperStats.mountSettings();

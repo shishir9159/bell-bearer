@@ -6168,6 +6168,18 @@ const dayRecord = (at = T0) =>
         }
         assert(html.indexOf('src/page/chat-views.js') < html.indexOf('dashboard.js"'), 'the views load after the page that mounts them');
     });
+    check('the chatgpt settings panel binds a control to every setting the site has', () => {
+        require('../src/page/chat-settings.js');
+        const html = globalThis.BB.ChatSettings.panelHtml(ChatSites.get('chatgpt'));
+        for (const key of ChatSites.allKeys().filter((one) => one.startsWith('chatgpt'))) {
+            assert(html.includes(`id="${key}"`), `${key} has no control`);
+        }
+        assert(/id="chatgptQueueGapSeconds"[^>]*min="1"/.test(html), 'the gap can be set below a second');
+        const page = readRepo('dashboard.html');
+        assert(page.includes('data-chat-settings="chatgpt"'), 'no panel for the settings card to open');
+        const dashboard = readRepo('dashboard.js');
+        assert(dashboard.indexOf('ChatSettings.mountAll') < dashboard.indexOf('SettingsForm.bindAll'), 'the controls are drawn after the form is bound');
+    });
     check('a pin opens its chat with the turn named in the address', () => {
         require('../src/page/chat-views.js');
         eq(globalThis.BB.ChatViews.pinUrl({ site: 'chatgpt', conv: 'abc12345', node: 'n/1', url: '' }),
