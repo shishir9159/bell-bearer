@@ -35,7 +35,10 @@ for exactly that reason, so a hidden run is slow rather than falsely red.
 second even in a hidden tab — the full suite spends minutes in the
 background-worker and player sections, whose timers a hidden tab throttles to
 about one a second. It is a fast gate, not a substitute: run `index.html`
-before committing.
+before committing. `tests/chat-only.html` is the same for the chat code, and
+takes `?suite=` to run only the suites whose name has that in it — the queue's
+specs alone take a minute in a hidden tab, because every one of its storage
+writes waits on a throttled timer.
 
 **Without a browser**, for the parts that are pure logic:
 
@@ -71,6 +74,10 @@ that code, not a replacement — it cannot press a key or play a video.
 | `pouch.test.js` | The filed/followed state of the injected pouch and playlist buttons |
 | `x-pouch.test.js` | x.com: where the pouch button lands, what a post reads as, what the ad sweep hides |
 | `x-only.html` | The X specs alone — the same file, minus everything slow (see below) |
+| `chat-stage.js` | A chatgpt.com-shaped page for the chat specs: virtualised, with working branch arrows and a composer that streams |
+| `chat.test.js` | The chat panel: outline, reaching unmounted turns, branch switching, compare, export, pins, skins |
+| `chat-queue.test.js` | Typing into a chat composer, the prompt picker, the queue, holding on a limit |
+| `chat-only.html` | The chat specs alone; `?suite=queue` narrows it to one suite |
 | `node-check.js` | The Node gate — pure logic only, no DOM, no timers |
 
 ## How it works

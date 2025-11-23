@@ -90,7 +90,11 @@ while you are typing in a field.
 | `Shift + H` | Skim: search your browsing history |
 | `Shift + A` | Skim: search the actions it can run |
 | `Shift + L` | Label every link and button in view |
-| `Shift + P` | Open the pouch — the sheet on YouTube, the panel on x.com, the sheet on leetcode.com |
+| `Shift + P` | Open the pouch — the sheet on YouTube, the panel on x.com, the sheet on leetcode.com — or the chat panel on chatgpt.com |
+| `Ctrl + Alt + J` / `K` | ChatGPT: jump to the next / previous prompt |
+| `Ctrl + Alt + P` | ChatGPT: pin the message you are reading, or unpin it |
+| `Ctrl + Alt + I` | ChatGPT: insert a prompt template, or save what is in the box as one |
+| `Ctrl + Alt + Q` | ChatGPT: queue what is in the prompt box behind the answer being written |
 | `Ctrl + Alt + T` | LeetCode: offer a code template at the cursor, or save the selection as one |
 | `Ctrl + Alt + M` | LeetCode: start or end a mock interview on this problem |
 | `Ctrl + Alt + C` | TypeRacer: cycle the typing caret — bar, block, underline, outline, or the site's own |
@@ -112,8 +116,18 @@ case but the whole of it: every bare letter there is a letter you meant to type.
 `Shift + P` is off until **Settings › General › Pouch shortcut** turns it on,
 for the same reason Skim and the link hints are: a bare-Shift letter is a large
 claim to make on somebody's keyboard without telling them first. It does nothing
-anywhere but YouTube, x.com and leetcode.com, so on every other site the key
-stays a plain capital P.
+anywhere but YouTube, x.com, leetcode.com and chatgpt.com, so on every other
+site the key stays a plain capital P. On chatgpt.com that includes the prompt
+box: with the caret in it, `Shift + P` types a P, and the panel is the button in
+the chat's header.
+
+The five ChatGPT keys are `Ctrl + Alt` for the LeetCode keys' reason, and more
+so: ChatGPT's prompt box has the focus nearly all the time. `Keybindings.conflicts`
+is checked across every site at once, so C, M, R and T were already taken; and
+`Ctrl + Alt + arrows` rotate the screen on a lot of Windows laptops. On Windows
+`AltGr` is `Ctrl + Alt` as far as a keystroke can tell, and it is how half of
+Europe types — `AltGr + Q` is `@` on a German keyboard — so a keystroke that
+produced a symbol, or that the browser says had AltGraph down, is left to the page.
 
 ## The reader
 
@@ -536,6 +550,63 @@ layout reads, no DOM writes, nothing that can force a reflow. Everything that
 costs anything happens on the shared observer's animation frame or once at the
 end of the race.
 
+## ChatGPT
+
+What goes wrong in a long ChatGPT session is finding your way around it, not
+getting answers. The conversation is a tree — every edited prompt and every
+regenerate starts a branch — and the page shows one path through it with a
+`< 2/3 >` where it splits. A two-hundred-turn debugging chat has no table of
+contents. Prompts you reuse are retyped. And you wait for each answer before you
+can send the next.
+
+**The panel** opens from a button in the chat's header, or `Shift + P`. On a wide
+window it docks in the margin the thread leaves empty — measured off the thread
+itself, since the sidebar may be open or shut — and on a narrower one it is an
+overlay that goes away on an outside click. It has four tabs:
+
+- **Outline** — every prompt, and under each answer the headings it wrote. Click
+  one to go there; the row you are reading follows the scroll. A `#` inside a
+  code block is not a heading, which in a Python answer is most of them.
+- **Tree** — the branches, drawn. A prompt is a ring, an answer a dot, the path
+  the page shows is the accent, and a turn under a fork carries the page's own
+  `k/n`. Long runs with no fork fold into one segment with a count. Click any turn
+  and the page's own arrows are clicked, fork by fork, until it shows it;
+  shift-click two to compare them side by side or in one column, word by word.
+- **Pins** — `Ctrl + Alt + P` pins the message you are reading. A pin is kept by
+  the turn's own id, not its position, which every edit above it would renumber.
+- **Queue** — this chat's queued prompts (below).
+
+**Export** in the panel's header gives the chat as Markdown or JSON, or copies
+the Markdown. Code keeps its fence and its language, in a fence longer than any
+inside it; `\( \)` and `\[ \]` become `$` and `$$` (Obsidian and GitHub render
+those), never inside code; citations become footnotes. Markdown is the path the
+page shows; JSON is the whole tree. **Library** lists your history a page at a
+time — shift-click for a range — and fetches the ones you pick about one a
+second, backing off when ChatGPT answers 429, into one zip with an index.
+
+**Prompt templates** — `Ctrl + Alt + I` offers them, last used first, and types
+the one you pick into the box. `{{name}}` asks for a value first; `{{selection}}`
+is whatever you had selected on the page. Ten starters ship — seeded only when
+there are no templates at all, so deleting them keeps them deleted — and the
+dashboard can put any missing ones back.
+
+**The queue** — `Ctrl + Alt + Q` takes what is in the box and sends it when the
+answer being written is done. Queued prompts go one at a time, typed into the
+page's own box and sent with its own button; nothing is ever posted to ChatGPT
+behind its back. Typing in the box yourself always wins, pressing ChatGPT's stop
+pauses the queue, and it stops at the first thing it does not understand rather
+than guessing. A prompt can be scheduled — in an hour, at a time, or for when a
+limit resets — and if its chat is not open then, a background tab is opened for
+it. When ChatGPT says a limit has been reached, a chip above the box offers to
+hold the queue until the time it names; a notice that blocks sending holds it by
+itself.
+
+Conversations are read from ChatGPT's own API with your session and kept in
+memory while the chat is open — never stored. What is stored is yours: pins,
+prompts, the queue, and whether the panel was open. The Prompts and Queue
+buttons beside ChatGPT's own composer buttons are off until **Settings ›
+ChatGPT** turns them on; the hotkeys and the panel reach both either way.
+
 ## Daily time limit
 
 **Any** site can be held to a daily limit. The list is under
@@ -733,6 +804,15 @@ src/shared/     pure logic, used by every surface
   roster.js        a site's own roster: the file format, the pace, and the job
   x-pouch.js       the X pouch: two independent topic lists and their items
   pouch-button.js  the pouch button both YouTube and X inject
+  chat-sites.js    the chat sites: names, settings keys, how their URLs and limit notices read
+  chat-tree.js     a conversation as a tree of turns, whichever site it came from
+  chatgpt-format.js ChatGPT's conversation read into that tree
+  chat-diff.js     a word diff of two answers, lines past a cap
+  chat-export.js   a chat as Markdown or JSON, and its file name
+  chat-pins.js     pinned turns, by site and conversation
+  prompt-templates.js the prompt templates and their ten starters
+  prompt-queue.js  queued and scheduled prompts, holds and leases, reset times
+  zip.js           a store-only zip for the bulk export
   time.js dom.js   formatting and escaping
 
 src/content/    injected into every page
@@ -759,6 +839,18 @@ src/content/    injected into every page
   leet-panel.js    the pouch sheet: due, to solve, solved, templates
   typeracer-read.js every typeracer.com selector, and reading a race off one
   typeracer-ui.js  the keystroke capture, the typing caret, the sounds
+  chatgpt-read.js  every chatgpt.com selector and request — the site's adapter
+  chat-ui.js       everything on a chat site: the conversation, the toggle, hotkeys
+  chat-panel.js    the docked panel's frame and its tabs' markup
+  chat-nav.js      reaching a turn in a virtualised thread; switching branch
+  chat-tree-view.js the branch tree as an SVG string
+  chat-compare.js  two branches side by side
+  chat-library.js  bulk export
+  chat-picker.js   the prompt picker
+  chat-runner.js   sending the queue, one prompt at a time
+  chat-queue-view.js the queue strip and the Queue tab
+  composer.js      typing into a chat site's prompt box, and pressing send
+  scroll-to.js     landing on something in a page that scrolls inside itself
   dom-watch.js     one throttled MutationObserver for all of the above
   overlay.js notify.js theme.js page-info.js markdown.js
 
@@ -773,6 +865,7 @@ src/background/ the service worker, pulled in by background.js
   commands.js      keyboard commands and messages, chess moves spoken
   activity-heartbeat.js  the alarm that feeds the activity store
   skim.js          tabs, history, and the actions Skim can run
+  prompt-queue.js  the one alarm a scheduled prompt needs, and waking its chat
 
 src/page/       shared by popup.html and dashboard.html
   ui.js            modals, toasts, clipboard, files, theme
@@ -791,6 +884,8 @@ src/page/       shared by popup.html and dashboard.html
   x-pouch-view.js  the dashboard's People and Posts panels — where X topics are managed
   leet-stats.js    the LeetCode Review, Practice and Notes panels
   typeracer-stats.js the TypeRacer Races, Weak spots and Practice panels
+  chat-views.js    a chat site's Pins, Prompts and Queue panels
+  chat-settings.js a chat site's settings panel
   popup-width.js   applies the popup size setting, from popup.html's <head>
 
 skins.css       the token layer for every skin — linked before popup/dashboard css
@@ -816,7 +911,7 @@ Importing writes those keys back, replacing what is there.
 ## Permissions
 
 - `storage`: To save and retrieve bookmarks
-- `alarms`: The activity heartbeat — an MV3 worker is suspended a few seconds after it goes idle, taking any setInterval with it
+- `alarms`: The activity heartbeat — an MV3 worker is suspended a few seconds after it goes idle, taking any setInterval with it — and the one alarm a scheduled chat prompt needs
 - `activeTab`: To interact with YouTube pages
 - `scripting`: To inject content scripts
 - `contextMenus`: For the "Copy as Markdown" right-click items
@@ -955,6 +1050,43 @@ how often you met it and got it wrong, and `n`/`ms` are the intervals that
 landed on it, which is the baseline a pair ending in it is judged against.
 
 The day key is **local**, not UTC, for the same reason the LeetCode one is.
+
+The chat sites keep four keys, and none of them is a conversation: the site has
+those, and a copy here would be a second history to go stale. Pins are keyed by
+site and conversation, and a pin by the turn's id; the chat's title and address
+are kept beside its pins so the dashboard can list and open them without a
+session on the site:
+
+```javascript
+{
+  bbChatPins: {
+    "chatgpt:<conversation id>": {
+      title: "Flaky login test", url: "https://chatgpt.com/c/…", updatedAt: 0,
+      pins: [{ node: "<turn id>", label: "the fix", excerpt: "first 140 characters", at: 0 }]
+    }
+  },
+  bbPromptTemplates: [
+    { id: "pt_…", name: "Code review", body: "Review the code below… {{code}}",
+      sites: [], createdAt: 0, usedAt: 0, uses: 0 }
+  ],
+  bbPromptQueue: {
+    items: [{ id: "pq_…", site: "chatgpt", conv: "<id>" | null, chain: "pc_…",
+              text: "…", model: "", notBefore: 0,
+              status: "waiting" | "sending" | "sent" | "held" | "failed",
+              note: "", createdAt: 0, sentAt: 0 }],
+    holds:  { chatgpt: { until: 0, reason: "GPT-5 limit" } },
+    leases: { "chatgpt:<id>": { by: "<page id>", until: 0 } },
+    paused: { "chatgpt:<id>": true }
+  },
+  bbChatPanel: { open: true, tab: "outline" }
+}
+```
+
+A template's `sites: []` is every chat site. A queued prompt with `conv: null`
+was queued on the new-chat page; its `chain` is what keeps "ask these three in a
+new chat" in one chat once the first has made it. The lease is how two tabs on
+one chat avoid sending the same prompt twice. Sent and failed prompts are kept a
+day, so the strip can say what happened, and then let go.
 
 The daily limit is two keys — what the limits are, and what today has gone on —
 both keyed by host, so neither knows anything about which sites have a workspace:
