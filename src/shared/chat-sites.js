@@ -41,6 +41,23 @@
                 ? `https://chatgpt.com/c/${encodeURIComponent(id)}`
                 : `https://chatgpt.com/${model ? `?model=${encodeURIComponent(model)}` : ''}`),
         }),
+        claude: Object.freeze({
+            id: 'claude',
+            name: 'Claude',
+            host: 'claude.ai',
+            prefix: 'claude',
+            speaker: 'Claude',
+            tabPatterns: Object.freeze(['*://claude.ai/*']),
+            convIdOf: (pathname) => {
+                const match = /^\/chat\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(String(pathname || ''));
+                return match ? match[1] : null;
+            },
+            /** /new, and a project's page, which starts a chat in that project. */
+            isNewChat: (pathname) => /^\/(?:new|project\/[0-9a-f-]{36})\/?$/i.test(String(pathname || '')),
+            // A new Claude chat has no address that picks its model, so a
+            // queued new-chat prompt goes with whatever the page has chosen.
+            chatUrl: (id) => (id ? `https://claude.ai/chat/${encodeURIComponent(id)}` : 'https://claude.ai/new'),
+        }),
     });
 
     function get(id) {
@@ -108,8 +125,19 @@
      *   blocked  nothing can be sent at all until the reset. Without one of
      *            these the notice is a fallback: the site carries on, with a
      *            smaller model, until the time it names
+     *   windows  which of the site's allowances a notice is about, when it has more than one
      */
     const LIMITS = Object.freeze({
+        // Every one of Claude's notices blocks: there is no quieter fallback
+        // to a smaller model to warn about. Which window ran out — the
+        // five-hour session or the week — is named, because the two are very
+        // different waits.
+        claude: Object.freeze({
+            notice: /limit|out of (?:free )?messages/i,
+            model: [],
+            blocked: [/out of (?:free )?messages/i, /limit (?:reached|hit)/i, /reached (?:your|the) .*limit/i, /usage limit/i],
+            windows: [['weekly', /weekly|7-day|this week/i], ['session', /5-hour|five-hour|session/i]],
+        }),
         chatgpt: Object.freeze({
             // A model's name can have a dot in it (GPT-4.5), so the sentence
             // ends at a dot followed by a space, not at the first dot.
@@ -129,7 +157,7 @@
     function readLimit(siteId, text, now = Date.now()) {
         const rules = LIMITS[siteId];
         const said = String(text || '').replace(/\s+/g, ' ').trim();
-        if (!rules || !/limit|too many requests/i.test(said)) return null;
+        if (!rules || !(rules.notice || /limit|too many requests/i).test(said)) return null;
         const first = (patterns) => {
             for (const pattern of patterns) {
                 const match = pattern.exec(said);
@@ -140,10 +168,12 @@
         // From the first word that introduces a time, so a number in the
         // model's name is never read as one.
         const when = /\b(?:resets?|until|after|in|at|tomorrow|available again)\b[\s\S]*$/i.exec(said);
+        const window = (rules.windows || []).find(([, pattern]) => pattern.test(said));
         return {
             model: first(rules.model) || '',
             until: queue().parseReset(when ? when[0] : '', now),
             blocked: !!first(rules.blocked),
+            window: window ? window[0] : '',
         };
     }
 

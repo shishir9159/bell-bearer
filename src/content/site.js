@@ -37,6 +37,7 @@
         // matched rather than the one subdomain.
         if (/(^|\.)typeracer\.com$/.test(host)) return 'typeracer';
         if (/(^|\.)(chatgpt\.com|chat\.openai\.com)$/.test(host)) return 'chatgpt';
+        if (/(^|\.)claude\.ai$/.test(host)) return 'claude';
         return 'other';
     }
 

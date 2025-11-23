@@ -277,6 +277,13 @@
         chatgptQueueOpenTab: true,
         chatgptExportDollars: true,
         chatgptExportThinking: false,
+
+        claudeComposerTools: false,
+        claudeLimitSuggest: true,
+        claudeQueueGapSeconds: 3,
+        claudeQueueOpenTab: true,
+        claudeExportDollars: true,
+        claudeExportThinking: false,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

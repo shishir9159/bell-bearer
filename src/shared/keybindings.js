@@ -28,7 +28,7 @@
     'use strict';
 
     const SCOPES = Object.freeze({
-        general: 'General', youtube: 'YouTube', chess: 'Chess.com', leetcode: 'LeetCode', typeracer: 'TypeRacer', chat: 'ChatGPT',
+        general: 'General', youtube: 'YouTube', chess: 'Chess.com', leetcode: 'LeetCode', typeracer: 'TypeRacer', chat: 'ChatGPT and Claude',
     });
 
     const BINDINGS = Object.freeze([
@@ -41,7 +41,7 @@
         // on a chat site the chat panel, which is that site's pouch. There is
         // no scope for "four sites", and hiding it under `youtube` would take
         // it off the keyboard map for most of the places it works.
-        { id: 'open-pouch', scope: 'general', kind: 'key', needs: 'pouchShortcut', label: 'Open the pouch (YouTube, X and LeetCode) or the chat panel (ChatGPT)', combo: { shift: true, code: 'KeyP', key: 'P' } },
+        { id: 'open-pouch', scope: 'general', kind: 'key', needs: 'pouchShortcut', label: 'Open the pouch (YouTube, X and LeetCode) or the chat panel (ChatGPT and Claude)', combo: { shift: true, code: 'KeyP', key: 'P' } },
         { id: 'copy-markdown-link', scope: 'general', kind: 'command', label: 'Copy this page as a Markdown link', combo: { ctrl: true, shift: true, code: 'KeyL', key: 'L' } },
 
         { id: 'record-checkpoint', scope: 'youtube', kind: 'key', label: 'Create checkpoint (hold and release)', combo: { ctrl: true, code: 'KeyB', key: 'b' } },

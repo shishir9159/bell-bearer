@@ -5440,6 +5440,35 @@ const dayRecord = (at = T0) =>
         eq(ChatSites.convIdOfUrl('chatgpt', 'not a url'), null);
     });
 
+    check('claude is a chat site of its own, with the same six settings', () => {
+        const claude = ChatSites.get('claude');
+        const id = '9a978684-1ba6-4d23-af91-b09ad7ae3f9c';
+        eq(claude.convIdOf(`/chat/${id}`), id);
+        eq(claude.convIdOf('/code/abc'), null, 'Claude Code on the web is not a chat');
+        eq(claude.convIdOf('/chat/not-a-uuid'), null);
+        assert(claude.isNewChat('/new') && claude.isNewChat(`/project/${id}`) && !claude.isNewChat('/recents'));
+        eq(claude.chatUrl(id), `https://claude.ai/chat/${id}`);
+        eq(claude.chatUrl(null, { model: 'opus' }), 'https://claude.ai/new', 'a new Claude chat has no address for a model');
+        eq(ChatSites.siteOfUrl('https://claude.ai/chat/x').id, 'claude');
+        eq(ChatSites.allKeys().filter((key) => key.startsWith('claude')).length, 6);
+        eq(ChatSites.siteKey('claude', 'queueOpenTab'), 'claudeQueueOpenTab');
+    });
+    check('every claude notice blocks, and says which allowance ran out', () => {
+        const T = new Date(2025, 10, 13, 18).getTime();
+        const five = new Date(2025, 10, 13, 21).getTime();
+        eq(ChatSites.readLimit('claude', 'You are out of free messages until 9 PM.', T),
+            { model: '', until: five, blocked: true, window: '' });
+        eq(ChatSites.readLimit('claude', '5-hour limit reached · resets 9:00 PM', T).window, 'session');
+        const weekly = ChatSites.readLimit('claude', 'Weekly limit reached. Your limit resets Monday at 9 AM.', T);
+        eq([weekly.window, weekly.blocked, new Date(weekly.until).getDay()], ['weekly', true, 1]);
+        eq(ChatSites.readLimit('claude', 'Claude can make mistakes.', T), null);
+    });
+    check('claude.ai is detected under its own name', () => {
+        const Site = require('../src/content/site.js');
+        eq(Site.detectSite('claude.ai'), 'claude');
+        eq(Site.detectSite('notclaude.ai'), 'other');
+    });
+
     // ------------------------------------------------- the conversation tree
 
     console.log('\n# the conversation tree');
@@ -5720,7 +5749,7 @@ const dayRecord = (at = T0) =>
 
     check('the chat keys fire in the prompt box, so none is a bare letter and none clashes', () => {
         const Keybindings = require('../src/shared/keybindings.js');
-        eq(Keybindings.SCOPES.chat, 'ChatGPT');
+        eq(Keybindings.SCOPES.chat, 'ChatGPT and Claude');
         eq(Keybindings.list({}, 'chat').map((b) => b.id), ['chat-next', 'chat-prev', 'chat-pin', 'chat-prompts', 'chat-queue']);
         for (const binding of Keybindings.list({}, 'chat')) {
             assert(binding.combo.ctrl && binding.combo.alt, `${binding.id} would fire while typing`);
@@ -6236,9 +6265,9 @@ const dayRecord = (at = T0) =>
     check('a chatgpt limit notice gives up its model, its time and whether it blocks', () => {
         const fallback = ChatSites.readLimit('chatgpt',
             'You\'ve hit the Free plan limit for GPT-4.5. Responses will use another model until your limit resets after 7:42 PM.', T18);
-        eq(fallback, { model: 'GPT-4.5', until: clock(19, 42), blocked: false });
+        eq(fallback, { model: 'GPT-4.5', until: clock(19, 42), blocked: false, window: '' });
         const blocked = ChatSites.readLimit('chatgpt', 'You\'ve reached our limit of messages per hour. Please try again in 30 minutes.', T18);
-        eq(blocked, { model: '', until: T18 + 30 * 60000, blocked: true });
+        eq(blocked, { model: '', until: T18 + 30 * 60000, blocked: true, window: '' });
         eq(ChatSites.readLimit('chatgpt', 'Nothing to see', T18), null);
         eq(ChatSites.readLimit('nowhere', 'limit', T18), null);
     });
