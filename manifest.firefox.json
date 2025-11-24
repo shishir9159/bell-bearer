@@ -105,6 +105,7 @@
         "src/content/composer.js",
         "src/shared/prompt-queue.js",
         "src/content/chatgpt-read.js",
+        "src/content/claude-read.js",
         "src/content/chat-nav.js",
         "src/content/chat-tree-view.js",
         "src/content/chat-compare.js",
