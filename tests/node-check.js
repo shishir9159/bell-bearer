@@ -6325,6 +6325,78 @@ const dayRecord = (at = T0) =>
         assert(!/new KeyboardEvent/.test(source), 'the composer sends a synthetic Enter');
     });
 
+    // ------------------------------------------------ reading claude's tree
+
+    console.log('\n# reading a claude conversation');
+
+    const ClaudeFormat = require('../src/shared/claude-format.js');
+
+    /**
+     * chat_conversations/<uuid>?tree=True as it answers: the sentinel parent,
+     * a prompt edited once (h2, h2b), an answer retried (a2, a2r), thinking, a
+     * web search with a cited answer, pasted text on a prompt, and one old
+     * message with text and no content.
+     */
+    function claudeRaw({ leaf = 'a2r' } = {}) {
+        const m = (uuid, parent, sender, at, content, extra = {}) => ({
+            uuid, parent_message_uuid: parent, sender, index: 0, created_at: `2025-11-13T10:00:${String(at).padStart(2, '0')}Z`,
+            content, text: '', attachments: [], files: [], ...extra,
+        });
+        const text = (t, citations) => ({ type: 'text', text: t, citations });
+        return {
+            uuid: 'conv-uuid', name: 'Why the build fails', model: 'claude-sonnet-4',
+            created_at: '2025-11-13T10:00:00Z', updated_at: '2025-11-13T10:05:00Z',
+            current_leaf_message_uuid: leaf,
+            chat_messages: [
+                m('h1', ClaudeFormat.SENTINEL, 'human', 1, [], { text: 'Old style prompt' }),
+                m('a1', 'h1', 'assistant', 2, [{ type: 'thinking', thinking: 'Let me look.' }, text('It is the linker.')]),
+                m('h2', 'a1', 'human', 3, [text('Here is the log')], { attachments: [{ file_name: 'paste.txt', extracted_content: 'ld: undefined symbol' }] }),
+                m('a2', 'h2', 'assistant', 4, [
+                    { type: 'tool_use', name: 'web_search', input: { query: 'ld undefined symbol' } },
+                    { type: 'tool_result', name: 'web_search', content: [] },
+                    text('Link the math library.', [{ url: 'https://example.com/ld', title: 'ld manual', start_index: 0, end_index: 22 }]),
+                ]),
+                m('a2r', 'h2', 'assistant', 5, [text('Add -lm to the link line.')]),
+                m('h2b', 'a1', 'human', 6, [text('An edited question')], { files: [{ file_name: 'screenshot.png' }] }),
+            ],
+        };
+    }
+
+    check('the sentinel parent is the root and the current leaf is the path shown', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(conv.root, ClaudeFormat.SENTINEL);
+        eq(ChatTree.activePath(conv), ['h1', 'a1', 'h2', 'a2r']);
+        eq(conv.site, 'claude');
+        eq(conv.url, 'https://claude.ai/chat/conv-uuid');
+    });
+    check('an edit and a retry are siblings, numbered by when each was written', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(ChatTree.siblingIndex(conv, 'a2r'), { index: 2, count: 2 });
+        eq(ChatTree.siblingIndex(conv, 'h2b'), { index: 2, count: 2 });
+        eq(ChatTree.forks(conv).sort(), ['a1', 'h2']);
+    });
+    check('with no current leaf yet, the newest message is the leaf', () => {
+        const raw = claudeRaw();
+        delete raw.current_leaf_message_uuid;
+        eq(ChatTree.activePath(ClaudeFormat.normalize(raw)), ['h1', 'a1', 'h2b']);
+    });
+    check('thinking stays out of the text, citations become footnotes, pasted text is kept', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw({ leaf: 'a2' }));
+        eq(conv.nodes.a1.text, 'It is the linker.');
+        eq(conv.nodes.a1.blocks[0], { kind: 'thinking', text: 'Let me look.' });
+        eq(conv.nodes.a2.text, 'Link the math library.[^1]');
+        eq(conv.nodes.a2.blocks[0].text, 'Searched the web: "ld undefined symbol"');
+        eq(conv.nodes.a2.cites, [{ n: 1, title: 'ld manual', url: 'https://example.com/ld' }]);
+        eq(conv.nodes.h2.blocks[1], { kind: 'attachment', name: 'paste.txt', text: 'ld: undefined symbol' });
+        eq(conv.nodes.h2b.text, 'An edited question\n\n[file: screenshot.png]');
+        eq(conv.nodes.h1.text, 'Old style prompt', 'a message with only text did not read');
+        eq(conv.nodes.a1.model, 'claude-sonnet-4');
+    });
+    check('a list row reads as the library wants it', () => {
+        eq(ClaudeFormat.listItem({ uuid: 'u', name: '', updated_at: '2025-11-13T10:00:00Z' }),
+            { id: 'u', title: 'Untitled chat', updatedAt: Date.parse('2025-11-13T10:00:00Z') });
+    });
+
     // ------------------------------------------------- reading chatgpt.com
 
     console.log('\n# reading chatgpt.com');
