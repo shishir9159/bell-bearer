@@ -6397,6 +6397,69 @@ const dayRecord = (at = T0) =>
             { id: 'u', title: 'Untitled chat', updatedAt: Date.parse('2025-11-13T10:00:00Z') });
     });
 
+    // ------------------------------------------------ replaying artifacts
+
+    console.log('\n# replaying claude artifacts');
+
+    /** A chat that builds a component over four answers, and makes a second document too. */
+    function artifactChat() {
+        const tool = (input) => ({ type: 'tool_use', name: 'artifacts', input });
+        const said = (t) => ({ type: 'text', text: t });
+        const m = (uuid, parent, sender, at, content) => ({
+            uuid, parent_message_uuid: parent, sender, created_at: `2025-11-13T10:00:${String(at).padStart(2, '0')}Z`, content,
+        });
+        const code = 'function add(a, b) {\n  return a + b;\n}\n```not a fence end```';
+        return ClaudeFormat.normalize({
+            uuid: 'c', name: 'Adder', current_leaf_message_uuid: 'a4',
+            chat_messages: [
+                m('h1', ClaudeFormat.SENTINEL, 'human', 1, [said('Write add')]),
+                m('a1', 'h1', 'assistant', 2, [said('Here:'), tool({ command: 'create', id: 'add', title: 'add.js', type: 'application/vnd.ant.code', language: 'javascript', content: code })]),
+                m('h2', 'a1', 'human', 3, [said('Rename a')]),
+                m('a2', 'h2', 'assistant', 4, [tool({ command: 'update', id: 'add', old_str: 'a, b', new_str: 'x, b' }),
+                    tool({ command: 'create', id: 'notes', title: 'Notes', type: 'text/markdown', content: '# Notes' })]),
+                m('h3', 'a2', 'human', 5, [said('Start over')]),
+                m('a3', 'h3', 'assistant', 6, [tool({ command: 'rewrite', id: 'add', content: 'const add = (x, y) => x + y;' })]),
+                m('h4', 'a3', 'human', 7, [said('Rename x')]),
+                m('a4', 'h4', 'assistant', 8, [tool({ command: 'update', id: 'add', old_str: '(x, y) => x', new_str: '(p, y) => p' }),
+                    tool({ command: 'update', id: 'notes', old_str: 'nowhere', new_str: 'x' })]),
+                // An abandoned branch that rewrote it into something else.
+                m('a4x', 'h4', 'assistant', 9, [tool({ command: 'rewrite', id: 'add', content: 'BRANCH' })]),
+            ],
+        });
+    }
+
+    check('create, update, rewrite and update replay to the final text', () => {
+        const [add, notes] = ChatExport.artifacts(artifactChat());
+        eq(add.content, 'const add = (p, y) => p + y;');
+        eq([add.title, add.language, add.lastTurn, add.stale], ['add.js', 'javascript', 'a4', false]);
+        eq([notes.language, notes.content], ['markdown', '# Notes'], 'a second document crossed with the first');
+    });
+    check('an update whose passage is missing marks the document stale and changes nothing', () => {
+        const notes = ChatExport.artifacts(artifactChat())[1];
+        eq([notes.stale, notes.content], [true, '# Notes']);
+    });
+    check('an artifact is exported once, in full, after the turn that last touched it', () => {
+        const md = ChatExport.markdown(artifactChat(), { now: 0 });
+        eq((md.match(/### add\.js/g) || []).length, 1);
+        assert(md.indexOf('### add.js') > md.indexOf('Rename x'), 'printed before its last edit');
+        assert(md.includes('*(wrote "add.js" — final version below)*') && md.includes('*(updated "add.js" — final version below)*'));
+        assert(md.includes('```javascript\nconst add = (p, y) => p + y;\n```'), 'the final text is not what was printed');
+        assert(!md.includes('BRANCH'), 'an abandoned branch reached the export');
+        assert(md.includes('may be out of date'), 'a stale document was not said to be one');
+        eq(ChatExport.json(artifactChat()).artifacts.map((a) => a.id), ['add', 'notes']);
+    });
+    check('a fence inside an artifact never closes the export’s fence around it', () => {
+        const chat = artifactChat();
+        chat.current = 'a1';
+        const md = ChatExport.markdown(chat);
+        assert(md.includes('````javascript\nfunction add(a, b)'), md);
+    });
+    check('pasted text rides along under the prompt, folded', () => {
+        const md = ChatExport.markdown(ClaudeFormat.normalize(claudeRaw()), { now: 0 });
+        assert(md.includes('<details><summary>paste.txt</summary>\n\n```\nld: undefined symbol\n```\n\n</details>'), md);
+        assert(md.includes('## Claude'), 'the other side is not named Claude');
+    });
+
     // ------------------------------------------------- reading chatgpt.com
 
     console.log('\n# reading chatgpt.com');

@@ -85,8 +85,71 @@
     /** Front matter values as YAML double-quoted strings, which JSON strings are. */
     const yaml = (value) => JSON.stringify(String(value || ''));
 
-    /** One turn's Markdown from its blocks — or its text, for a node that has none. */
-    function turnMarkdown(turn, { thinking }) {
+    // ----------------------------------------------------------- artifacts
+
+    /** A document's type as the language its fence is labelled with. */
+    const ARTIFACT_LANGS = Object.freeze({
+        'text/markdown': 'markdown',
+        'text/html': 'html',
+        'application/vnd.ant.react': 'jsx',
+        'image/svg+xml': 'svg',
+        'application/vnd.ant.mermaid': 'mermaid',
+    });
+
+    /**
+     * The documents a chat wrote and rewrote — Claude's artifacts — replayed
+     * along `path` into each one's final text, in the order they were made.
+     *
+     * An artifact is not a message; it is a document the messages edit.
+     * `create` and `rewrite` set its text, `update` swaps one passage for
+     * another. An update whose passage is not there marks the document
+     * *stale* and changes nothing, rather than guessing where the edit went.
+     * An artifact edited only on a branch the page is not showing is not
+     * replayed at all: it is not part of the chat being exported.
+     */
+    function artifacts(conv, path = ChatTree.activePath(conv)) {
+        const byId = new Map();
+        for (const turnId of path) {
+            for (const block of conv.nodes[turnId].blocks) {
+                if (block.kind !== 'artifact' || !block.id) continue;
+                let doc = byId.get(block.id);
+                if (!doc) {
+                    doc = { id: block.id, title: '', type: '', language: '', content: '', stale: false, lastTurn: turnId, turns: [] };
+                    byId.set(block.id, doc);
+                }
+                if (block.title) doc.title = block.title;
+                if (block.type) doc.type = block.type;
+                if (block.language) doc.language = block.language;
+                if (block.command === 'update') {
+                    const at = block.old ? doc.content.indexOf(block.old) : -1;
+                    if (at < 0) doc.stale = true;
+                    else doc.content = doc.content.slice(0, at) + block.new + doc.content.slice(at + block.old.length);
+                } else {
+                    doc.content = block.content;
+                }
+                doc.lastTurn = turnId;
+                if (!doc.turns.includes(turnId)) doc.turns.push(turnId);
+            }
+        }
+        return [...byId.values()].map((doc) => ({
+            ...doc,
+            title: doc.title || 'Untitled artifact',
+            language: ARTIFACT_LANGS[doc.type] || doc.language || '',
+        }));
+    }
+
+    /** A document in full: its title, and its text in a fence long enough to hold it. */
+    const artifactMarkdown = (doc) => `### ${doc.title}\n\n${ChatTree.fence(doc.content, doc.language)}${
+        doc.stale ? '\n\n*(an edit to this could not be applied, so it may be out of date)*' : ''}`;
+
+    /**
+     * One turn's Markdown from its blocks — or its text, for a node that has
+     * none. `docs` is the chat's replayed artifacts: each is printed in full
+     * once, after the turn that last touched it, and every earlier touch is a
+     * line pointing at that — so the file reads top to bottom without the
+     * same three-hundred-line component printed five times.
+     */
+    function turnMarkdown(turn, { thinking, docs = [] }) {
         if (!turn.blocks.length) return turn.text;
         const parts = [];
         const recap = turn.blocks.filter((b) => b.kind === 'thinking' && b.recap).map((b) => b.text)[0] || 'Thinking';
@@ -98,11 +161,22 @@
             else if (block.kind === 'output') parts.push(ChatTree.fence(block.text, 'output'));
             else if (block.kind === 'image') parts.push('[image]');
             else if (block.kind === 'tool') parts.push(`*${block.text}*`);
+            else if (block.kind === 'file') parts.push(`[file: ${block.name}]`);
+            else if (block.kind === 'attachment') {
+                // Pasted text is part of what the answer was answering — in a
+                // debugging chat, usually the log — so it is kept, folded.
+                parts.push(`<details><summary>${block.name}</summary>\n\n${ChatTree.fence(block.text)}\n\n</details>`);
+            } else if (block.kind === 'artifact') {
+                const doc = docs.find((one) => one.id === block.id);
+                const said = doc && doc.lastTurn !== turn.id ? `*(${block.command === 'create' ? 'wrote' : 'updated'} "${doc.title}" — final version below)*` : '';
+                if (said && !parts.includes(said)) parts.push(said);
+            }
             else if (block.kind === 'thinking' && thinking && thoughts && !thought) {
                 thought = true;
                 parts.push(`<details><summary>${recap}</summary>\n\n${thoughts}\n\n</details>`);
             }
         }
+        for (const doc of docs) if (doc.lastTurn === turn.id) parts.push(artifactMarkdown(doc));
         return parts.filter(Boolean).join('\n\n');
     }
 
@@ -114,12 +188,13 @@
         const site = ChatSites.get(conv.site);
         const speaker = site ? site.speaker : 'Assistant';
         const models = [...new Set(path.map((id) => conv.nodes[id].model).filter(Boolean))];
+        const docs = artifacts(conv, path);
         const notes = [];
         const byUrl = new Map();
 
         const body = path.map((id) => {
             const turn = conv.nodes[id];
-            let text = turnMarkdown(turn, { thinking });
+            let text = turnMarkdown(turn, { thinking, docs });
             // The turn numbers its own footnotes from 1; the file numbers them
             // once, and a source cited twice is one footnote.
             if (turn.cites.length) {
@@ -171,6 +246,8 @@
             createdAt: conv.createdAt, updatedAt: conv.updatedAt,
             root: conv.root, current: conv.current, path, branches, nodes,
         };
+        const docs = artifacts(conv, path);
+        if (docs.length) out.artifacts = docs.map(({ id, title, type, language, content, stale }) => ({ id, title, type, language, content, stale }));
         if (raw) out.raw = raw;
         return out;
     }
@@ -192,7 +269,7 @@
         return `${stem || day}${suffix}`;
     }
 
-    const ChatExport = { TYPE, VERSION, segments, toDollars, markdown, json, fileName, fence: ChatTree.fence };
+    const ChatExport = { TYPE, VERSION, segments, toDollars, markdown, json, fileName, artifacts, fence: ChatTree.fence };
 
     root.BB = root.BB || {};
     root.BB.ChatExport = ChatExport;
