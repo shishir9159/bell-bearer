@@ -164,6 +164,56 @@
     const sendButton = () => find('send', document, { visible: true });
     const stopButton = () => find('stop', document, { visible: true });
 
+    // --------------------------------------------------------- the bridge
+
+    /**
+     * What src/content/claude-page.js has heard on the page's own fetch.
+     * Until it has said anything the DOM is all there is — the bridge may not
+     * be loaded, or the page may have taken its own `fetch` before it was.
+     */
+    const bridge = { heard: false, streaming: false, endedAt: 0, limit: null };
+    const detailOf = (event) => { try { return JSON.parse(event.detail) || {}; } catch (_) { return {}; } };
+    if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener('bb:claude:stream', (event) => {
+            const detail = detailOf(event);
+            bridge.heard = true;
+            bridge.streaming = detail.phase === 'start';
+            if (detail.phase === 'end') bridge.endedAt = Date.now();
+        });
+        document.addEventListener('bb:claude:limit', (event) => { bridge.limit = detailOf(event); });
+    }
+
+    /**
+     * The bridge first. Just after it heard an answer end, it outweighs a
+     * stop button the page has not taken down yet — that lag is what it is
+     * for, in a background tab. Otherwise, the stop button and the page's
+     * own streaming flag.
+     */
+    function isStreaming(now = Date.now()) {
+        if (bridge.streaming) return true;
+        if (bridge.heard && now - bridge.endedAt < 3000) return false;
+        return !!stopButton() || !!find('streaming');
+    }
+
+    /**
+     * The limit the stream reported, in the shape ChatSites.readLimit gives a
+     * notice — and exact, where a notice is a time of day to be parsed. Null
+     * within the limit, and once a reported reset has passed.
+     */
+    function streamLimit(now = Date.now()) {
+        const limit = bridge.limit;
+        if (!limit || !/exceeded|approaching/.test(limit.type || '')) return null;
+        if (limit.resetsAt && limit.resetsAt <= now) return null;
+        return {
+            model: '',
+            until: limit.resetsAt || null,
+            blocked: /exceeded/.test(limit.type),
+            approaching: /approaching/.test(limit.type),
+            remaining: limit.remaining,
+            window: '',
+        };
+    }
+
     function composerBox() {
         const box = composer();
         return box ? (box.closest('fieldset') || box.closest('form') || box.parentElement) : null;
@@ -269,7 +319,9 @@
         composer,
         sendButton,
         stopButton,
-        isStreaming: () => !!stopButton() || !!find('streaming'),
+        isStreaming: () => isStreaming(),
+        /** The exact limit off the completion stream, when the bridge has one. */
+        limit: () => streamLimit(),
         headerSlot,
         headerBottom,
         threadRight,
@@ -280,7 +332,7 @@
         chatUrl: (id, options) => SITE.chatUrl(id, options),
     });
 
-    const ClaudeRead = { SELECTORS, find, findAll, fingerprint, matchTurn, readCount, onChatPage, createApi, adapter };
+    const ClaudeRead = { SELECTORS, find, findAll, fingerprint, matchTurn, readCount, onChatPage, createApi, adapter, bridge, isStreaming, streamLimit };
 
     root.BB = root.BB || {};
     root.BB.ClaudeRead = ClaudeRead;

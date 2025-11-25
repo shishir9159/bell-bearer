@@ -135,6 +135,16 @@
         "src/content/leet-page.js"
       ],
       "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://claude.ai/*"
+      ],
+      "js": [
+        "src/content/claude-page.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "commands": {

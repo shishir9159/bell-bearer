@@ -6510,6 +6510,70 @@ const dayRecord = (at = T0) =>
         eq(ChatTree.activePath(conv), ['h1', 'a1', 'h2', 'a2r']);
     });
 
+    // ------------------------------------------------ claude's page bridge
+
+    console.log('\n# the claude page bridge');
+
+    /**
+     * claude-page.js run against a fetch that answers `response`, with a
+     * document that records what it says. Node has Response, streams and
+     * CustomEvent of its own, which is all the bridge touches.
+     */
+    async function throughBridge(response, url) {
+        const saved = { window: global.window, document: global.document };
+        const heard = [];
+        global.document = new EventTarget();
+        for (const name of ['bb:claude:stream', 'bb:claude:limit']) {
+            document.addEventListener(name, (event) => heard.push([name.slice(10), JSON.parse(event.detail)]));
+        }
+        global.window = { fetch: async () => response };
+        try {
+            delete require.cache[require.resolve('../src/content/claude-page.js')];
+            require('../src/content/claude-page.js');
+            const answer = await window.fetch(url, { method: 'POST' });
+            const pageRead = answer.ok ? await answer.text() : '';
+            for (let i = 0; i < 50 && !heard.some(([, d]) => d.phase === 'end'); i++) await new Promise((done) => setTimeout(done, 5));
+            return { heard, pageRead };
+        } finally {
+            global.window = saved.window;
+            global.document = saved.document;
+        }
+    }
+
+    const completion = '/api/organizations/o/chat_conversations/9a978684-1ba6-4d23-af91-b09ad7ae3f9c/completion';
+    const sse = (...events) => events.map((body) => `event: ${body.type}\r\ndata: ${JSON.stringify(body)}\r\n\r\n`).join('');
+
+    await checkAsync('the bridge reports the start, the exact limit and the end, and the page still reads it all', async () => {
+        const body = sse({ type: 'message_start' },
+            { type: 'message_limit', message_limit: { type: 'approaching_limit', resetsAt: 1763000000, remaining: 2 } },
+            { type: 'content_block_delta', delta: { text: 'hi' } }, { type: 'message_stop' });
+        const { heard, pageRead } = await throughBridge(new Response(body), completion);
+        eq(heard, [
+            ['stream', { phase: 'start', conv: '9a978684-1ba6-4d23-af91-b09ad7ae3f9c' }],
+            ['limit', { type: 'approaching_limit', resetsAt: 1763000000000, remaining: 2 }],
+            ['stream', { phase: 'end', conv: '9a978684-1ba6-4d23-af91-b09ad7ae3f9c' }],
+        ]);
+        eq(pageRead, body, 'the page did not get its whole stream');
+    });
+    await checkAsync('a 429 says which limit and when it resets, and ends the answer', async () => {
+        const error = { type: 'error', error: { type: 'rate_limit_error', message: JSON.stringify({ type: 'exceeded_limit', resetsAt: 1763003600 }) } };
+        const { heard } = await throughBridge(new Response(JSON.stringify(error), { status: 429 }), completion);
+        eq(heard.slice(1), [
+            ['limit', { type: 'exceeded_limit', resetsAt: 1763003600000, remaining: null }],
+            ['stream', { phase: 'end', conv: '9a978684-1ba6-4d23-af91-b09ad7ae3f9c', error: 429 }],
+        ]);
+    });
+    await checkAsync('any other request goes by untouched and unreported', async () => {
+        const { heard } = await throughBridge(new Response('{}'), '/api/organizations/o/chat_conversations?limit=5');
+        eq(heard, []);
+    });
+    check('the bridge runs in the page’s world on claude.ai alone, before the page takes its fetch', () => {
+        const entry = JSON.parse(readRepo('manifest.json')).content_scripts.find((one) => one.js.includes('src/content/claude-page.js'));
+        eq([entry.world, entry.run_at, entry.matches], ['MAIN', 'document_start', ['*://claude.ai/*']]);
+        const source = readRepo('src/content/claude-page.js');
+        assert(!/chrome\./.test(source.replace(/\/\*[\s\S]*?\*\//g, '')), 'a MAIN-world script cannot use chrome.*');
+    });
+
     // ------------------------------------------------- reading chatgpt.com
 
     console.log('\n# reading chatgpt.com');
