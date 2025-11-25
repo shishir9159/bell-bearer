@@ -5282,6 +5282,11 @@ const dayRecord = (at = T0) =>
     check('a chat site is wired through its adapter, and shift+p opens its panel', () => {
         const main = readRepo('src/content/main.js');
         assert(/CHAT_ADAPTERS = \{ chatgpt: /.test(main), 'chatgpt has no adapter in main.js');
+        assert(/claude: \(\) => ClaudeRead\.adapter/.test(main), 'claude has no adapter in main.js');
+        assert(/ChatgptRead, ClaudeRead \} = BB;/.test(main), 'main.js does not take ClaudeRead off BB');
+        const js = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+        assert(js.indexOf('src/content/claude-read.js') > -1 && js.indexOf('src/content/claude-read.js') < js.indexOf('src/content/main.js'),
+            'main.js would get undefined for ClaudeRead at load');
         assert(/return youtubeUi \|\| twitterUi \|\| leetUi \|\| chatUi;/.test(main), 'Shift+P would not reach the chat panel');
     });
 

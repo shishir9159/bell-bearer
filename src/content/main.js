@@ -32,7 +32,7 @@
         PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
         CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
         Keybindings, SkimContent, LinkHints, TimeLimitContent, TwitterUi, TwitterAds,
-        RosterContent, LeetUi, TyperUi, Reader, ChatUi, ChatSites, ChatgptRead } = BB;
+        RosterContent, LeetUi, TyperUi, Reader, ChatUi, ChatSites, ChatgptRead, ClaudeRead } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -363,7 +363,7 @@
      * The chat core never names a site, so a second chat site is one line
      * here and one entry in src/shared/chat-sites.js.
      */
-    const CHAT_ADAPTERS = { chatgpt: () => ChatgptRead.adapter };
+    const CHAT_ADAPTERS = { chatgpt: () => ChatgptRead.adapter, claude: () => ClaudeRead.adapter };
 
     if (ChatSites.get(site) && CHAT_ADAPTERS[site]) {
         const watcher = DomWatch.createWatcher();
