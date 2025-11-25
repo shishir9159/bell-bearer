@@ -6460,6 +6460,56 @@ const dayRecord = (at = T0) =>
         assert(md.includes('## Claude'), 'the other side is not named Claude');
     });
 
+    // ------------------------------------------------------ reading claude.ai
+
+    console.log('\n# reading claude.ai');
+
+    const ClaudeRead = require('../src/content/claude-read.js');
+
+    check('a row is its place on the path shown, when its words say so', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(ClaudeRead.matchTurn(conv, 1, 'Thought for 3s It is the linker.'), ['a1']);
+        eq(ClaudeRead.matchTurn(conv, 3, 'Add -lm to the link line. Copy Retry'), ['a2r']);
+    });
+    check('a row whose words disagree is no turn at all — never the likely one', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(ClaudeRead.matchTurn(conv, 1, 'Something else entirely'), []);
+        eq(ClaudeRead.matchTurn(conv, 9, 'It is the linker.'), [], 'past the end of the path');
+    });
+    check('a row showing a sibling — the page’s own arrows were used — is that sibling', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(ClaudeRead.matchTurn(conv, 3, 'Link the math library. 1'), ['a2']);
+        eq(ClaudeRead.matchTurn(conv, 2, 'An edited question'), ['h2b']);
+    });
+    check('nothing is drawn under /code, or anywhere that is not a chat', () => {
+        assert(ClaudeRead.onChatPage('/new') && ClaudeRead.onChatPage('/chat/9a978684-1ba6-4d23-af91-b09ad7ae3f9c'));
+        for (const path of ['/code', '/code/session_1', '/settings/profile', '/recents', '/projects', '/artifacts']) {
+            assert(!ClaudeRead.onChatPage(path), `${path} is not a chat`);
+        }
+    });
+
+    await checkAsync('the organisation comes from the page’s cookie, or the first that can chat', async () => {
+        const calls = [];
+        const answer = (body) => ({ ok: true, status: 200, json: async () => body });
+        const impl = async (url) => {
+            calls.push(url);
+            if (url === '/api/organizations') return answer([{ uuid: 'api-only', capabilities: ['api'] }, { uuid: 'org-2', capabilities: ['chat'] }]);
+            return answer([{ uuid: 'k1', name: 'First', updated_at: '2025-11-13T10:00:00Z' }]);
+        };
+        const fromCookie = ClaudeRead.createApi(impl, () => 'a=1; lastActiveOrg=org-1; b=2');
+        eq((await fromCookie.listConversations({ limit: 1 })).total, 2, 'a full page should admit there may be more');
+        eq(calls, ['/api/organizations/org-1/chat_conversations?limit=1&offset=0']);
+        calls.length = 0;
+        const fromApi = ClaudeRead.createApi(impl, () => '');
+        eq((await fromApi.listConversations({ limit: 5 })).items, [{ id: 'k1', title: 'First', updatedAt: Date.parse('2025-11-13T10:00:00Z') }]);
+        eq(calls[1], '/api/organizations/org-2/chat_conversations?limit=5&offset=0');
+    });
+    await checkAsync('a conversation arrives already in the tree shape', async () => {
+        const impl = async () => ({ ok: true, status: 200, json: async () => claudeRaw() });
+        const conv = await ClaudeRead.createApi(impl, () => 'lastActiveOrg=o').fetchConversation('conv-uuid');
+        eq(ChatTree.activePath(conv), ['h1', 'a1', 'h2', 'a2r']);
+    });
+
     // ------------------------------------------------- reading chatgpt.com
 
     console.log('\n# reading chatgpt.com');
