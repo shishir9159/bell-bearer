@@ -6214,6 +6214,18 @@ const dayRecord = (at = T0) =>
         const dashboard = readRepo('dashboard.js');
         assert(dashboard.indexOf('ChatSettings.mountAll') < dashboard.indexOf('SettingsForm.bindAll'), 'the controls are drawn after the form is bound');
     });
+    check('claude has its card, a panel behind every tab, and its settings', () => {
+        const SiteIcons = require('../src/shared/site-icons.js');
+        eq([SiteIcons.get('claude').name, SiteIcons.get('claude').color], ['Claude', 'currentColor']);
+        assert(SiteIcons.list().some((site) => site.id === 'claude'), 'not in ORDER');
+        const html = readRepo('dashboard.html');
+        const tabs = /claude: \[([\s\S]*?)\],/.exec(readRepo('dashboard.js'))[1];
+        eq([...tabs.matchAll(/panel: '([^']+)'/g)].map((m) => m[1]), ['claudePinsPanel', 'claudePromptsPanel', 'claudeQueuePanel']);
+        for (const id of ['claudePinsPanel', 'claudePromptsPanel', 'claudeQueuePanel']) assert(html.includes(`id="${id}"`), `${id} is not in the page`);
+        assert(html.includes('data-chat-settings="claude"'), 'no settings panel for the card to open');
+        const panel = globalThis.BB.ChatSettings.panelHtml(ChatSites.get('claude'));
+        for (const key of ChatSites.allKeys().filter((one) => one.startsWith('claude'))) assert(panel.includes(`id="${key}"`), `${key} has no control`);
+    });
     check('a pin opens its chat with the turn named in the address', () => {
         require('../src/page/chat-views.js');
         eq(globalThis.BB.ChatViews.pinUrl({ site: 'chatgpt', conv: 'abc12345', node: 'n/1', url: '' }),

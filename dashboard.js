@@ -70,6 +70,12 @@
             { id: 'prompts', label: 'Prompts', panel: 'chatgptPromptsPanel' },
             { id: 'queue', label: 'Queue', panel: 'chatgptQueuePanel' },
         ],
+        claude: [
+            { id: 'pins', label: 'Pins', panel: 'claudePinsPanel' },
+            // The one shared list of prompts, shown under each chat site.
+            { id: 'prompts', label: 'Prompts', panel: 'claudePromptsPanel' },
+            { id: 'queue', label: 'Queue', panel: 'claudeQueuePanel' },
+        ],
     };
 
     /**

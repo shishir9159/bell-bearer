@@ -86,6 +86,17 @@
             viewBox: '0 0 24 24',
             path: 'M4.5 3h15A2.5 2.5 0 0 1 22 5.5v10a2.5 2.5 0 0 1-2.5 2.5H10l-4.6 3.7A.9.9 0 0 1 4 21v-3h.5A2.5 2.5 0 0 1 2 15.5v-10A2.5 2.5 0 0 1 4.5 3zm3 6.25a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5zm4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5zm4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5z',
         },
+        claude: {
+            id: 'claude',
+            name: 'Claude',
+            description: 'The same chat panel as ChatGPT — outline, branches, pins, prompts, a queue — and artifacts in exports',
+            // A plain bubble with lines of text in it rather than Anthropic's
+            // mark — and different enough from ChatGPT's dotted one to tell
+            // the two cards apart at a glance.
+            color: 'currentColor',
+            viewBox: '0 0 24 24',
+            path: 'M4.5 3h15A2.5 2.5 0 0 1 22 5.5v10a2.5 2.5 0 0 1-2.5 2.5H10l-4.6 3.7A.9.9 0 0 1 4 21v-3h.5A2.5 2.5 0 0 1 2 15.5v-10A2.5 2.5 0 0 1 4.5 3zM6.5 7.4v1.8h11V7.4zm0 4v1.8h7.5v-1.8z',
+        },
         reddit: {
             id: 'reddit',
             name: 'Reddit',
@@ -96,7 +107,7 @@
         },
     };
 
-    const ORDER = ['youtube', 'chess', 'lichess', 'twitter', 'reddit', 'leetcode', 'typeracer', 'chatgpt'];
+    const ORDER = ['youtube', 'chess', 'lichess', 'twitter', 'reddit', 'leetcode', 'typeracer', 'chatgpt', 'claude'];
 
     /**
      * The sites in the order they are shown: the user's own, dragged into
