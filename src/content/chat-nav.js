@@ -229,6 +229,11 @@
     async function switchTo(adapter, conv, target, { wait = settle } = {}) {
         const path = ChatTree.pathTo(conv, target);
         if (!path.length) return { ok: false, reason: 'That turn is not in this conversation.' };
+        // Turns are told apart against the target's own path, not the one
+        // the tree last said was shown: halfway through a switch the page is
+        // on neither. A site that ties a row to the tree by its place on the
+        // path (claude.ai) would otherwise be looking at the wrong path.
+        const view = showing(conv, target);
 
         for (const id of path) {
             const turn = ChatTree.node(conv, id);
@@ -246,7 +251,7 @@
             }
 
             const find = () => {
-                const element = mountedAny(adapter, conv, parent.children);
+                const element = mountedAny(adapter, view, parent.children);
                 if (element && adapter.revealSiblingNav) adapter.revealSiblingNav(element);
                 return element && adapter.siblingNav(element);
             };
