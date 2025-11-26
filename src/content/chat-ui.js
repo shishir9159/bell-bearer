@@ -644,14 +644,50 @@
          * a smaller model. Never done — notices come and go.
          */
         function watchLimit() {
-            const text = adapter.limitNotice();
-            const read = text ? ChatSites.readLimit(adapter.site, text) : null;
-            const was = limit && `${limit.until}/${limit.blocked}`;
-            limit = read ? { ...read, text } : null;
-            if (limit && limit.blocked) holdForLimit(limit);
-            if (was !== (limit && `${limit.until}/${limit.blocked}`)) drawStrip();
+            // A site that reports its limit exactly — Claude's completion
+            // stream carries the reset as an epoch — wins over the banner,
+            // whose time of day is parsed; the banner is the fallback.
+            const exact = adapter.limit ? adapter.limit() : null;
+            const text = exact ? '' : adapter.limitNotice();
+            const read = exact || (text ? ChatSites.readLimit(adapter.site, text) : null);
+            const was = limit && `${limit.until}/${limit.blocked}/${limit.approaching}`;
+            limit = read ? { ...read, text, window: read.window || (limit && limit.until === read.until ? limit.window : '') } : null;
+            if (limit && limit.blocked) {
+                holdForLimit(limit);
+                nameWindow(limit);
+            }
+            if (was !== (limit && `${limit.until}/${limit.blocked}/${limit.approaching}`)) drawStrip();
             drawChip();
             return false;
+        }
+
+        /**
+         * Which allowance ran out, when the site has more than one and the
+         * notice did not say: the five-hour session and the week are very
+         * different waits, and holding a queue until Monday is something to
+         * be told plainly. Asked of the site once per reset time.
+         */
+        let namedFor = 0;
+        async function nameWindow(read) {
+            if (read.window || !adapter.usage || !read.until || namedFor === read.until) return;
+            namedFor = read.until;
+            const usage = await adapter.usage().catch(() => null);
+            if (!usage || !limit || limit.until !== read.until) return;
+            const closest = Object.entries(usage).filter(([, w]) => w && w.resetsAt)
+                .sort(([, a], [, b]) => Math.abs(a.resetsAt - read.until) - Math.abs(b.resetsAt - read.until))[0];
+            if (closest) {
+                limit.window = closest[0];
+                drawChip();
+            }
+        }
+
+        /** "your 5-hour session resets at 5:00 PM", "your weekly limit resets Monday at 9:00 AM". */
+        function windowText(read) {
+            if (!read.until) return 'the site did not say when it resets';
+            const day = new Date(read.until).toLocaleDateString([], { weekday: 'long' });
+            if (read.window === 'weekly') return `your weekly limit resets ${day} at ${clock(read.until)}`;
+            if (read.window === 'session') return `your 5-hour session resets at ${clock(read.until)}`;
+            return `it resets at ${clock(read.until)}`;
         }
 
         /**
@@ -677,12 +713,21 @@
                 return;
             }
             const name = (ChatSites.get(adapter.site) || {}).name || 'The site';
-            const html = held
-                ? `<span>${Dom.escapeHtml(name)} says a limit has been reached — your queue is held${limit.until ? ` until ${Dom.escapeHtml(clock(limit.until))}` : ' for now'}.</span>`
-                : `<span>${Dom.escapeHtml(limit.model || 'The better model')} is back after ${Dom.escapeHtml(clock(limit.until))}</span>
+            const dismiss = '<button type="button" class="bb-chat-limit-x" data-bb-limit="dismiss" aria-label="Dismiss">×</button>';
+            let html;
+            if (held) {
+                html = `<span>${Dom.escapeHtml(name)} says a limit has been reached — ${Dom.escapeHtml(windowText(limit))}, and your queue waits until then.</span>`;
+            } else if (limit.approaching) {
+                // Nearly out: nothing is falling back yet, so the offer is
+                // only to keep what is queued for after the reset.
+                const left = Number.isFinite(limit.remaining) ? `${limit.remaining} message${limit.remaining === 1 ? '' : 's'} left` : 'Nearly at the limit';
+                html = `<span>${Dom.escapeHtml(left)} until ${Dom.escapeHtml(clock(limit.until))}</span>
+                   <button type="button" data-bb-limit="hold">Hold the rest of my queue until then</button>${dismiss}`;
+            } else {
+                html = `<span>${Dom.escapeHtml(limit.model || 'The better model')} is back after ${Dom.escapeHtml(clock(limit.until))}</span>
                    <button type="button" data-bb-limit="hold">Hold my queue until then</button>
-                   <button type="button" data-bb-limit="later">Queue this for then</button>
-                   <button type="button" class="bb-chat-limit-x" data-bb-limit="dismiss" aria-label="Dismiss">×</button>`;
+                   <button type="button" data-bb-limit="later">Queue this for then</button>${dismiss}`;
+            }
             if (!chip) {
                 chip = document.createElement('div');
                 chip.id = CHIP_ID;

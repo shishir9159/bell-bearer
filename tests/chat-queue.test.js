@@ -284,7 +284,7 @@
 
                 notice.textContent = 'You\u2019ve reached our limit of messages per hour. Please try again in 30 minutes.';
                 ui.limitNow();
-                assert(/held/.test(document.getElementById('bb-chat-limit').textContent), 'a blocking notice was only offered');
+                assert(/queue waits/.test(document.getElementById('bb-chat-limit').textContent), 'a blocking notice was only offered');
                 await waitFor(() => queue().holds.chatgpt.until < reset.getTime(), 'the queue held for the half hour');
             } finally { restore(); }
             assert(!document.getElementById('bb-chat-limit'), 'the chip outlived its page');

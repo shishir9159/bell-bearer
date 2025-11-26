@@ -298,6 +298,15 @@
                 // No total is given. A full page means there may be more.
                 return { items, total: items.length === limit ? offset + limit + 1 : offset + items.length };
             },
+            /** The five-hour session and the week, each with when it resets — what names a limit's wait. */
+            async usage() {
+                const body = await get('/usage');
+                const window = (w) => {
+                    const resetsAt = w && (typeof w.resets_at === 'number' ? w.resets_at * (w.resets_at < 1e12 ? 1000 : 1) : Date.parse(w.resets_at));
+                    return Number.isFinite(resetsAt) ? { utilization: Number(w.utilization) || 0, resetsAt } : null;
+                };
+                return { session: window(body && body.five_hour), weekly: window(body && body.seven_day) };
+            },
         };
     }
 
@@ -322,6 +331,7 @@
         isStreaming: () => isStreaming(),
         /** The exact limit off the completion stream, when the bridge has one. */
         limit: () => streamLimit(),
+        usage: () => api.usage(),
         headerSlot,
         headerBottom,
         threadRight,

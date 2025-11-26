@@ -169,7 +169,7 @@
                 // would hold the queue too, but it runs on animation frames
                 // and this may be a background tab, which has none.
                 const notice = adapter.limitNotice && adapter.limitNotice();
-                const limit = notice ? ChatSites.readLimit(site, notice, now()) : null;
+                const limit = (adapter.limit && adapter.limit()) || (notice ? ChatSites.readLimit(site, notice, now()) : null);
                 const blocked = !!(limit && limit.blocked);
                 await write((s) => {
                     let out = PromptQueue.patch(s, item.id, { status: 'sent', sentAt: now() });
