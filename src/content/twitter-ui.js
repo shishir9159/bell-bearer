@@ -389,11 +389,23 @@
          * gone for the rest of the session. getElementById is what keeps that
          * cheap: it only finds the row while the row is still in the
          * document, so a rebuild that took it away is also what puts it back.
+         *
+         * Not on a chat page. X keeps the same column there but squeezes it to
+         * a rail of icons, and our row — which carries its word regardless —
+         * spilled out of the rail over the conversation list. It is taken out
+         * rather than restyled: Shift+P still opens the pouch, and the row
+         * comes back on the first pass after you leave the chat. `path` is
+         * the specs' seam; the watcher passes nothing.
          */
-        function injectNavEntry() {
+        function injectNavEntry(path) {
+            const placed = document.getElementById(NAV_ID);
+            if (TwitterPage.isChatPath(path)) {
+                if (placed) placed.remove();
+                return false;
+            }
+            if (placed) return false;
             const nav = TwitterPage.find('nav');
             if (!nav) return false;
-            if (document.getElementById(NAV_ID)) return false;
 
             const entry = document.createElement('div');
             entry.id = NAV_ID;

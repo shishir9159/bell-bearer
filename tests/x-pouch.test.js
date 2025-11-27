@@ -231,6 +231,33 @@
             assert(document.getElementById('bb-x-nav-entry'), 'placed anyway');
             teardown();
         });
+
+        test('a chat page has no row, and leaving it brings the row back', () => {
+            // X squeezes the column to a rail of icons for a chat, and the
+            // row's word spilled out over the conversation list.
+            stage(NAV);
+            const ui = makeUi();
+            ui.injectNavEntry('/home');
+            assert(document.getElementById('bb-x-nav-entry'), 'placed on the timeline');
+
+            ui.injectNavEntry('/i/chat/123-456');
+            assertEqual(document.getElementById('bb-x-nav-entry'), null, 'taken out in the chat');
+            ui.injectNavEntry('/messages');
+            assertEqual(document.getElementById('bb-x-nav-entry'), null, 'and the older inbox');
+
+            ui.injectNavEntry('/explore');
+            assert(document.getElementById('bb-x-nav-entry'), 'back once the chat is left');
+            teardown();
+        });
+
+        test('only the chat routes count as chat', () => {
+            const { isChatPath } = window.BB.TwitterPage;
+            assert(isChatPath('/i/chat'));
+            assert(isChatPath('/messages/123-456'));
+            // A handle that merely starts with the word is somebody's profile.
+            assertEqual(isChatPath('/messagesbot'), false);
+            assertEqual(isChatPath('/i/bookmarks'), false);
+        });
     });
 
     suite('x.com — the pouch button on a post', () => {

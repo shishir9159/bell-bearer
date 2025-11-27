@@ -207,6 +207,18 @@
         return handleFromHref(location.pathname);
     }
 
+    /**
+     * Is this X's chat — the new /i/chat or the older /messages?
+     *
+     * Both fold the left navigation down to a rail of bare icons to make room
+     * for the conversation, and there is no word-sized space left in it for
+     * our row. `path` is a seam for the specs, which cannot move the address
+     * bar of the page they run in.
+     */
+    function isChatPath(path = location.pathname) {
+        return /^\/(?:i\/chat|messages)(?:[/?#]|$)/i.test(String(path || ''));
+    }
+
     /** Read the person whose profile is on screen, or null. */
     function readProfile() {
         const handle = profileHandle();
@@ -225,7 +237,7 @@
 
     const TwitterPage = {
         SELECTORS, find, findAll, closest,
-        avatarUrl, handleFromHref, readPost, readProfile, profileHandle,
+        avatarUrl, handleFromHref, readPost, readProfile, profileHandle, isChatPath,
     };
 
     root.BB = root.BB || {};
