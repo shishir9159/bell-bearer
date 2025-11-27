@@ -90,11 +90,11 @@ while you are typing in a field.
 | `Shift + H` | Skim: search your browsing history |
 | `Shift + A` | Skim: search the actions it can run |
 | `Shift + L` | Label every link and button in view |
-| `Shift + P` | Open the pouch — the sheet on YouTube, the panel on x.com, the sheet on leetcode.com — or the chat panel on chatgpt.com |
-| `Ctrl + Alt + J` / `K` | ChatGPT: jump to the next / previous prompt |
-| `Ctrl + Alt + P` | ChatGPT: pin the message you are reading, or unpin it |
-| `Ctrl + Alt + I` | ChatGPT: insert a prompt template, or save what is in the box as one |
-| `Ctrl + Alt + Q` | ChatGPT: queue what is in the prompt box behind the answer being written |
+| `Shift + P` | Open the pouch — the sheet on YouTube, the panel on x.com, the sheet on leetcode.com — or the chat panel on chatgpt.com and claude.ai |
+| `Ctrl + Alt + J` / `K` | ChatGPT and Claude: jump to the next / previous prompt |
+| `Ctrl + Alt + P` | ChatGPT and Claude: pin the message you are reading, or unpin it |
+| `Ctrl + Alt + I` | ChatGPT and Claude: insert a prompt template, or save what is in the box as one |
+| `Ctrl + Alt + Q` | ChatGPT and Claude: queue what is in the prompt box behind the answer being written |
 | `Ctrl + Alt + T` | LeetCode: offer a code template at the cursor, or save the selection as one |
 | `Ctrl + Alt + M` | LeetCode: start or end a mock interview on this problem |
 | `Ctrl + Alt + C` | TypeRacer: cycle the typing caret — bar, block, underline, outline, or the site's own |
@@ -116,13 +116,13 @@ case but the whole of it: every bare letter there is a letter you meant to type.
 `Shift + P` is off until **Settings › General › Pouch shortcut** turns it on,
 for the same reason Skim and the link hints are: a bare-Shift letter is a large
 claim to make on somebody's keyboard without telling them first. It does nothing
-anywhere but YouTube, x.com, leetcode.com and chatgpt.com, so on every other
-site the key stays a plain capital P. On chatgpt.com that includes the prompt
+anywhere but YouTube, x.com, leetcode.com, chatgpt.com and claude.ai, so on every
+other site the key stays a plain capital P. On the two chat sites that includes the prompt
 box: with the caret in it, `Shift + P` types a P, and the panel is the button in
 the chat's header.
 
-The five ChatGPT keys are `Ctrl + Alt` for the LeetCode keys' reason, and more
-so: ChatGPT's prompt box has the focus nearly all the time. `Keybindings.conflicts`
+The five chat keys are `Ctrl + Alt` for the LeetCode keys' reason, and more
+so: a chat site's prompt box has the focus nearly all the time. `Keybindings.conflicts`
 is checked across every site at once, so C, M, R and T were already taken; and
 `Ctrl + Alt + arrows` rotate the screen on a lot of Windows laptops. On Windows
 `AltGr` is `Ctrl + Alt` as far as a keystroke can tell, and it is how half of
@@ -550,7 +550,7 @@ layout reads, no DOM writes, nothing that can force a reflow. Everything that
 costs anything happens on the shared observer's animation frame or once at the
 end of the race.
 
-## ChatGPT
+## ChatGPT and Claude
 
 What goes wrong in a long ChatGPT session is finding your way around it, not
 getting answers. The conversation is a tree — every edited prompt and every
@@ -606,6 +606,38 @@ memory while the chat is open — never stored. What is stored is yours: pins,
 prompts, the queue, and whether the panel was open. The Prompts and Queue
 buttons beside ChatGPT's own composer buttons are off until **Settings ›
 ChatGPT** turns them on; the hotkeys and the panel reach both either way.
+
+### What differs on Claude
+
+claude.ai gets exactly the same panel, queue, pins, prompts and exports — the
+chat code never names a site, and Claude is a second adapter onto it rather than
+a second copy. What differs is what claude.ai's page is like underneath:
+
+- **Nothing in its markup names a message.** A row of the transcript is tied to
+  the tree by its place on the path shown, and that is confirmed by comparing
+  the row's words with the turn's. When the two disagree the row is no turn at
+  all — a pin mark on the wrong answer is worse than none.
+- **Its thread is virtualised,** so reaching a turn forty prompts up means
+  scrolling to where it should be, letting the page mount it, and looking again.
+  The same code runs on ChatGPT; on Claude it is load-bearing.
+- **Its answer stream is watched.** A small script in the page's own world reads
+  a copy of the completion stream — never the page's own — for the moment the
+  answer ends, which works in a background tab where the page itself runs no
+  animation frames, and for the exact time a limit resets. The queue waits on
+  that, and falls back to the page only when it is silent.
+- **Artifacts are exported as documents.** An artifact is not a message but a
+  document the messages edit. The edits are replayed into its final text, which
+  is printed once, in full, after the turn that last touched it; earlier edits
+  are a line pointing at it. An edit that no longer applies marks it out of date
+  rather than guessing. Pasted text on a prompt is exported folded under it.
+- **Its limits all block,** and there are two of them — the five-hour session
+  and the week. The chip says which one ran out, because they are very different
+  waits. Near the limit, it offers to hold the rest of the queue.
+
+Nothing is drawn under `/code` (Claude Code on the web), on the settings pages or
+on the artifact pages — none of them is a chat. claude.ai's own search matches
+titles only, so a search over what was said is a real gap on Claude; filling it
+is left for later.
 
 ## Daily time limit
 
@@ -807,6 +839,7 @@ src/shared/     pure logic, used by every surface
   chat-sites.js    the chat sites: names, settings keys, how their URLs and limit notices read
   chat-tree.js     a conversation as a tree of turns, whichever site it came from
   chatgpt-format.js ChatGPT's conversation read into that tree
+  claude-format.js claude.ai's conversation read into that tree, artifact edits and all
   chat-diff.js     a word diff of two answers, lines past a cap
   chat-export.js   a chat as Markdown or JSON, and its file name
   chat-pins.js     pinned turns, by site and conversation
@@ -840,6 +873,7 @@ src/content/    injected into every page
   typeracer-read.js every typeracer.com selector, and reading a race off one
   typeracer-ui.js  the keystroke capture, the typing caret, the sounds
   chatgpt-read.js  every chatgpt.com selector and request — the site's adapter
+  claude-read.js   every claude.ai selector and request; rows tied to the tree by place and words
   chat-ui.js       everything on a chat site: the conversation, the toggle, hotkeys
   chat-panel.js    the docked panel's frame and its tabs' markup
   chat-nav.js      reaching a turn in a virtualised thread; switching branch
@@ -857,6 +891,7 @@ src/content/    injected into every page
   MAIN-world entries, loaded per site, with no chrome.* and DOM events only:
   chess-page.js    the board's own state, which the isolated world cannot see
   leet-page.js     watches LeetCode's fetches for verdicts; drives Monaco
+  claude-page.js   reads Claude's completion stream off a clone: its end, and its exact limit
 
 src/background/ the service worker, pulled in by background.js
   proto.js         the sowon wire format
