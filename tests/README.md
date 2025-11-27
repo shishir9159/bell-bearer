@@ -77,6 +77,7 @@ that code, not a replacement — it cannot press a key or play a video.
 | `chat-stage.js` | A chatgpt.com-shaped page for the chat specs: virtualised, with working branch arrows and a composer that streams |
 | `chat.test.js` | The chat panel: outline, reaching unmounted turns, branch switching, compare, export, pins, skins |
 | `chat-queue.test.js` | Typing into a chat composer, the prompt picker, the queue, holding on a limit |
+| `chat-claude.test.js` | The same core on a claude.ai-shaped page: rows tied by place and words, hover-drawn arrows, the stream bridge, exact limits |
 | `chat-only.html` | The chat specs alone; `?suite=queue` narrows it to one suite |
 | `node-check.js` | The Node gate — pure logic only, no DOM, no timers |
 
