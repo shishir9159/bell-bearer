@@ -3247,6 +3247,76 @@ check('a binding turned off is a key the page keeps', () => {
     });
 });
 
+// --------------------------------------------------------- party clock
+
+const PartyClock = require('../src/shared/party-clock.js');
+
+/**
+ * A pong from a room whose clock is `skew` ahead of ours, with the two legs
+ * taking `out` and `back` milliseconds and the far end holding it `hold`.
+ */
+function pongFrom({ c = 1000, skew = 500, out = 50, back = 50, hold = 10 } = {}) {
+    const s = c + out + skew;
+    const s2 = s + hold;
+    return { pong: { c, s, s2 }, t3: s2 - skew + back };
+}
+
+console.log('\n# party clock');
+check('equal legs give the exact offset, and the round trip excludes the hold', () => {
+    const { pong, t3 } = pongFrom();
+    eq(PartyClock.sample(pong, t3), { offset: 500, rtt: 100 });
+});
+check('unequal legs are wrong by half their difference, and no more', () => {
+    const { pong, t3 } = pongFrom({ out: 20, back: 180, hold: 0 });
+    eq(PartyClock.sample(pong, t3), { offset: 420, rtt: 200 });
+});
+check('a round trip the clocks cannot have made is refused', () => {
+    eq(PartyClock.sample({ c: 1000, s: 1500, s2: 1600 }, 1050), null, 'held longer than it was away');
+    eq(PartyClock.sample({ c: 'x', s: 1, s2: 2 }, 3), null);
+    eq(PartyClock.sample({ c: 1000, s: 1600, s2: 1500 }, 1200), null, 'sent before it arrived');
+});
+check('the fastest sample sets the offset, whichever order they came in', () => {
+    const clock = PartyClock.createClock();
+    const slow = pongFrom({ c: 1000, out: 20, back: 180, hold: 0 });
+    const fast = pongFrom({ c: 2000 });
+    clock.add(fast.pong, fast.t3);
+    clock.add(slow.pong, slow.t3);
+    eq(clock.offset(), 500);
+    eq(clock.minRtt(), 100);
+});
+check('a path that stays slow is adopted once the fast sample rolls out', () => {
+    const clock = PartyClock.createClock();
+    const fast = pongFrom({ c: 0 });
+    clock.add(fast.pong, fast.t3);
+    for (let i = 1; i <= PartyClock.WINDOW; i++) {
+        const slow = pongFrom({ c: i * 5000, skew: 700, out: 150, back: 150 });
+        clock.add(slow.pong, slow.t3);
+    }
+    eq(clock.offset(), 700);
+    eq(clock.minRtt(), 300);
+});
+check('room and local time convert both ways', () => {
+    const clock = PartyClock.createClock();
+    eq(clock.offset(), 0, 'no sample is no correction');
+    const { pong, t3 } = pongFrom({ skew: -250 });
+    assert(clock.add(pong, t3));
+    eq(clock.toRoom(10000), 9750);
+    eq(clock.toLocal(clock.toRoom(10000)), 10000);
+});
+check('the displayed round trip is smoothed, not the last reading', () => {
+    const clock = PartyClock.createClock();
+    let one = pongFrom({ c: 0, out: 50, back: 50, hold: 0 });
+    clock.add(one.pong, one.t3);
+    eq(clock.rtt(), 100);
+    one = pongFrom({ c: 5000, out: 100, back: 100, hold: 0 });
+    clock.add(one.pong, one.t3);
+    eq(Math.round(clock.rtt()), 115);
+});
+check('the heartbeat slows while paused but never stops', () => {
+    assert(PartyClock.pingDelay({ paused: true }) > PartyClock.pingDelay({ paused: false }));
+    assert(Number.isFinite(PartyClock.pingDelay({ paused: true })));
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.
