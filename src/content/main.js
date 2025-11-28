@@ -256,8 +256,16 @@
         // YouTube is a single-page app: it fires yt-navigate-finish instead of
         // reloading. `loadstart` is the belt-and-braces path for the cases where
         // the player swaps its source without a navigation event.
+        //
+        // Only a navigation, or a loadstart on a URL we have not seen, re-arms
+        // the page's injections. Every hover preview on the home grid is a
+        // <video> firing loadstart, and each one used to re-arm the playlist
+        // button for its twenty settling passes and re-read the pouch.
         let lastVideoId = null;
-        const onPageChange = () => {
+        let lastHref = null;
+        const onPageChange = (event) => {
+            if (event && event.type === 'loadstart' && location.href === lastHref) return;
+            lastHref = location.href;
             youtubeUi.onNavigate();
             const id = PageInfo.getVideoId();
             reader.onNavigate(id);

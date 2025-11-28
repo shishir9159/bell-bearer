@@ -214,3 +214,77 @@ suite('youtube playlist header', () => {
         } finally { teardown(); }
     });
 });
+
+/**
+ * The pouch button beside Subscribe, across an SPA move.
+ *
+ * YouTube keeps the watch page in the DOM, hidden, when you go from a video to
+ * its channel. "There is already a button" used to retire the task with the
+ * button stranded in that hidden page, so the channel page had none.
+ */
+suite('youtube pouch button', () => {
+    let host = null;
+
+    function stage(html) {
+        host = document.createElement('div');
+        host.innerHTML = html;
+        document.body.appendChild(host);
+    }
+
+    function teardown() {
+        if (host) host.remove();
+        host = null;
+    }
+
+    function makeShownUi() {
+        return YouTubeUi().createYouTubeUi({
+            watcher: { add() {}, remove() {}, has: () => false, schedule() {}, stop() {} },
+            notify() {},
+            getPouchButtonStyle: () => 'default',
+        });
+    }
+
+    const SUB = '<ytd-subscribe-button-renderer style="display:block;width:90px;height:36px">' +
+        '</ytd-subscribe-button-renderer>';
+
+    test('a button stranded in a hidden page moves to the Subscribe on screen', () => {
+        stage(`<div id="watch" style="display:none"><div>${SUB}</div></div>` +
+            `<div id="channel"><div>${SUB}</div></div>`);
+        try {
+            const ui = makeShownUi();
+            const { BUTTON_ID } = YouTubeUi();
+
+            // Placed on the watch page while it was the one on screen.
+            host.querySelector('#watch').style.display = '';
+            host.querySelector('#channel').style.display = 'none';
+            assertEqual(ui.injectPouchButton('/watch'), true);
+            assert(host.querySelector('#watch #' + BUTTON_ID), 'placed on the watch page');
+
+            // Off to the channel, which YouTube shows beside the hidden video.
+            host.querySelector('#watch').style.display = 'none';
+            host.querySelector('#channel').style.display = '';
+            assertEqual(ui.injectPouchButton('/@someone'), true);
+            assert(host.querySelector('#channel #' + BUTTON_ID), 'moved to the channel page');
+            assertEqual(document.querySelectorAll('#' + BUTTON_ID).length, 1, 'moved, not duplicated');
+        } finally { teardown(); }
+    });
+
+    test('a page with no Subscribe lets the task go at once', () => {
+        stage(SUB);
+        try {
+            assertEqual(makeShownUi().injectPouchButton('/'), true);
+            assertEqual(document.getElementById(YouTubeUi().BUTTON_ID), null,
+                'nothing placed on the home page');
+        } finally { teardown(); }
+    });
+
+    test('only home, the feeds, search and playlists go without Subscribe', () => {
+        const { hasSubscribe } = YouTubeUi();
+        for (const path of ['/', '/feed/subscriptions', '/results', '/playlist']) {
+            assertEqual(hasSubscribe(path), false, path);
+        }
+        for (const path of ['/watch', '/@someone', '/channel/UC123', '/shorts/abc', '/playlists-fan']) {
+            assertEqual(hasSubscribe(path), true, path);
+        }
+    });
+});

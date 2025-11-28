@@ -70,6 +70,17 @@
     ];
 
     /**
+     * Pages that never show a Subscribe control: home, the feeds, search and
+     * a playlist. Named by exclusion so a page YouTube adds later still gets
+     * looked at. Without it the button's task sat armed on the home page for
+     * as long as you stayed there, testing every Subscribe left behind in
+     * the hidden watch page on every frame the feed changed.
+     */
+    function hasSubscribe(pathname = window.location.pathname) {
+        return !/^\/(?:$|feed\/|results(?:$|\/)|playlist(?:$|\/))/.test(pathname);
+    }
+
+    /**
      * Where the playlist panel on a watch page keeps its header, and where a
      * /playlist page keeps its own. Newest spelling first, as everywhere else
      * in this extension that reaches into YouTube's DOM.
@@ -128,6 +139,14 @@
      */
     function isVisible(element) {
         if (!element) return false;
+        // checkVisibility first, where there is one: it answers from style
+        // alone, while a rect read flushes layout for the whole document.
+        // YouTube keeps every page it has shown in the DOM, hidden, so most
+        // of what a selector matches is in a display:none subtree — and each
+        // of those used to cost a forced layout on every mutation frame of a
+        // page still loading.
+        if (typeof element.checkVisibility === 'function' &&
+            !element.checkVisibility({ visibilityProperty: true })) return false;
         const rect = element.getBoundingClientRect();
         if (rect.width <= 0 && rect.height <= 0) return false;
         const style = getComputedStyle(element);
@@ -205,13 +224,28 @@
          * second, hidden Subscribe in the sticky header that has not been
          * scrolled into place yet, and the button would go in there — present
          * in the DOM, invisible on the page.
+         *
+         * An existing button only counts while it is on screen. YouTube keeps
+         * the watch page in the DOM, hidden, when you go from a video to its
+         * channel, and "there is already one" used to retire the task with
+         * the button stranded in that hidden page — the channel got none. It
+         * is moved to the Subscribe on screen instead of built again. `path`
+         * is the specs' seam; the watcher passes nothing.
          */
-        function injectPouchButton() {
+        function injectPouchButton(path) {
             if (getPouchButtonStyle() === 'hidden') return true;
-            if (document.getElementById(BUTTON_ID)) return true;
+            const existing = document.getElementById(BUTTON_ID);
+            if (existing && isVisible(existing)) return true;
+            if (!hasSubscribe(path)) return true;
 
             const anchor = firstMatch(SUBSCRIBE_SELECTORS);
             if (!anchor || !anchor.parentElement) return false;
+
+            if (existing) {
+                placePouchButton(existing, anchor);
+                markPouchButton();
+                return true;
+            }
 
             const button = PouchButton.create({
                 id: BUTTON_ID,
@@ -226,15 +260,18 @@
             // there re-arms the player's single-key shortcuts on the way back.
             Dom.holdFocus(button);
 
+            placePouchButton(button, anchor);
+            markPouchButton();
+            return true;
+        }
+
+        function placePouchButton(button, anchor) {
             const smartimation = anchor.querySelector && anchor.querySelector('yt-smartimation');
             const target = (smartimation && smartimation.parentElement) ? smartimation : anchor;
             const parent = target.parentElement;
 
             parent.classList.add('bb-inline-row');
             parent.insertBefore(button, target.nextSibling);
-
-            markPouchButton();
-            return true;
         }
 
         /**
@@ -707,8 +744,10 @@
 
         /** YouTube rebuilds the page on SPA navigation; re-arm the injections. */
         function onNavigate() {
-            if (!document.getElementById(BUTTON_ID)) watcher.add('pouch-button', injectPouchButton);
-            else markPouchButton();
+            // Always re-armed: a button in the document may be one stranded in
+            // the page just left, and the task is what tells the two apart.
+            watcher.add('pouch-button', injectPouchButton);
+            markPouchButton();
 
             if (!document.getElementById(GUIDE_ID)) watcher.add('guide-entry', injectGuideEntry);
 
@@ -739,7 +778,7 @@
 
     const YouTubeUi = {
         createYouTubeUi,
-        firstMatch, isVisible, PLAYLIST_HEADER_SELECTORS, SUBSCRIBE_SELECTORS,
+        firstMatch, isVisible, hasSubscribe, PLAYLIST_HEADER_SELECTORS, SUBSCRIBE_SELECTORS,
         BUTTON_ID, GUIDE_ID, PLAYLIST_BUTTON_ID, PLAYLIST_SETTLE,
         RANGES: PouchSheet.RANGES, SORTS: PouchSheet.SORTS,
         ALL_TOPICS: PouchSheet.ALL_TOPICS, PER_CHANNEL: PouchSheet.PER_CHANNEL,
