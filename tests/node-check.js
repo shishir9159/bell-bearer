@@ -3317,6 +3317,68 @@ check('the heartbeat slows while paused but never stops', () => {
     assert(Number.isFinite(PartyClock.pingDelay({ paused: true })));
 });
 
+// --------------------------------------------------------- party state
+
+const PartyState = require('../src/shared/party-state.js');
+
+const playingAt = (over = {}) => ({ ...PartyState.blank(), seq: 4, paused: false, pos: 100, at: 10000, ...over });
+const intentOf = (over = {}) => ({ id: 1, base: 4, op: 'pause', pos: 100, at: 10000, ...over });
+
+console.log('\n# party state');
+check('a playing vector extrapolates from when it was true, at its rate', () => {
+    eq(PartyState.expected(playingAt(), 12000), 102);
+    eq(PartyState.expected(playingAt({ rate: 1.5 }), 12000), 103);
+});
+check('paused, held, or not started yet, the position stands still', () => {
+    eq(PartyState.expected(playingAt({ paused: true }), 60000), 100);
+    eq(PartyState.expected(playingAt({ hold: { waiting: ['m1'], since: 10000 } }), 60000), 100);
+    eq(PartyState.expected(playingAt({ at: 15000 }), 12000), 100, 'a scheduled start is not negative time');
+    assert(PartyState.scheduled(playingAt({ at: 15000 }), 12000));
+    assert(!PartyState.scheduled(playingAt(), 12000));
+});
+check('an intent is normalised, and its timestamp only believed so far', () => {
+    eq(PartyState.validateIntent(intentOf({ at: 10200 }), 10000).at, 10200);
+    eq(PartyState.validateIntent(intentOf({ at: 99999 }), 10000).at, 10000 + PartyState.AT_FUTURE_MS);
+    eq(PartyState.validateIntent(intentOf({ at: 0 }), 10000).at, 10000 - PartyState.AT_PAST_MS);
+    eq(PartyState.validateIntent(intentOf({ at: undefined }), 10000).at, 10000);
+    eq(PartyState.validateIntent(intentOf({ pos: -3 }), 10000).pos, 0);
+});
+check('an intent that cannot be one is refused', () => {
+    const now = 10000;
+    eq(PartyState.validateIntent(intentOf({ op: 'rewind' }), now), null);
+    eq(PartyState.validateIntent(intentOf({ pos: NaN }), now), null, 'a player reporting NaN');
+    eq(PartyState.validateIntent(intentOf({ id: -1 }), now), null);
+    eq(PartyState.validateIntent(intentOf({ op: 'rate', rate: 16 }), now), null);
+    eq(PartyState.validateIntent(intentOf({ op: 'rate', rate: 1.25 }), now).rate, 1.25);
+});
+check('a peer names a video by id, never by address', () => {
+    const media = (m) => PartyState.validateIntent(intentOf({ op: 'media', media: m }), 10000);
+    eq(media({ site: 'youtube', id: 'dQw4w9WgXcQ' }).media, { site: 'youtube', id: 'dQw4w9WgXcQ' });
+    eq(media({ site: 'netflix', id: '81234567' }).media, { site: 'netflix', id: '81234567' });
+    eq(media({ site: 'youtube', id: 'https://evil.example/' }), null);
+    eq(media({ site: 'vimeo', id: '123' }), null);
+    eq(media({ site: 'netflix', id: '81234567' }).paused, true, 'a new video starts paused');
+});
+check('two clicks at once: the second, blind to the first, collides', () => {
+    const last = { seq: 5, by: 'ana', changedAt: 10000 };
+    assert(PartyState.conflicts(last, 'ben', 4, 10400));
+    assert(!PartyState.conflicts(last, 'ben', 5, 10400), 'Ben had seen it');
+    assert(!PartyState.conflicts(last, 'ana', 4, 10400), 'nobody collides with themselves');
+    assert(!PartyState.conflicts(last, 'ben', 4, 10000 + PartyState.CONFLICT_MS), 'a late act is a deliberate one');
+});
+check('an accepted intent rebases the vector on where its member was', () => {
+    const next = PartyState.apply(playingAt(), PartyState.validateIntent(intentOf({ pos: 101.5, at: 11500 }), 11600), 'ben');
+    eq([next.seq, next.paused, next.pos, next.at, next.by], [5, true, 101.5, 11500, 'ben']);
+    const faster = PartyState.apply(playingAt(), PartyState.validateIntent(intentOf({ op: 'rate', rate: 1.5, pos: 102 }), 12000), 'ana');
+    eq([faster.rate, faster.paused, faster.pos], [1.5, false, 102]);
+});
+check('acting on the room clears a hold, changing its speed does not', () => {
+    const held = playingAt({ hold: { waiting: ['cat'], since: 10000 } });
+    eq(PartyState.apply(held, PartyState.validateIntent(intentOf(), 10000), 'ana').hold, null);
+    const rated = PartyState.apply(held, PartyState.validateIntent(intentOf({ op: 'rate', rate: 2 }), 10000), 'ana');
+    eq(rated.hold, { waiting: ['cat'], since: 10000 });
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.
