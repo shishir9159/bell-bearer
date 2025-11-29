@@ -3477,6 +3477,109 @@ check('a player that will not hold a rate is only ever seeked, and less eagerly'
     eq(switched.decide(0.5), { kind: 'none' });
 });
 
+// ---------------------------------------------------------- party room
+
+const PartyRoom = require('../src/shared/party-room.js');
+
+/** A room with ids minted in order and every message it sends kept. */
+function roomOf(policy = {}) {
+    const sent = [];
+    let n = 0;
+    const room = PartyRoom.createRoom({
+        id: 'room1', policy,
+        send: (to, msg) => sent.push({ to, msg }),
+        mint: (prefix) => `${prefix}${++n}`,
+    });
+    return {
+        room,
+        sent,
+        join: (name, now = 0) => room.join({ name }, now).member,
+        /** What `to` has been sent of type `t`, oldest first. */
+        got: (to, t) => sent.filter((one) => one.to === to && one.msg.t === t).map((one) => one.msg),
+        clear: () => { sent.length = 0; },
+    };
+}
+
+const play = (over = {}) => ({ t: 'intent', id: 1, base: 0, op: 'play', pos: 10, at: 1000, ...over });
+
+console.log('\n# party room');
+check('the first in is the host, and everyone hears who else is here', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('  Ben  ');
+    const welcome = r.got(ben, 'welcome')[0];
+    eq([welcome.v, welcome.you, welcome.room.id], [PartyRoom.VERSION, ben, 'room1']);
+    eq(r.got(ana, 'members').pop().list.map((m) => [m.name, m.role]), [['Ana', 'host'], ['Ben', 'guest']]);
+});
+check('an accepted intent reaches everyone, acknowledged to its sender', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, play(), 1000);
+    const seen = r.got(ana, 'state').pop();
+    eq([seen.seq, seen.paused, seen.pos, seen.by], [1, false, 10, ben]);
+    eq(r.got(ben, 'state').pop().ack, { member: ben, id: 1 });
+});
+check('a refused intent is said to its sender alone, with the state to snap back to', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.clear();
+    r.room.handle(ben, play({ pos: NaN }), 1000);
+    eq(r.got(ben, 'reject'), [{ t: 'reject', id: 1, why: 'invalid' }]);
+    eq(r.got(ben, 'state').length, 1);
+    eq(r.got(ana, 'state').length, 0);
+});
+check('in host control only the host drives', () => {
+    const r = roomOf({ control: 'host' });
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, play(), 1000);
+    eq(r.got(ben, 'reject').pop().why, 'policy');
+    r.room.handle(ana, play({ id: 2 }), 1200);
+    eq(r.room.state().by, ana);
+});
+check('two clicks at once: the first stands and the second is refused', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ana, play({ op: 'pause' }), 1000);
+    r.room.handle(ben, play({ at: 1100 }), 1100);
+    eq(r.got(ben, 'reject').pop().why, 'conflict');
+    eq(r.room.state().paused, true);
+    r.room.handle(ben, play({ id: 2, at: 3000 }), 3000);
+    eq(r.room.state().paused, false, 'the same stale view, acted on later, is let through');
+});
+check('a member hammering the room is slowed down', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    for (let i = 1; i <= PartyRoom.INTENTS_PER_S + 1; i++) {
+        r.room.handle(ana, play({ id: i, base: i - 1, op: 'seek', at: 1000 + i }), 1000 + i);
+    }
+    eq(r.got(ana, 'reject').pop().why, 'rate-limit');
+    eq(r.room.state().seq, PartyRoom.INTENTS_PER_S);
+});
+check('a ping is answered, and a member behind on the state is sent it', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    r.room.handle(ana, play(), 1000);
+    r.clear();
+    r.room.handle(ana, { t: 'ping', c: 5, seq: 1, rtt: 80 }, 2000);
+    eq(r.got(ana, 'pong'), [{ t: 'pong', c: 5, s: 2000, s2: 2000, seq: 1 }]);
+    eq(r.got(ana, 'state').length, 0);
+    r.room.handle(ana, { t: 'ping', c: 6, seq: 0 }, 3000);
+    eq(r.got(ana, 'state').length, 1);
+    eq(r.room.members()[0].rtt, 80);
+});
+check('the host leaving hands the room to whoever came first', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    r.join('Ben');
+    r.join('Cat');
+    r.room.handle(ana, { t: 'bye' }, 200);
+    eq(r.room.members().map((m) => [m.name, m.role]), [['Ben', 'host'], ['Cat', 'guest']]);
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.
