@@ -3379,6 +3379,104 @@ check('acting on the room clears a hold, changing its speed does not', () => {
     eq(rated.hold, { waiting: ['cat'], since: 10000 });
 });
 
+// --------------------------------------------------------- party drift
+
+const PartyDrift = require('../src/shared/party-drift.js');
+
+/** A drift controller and a clock that moves a second per decision. */
+function driftAt(profile) {
+    const drift = PartyDrift.createDrift({ profile });
+    let now = 100000;
+    return {
+        drift,
+        at: () => now,
+        decide(d, over = {}) {
+            now += PartyDrift.EVAL_MS;
+            return drift.decide({ actual: 50 + d, expected: 50, now, ...over });
+        },
+        wait(ms) { now += ms; },
+    };
+}
+
+console.log('\n# party drift');
+check('inside the deadband nothing is touched', () => {
+    eq(driftAt().decide(0.05), { kind: 'none' });
+    eq(driftAt().decide(-0.09), { kind: 'none' });
+});
+check('ahead slows down and behind speeds up, by no more than the cap', () => {
+    eq(driftAt().decide(0.5), { kind: 'rate', rate: 0.92 });
+    eq(driftAt().decide(-0.2), { kind: 'rate', rate: 1.05 });
+    eq(driftAt().decide(-0.2, { rate: 2 }), { kind: 'rate', rate: 2.1 }, 'relative to the room rate');
+});
+check('one decision a second, however often timeupdate asks', () => {
+    const t = driftAt();
+    eq(t.decide(0.5).kind, 'rate');
+    eq(t.drift.decide({ actual: 50.5, expected: 50, now: t.at() + 200 }), { kind: 'none' });
+});
+check('a nudge holds until the drift is nearly gone, then hands the rate back', () => {
+    const t = driftAt();
+    eq(t.decide(0.3).kind, 'rate');
+    eq(t.decide(0.08).kind, 'rate', 'below the deadband but not settled');
+    eq(t.decide(0.03), { kind: 'rate', rate: 1 });
+    eq(t.decide(0.03), { kind: 'none' }, 'handed back once');
+});
+check('a nudge is not rewritten for a change nobody could hear', () => {
+    const t = driftAt();
+    eq(t.decide(-0.4), { kind: 'rate', rate: 1.08 });
+    eq(t.decide(-0.39), { kind: 'none' });
+});
+check('a big drift seeks to where the room will be once the seek is done', () => {
+    const t = driftAt();
+    eq(t.decide(2), { kind: 'seek', to: 50 + PartyDrift.SEEK_LATENCY_START });
+    eq(t.decide(3), { kind: 'none' }, 'nothing while the seek is out');
+    t.drift.seekDone(t.at() + 500, 1000);
+    eq(Math.round(t.drift.seekLatency() * 1000), 475);
+    eq(t.decide(0.5), { kind: 'none' }, 'held off while the player settles');
+    t.wait(PartyDrift.SEEK_FREEZE_MS);
+    eq(t.decide(0.5).kind, 'rate');
+});
+check('a seek out of a nudge puts the room rate back with it', () => {
+    const t = driftAt();
+    t.decide(0.5);
+    eq(t.decide(2, { rate: 1 }), { kind: 'seek', to: 50.25, rate: 1 });
+});
+check('a second big drift inside the cooldown is nudged, not seeked', () => {
+    const t = driftAt();
+    t.decide(2);
+    t.drift.seekDone(t.at(), 200);
+    t.wait(PartyDrift.SEEK_FREEZE_MS);
+    eq(t.decide(2), { kind: 'rate', rate: 0.92 });
+});
+check('behind with nothing buffered, it runs to catch up rather than jump into the hole', () => {
+    eq(driftAt().decide(-2, { bufferedAhead: 0.5 }), { kind: 'rate', rate: 1.08 });
+    eq(driftAt().decide(-2, { bufferedAhead: 30 }).kind, 'seek');
+});
+check('three seeks in a minute and the thresholds widen for a while', () => {
+    const t = driftAt();
+    for (let i = 0; i < PartyDrift.STRUGGLE_SEEKS; i++) {
+        t.decide(2);
+        t.drift.seekDone(t.at(), 300);
+        t.wait(PartyDrift.SEEK_COOLDOWN_MS);
+    }
+    assert(t.drift.struggling(t.at()));
+    eq(t.decide(2).kind, 'rate', 'what was a seek is a nudge now');
+    t.wait(PartyDrift.STRUGGLE_MS);
+    assert(!t.drift.struggling(t.at()));
+});
+check('paused, an overshoot is taken back exactly, with no lead', () => {
+    eq(driftAt().decide(0.3, { paused: true }), { kind: 'seek', to: 50 });
+    eq(driftAt().decide(0.05, { paused: true }), { kind: 'none' });
+});
+check('a player that will not hold a rate is only ever seeked, and less eagerly', () => {
+    const t = driftAt('seekOnly');
+    eq(t.decide(0.8), { kind: 'none' });
+    eq(t.decide(1.2).kind, 'seek');
+    const switched = driftAt();
+    switched.drift.setProfile('seekOnly');
+    eq(switched.drift.profile(), 'seekOnly');
+    eq(switched.decide(0.5), { kind: 'none' });
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.
