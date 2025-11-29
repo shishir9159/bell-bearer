@@ -3530,14 +3530,15 @@ check('a refused intent is said to its sender alone, with the state to snap back
     eq(r.got(ben, 'state').length, 1);
     eq(r.got(ana, 'state').length, 0);
 });
-check('in host control only the host drives', () => {
+check('in host control only the host and co-hosts drive', () => {
     const r = roomOf({ control: 'host' });
     const ana = r.join('Ana');
     const ben = r.join('Ben');
     r.room.handle(ben, play(), 1000);
     eq(r.got(ben, 'reject').pop().why, 'policy');
-    r.room.handle(ana, play({ id: 2 }), 1200);
-    eq(r.room.state().by, ana);
+    r.room.handle(ana, { t: 'role', member: ben, role: 'cohost' }, 1100);
+    r.room.handle(ben, play({ id: 2 }), 1200);
+    eq(r.room.state().by, ben);
 });
 check('two clicks at once: the first stands and the second is refused', () => {
     const r = roomOf();
@@ -3571,13 +3572,54 @@ check('a ping is answered, and a member behind on the state is sent it', () => {
     eq(r.got(ana, 'state').length, 1);
     eq(r.room.members()[0].rtt, 80);
 });
-check('the host leaving hands the room to whoever came first', () => {
+check('a guest asking to pause is heard by the hosts, not by the other guests', () => {
+    const r = roomOf({ control: 'host' });
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    const cat = r.join('Cat');
+    r.room.handle(ben, { t: 'request', op: 'pause' }, 1000);
+    eq(r.got(ana, 'request'), [{ t: 'request', from: ben, op: 'pause' }]);
+    eq(r.got(cat, 'request'), []);
+});
+check('only the host sets the rules, hands over, or shows someone out', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, { t: 'policy', control: 'host' }, 1000);
+    eq(r.room.policy().control, 'everyone');
+    r.room.handle(ana, { t: 'policy', control: 'host', locked: true }, 1000);
+    eq(r.room.policy(), { control: 'host', wait: true, locked: true });
+    eq(r.room.join({ name: 'Dee' }, 1000), { error: 'locked' });
+    r.room.handle(ana, { t: 'role', member: ben, role: 'host' }, 1100);
+    eq(r.room.members().map((m) => m.role), ['cohost', 'host']);
+    r.room.handle(ben, { t: 'kick', member: ana }, 1200);
+    eq(r.got(ana, 'error'), [{ t: 'error', code: 'kicked' }]);
+    eq(r.room.members().map((m) => m.name), ['Ben']);
+});
+check('a member comes back as themselves with the token from their welcome', () => {
+    const r = roomOf();
+    r.join('Ana');
+    const ben = r.join('Ben');
+    const token = r.got(ben, 'welcome')[0].resume;
+    eq(r.room.join({ resume: token }, 5000), { member: ben });
+    eq(r.room.join({ resume: 'r-unknown' }, 5000), { error: 'expired' });
+});
+check('the host leaving hands the room to the first co-host, else the earliest', () => {
     const r = roomOf();
     const ana = r.join('Ana');
     r.join('Ben');
-    r.join('Cat');
+    const cat = r.join('Cat');
+    r.room.handle(ana, { t: 'role', member: cat, role: 'cohost' }, 100);
     r.room.handle(ana, { t: 'bye' }, 200);
-    eq(r.room.members().map((m) => [m.name, m.role]), [['Ben', 'host'], ['Cat', 'guest']]);
+    eq(r.room.members().map((m) => [m.name, m.role]), [['Ben', 'guest'], ['Cat', 'host']]);
+});
+check('a solo member watches alone and cannot drive', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    r.room.handle(ana, { t: 'solo', solo: true }, 100);
+    r.room.handle(ana, play(), 1000);
+    eq(r.got(ana, 'reject').pop().why, 'policy');
+    eq(r.room.members()[0].solo, true);
 });
 
 // ------------------------------------------------------------ activity

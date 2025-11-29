@@ -51,6 +51,7 @@
         const rules = {
             control: CONTROLS.includes(policy.control) ? policy.control : 'everyone',
             wait: policy.wait !== false,
+            locked: false,
         };
 
         const inOrder = () => [...members.values()].sort((a, b) => a.order - b.order);
@@ -77,11 +78,22 @@
         }
 
         /**
-         * A member arriving. Authentication is the caller's: the server checks
-         * the room secret, a P2P host checks the channel binding, then calls
-         * this. Returns { member } or { error }.
+         * A member arriving, or coming back with the resume token its welcome
+         * carried. Authentication is the caller's: the server checks the room
+         * secret, a P2P host checks the channel binding, then calls this.
+         * Returns { member } or { error }.
          */
-        function join({ name } = {}, now) {
+        function join({ name, resume } = {}, now) {
+            if (resume) {
+                const back = [...members.values()].find((m) => m.resume === resume);
+                if (!back) return { error: 'expired' };
+                back.away = false;
+                back.lastSeen = now;
+                welcome(back, now);
+                announceMembers();
+                return { member: back.id };
+            }
+            if (rules.locked) return { error: 'locked' };
             if (members.size >= MAX_MEMBERS) return { error: 'full' };
 
             const m = {
@@ -137,6 +149,8 @@
                 m.away = false;
                 announceMembers();
             }
+            const target = members.get(msg.member);
+
             switch (msg.t) {
                 case 'ping': {
                     const rtt = Number(msg.rtt);
@@ -147,6 +161,36 @@
                 }
                 case 'intent':
                     intent(m, msg, now);
+                    break;
+                case 'request':
+                    if (!PartyState.OPS.includes(msg.op)) break;
+                    for (const one of members.values()) {
+                        if (one.role !== 'guest' && one !== m) send(one.id, { t: 'request', from: m.id, op: msg.op });
+                    }
+                    break;
+                case 'policy':
+                    if (!isHost(m)) break;
+                    if (CONTROLS.includes(msg.control)) rules.control = msg.control;
+                    if (typeof msg.wait === 'boolean') rules.wait = msg.wait;
+                    if (typeof msg.locked === 'boolean') rules.locked = msg.locked;
+                    broadcast({ t: 'policy', ...rules });
+                    break;
+                case 'role':
+                    if (!isHost(m) || !target || target === m || !ROLES.includes(msg.role)) break;
+                    // Handing the room over leaves the old host a co-host, not
+                    // a guest: they were driving a moment ago.
+                    if (msg.role === 'host') m.role = 'cohost';
+                    target.role = msg.role;
+                    announceMembers();
+                    break;
+                case 'kick':
+                    if (!isHost(m) || !target || target === m) break;
+                    send(target.id, { t: 'error', code: 'kicked' });
+                    remove(target);
+                    break;
+                case 'solo':
+                    m.solo = msg.solo === true;
+                    announceMembers();
                     break;
                 case 'bye':
                     remove(m);
