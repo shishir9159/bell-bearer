@@ -1172,6 +1172,199 @@ holding the job — two tabs would otherwise follow the same account twice — a
 is handed back before each navigation, with `leaseUntil` covering the case where
 the tab is simply closed.
 
+## Watch party protocol
+
+The watch party carries **control, not media**: everyone plays from their own
+Netflix or YouTube, and what travels is play, pause, seek, rate and which
+video. This is what a party server has to do. The extension's own authority,
+`src/shared/party-room.js`, is the reference implementation — a peer-to-peer
+party runs it in the host's browser, and a server party expects a server that
+behaves the same way — and `tests/party-vectors.json` pins the behaviour down
+case by case, the way `src/background/proto.js` pins down sowon's wire format.
+
+### Transport
+
+- WebSocket, text frames, one JSON object per frame, at most **8 KB**. A frame
+  that is not a JSON object, or is larger, closes the connection.
+- Every message has a string `t`, its type. Unknown types are ignored, so a
+  newer client can talk to an older server.
+- Times are milliseconds since the Unix epoch on the **server's** clock — the
+  room clock. Clients measure their offset from it with `ping`.
+- The same messages flow over WebRTC data channels in a peer-to-peer party,
+  where the host's browser is the server.
+
+### Joining
+
+| Client sends | Server answers |
+| --- | --- |
+| `create {v:1, name, policy:{control, wait}}` | `created {room, secret}`, then `welcome` |
+| `hello {v:1, room, secret, name}` | `welcome`, or `error {code}` and close |
+| `hello {v:1, room, resume}` | `welcome` for the same member id and role, or `error {code:'expired'}` |
+
+`room` is short and shareable; `secret` is 16 random bytes, base64url. The
+secret is checked on `hello` and never sent back out. A room is discarded a
+minute after its last member is gone.
+
+```
+welcome {v:1, you, resume, now,
+         room: {id, policy:{control, wait, locked}, members:[…], state:{…}}}
+```
+
+`resume` is a token for coming back within the grace period with the same id
+and role — after a dropped connection, a reloaded offscreen document, or a
+laptop lid.
+
+Error codes: `version`, `no-room`, `bad-secret`, `expired`, `locked`, `full`,
+`kicked`.
+
+### The state vector
+
+```
+state {seq, media:{site, id} | null, paused, pos, rate, at, by,
+       hold:{waiting:[memberId], since} | null, ack?:{member, id}}
+```
+
+The position at room time `now` is
+
+```
+paused or hold or now <= at   →  pos
+otherwise                     →  pos + (now − at) / 1000 × rate
+```
+
+An `at` in the future is a scheduled start: the room is playing from `pos`
+once that moment arrives. The server only ever broadcasts whole vectors, and a
+client keeps the one with the highest `seq`, so loss, duplication and
+reordering are all harmless.
+
+### Messages
+
+Client → server:
+
+| Message | Meaning |
+| --- | --- |
+| `ping {c, seq, rtt?}` | Heartbeat and clock sample; `seq` is the client's latest; `rtt` its own measure, for the member list |
+| `intent {id, base, op, pos, at, rate?, media?, paused?}` | "I did this, at this position, at this room time, having seen `base`." `op` is `play`, `pause`, `seek`, `rate` or `media` |
+| `ready {ready, why?}` | `ready:false` with `why` of `buffering`, `loading` or `ad` |
+| `request {op}` | A guest asking the hosts to do something, in host control |
+| `policy {control?, wait?, locked?}` | Host only |
+| `role {member, role}` | Host only: `cohost`, `guest`, or `host` to hand over |
+| `kick {member}` | Host only |
+| `solo {solo}` | Step out of the room's playback, or back in |
+| `bye` | Leaving |
+
+Server → client:
+
+| Message | Sent to |
+| --- | --- |
+| `pong {c, s, s2, seq}` | the pinger. `s` when the ping arrived, `s2` when the pong left. If the pinger's `seq` differs, a `state` follows |
+| `state {…}` | everyone, on every change. `ack` names the intent that caused it |
+| `reject {id, why}` then `state` | the sender only. `why` is `invalid`, `policy`, `rate-limit` or `conflict` |
+| `members {list}` | everyone, when anyone arrives, leaves, or changes role, readiness, solo, away or lagging |
+| `policy {control, wait, locked}` | everyone, when the host changes it |
+| `request {from, op}` | the host and co-hosts |
+| `error {code}` | the one being refused or kicked, then close |
+
+A member entry is `{id, name, role, ready, why, solo, away, rtt, lagging}`.
+Names are trimmed, whitespace collapsed, capped at 32 characters, and default
+to `Guest`.
+
+### The authority's rules
+
+An intent is checked in this order, and the first failure rejects it:
+
+1. **Valid.**
+   - `op` is known, and `id` and `base` are non-negative integers.
+   - `pos` is finite, then clamped to 0 through 86400.
+   - `at` is clamped to `[now − 3000, now + 500]`, and is `now` if absent.
+   - `rate` (for `rate`) is between 0.25 and 5.
+   - `media` (for `media`) matches its site: YouTube `^[A-Za-z0-9_-]{11}$`,
+     Netflix `^\d{1,12}$`.
+
+   A peer names a video by id and never by URL. Each client builds the address
+   itself.
+2. **Permitted.** In `host` control only the host and co-hosts may send
+   intents. A solo member may not send them in any mode.
+3. **Not too many.** At most 5 intents per member per second.
+4. **Not a collision.** An intent collides when all three of these hold:
+   - its `base` is not the current `seq`,
+   - the last accepted intent came from someone else,
+   - that intent was accepted less than 1500 ms ago.
+
+   The first of two simultaneous clicks stands. The second person gets
+   `conflict` and snaps to it.
+
+An accepted intent sets `pos` and `at` from the intent, and then:
+
+- `play` sets `paused` to false, and `pause` sets it to true.
+- `rate` sets `rate`.
+- `media` sets `media`, and sets `paused` from the intent (default true).
+- Every op except `rate` clears a hold.
+- `by` becomes the sender and `seq` goes up by one.
+- The resulting state is broadcast with `ack`.
+
+A `play` accepted while members are still not ready starts the room already
+held on them (see holds).
+
+Changes the room makes itself (holds and releases) also raise `seq`, and they
+count as the latest `seq` for the collision rule. A member who saw the hold is
+not colliding with anything by acting on it.
+
+### Holds
+
+With `wait` on, the room may wait for a member who reports `ready:false`,
+unless any of these is true:
+
+- The reason is `ad`.
+- The room is paused.
+- The member is solo, away, or lagging.
+- More than 6 members are present.
+
+A hold works like this:
+
+- **Starting.** The first such member starts a hold: `pos` becomes the
+  position at that moment, `at` becomes now, and `hold` becomes
+  `{waiting:[id], since:now}`. Later ones are added to `waiting`.
+- **Leaving it.** Being ready again, leaving, going away or going solo removes
+  a member from `waiting`.
+- **Release.** When `waiting` empties, the room releases. `hold` becomes null
+  and `at` becomes `now + lead`, where
+  `lead = clamp(max present rtt / 2 + 150, 250, 1000)` ms.
+- **Timeout.** A hold older than **8 s** releases anyway. Whoever it was still
+  waiting for is marked `lagging` for 2 minutes.
+- **Anti-flap.** A member's third hold within 2 minutes does not hold the
+  room. It marks them `lagging` for 5 minutes.
+
+A lagging member catches up by seeking instead of stopping everyone.
+
+### Liveness
+
+The server runs its timeouts about once a second.
+
+- **Away.** A member not heard from for **15 s** is `away`. Any message brings
+  them back.
+- **Removed.** At **60 s** the member is removed, which also ends their resume
+  grace.
+- **Handover.** A host who goes away, or leaves, hands the room to the first
+  present co-host, else the earliest present member. An away host becomes a
+  co-host. If everyone is away, the host keeps the role.
+- **Kicked.** A kicked member gets `error {code:'kicked'}` and is removed.
+
+### Constants
+
+| Name | Value |
+| --- | --- |
+| max members | 16 |
+| max frame | 8 KB |
+| intents per second | 5 |
+| collision window | 1500 ms |
+| `at` accepted | −3000 / +500 ms |
+| away / removed | 15 s / 60 s |
+| hold timeout | 8 s |
+| holds only up to | 6 members present |
+| anti-flap | 3 holds in 120 s → lagging 5 min |
+| timed-out straggler | lagging 2 min |
+| release lead | 250–1000 ms, max rtt / 2 + 150 |
+
 ## Tests
 
 ```bash

@@ -5,11 +5,12 @@
  * Exactly one of these exists per party. In a peer-to-peer party it runs in
  * the host's offscreen document and the guests reach it over data channels;
  * in a server party the Zig/Go server is the authority and implements the
- * same rules, which PARTY_PROTOCOL.md states and tests/party-vectors.json pins
- * down. Keeping both honest is why this is transport-free and clock-free: it
- * is handed messages and the time, and it answers through `send(memberId,
- * message)`. It never sets a timer — the owner calls tick() — so a vector
- * replays identically here and against a live server.
+ * same rules, which the README's "Watch party protocol" states and
+ * tests/party-vectors.json pins down. Keeping both honest is why this is
+ * transport-free and clock-free: it is handed messages and the time, and it
+ * answers through `send(memberId, message)`. It never sets a timer — the
+ * owner calls tick() — so a vector replays identically here and against a
+ * live server.
  *
  * Members send intents, never vectors. The authority decides whether an
  * intent stands (valid, permitted, not colliding with a change its sender had
