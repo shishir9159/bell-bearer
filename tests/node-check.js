@@ -3659,6 +3659,105 @@ check('a solo member watches alone and cannot drive', () => {
     eq(r.room.members()[0].solo, true);
 });
 
+// ---------------------------------------------------------- party holds
+
+/** Ana and Ben (and `extra` more), playing from 10s at t=1000. */
+function playingRoom(policy = {}, extra = 0) {
+    const r = roomOf(policy);
+    const ids = ['Ana', 'Ben', ...Array.from({ length: extra }, (_, i) => `M${i}`)].map((name) => r.join(name));
+    r.room.handle(ids[0], play(), 1000);
+    return { ...r, ana: ids[0], ben: ids[1], ids };
+}
+const stall = (why = 'buffering') => ({ t: 'ready', ready: false, why });
+
+console.log('\n# party holds');
+check('a member buffering holds the room where it had got to', () => {
+    const r = playingRoom();
+    r.room.handle(r.ben, stall(), 3000);
+    const held = r.room.state();
+    eq([held.paused, held.pos, held.at, held.hold], [false, 12, 3000, { waiting: [r.ben], since: 3000 }]);
+    eq(PartyState.expected(held, 9000), 12, 'the position stands still while held');
+});
+check('everyone ready, the room goes again together, a little ahead', () => {
+    const r = playingRoom();
+    r.room.handle(r.ana, { t: 'ping', c: 0, seq: 0, rtt: 400 }, 2000);
+    r.room.handle(r.ben, stall(), 3000);
+    r.room.handle(r.ana, stall(), 3100);
+    eq(r.room.state().hold.waiting, [r.ben, r.ana]);
+    r.room.handle(r.ben, { t: 'ready', ready: true }, 4000);
+    r.room.handle(r.ana, { t: 'ready', ready: true }, 5000);
+    const going = r.room.state();
+    eq([going.hold, going.pos, going.at], [null, 12, 5000 + 200 + PartyRoom.LEAD_PAD_MS]);
+    assert(PartyState.scheduled(going, 5100));
+});
+check('an ad, a paused room, or a room that said not to wait holds nothing', () => {
+    const ad = playingRoom();
+    ad.room.handle(ad.ben, stall('ad'), 3000);
+    eq(ad.room.state().hold, null);
+    eq(ad.room.members()[1].why, 'ad');
+    const paused = playingRoom();
+    paused.room.handle(paused.ana, play({ id: 2, base: 1, op: 'pause', at: 2000 }), 2000);
+    paused.room.handle(paused.ben, stall(), 3000);
+    eq(paused.room.state().hold, null);
+    const off = playingRoom({ wait: false });
+    off.room.handle(off.ben, stall(), 3000);
+    eq(off.room.state().hold, null);
+});
+check('past six people nobody waits for anyone', () => {
+    const r = playingRoom({}, PartyRoom.HOLD_MAX_MEMBERS - 1);
+    r.room.handle(r.ben, stall(), 3000);
+    eq(r.room.state().hold, null);
+});
+check('the wait is capped, and the straggler catches up rather than holding again', () => {
+    const r = playingRoom();
+    r.room.handle(r.ben, stall(), 3000);
+    r.room.handle(r.ana, { t: 'ping', c: 0, seq: 3 }, 3000 + PartyRoom.HOLD_TIMEOUT_MS);
+    r.room.tick(3000 + PartyRoom.HOLD_TIMEOUT_MS);
+    eq(r.room.state().hold, null);
+    eq(r.room.members()[1].lagging, true);
+    r.room.handle(r.ben, { t: 'ready', ready: true }, 12000);
+    r.room.handle(r.ben, stall(), 13000);
+    eq(r.room.state().hold, null, 'still excluded');
+    for (const id of [r.ana, r.ben]) r.room.handle(id, { t: 'ping', c: 0, seq: 4 }, 3000 + PartyRoom.HOLD_TIMEOUT_MS + PartyRoom.EXCLUDE_MS);
+    r.room.tick(3000 + PartyRoom.HOLD_TIMEOUT_MS + PartyRoom.EXCLUDE_MS);
+    eq(r.room.members()[1].lagging, false);
+});
+check('a member who keeps holding the room stops holding it', () => {
+    const r = playingRoom();
+    for (let i = 0; i < PartyRoom.FLAP_HOLDS; i++) {
+        r.room.handle(r.ben, stall(), 3000 + i * 10000);
+        r.room.handle(r.ben, { t: 'ready', ready: true }, 4000 + i * 10000);
+    }
+    eq(r.room.members()[1].lagging, true);
+    eq(r.room.state().hold, null);
+});
+check('somebody pausing during a hold wins, and can act on the held state', () => {
+    const r = playingRoom();
+    r.room.handle(r.ben, stall(), 3000);
+    const seen = r.room.state().seq;
+    r.room.handle(r.ana, play({ id: 2, base: seen, op: 'pause', pos: 12, at: 3200 }), 3200);
+    eq([r.room.state().paused, r.room.state().hold], [true, null]);
+    eq(r.got(r.ana, 'reject'), []);
+});
+check('play pressed while someone is still loading starts the room held on them', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, stall('loading'), 500);
+    r.room.handle(ana, play(), 1000);
+    eq([r.room.state().paused, r.room.state().hold], [false, { waiting: [ben], since: 1000 }]);
+});
+check('a member leaving or stepping out is not waited for', () => {
+    const r = playingRoom();
+    r.room.handle(r.ben, stall(), 3000);
+    r.room.handle(r.ben, { t: 'solo', solo: true }, 3500);
+    eq(r.room.state().hold, null);
+    const gone = playingRoom();
+    gone.room.handle(gone.ben, stall(), 3000);
+    gone.room.handle(gone.ben, { t: 'bye' }, 3500);
+    eq(gone.room.state().hold, null);
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

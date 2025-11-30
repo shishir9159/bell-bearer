@@ -43,6 +43,29 @@
     const AWAY_MS = 15000;
     const REMOVE_MS = 60000;
 
+    /**
+     * Waiting for a member whose player is buffering. The room holds at the
+     * position it had reached, and releases with a start time a little in the
+     * future so every player begins on the same frame rather than each as
+     * the message happens to reach it.
+     *
+     * The limits are what keep one slow connection from ruining the evening:
+     * the wait is capped, a member who has held the room three times in two
+     * minutes stops holding it and catches up by seeking instead, ads never
+     * hold it (a two-minute ad break on one account is not everybody's), and
+     * past six people nobody waits for anyone.
+     */
+    const HOLD_TIMEOUT_MS = 8000;
+    const HOLD_MAX_MEMBERS = 6;
+    const FLAP_HOLDS = 3;
+    const FLAP_WINDOW_MS = 120000;
+    const LAG_MS = 300000;
+    const EXCLUDE_MS = 120000;
+    const LEAD_PAD_MS = 150;
+    const LEAD_MIN_MS = 250;
+    const LEAD_MAX_MS = 1000;
+    const WHYS = Object.freeze(['buffering', 'loading', 'ad']);
+
     function mintRandom(prefix) {
         const bytes = new Uint8Array(8);
         const crypto = root.crypto;
@@ -111,7 +134,7 @@
                 id: mint('m'), resume: mint('r'), name: cleanName(name),
                 role: members.size === 0 ? 'host' : 'guest', order: joined++,
                 lastSeen: now, away: false, ready: true, why: null, solo: false,
-                rtt: null, lagging: false, intents: [],
+                rtt: null, lagging: false, laggingUntil: 0, holdTimes: [], intents: [],
             };
             members.set(m.id, m);
             welcome(m, now);
@@ -126,9 +149,72 @@
             if (next) next.role = 'host';
         }
 
-        function remove(m) {
+        function remove(m, now) {
             if (!members.delete(m.id)) return;
             if (isHost(m)) promote();
+            unwait(m, now);
+            announceMembers();
+        }
+
+        // ------------------------------------------------------------ holds
+
+        const here = () => inOrder().filter((one) => !one.away);
+
+        /** Whether this member's buffering is worth the room waiting for. */
+        function holdsRoom(m, now) {
+            return rules.wait && !state.paused && !m.ready && m.why !== 'ad' && !m.solo && !m.away &&
+                now >= m.laggingUntil && here().length <= HOLD_MAX_MEMBERS;
+        }
+
+        /**
+         * A change the room makes itself. Its seq moves on so everyone
+         * applies it, and the conflict rule's record moves with it — a member
+         * who saw the hold is not colliding with anything by acting on it.
+         */
+        function change(next) {
+            state = { ...next, seq: state.seq + 1 };
+            if (last) last = { ...last, seq: state.seq };
+            broadcast(stateMessage());
+        }
+
+        function wait(m, now) {
+            m.holdTimes = m.holdTimes.filter((at) => now - at < FLAP_WINDOW_MS).concat(now);
+            if (m.holdTimes.length >= FLAP_HOLDS) {
+                m.holdTimes = [];
+                m.laggingUntil = now + LAG_MS;
+                m.lagging = true;
+                unwait(m, now);
+                return;
+            }
+            if (state.hold) {
+                if (!state.hold.waiting.includes(m.id)) change({ ...state, hold: { ...state.hold, waiting: [...state.hold.waiting, m.id] } });
+                return;
+            }
+            change({ ...state, pos: PartyState.expected(state, now), at: now, hold: { waiting: [m.id], since: now } });
+        }
+
+        function unwait(m, now) {
+            if (!state.hold || !state.hold.waiting.includes(m.id)) return;
+            const waiting = state.hold.waiting.filter((one) => one !== m.id);
+            if (waiting.length) change({ ...state, hold: { ...state.hold, waiting } });
+            else release(now);
+        }
+
+        /** Everyone ready: go, a little in the future, together. */
+        function release(now) {
+            const rtts = here().map((one) => one.rtt).filter(Number.isFinite);
+            const lead = Math.min(LEAD_MAX_MS, Math.max(LEAD_MIN_MS, (rtts.length ? Math.max(...rtts) : 0) / 2 + LEAD_PAD_MS));
+            change({ ...state, at: now + lead, hold: null });
+        }
+
+        function ready(m, msg, now) {
+            const isReady = msg.ready !== false;
+            const why = isReady ? null : (WHYS.includes(msg.why) ? msg.why : 'buffering');
+            if (m.ready === isReady && m.why === why) return;
+            m.ready = isReady;
+            m.why = why;
+            if (isReady) unwait(m, now);
+            else if (holdsRoom(m, now)) wait(m, now);
             announceMembers();
         }
 
@@ -149,6 +235,11 @@
 
             state = PartyState.apply(state, it, m.id);
             last = { seq: state.seq, by: m.id, changedAt: now };
+            // Pressing play while somebody is still loading the video starts
+            // the room held on them, rather than leaving them to catch up on
+            // a film that began without them.
+            const loading = it.op === 'play' ? here().filter((one) => holdsRoom(one, now)).map((one) => one.id) : [];
+            if (loading.length) state = { ...state, hold: { waiting: loading, since: now } };
             broadcast(stateMessage({ ack: { member: m.id, id: it.id } }));
         }
 
@@ -197,14 +288,18 @@
                 case 'kick':
                     if (!isHost(m) || !target || target === m) break;
                     send(target.id, { t: 'error', code: 'kicked' });
-                    remove(target);
+                    remove(target, now);
+                    break;
+                case 'ready':
+                    ready(m, msg, now);
                     break;
                 case 'solo':
                     m.solo = msg.solo === true;
+                    if (m.solo) unwait(m, now);
                     announceMembers();
                     break;
                 case 'bye':
-                    remove(m);
+                    remove(m, now);
                     break;
                 default:
                     break;
@@ -214,9 +309,9 @@
         return {
             join,
             handle,
-            leave(memberId) {
+            leave(memberId, now) {
                 const m = members.get(memberId);
-                if (m) remove(m);
+                if (m) remove(m, now);
             },
             /** Timeouts; the owner calls this about once a second. */
             tick(now) {
@@ -226,11 +321,29 @@
                     if (quiet >= REMOVE_MS) {
                         members.delete(m.id);
                         if (isHost(m)) promote();
+                        unwait(m, now);
                         changed = true;
                     } else if (quiet >= AWAY_MS && !m.away) {
                         m.away = true;
+                        unwait(m, now);
                         changed = true;
                     }
+                    if (m.lagging && now >= m.laggingUntil) {
+                        m.lagging = false;
+                        changed = true;
+                    }
+                }
+                // Past the cap the stragglers are let go, and kept from
+                // holding the room again for a while: they catch up instead.
+                if (state.hold && now - state.hold.since >= HOLD_TIMEOUT_MS) {
+                    for (const waiter of state.hold.waiting) {
+                        const m = members.get(waiter);
+                        if (!m) continue;
+                        m.laggingUntil = now + EXCLUDE_MS;
+                        m.lagging = true;
+                    }
+                    release(now);
+                    changed = true;
                 }
                 const host = [...members.values()].find(isHost);
                 // Handed over only to someone who is actually here; with the
@@ -249,7 +362,11 @@
         };
     }
 
-    const PartyRoom = { VERSION, MAX_MEMBERS, INTENTS_PER_S, AWAY_MS, REMOVE_MS, CONTROLS, ROLES, createRoom, mintRandom };
+    const PartyRoom = {
+        VERSION, MAX_MEMBERS, INTENTS_PER_S, AWAY_MS, REMOVE_MS, CONTROLS, ROLES,
+        HOLD_TIMEOUT_MS, HOLD_MAX_MEMBERS, FLAP_HOLDS, LAG_MS, EXCLUDE_MS, LEAD_PAD_MS, LEAD_MIN_MS, LEAD_MAX_MS, WHYS,
+        createRoom, mintRandom,
+    };
 
     root.BB = root.BB || {};
     root.BB.PartyRoom = PartyRoom;
