@@ -3613,6 +3613,43 @@ check('the host leaving hands the room to the first co-host, else the earliest',
     r.room.handle(ana, { t: 'bye' }, 200);
     eq(r.room.members().map((m) => [m.name, m.role]), [['Ben', 'guest'], ['Cat', 'host']]);
 });
+check('a member gone quiet is shown away, and back on their next word', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ana, { t: 'ping', c: 0, seq: 0 }, PartyRoom.AWAY_MS);
+    r.room.tick(PartyRoom.AWAY_MS);
+    eq(r.room.members().map((m) => m.away), [false, true]);
+    r.room.handle(ben, { t: 'ping', c: 0, seq: 0 }, PartyRoom.AWAY_MS + 100);
+    eq(r.got(ana, 'members').pop().list.map((m) => m.away), [false, false]);
+});
+check('a minute of silence ends the grace: gone, and the token with them', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    const token = r.got(ben, 'welcome')[0].resume;
+    r.room.handle(ana, { t: 'ping', c: 0, seq: 0 }, PartyRoom.REMOVE_MS);
+    r.room.tick(PartyRoom.REMOVE_MS);
+    eq(r.room.members().map((m) => m.name), ['Ana']);
+    eq(r.room.join({ resume: token }, PartyRoom.REMOVE_MS), { error: 'expired' });
+});
+check('a host gone quiet hands over at once, and comes back a co-host', () => {
+    const r = roomOf({ control: 'host' });
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, { t: 'ping', c: 0, seq: 0 }, PartyRoom.AWAY_MS);
+    r.room.tick(PartyRoom.AWAY_MS);
+    eq(r.room.members().map((m) => m.role), ['cohost', 'host']);
+    r.room.handle(ana, play({ at: PartyRoom.AWAY_MS + 50 }), PartyRoom.AWAY_MS + 50);
+    eq(r.room.state().by, ana, 'still allowed to drive');
+});
+check('with the whole room quiet the host keeps it', () => {
+    const r = roomOf();
+    r.join('Ana');
+    r.join('Ben');
+    r.room.tick(PartyRoom.AWAY_MS);
+    eq(r.room.members().map((m) => [m.role, m.away]), [['host', true], ['guest', true]]);
+});
 check('a solo member watches alone and cannot drive', () => {
     const r = roomOf();
     const ana = r.join('Ana');

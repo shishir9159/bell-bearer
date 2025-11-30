@@ -32,6 +32,17 @@
     const CONTROLS = Object.freeze(['everyone', 'host']);
     const ROLES = Object.freeze(['host', 'cohost', 'guest']);
 
+    /**
+     * Liveness, off the pings every member sends at least every fifteen
+     * seconds. Away is shown and costs nothing; removal is what ends the
+     * resume grace — a member back within the minute keeps their id and role.
+     * A host gone quiet for as long as it takes to be marked away is replaced
+     * then, not a minute later: a room nobody can drive in host control is a
+     * room stuck on whatever was last pressed.
+     */
+    const AWAY_MS = 15000;
+    const REMOVE_MS = 60000;
+
     function mintRandom(prefix) {
         const bytes = new Uint8Array(8);
         const crypto = root.crypto;
@@ -208,14 +219,37 @@
                 if (m) remove(m);
             },
             /** Timeouts; the owner calls this about once a second. */
-            tick() {},
+            tick(now) {
+                let changed = false;
+                for (const m of inOrder()) {
+                    const quiet = now - m.lastSeen;
+                    if (quiet >= REMOVE_MS) {
+                        members.delete(m.id);
+                        if (isHost(m)) promote();
+                        changed = true;
+                    } else if (quiet >= AWAY_MS && !m.away) {
+                        m.away = true;
+                        changed = true;
+                    }
+                }
+                const host = [...members.values()].find(isHost);
+                // Handed over only to someone who is actually here; with the
+                // whole room quiet the host keeps it. Back again, the old host
+                // is a co-host, so host control still lets them drive.
+                if (host && host.away && inOrder().some((m) => !m.away)) {
+                    host.role = 'cohost';
+                    promote();
+                    changed = true;
+                }
+                if (changed) announceMembers();
+            },
             state: () => ({ ...state }),
             members: roster,
             policy: () => ({ ...rules }),
         };
     }
 
-    const PartyRoom = { VERSION, MAX_MEMBERS, INTENTS_PER_S, CONTROLS, ROLES, createRoom, mintRandom };
+    const PartyRoom = { VERSION, MAX_MEMBERS, INTENTS_PER_S, AWAY_MS, REMOVE_MS, CONTROLS, ROLES, createRoom, mintRandom };
 
     root.BB = root.BB || {};
     root.BB.PartyRoom = PartyRoom;
