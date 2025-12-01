@@ -7231,6 +7231,70 @@ const dayRecord = (at = T0) =>
         eq(code, 'signed-out');
     });
 
+    // ---------------------------------------------------- party loader
+
+    console.log('\n# party loader — nothing loads until a party starts');
+    const PartyLoader = require('../src/background/party-loader.js');
+    const fs = require('fs');
+
+    check('no manifest loads party code into a page', () => {
+        for (const name of ['manifest.json', 'manifest.firefox.json']) {
+            const manifest = JSON.parse(fs.readFileSync(`${__dirname}/../${name}`, 'utf8'));
+            const listed = manifest.content_scripts.flatMap((one) => one.js || []);
+            eq(listed.filter((file) => /party/.test(file)), [], name);
+        }
+    });
+    check('every file the loader injects is on disk', () => {
+        const files = [...PartyLoader.CONTENT_FILES, ...Object.values(PartyLoader.PAGE_FILES).flat()];
+        for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
+    });
+
+    /** Just the chrome.* the loader touches, recording what it injects. */
+    function loaderWith(session = {}) {
+        const injected = [];
+        const api = {
+            storage: { session: {
+                get: async (key) => (key in session ? { [key]: session[key] } : {}),
+                set: async (values) => { Object.assign(session, values); },
+                remove: async (key) => { delete session[key]; },
+            } },
+            scripting: { executeScript: async ({ target, files, world }) => { injected.push({ tab: target.tabId, files, world }); } },
+        };
+        return { loader: PartyLoader.createLoader(api), injected, session };
+    }
+    const done = { status: 'complete' };
+
+    await checkAsync('a tab that has never been in a party is never injected', async () => {
+        const { loader, injected } = loaderWith();
+        await loader.onUpdated(7, done, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
+        eq(injected, []);
+    });
+    await checkAsync('starting a party brings the code into that tab only', async () => {
+        const { loader, injected, session } = loaderWith();
+        assert(await loader.bind(7, 'https://www.netflix.com/watch/81234567'));
+        eq(injected.map((one) => one.tab), [7]);
+        eq(injected[0].files, [...PartyLoader.CONTENT_FILES]);
+        eq(session[PartyLoader.KEY], { tabId: 7, site: 'netflix' });
+        assert(!(await loader.bind(8, 'https://example.com/')), 'not a site the party plays on');
+    });
+    await checkAsync('the party tab reloading is injected again; others and elsewhere are not', async () => {
+        const { loader, injected } = loaderWith({ [PartyLoader.KEY]: { tabId: 7, site: 'youtube' } });
+        await loader.onUpdated(7, { status: 'loading' }, { url: 'https://www.youtube.com/' });
+        await loader.onUpdated(8, done, { url: 'https://www.youtube.com/' });
+        await loader.onUpdated(7, done, { url: 'https://example.com/' });
+        eq(injected, [], 'not complete, not the party tab, not a party site');
+        await loader.onUpdated(7, done, { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
+        eq(injected.map((one) => one.tab), [7], 'read back from the session after a worker restart');
+    });
+    await checkAsync('leaving, or closing the tab, shuts the gate again', async () => {
+        const { loader, injected, session } = loaderWith();
+        await loader.bind(7, 'https://www.youtube.com/');
+        await loader.onRemoved(7);
+        eq(session[PartyLoader.KEY], undefined);
+        await loader.onUpdated(7, done, { url: 'https://www.youtube.com/' });
+        eq(injected.length, 1);
+    });
+
     console.log('\n' + '='.repeat(52));
     console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
     process.exit(failed ? 1 : 0);
