@@ -3823,6 +3823,44 @@ for (const vector of PartyVectors.cases) {
     check(vector.name, () => runVector(vector));
 }
 
+// ---------------------------------------------------------- party sites
+
+const PartySites = require('../src/shared/party-sites.js');
+
+console.log('\n# party sites');
+check('a watch page names its media; anything else names none', () => {
+    eq(PartySites.mediaOf('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s'), { site: 'youtube', id: 'dQw4w9WgXcQ' });
+    eq(PartySites.mediaOf('https://www.netflix.com/watch/81234567?trackId=1'), { site: 'netflix', id: '81234567' });
+    eq(PartySites.mediaOf('https://www.netflix.com/browse'), null);
+    eq(PartySites.mediaOf('https://www.youtube.com/watch?v=short'), null, 'not an id the authority would take');
+    eq(PartySites.mediaOf('https://example.com/watch/81234567'), null);
+});
+check('the way back to a video is built here, never taken from a peer', () => {
+    eq(PartySites.urlFor({ site: 'youtube', id: 'dQw4w9WgXcQ' }), 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    eq(PartySites.urlFor({ site: 'netflix', id: '81234567' }), 'https://www.netflix.com/watch/81234567');
+    eq(PartySites.urlFor({ site: 'netflix', id: '1/../../logout' }), null);
+    eq(PartySites.urlFor({ site: 'javascript', id: 'alert(1)' }), null);
+});
+check('every party site has a media pattern the authority checks, and no more', () => {
+    eq(PartySites.list().map((site) => site.id).sort(), Object.keys(PartyState.MEDIA_ID).sort());
+});
+check('only netflix seeks through its api and probes the rate', () => {
+    eq(PartySites.list().map((site) => [site.id, site.seek, site.rate]),
+        [['youtube', 'video', 'nudge'], ['netflix', 'api', 'probe']]);
+});
+check('the loader and the registry agree on which tab is a party site', () => {
+    const PartyLoader = require('../src/background/party-loader.js');
+    for (const url of ['https://www.youtube.com/', 'https://m.youtube.com/watch?v=dQw4w9WgXcQ',
+        'https://www.netflix.com/watch/1', 'https://example.com/', 'not a url']) {
+        eq(PartyLoader.siteOf(url), PartySites.siteOf(url), url);
+    }
+});
+check('the loader injects each party module after the ones it reads', () => {
+    const files = require('../src/background/party-loader.js').CONTENT_FILES;
+    const at = (name) => files.indexOf(`src/shared/${name}.js`);
+    assert(at('party-state') >= 0 && at('party-state') < at('party-sites'), 'party-sites reads PartyState');
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

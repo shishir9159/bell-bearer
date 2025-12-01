@@ -26,6 +26,7 @@
         'src/shared/party-clock.js',
         'src/shared/party-state.js',
         'src/shared/party-drift.js',
+        'src/shared/party-sites.js',
     ]);
 
     /** Injected into the page's own world, per site. */
