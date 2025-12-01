@@ -3758,6 +3758,71 @@ check('a member leaving or stepping out is not waited for', () => {
     eq(gone.room.state().hold, null);
 });
 
+// ------------------------------------------------ party protocol vectors
+
+/**
+ * The cases in party-vectors.json, run against this authority. The same file
+ * is what a party server is checked against, so a case here that needs this
+ * implementation's internals to pass is a case the server cannot — which is
+ * why these only ever look at messages sent.
+ */
+const PartyVectors = require('./party-vectors.json');
+
+/** "@a" becomes alias a's member id, wherever it appears in a value. */
+function withIds(value, ids) {
+    if (typeof value === 'string' && value.startsWith('@')) return ids[value.slice(1)] || value;
+    if (Array.isArray(value)) return value.map((one) => withIds(one, ids));
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([key, one]) => [key, withIds(one, ids)]));
+    }
+    return value;
+}
+
+/** Every field `want` names, `got` has the same; arrays have the same length too. */
+function matches(got, want) {
+    if (Array.isArray(want)) return Array.isArray(got) && got.length === want.length && want.every((one, i) => matches(got[i], one));
+    if (want && typeof want === 'object') return !!got && typeof got === 'object' && Object.keys(want).every((key) => matches(got[key], want[key]));
+    return got === want;
+}
+
+function runVector(vector) {
+    const r = roomOf(vector.policy || {});
+    const ids = {};
+    for (const step of vector.steps) {
+        if (step.join) {
+            const token = step.resume && (ids[step.resume] ? r.got(ids[step.resume], 'welcome')[0].resume : step.resume);
+            const out = r.room.join(token ? { resume: token } : { name: step.name }, step.at);
+            // What the server does with a refused join: error, then close.
+            if (out.error) r.sent.push({ to: `alias:${step.join}`, msg: { t: 'error', code: out.error } });
+            else ids[step.join] = out.member;
+        } else if (step.tick) {
+            r.room.tick(step.at);
+        } else {
+            r.room.handle(ids[step.from], withIds(step.msg, ids), step.at);
+        }
+    }
+
+    const inbox = (alias) => r.sent.filter((one) => one.to === ids[alias] || one.to === `alias:${alias}`).map((one) => one.msg);
+    const next = {};
+    for (const { to, msg } of vector.expect || []) {
+        const want = withIds(msg, ids);
+        const got = inbox(to);
+        const found = got.findIndex((one, i) => i >= (next[to] || 0) && matches(one, want));
+        if (found < 0) throw new Error(`${to} was never sent ${JSON.stringify(want)} (in order)`);
+        next[to] = found + 1;
+    }
+    for (const { to, msg } of vector.absent || []) {
+        const want = withIds(msg, ids);
+        if (inbox(to).some((one) => matches(one, want))) throw new Error(`${to} was sent ${JSON.stringify(want)}`);
+    }
+}
+
+console.log('\n# party protocol vectors');
+check('the vector file is the version this suite reads', () => eq(PartyVectors.version, 1));
+for (const vector of PartyVectors.cases) {
+    check(vector.name, () => runVector(vector));
+}
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

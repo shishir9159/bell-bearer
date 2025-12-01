@@ -1,0 +1,207 @@
+{
+  "about": "Cases every party authority must pass: src/shared/party-room.js here, the Zig/Go server there. A step joins a member under an alias, sends a message from one, or ticks the clock; `at` is room time in ms. `expect` lists messages each alias must be sent, in order but not necessarily adjacent, matching the fields given; `absent` lists messages it must never be sent. \"@a\" stands for alias a's member id.",
+  "version": 1,
+  "cases": [
+    {
+      "name": "the first in is the host, and everyone hears who is here",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "  Ben  " }
+      ],
+      "expect": [
+        { "to": "b", "msg": { "t": "welcome", "v": 1, "you": "@b", "room": { "policy": { "control": "everyone", "wait": true, "locked": false } } } },
+        { "to": "a", "msg": { "t": "members", "list": [{ "id": "@a", "name": "Ana", "role": "host" }, { "id": "@b", "name": "Ben", "role": "guest" }] } }
+      ]
+    },
+    {
+      "name": "an accepted intent reaches everyone, acknowledged",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 1000, "from": "b", "msg": { "t": "intent", "id": 1, "base": 0, "op": "play", "pos": 10, "at": 1000 } }
+      ],
+      "expect": [
+        { "to": "a", "msg": { "t": "state", "seq": 1, "paused": false, "pos": 10, "at": 1000, "rate": 1, "by": "@b", "hold": null, "ack": { "member": "@b", "id": 1 } } },
+        { "to": "b", "msg": { "t": "state", "seq": 1, "ack": { "member": "@b", "id": 1 } } }
+      ]
+    },
+    {
+      "name": "an invalid intent is refused to its sender alone",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 1000, "from": "b", "msg": { "t": "intent", "id": 1, "base": 0, "op": "play", "pos": "later", "at": 1000 } },
+        { "at": 1100, "from": "b", "msg": { "t": "intent", "id": 2, "base": 0, "op": "media", "pos": 0, "at": 1100, "media": { "site": "youtube", "id": "https://evil.example/x" } } }
+      ],
+      "expect": [
+        { "to": "b", "msg": { "t": "reject", "id": 1, "why": "invalid" } },
+        { "to": "b", "msg": { "t": "state", "seq": 0 } },
+        { "to": "b", "msg": { "t": "reject", "id": 2, "why": "invalid" } }
+      ],
+      "absent": [{ "to": "a", "msg": { "t": "state" } }]
+    },
+    {
+      "name": "in host control a guest is refused until made a co-host",
+      "policy": { "control": "host" },
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 1000, "from": "b", "msg": { "t": "intent", "id": 1, "base": 0, "op": "play", "pos": 10, "at": 1000 } },
+        { "at": 1100, "from": "a", "msg": { "t": "role", "member": "@b", "role": "cohost" } },
+        { "at": 1200, "from": "b", "msg": { "t": "intent", "id": 2, "base": 0, "op": "play", "pos": 10, "at": 1200 } }
+      ],
+      "expect": [
+        { "to": "b", "msg": { "t": "reject", "id": 1, "why": "policy" } },
+        { "to": "a", "msg": { "t": "state", "seq": 1, "by": "@b" } }
+      ]
+    },
+    {
+      "name": "two clicks at once: the second is refused, the same view acted on later is not",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 1000, "from": "a", "msg": { "t": "intent", "id": 1, "base": 0, "op": "pause", "pos": 10, "at": 1000 } },
+        { "at": 1100, "from": "b", "msg": { "t": "intent", "id": 1, "base": 0, "op": "play", "pos": 10, "at": 1100 } },
+        { "at": 3000, "from": "b", "msg": { "t": "intent", "id": 2, "base": 0, "op": "play", "pos": 10, "at": 3000 } }
+      ],
+      "expect": [
+        { "to": "b", "msg": { "t": "reject", "id": 1, "why": "conflict" } },
+        { "to": "a", "msg": { "t": "state", "seq": 2, "paused": false, "by": "@b" } }
+      ]
+    },
+    {
+      "name": "a sixth intent inside a second is refused",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 1001, "from": "a", "msg": { "t": "intent", "id": 1, "base": 0, "op": "seek", "pos": 1, "at": 1001 } },
+        { "at": 1002, "from": "a", "msg": { "t": "intent", "id": 2, "base": 1, "op": "seek", "pos": 2, "at": 1002 } },
+        { "at": 1003, "from": "a", "msg": { "t": "intent", "id": 3, "base": 2, "op": "seek", "pos": 3, "at": 1003 } },
+        { "at": 1004, "from": "a", "msg": { "t": "intent", "id": 4, "base": 3, "op": "seek", "pos": 4, "at": 1004 } },
+        { "at": 1005, "from": "a", "msg": { "t": "intent", "id": 5, "base": 4, "op": "seek", "pos": 5, "at": 1005 } },
+        { "at": 1006, "from": "a", "msg": { "t": "intent", "id": 6, "base": 5, "op": "seek", "pos": 6, "at": 1006 } }
+      ],
+      "expect": [
+        { "to": "a", "msg": { "t": "state", "seq": 5 } },
+        { "to": "a", "msg": { "t": "reject", "id": 6, "why": "rate-limit" } }
+      ]
+    },
+    {
+      "name": "a ping is answered, and a member behind is sent the state",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 1000, "from": "a", "msg": { "t": "intent", "id": 1, "base": 0, "op": "play", "pos": 10, "at": 1000 } },
+        { "at": 2000, "from": "a", "msg": { "t": "ping", "c": 5, "seq": 1 } },
+        { "at": 3000, "from": "a", "msg": { "t": "ping", "c": 6, "seq": 0 } }
+      ],
+      "expect": [
+        { "to": "a", "msg": { "t": "pong", "c": 5, "s": 2000, "s2": 2000, "seq": 1 } },
+        { "to": "a", "msg": { "t": "pong", "c": 6, "seq": 1 } },
+        { "to": "a", "msg": { "t": "state", "seq": 1 } }
+      ]
+    },
+    {
+      "name": "a guest's request reaches the hosts only",
+      "policy": { "control": "host" },
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 0, "join": "c", "name": "Cat" },
+        { "at": 1000, "from": "b", "msg": { "t": "request", "op": "pause" } }
+      ],
+      "expect": [{ "to": "a", "msg": { "t": "request", "from": "@b", "op": "pause" } }],
+      "absent": [{ "to": "c", "msg": { "t": "request" } }]
+    },
+    {
+      "name": "a buffering member holds the room, and the release starts a lead ahead",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 1000, "from": "a", "msg": { "t": "intent", "id": 1, "base": 0, "op": "play", "pos": 10, "at": 1000 } },
+        { "at": 2000, "from": "a", "msg": { "t": "ping", "c": 0, "seq": 1, "rtt": 400 } },
+        { "at": 3000, "from": "b", "msg": { "t": "ready", "ready": false, "why": "buffering" } },
+        { "at": 4000, "from": "b", "msg": { "t": "ready", "ready": true } }
+      ],
+      "expect": [
+        { "to": "a", "msg": { "t": "state", "seq": 2, "paused": false, "pos": 12, "at": 3000, "hold": { "waiting": ["@b"], "since": 3000 } } },
+        { "to": "a", "msg": { "t": "state", "seq": 3, "paused": false, "pos": 12, "at": 4350, "hold": null } }
+      ]
+    },
+    {
+      "name": "a hold past its cap releases and marks the straggler lagging",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 1000, "from": "a", "msg": { "t": "intent", "id": 1, "base": 0, "op": "play", "pos": 10, "at": 1000 } },
+        { "at": 3000, "from": "b", "msg": { "t": "ready", "ready": false, "why": "buffering" } },
+        { "at": 11000, "from": "a", "msg": { "t": "ping", "c": 0, "seq": 2 } },
+        { "at": 11000, "tick": true }
+      ],
+      "expect": [
+        { "to": "a", "msg": { "t": "state", "seq": 3, "pos": 12, "at": 11250, "hold": null } },
+        { "to": "a", "msg": { "t": "members", "list": [{ "id": "@a", "lagging": false }, { "id": "@b", "lagging": true }] } }
+      ]
+    },
+    {
+      "name": "an ad holds nothing",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 1000, "from": "a", "msg": { "t": "intent", "id": 1, "base": 0, "op": "play", "pos": 10, "at": 1000 } },
+        { "at": 3000, "from": "b", "msg": { "t": "ready", "ready": false, "why": "ad" } }
+      ],
+      "expect": [{ "to": "a", "msg": { "t": "members", "list": [{ "id": "@a" }, { "id": "@b", "ready": false, "why": "ad" }] } }],
+      "absent": [{ "to": "a", "msg": { "t": "state", "seq": 2 } }]
+    },
+    {
+      "name": "play pressed while someone is loading starts held on them",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 500, "from": "b", "msg": { "t": "ready", "ready": false, "why": "loading" } },
+        { "at": 1000, "from": "a", "msg": { "t": "intent", "id": 1, "base": 0, "op": "play", "pos": 0, "at": 1000 } }
+      ],
+      "expect": [{ "to": "b", "msg": { "t": "state", "seq": 1, "paused": false, "hold": { "waiting": ["@b"], "since": 1000 } } }]
+    },
+    {
+      "name": "a host gone quiet hands over to whoever is here",
+      "policy": { "control": "host" },
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 15000, "from": "b", "msg": { "t": "ping", "c": 0, "seq": 0 } },
+        { "at": 15000, "tick": true }
+      ],
+      "expect": [{ "to": "b", "msg": { "t": "members", "list": [{ "id": "@a", "role": "cohost", "away": true }, { "id": "@b", "role": "host", "away": false }] } }]
+    },
+    {
+      "name": "a member comes back as themselves, until the grace runs out",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 5000, "join": "b", "resume": "b" },
+        { "at": 5000, "join": "x", "resume": "nobody" }
+      ],
+      "expect": [
+        { "to": "b", "msg": { "t": "welcome", "you": "@b" } },
+        { "to": "b", "msg": { "t": "welcome", "you": "@b" } },
+        { "to": "x", "msg": { "t": "error", "code": "expired" } }
+      ]
+    },
+    {
+      "name": "the host locks the room and shows someone out",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 1000, "from": "a", "msg": { "t": "policy", "locked": true } },
+        { "at": 1100, "join": "c", "name": "Cat" },
+        { "at": 1200, "from": "a", "msg": { "t": "kick", "member": "@b" } }
+      ],
+      "expect": [
+        { "to": "a", "msg": { "t": "policy", "control": "everyone", "wait": true, "locked": true } },
+        { "to": "c", "msg": { "t": "error", "code": "locked" } },
+        { "to": "b", "msg": { "t": "error", "code": "kicked" } },
+        { "to": "a", "msg": { "t": "members", "list": [{ "id": "@a" }] } }
+      ]
+    }
+  ]
+}
