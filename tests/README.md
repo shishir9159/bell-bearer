@@ -79,6 +79,8 @@ that code, not a replacement — it cannot press a key or play a video.
 | `chat-queue.test.js` | Typing into a chat composer, the prompt picker, the queue, holding on a limit |
 | `chat-claude.test.js` | The same core on a claude.ai-shaped page: rows tied by place and words, hover-drawn arrows, the stream bridge, exact limits |
 | `chat-only.html` | The chat specs alone; `?suite=queue` narrows it to one suite |
+| `party-media.test.js` | The watch party's media adapter on real (silent) media: our writes are not intents, the user's are, and a vector sent before an intent was answered is not played |
+| `party-only.html` | The party specs alone, with the modules the party loader injects |
 | `node-check.js` | The Node gate — pure logic only, no DOM, no timers |
 
 ## How it works

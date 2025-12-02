@@ -3886,6 +3886,11 @@ check('an expectation that never came back stops matching', () => {
     ledger.expect('play', null, 0);
     assert(!ledger.consume('play', null, PartyMedia.EXPECT_MS + 1));
 });
+check('the browser suite loads the party the way the loader injects it', () => {
+    const html = require('fs').readFileSync(`${__dirname}/index.html`, 'utf8');
+    const loaded = [...html.matchAll(/src="\.\.\/(src\/[^"]*party[^"]*)"/g)].map((one) => one[1]);
+    eq(loaded, [...require('../src/background/party-loader.js').CONTENT_FILES]);
+});
 
 // ------------------------------------------------------------ activity
 

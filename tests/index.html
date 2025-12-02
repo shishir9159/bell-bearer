@@ -142,6 +142,14 @@
 <script src="../src/content/chat-runner.js"></script>
 <script src="../src/content/chat-queue-view.js"></script>
 <script src="../src/content/chat-ui.js"></script>
+<!-- The watch party. No manifest lists these — the party loader injects
+     them into a party's tab — so this page is the one place they load
+     together with the content scripts, in the loader's order. -->
+<script src="../src/shared/party-clock.js"></script>
+<script src="../src/shared/party-state.js"></script>
+<script src="../src/shared/party-drift.js"></script>
+<script src="../src/shared/party-sites.js"></script>
+<script src="../src/content/party-media.js"></script>
 
 <!-- 4. Specs -->
 <script src="background.test.js"></script>
@@ -164,6 +172,7 @@
 <script src="chat.test.js"></script>
 <script src="chat-queue.test.js"></script>
 <script src="chat-claude.test.js"></script>
+<script src="party-media.test.js"></script>
 <!-- Last, because it loads content.css for the specs that need the reader
      laid out, and a stylesheet loaded earlier would restyle every fixture
      after it. -->
