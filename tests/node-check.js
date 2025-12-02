@@ -3861,6 +3861,32 @@ check('the loader injects each party module after the ones it reads', () => {
     assert(at('party-state') >= 0 && at('party-state') < at('party-sites'), 'party-sites reads PartyState');
 });
 
+// ---------------------------------------------------------- party media
+
+const PartyMedia = require('../src/content/party-media.js');
+
+console.log('\n# party media — the expectation ledger');
+check('an event matching a write of ours is ours, once', () => {
+    const ledger = PartyMedia.createLedger();
+    ledger.expect('pause', null, 1000);
+    assert(ledger.consume('pause', null, 1100));
+    assert(!ledger.consume('pause', null, 1150), 'a second pause is the user');
+});
+check('a seek is ours if it lands near where we sent it; a rate only if it is the rate', () => {
+    const ledger = PartyMedia.createLedger();
+    ledger.expect('seek', 42, 0);
+    ledger.expect('rate', 0.95, 0);
+    assert(!ledger.consume('seek', 50, 10), 'the user seeking elsewhere meanwhile');
+    assert(ledger.consume('seek', 42.3, 10), 'a keyframe away');
+    assert(!ledger.consume('rate', 1, 10), 'the page putting its own rate back');
+    assert(ledger.consume('rate', 0.95, 10));
+});
+check('an expectation that never came back stops matching', () => {
+    const ledger = PartyMedia.createLedger();
+    ledger.expect('play', null, 0);
+    assert(!ledger.consume('play', null, PartyMedia.EXPECT_MS + 1));
+});
+
 // ------------------------------------------------------------ activity
 
 // Just enough chrome.* for the store: a local key/value area, promise form.

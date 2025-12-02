@@ -27,6 +27,7 @@
         'src/shared/party-state.js',
         'src/shared/party-drift.js',
         'src/shared/party-sites.js',
+        'src/content/party-media.js',
     ]);
 
     /** Injected into the page's own world, per site. */
