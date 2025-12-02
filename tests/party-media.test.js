@@ -158,3 +158,38 @@ suite('party media: waiting on the authority', () => {
     });
 });
 
+
+suite('party media: keeping up with the room', () => {
+    test('a remote seek lands without echoing back as a seek', async () => {
+        const h = await partyHarness();
+        try {
+            h.room({ pos: 20 });
+            // Past the seek debounce, or an echo would not have been sent yet.
+            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
+            assert(Math.abs(h.video.currentTime - 20) < 0.5, `landed at ${h.video.currentTime}`);
+            assertDeepEqual(h.intents(), []);
+        } finally { h.destroy(); }
+    });
+
+    test('a little behind is caught up by a rate nudge, which is not an intent', async () => {
+        const h = await partyHarness();
+        try {
+            h.room({ paused: false, pos: 0, at: Date.now() - 700 });
+            await partyWait(300);
+            assert(h.video.playbackRate > 1, `still at ${h.video.playbackRate}`);
+            assert(h.media.stats().nudges >= 1);
+            assertEqual(h.media.stats().seeks, 0, 'under a second and a half behind is never a seek');
+            assertDeepEqual(h.intents(), []);
+        } finally { h.destroy(); }
+    });
+
+    test('leaving mid-nudge hands back the room rate', async () => {
+        const h = await partyHarness();
+        try {
+            h.room({ paused: false, pos: 0, at: Date.now() - 700 });
+            await partyWait(300);
+            h.media.detach();
+            assertEqual(h.video.playbackRate, 1);
+        } finally { h.destroy(); }
+    });
+});

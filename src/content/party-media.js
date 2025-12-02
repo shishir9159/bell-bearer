@@ -25,6 +25,7 @@
     const ns = root.BB || {};
     const PartyClock = ns.PartyClock || req('../shared/party-clock.js');
     const PartyState = ns.PartyState || req('../shared/party-state.js');
+    const PartyDrift = ns.PartyDrift || req('../shared/party-drift.js');
 
     /** How long a write of ours may take to come back as its event. */
     const EXPECT_MS = 1500;
@@ -73,9 +74,10 @@
         now = PartyClock.localNow,
         onStatus = noop,
     }) {
+        const drift = PartyDrift.createDrift({ profile: 'nudge' });
         const ledger = createLedger();
         const controls = VIDEO_CONTROLS;
-        const stats = { intents: 0 };
+        const stats = { intents: 0, seeks: 0, nudges: 0 };
 
         let attached = false;
         let me = null;
@@ -86,6 +88,8 @@
         let snapNext = false;
         let solo = false;
         let seekTimer = null;
+        let seekAskedAt = null;
+        let awaitPlaying = false;
         let startTimer = null;
         let pingTimer = null;
         let status = 'joining';
@@ -107,6 +111,11 @@
                 if (video.paused === (kind === 'pause')) return;
                 ledger.expect(kind, null, t);
                 controls[kind](video);
+            } else if (kind === 'seek') {
+                ledger.expect('seek', value, t);
+                seekAskedAt = t;
+                stats.seeks++;
+                controls.seek(video, value);
             } else if (kind === 'rate') {
                 if (Math.abs(video.playbackRate - value) < RATE_SLACK) return;
                 ledger.expect('rate', value, t);
@@ -137,6 +146,7 @@
         function follow() {
             const video = getVideo();
             if (!room || !video || solo || pending) return;
+            drift.reset();
             clearTimeout(startTimer);
             const roomNow = clock.toRoom(now());
             write('rate', room.rate);
@@ -151,6 +161,37 @@
                 write('play');
             }
             setStatus('synced');
+            correct();
+        }
+
+        function bufferedAhead(video) {
+            const ranges = video.buffered;
+            for (let i = 0; ranges && i < ranges.length; i++) {
+                if (ranges.start(i) <= video.currentTime && video.currentTime <= ranges.end(i)) {
+                    return ranges.end(i) - video.currentTime;
+                }
+            }
+            return 0;
+        }
+
+        /** One drift decision, applied. Runs on timeupdate and whenever the room moves. */
+        function correct() {
+            const video = getVideo();
+            if (!room || !video || solo || pending || seekTimer) return;
+            const t = now();
+            const action = drift.decide({
+                actual: video.currentTime,
+                expected: PartyState.expected(room, clock.toRoom(t)),
+                rate: room.rate, paused: video.paused, now: t,
+                bufferedAhead: video.readyState ? bufferedAhead(video) : Infinity,
+            });
+            if (action.kind === 'rate') {
+                stats.nudges++;
+                write('rate', action.rate);
+            } else if (action.kind === 'seek') {
+                if (action.rate) write('rate', action.rate);
+                write('seek', action.to);
+            }
         }
 
         function onState(msg) {
@@ -171,12 +212,32 @@
         }
 
         function onSeeked(event) {
-            if (!mine(event) || ledger.consume('seek', event.target.currentTime, now())) return;
+            if (!mine(event)) return;
+            const video = event.target;
+            const t = now();
+            if (ledger.consume('seek', video.currentTime, t)) {
+                // Paused, the seek is done when it lands; playing, when the
+                // frames start again — which is the cost the drift learns.
+                if (video.paused || video.readyState >= 3) drift.seekDone(t, t - seekAskedAt);
+                else awaitPlaying = true;
+                return;
+            }
             clearTimeout(seekTimer);
             seekTimer = setTimeout(() => {
                 seekTimer = null;
                 sendIntent('seek');
             }, SEEK_DEBOUNCE_MS);
+        }
+
+        function onPlaying(event) {
+            if (!mine(event) || !awaitPlaying) return;
+            awaitPlaying = false;
+            const t = now();
+            drift.seekDone(t, t - seekAskedAt);
+        }
+
+        function onTimeUpdate(event) {
+            if (mine(event)) correct();
         }
 
         function onRateChange(event) {
@@ -219,7 +280,8 @@
         }
 
         const LISTENERS = [
-            ['play', onPlayOrPause], ['pause', onPlayOrPause], ['seeked', onSeeked], ['ratechange', onRateChange],
+            ['play', onPlayOrPause], ['pause', onPlayOrPause], ['seeked', onSeeked], ['playing', onPlaying],
+            ['ratechange', onRateChange], ['timeupdate', onTimeUpdate],
         ];
 
         function attach() {
@@ -238,6 +300,8 @@
             clearInterval(pingTimer);
             pending = null;
             seekTimer = null;
+            // Hand the rate back as the room had it, not mid-nudge.
+            if (room && drift.nudging()) write('rate', room.rate);
             setStatus('left');
         }
 
@@ -252,7 +316,7 @@
             attach, detach, receive, setSolo,
             status: () => status,
             room: () => room,
-            stats: () => ({ ...stats }),
+            stats: () => ({ ...stats, seekLatency: drift.seekLatency(), profile: drift.profile() }),
         };
     }
 
