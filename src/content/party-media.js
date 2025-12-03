@@ -16,7 +16,8 @@
  * `reject`, …), forwarded by the party session. A `ping` on it is answered by
  * the session itself, in room time, so one clock covers both hops.
  *
- * Injected by the party loader, never listed in a manifest.
+ * Injected by the party loader, never listed in a manifest, and it boots
+ * itself: see the foot of this file.
  */
 (function (root) {
     'use strict';
@@ -26,6 +27,7 @@
     const PartyClock = ns.PartyClock || req('../shared/party-clock.js');
     const PartyState = ns.PartyState || req('../shared/party-state.js');
     const PartyDrift = ns.PartyDrift || req('../shared/party-drift.js');
+    const PartySites = ns.PartySites || req('../shared/party-sites.js');
 
     /** How long a write of ours may take to come back as its event. */
     const EXPECT_MS = 1500;
@@ -36,6 +38,8 @@
     const SEEK_DEBOUNCE_MS = 300;
     /** An intent the authority never answers stops holding the room back after this. */
     const PENDING_MS = 3000;
+    /** A rate change this soon after a new source is the page resetting it, not the user. */
+    const SOURCE_RESET_MS = 4000;
     const CLOCK_PING_MS = 60000;
 
     function createLedger() {
@@ -69,11 +73,15 @@
     });
 
     function createPartyMedia({
-        getVideo, send,
+        site, getVideo, send,
         clock = PartyClock.createClock(),
         now = PartyClock.localNow,
+        mediaNow = () => PartySites.mediaOf(root.location.href),
+        followMedia = () => true,
+        go = (url) => root.location.assign(url),
         onStatus = noop,
     }) {
+        const profile = PartySites.get(site);
         const drift = PartyDrift.createDrift({ profile: 'nudge' });
         const ledger = createLedger();
         const controls = VIDEO_CONTROLS;
@@ -87,6 +95,8 @@
         let pending = null;
         let snapNext = false;
         let solo = false;
+        let loading = false;
+        let sourceAt = -Infinity;
         let seekTimer = null;
         let seekAskedAt = null;
         let awaitPlaying = false;
@@ -100,6 +110,7 @@
             onStatus(next, detail);
         };
         const mine = (event) => attached && !!event && event.target === getVideo();
+        const onRoomMedia = () => !room || !room.media || PartySites.sameMedia(room.media, mediaNow());
 
         // --- writing ---------------------------------------------------
 
@@ -126,6 +137,7 @@
         function sendIntent(op, extra = {}) {
             const video = getVideo();
             if (!video || !room || solo) return;
+            if (op !== 'media' && !onRoomMedia()) return;
             const id = ++cseq;
             if (pending) clearTimeout(pending.timer);
             pending = { id, timer: setTimeout(settle, PENDING_MS) };
@@ -143,9 +155,19 @@
 
         // --- playing the room ------------------------------------------
 
+        let roomMediaChanged = false;
+
         function follow() {
             const video = getVideo();
-            if (!room || !video || solo || pending) return;
+            if (!room || !video || loading || solo || pending) return;
+            if (!onRoomMedia()) {
+                const url = roomMediaChanged && followMedia() && PartySites.urlFor(room.media);
+                roomMediaChanged = false;
+                setStatus('elsewhere');
+                if (url) go(url);
+                return;
+            }
+            roomMediaChanged = false;
             drift.reset();
             clearTimeout(startTimer);
             const roomNow = clock.toRoom(now());
@@ -177,7 +199,7 @@
         /** One drift decision, applied. Runs on timeupdate and whenever the room moves. */
         function correct() {
             const video = getVideo();
-            if (!room || !video || solo || pending || seekTimer) return;
+            if (!room || !video || loading || solo || pending || seekTimer || !onRoomMedia()) return;
             const t = now();
             const action = drift.decide({
                 actual: video.currentTime,
@@ -198,6 +220,7 @@
             const { t, ack, ...state } = msg;
             const ours = !!pending && !!ack && ack.id === pending.id && (!me || ack.member === me);
             if (room && (state.seq < room.seq || (state.seq === room.seq && !snapNext && !ours))) return;
+            roomMediaChanged = roomMediaChanged || !room || !PartySites.sameMedia(room.media, state.media);
             room = state;
             snapNext = false;
             if (ours) settle();
@@ -207,7 +230,7 @@
         // --- listening to the page ------------------------------------
 
         function onPlayOrPause(event) {
-            if (!mine(event) || ledger.consume(event.type, null, now())) return;
+            if (!mine(event) || ledger.consume(event.type, null, now()) || loading) return;
             sendIntent(event.type);
         }
 
@@ -222,6 +245,7 @@
                 else awaitPlaying = true;
                 return;
             }
+            if (loading) return;
             clearTimeout(seekTimer);
             seekTimer = setTimeout(() => {
                 seekTimer = null;
@@ -236,15 +260,43 @@
             drift.seekDone(t, t - seekAskedAt);
         }
 
+        function onRateChange(event) {
+            if (!mine(event)) return;
+            const rate = event.target.playbackRate;
+            const t = now();
+            if (ledger.consume('rate', rate, t) || !room || loading) return;
+            if (t - sourceAt < SOURCE_RESET_MS) {
+                // The page put its own remembered rate back while loading.
+                drift.reset();
+                write('rate', room.rate);
+                return;
+            }
+            sendIntent('rate', { rate });
+        }
+
+        function onSourceChanged(event) {
+            if (!mine(event)) return;
+            loading = true;
+            sourceAt = now();
+            ledger.clear();
+        }
+
+        function onSourceReady(event) {
+            if (!mine(event) || !loading) return;
+            loading = false;
+            const media = mediaNow();
+            // Somebody here moved the room to another video (or the next
+            // episode started on its own): that is a change for everyone.
+            if (room && media && !onRoomMedia()) sendIntent('media', { media, paused: event.target.paused });
+            else follow();
+        }
+
         function onTimeUpdate(event) {
             if (mine(event)) correct();
         }
 
-        function onRateChange(event) {
-            if (!mine(event)) return;
-            const rate = event.target.playbackRate;
-            if (ledger.consume('rate', rate, now()) || !room) return;
-            sendIntent('rate', { rate });
+        function onNavigated() {
+            if (!onRoomMedia()) setStatus('elsewhere');
         }
 
         // --- the port ---------------------------------------------------
@@ -256,13 +308,16 @@
         function receive(msg) {
             if (!attached || !msg || typeof msg.t !== 'string') return;
             switch (msg.t) {
-                case 'welcome':
+                case 'welcome': {
                     me = msg.you;
                     room = null;
                     if (pending) clearTimeout(pending.timer);
                     pending = null;
                     onState({ ...msg.room.state });
+                    const media = mediaNow();
+                    if (!room.media && media) sendIntent('media', { media, paused: !!(getVideo() || {}).paused });
                     break;
+                }
                 case 'state': onState(msg); break;
                 case 'reject':
                     if (!pending || msg.id !== pending.id) break;
@@ -282,12 +337,14 @@
         const LISTENERS = [
             ['play', onPlayOrPause], ['pause', onPlayOrPause], ['seeked', onSeeked], ['playing', onPlaying],
             ['ratechange', onRateChange], ['timeupdate', onTimeUpdate],
+            ['loadstart', onSourceChanged], ['emptied', onSourceChanged], ['loadeddata', onSourceReady],
         ];
 
         function attach() {
             if (attached) return;
             attached = true;
             for (const [type, fn] of LISTENERS) document.addEventListener(type, fn, { capture: true, passive: true });
+            if (profile.navigated) document.addEventListener(profile.navigated, onNavigated);
             ping();
             pingTimer = setInterval(ping, CLOCK_PING_MS);
         }
@@ -296,6 +353,7 @@
             if (!attached) return;
             attached = false;
             for (const [type, fn] of LISTENERS) document.removeEventListener(type, fn, { capture: true });
+            if (profile.navigated) document.removeEventListener(profile.navigated, onNavigated);
             for (const timer of [seekTimer, startTimer, pending && pending.timer]) clearTimeout(timer);
             clearInterval(pingTimer);
             pending = null;
@@ -320,9 +378,45 @@
         };
     }
 
+    /**
+     * Boot. Runs when the loader injects this file into a party tab, where the
+     * page's own content script has already put its player on
+     * `__bellBearer`. The test page has none, so nothing boots there.
+     */
+    function boot() {
+        const bb = root.__bellBearer;
+        const api = root.chrome;
+        if (!bb || !bb.player || root.__bbPartyMedia || !api || !api.runtime || !ns.Site) return;
+        const site = PartySites.siteOf(root.location.href);
+        if (!site) return;
+
+        let port;
+        try {
+            port = api.runtime.connect({ name: 'bb:party' });
+        } catch (_) {
+            return; // the extension reloaded under this page
+        }
+        const media = createPartyMedia({
+            site,
+            getVideo: ns.Site.createPlayerLocator(site),
+            send: (msg) => { try { port.postMessage(msg); } catch (_) { media.detach(); } },
+        });
+        root.__bbPartyMedia = media;
+        bb.party = media;
+        port.onMessage.addListener(media.receive);
+        port.onDisconnect.addListener(() => {
+            void api.runtime.lastError;
+            media.detach();
+            root.__bbPartyMedia = null;
+        });
+        media.attach();
+    }
+
     const PartyMedia = { createPartyMedia, createLedger, VIDEO_CONTROLS, EXPECT_MS, SEEK_DEBOUNCE_MS, PENDING_MS };
 
     root.BB = root.BB || {};
     root.BB.PartyMedia = PartyMedia;
     if (typeof module !== 'undefined' && module.exports) module.exports = PartyMedia;
+
+    if (typeof document !== 'undefined') boot();
 })(typeof globalThis !== 'undefined' ? globalThis : this);

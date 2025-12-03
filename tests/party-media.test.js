@@ -36,9 +36,14 @@ async function partyHarness(over = {}) {
     await new Promise((resolve) => video.addEventListener('loadeddata', resolve, { once: true }));
 
     const sent = [];
+    const gone = [];
+    let onVideo = PARTY_VIDEO;
     const media = window.BB.PartyMedia.createPartyMedia({
+        site: 'youtube',
         getVideo: () => video,
         send: (msg) => sent.push(msg),
+        mediaNow: () => onVideo,
+        go: (to) => gone.push(to),
         ...over,
     });
     media.attach();
@@ -48,7 +53,7 @@ async function partyHarness(over = {}) {
     media.receive({ t: 'welcome', you: 'm1', room: { state: vector({}) } });
 
     return {
-        video, media, sent,
+        video, media, sent, gone, url,
         intents: () => sent.filter((msg) => msg.t === 'intent'),
         /** The room moving on, as another member made it. */
         room(fields, extra = {}) {
@@ -61,6 +66,7 @@ async function partyHarness(over = {}) {
             media.receive({ t: 'state', ...vector({ by: 'm1', ...fields }), ack: { member: 'm1', id: last.id } });
         },
         get seq() { return seq; },
+        moveTo: (next) => { onVideo = next; },
         destroy() {
             media.detach();
             video.pause();
@@ -190,6 +196,41 @@ suite('party media: keeping up with the room', () => {
             await partyWait(300);
             h.media.detach();
             assertEqual(h.video.playbackRate, 1);
+        } finally { h.destroy(); }
+    });
+});
+
+suite('party media: which video', () => {
+    test('the room moving to another video is followed, by a url built here', async () => {
+        const h = await partyHarness();
+        try {
+            h.room({ media: { site: 'youtube', id: 'aaaaaaaaaaa' } });
+            assertDeepEqual(h.gone, ['https://www.youtube.com/watch?v=aaaaaaaaaaa']);
+            assertEqual(h.media.status(), 'elsewhere');
+        } finally { h.destroy(); }
+    });
+
+    test('while on another video, nothing it does is sent to the room', async () => {
+        const h = await partyHarness({ followMedia: () => false });
+        try {
+            h.moveTo({ site: 'youtube', id: 'bbbbbbbbbbb' });
+            h.video.currentTime = 12;
+            h.video.playbackRate = 2;
+            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
+            assertDeepEqual(h.intents(), []);
+        } finally { h.destroy(); }
+    });
+
+    test('loading another video here moves the room to it, and the load itself is not an intent', async () => {
+        const h = await partyHarness();
+        try {
+            const next = { site: 'youtube', id: 'ccccccccccc' };
+            h.moveTo(next);
+            h.video.src = h.url; // a new source, as a watch-page navigation gives the player
+            h.video.playbackRate = 1.75; // the page putting its remembered rate back mid-load
+            await new Promise((resolve) => h.video.addEventListener('loadeddata', resolve, { once: true }));
+            await partyWait(100);
+            assertDeepEqual(h.intents().map((one) => [one.op, one.media]), [['media', next]]);
         } finally { h.destroy(); }
     });
 });
