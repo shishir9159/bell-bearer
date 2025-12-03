@@ -29,6 +29,7 @@ function silentWav(seconds) {
 const PARTY_VIDEO = { site: 'youtube', id: 'dQw4w9WgXcQ' };
 
 async function partyHarness(over = {}) {
+    const party = over.party || PARTY_VIDEO;
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:-9999px;width:320px;height:180px;';
     const video = document.createElement('video');
@@ -43,9 +44,9 @@ async function partyHarness(over = {}) {
 
     const sent = [];
     const gone = [];
-    let onVideo = PARTY_VIDEO;
+    let onVideo = party;
     const media = window.BB.PartyMedia.createPartyMedia({
-        site: 'youtube',
+        site: party.site,
         getVideo: () => video,
         send: (msg) => sent.push(msg),
         mediaNow: () => onVideo,
@@ -55,7 +56,7 @@ async function partyHarness(over = {}) {
     media.attach();
 
     let seq = 1;
-    const vector = (fields) => ({ seq, media: PARTY_VIDEO, paused: true, pos: 0, rate: 1, at: Date.now(), by: 'm2', hold: null, ...fields });
+    const vector = (fields) => ({ seq, media: party, paused: true, pos: 0, rate: 1, at: Date.now(), by: 'm2', hold: null, ...fields });
     media.receive({ t: 'welcome', you: 'm1', room: { state: vector({}) } });
 
     return {
@@ -269,5 +270,111 @@ suite('party media: which video', () => {
             await partyWait(100);
             assertDeepEqual(h.intents().map((one) => [one.op, one.media]), [['media', next]]);
         } finally { h.destroy(); }
+    });
+});
+
+/**
+ * Netflix's player API as the page world has it, with a billboard session
+ * ahead of the one being watched. Its seek moves the video the way Netflix's
+ * does; any other currentTime write is counted, because on Netflix it is
+ * error M7375.
+ */
+function fakeNetflix(video) {
+    const calls = [];
+    const native = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'currentTime');
+    let viaApi = false;
+    let direct = 0;
+    Object.defineProperty(video, 'currentTime', {
+        configurable: true,
+        get() { return native.get.call(this); },
+        set(value) { if (!viaApi) direct++; native.set.call(this, value); },
+    });
+    const watching = {
+        seek(ms) {
+            calls.push(['seek', ms]);
+            viaApi = true;
+            try { video.currentTime = ms / 1000; } finally { viaApi = false; }
+        },
+        play() { calls.push(['play']); video.play().catch(() => {}); },
+        pause() { calls.push(['pause']); video.pause(); },
+    };
+    const billboard = { seek() { throw new Error('the billboard is not what is being watched'); } };
+    const videoPlayer = {
+        getAllPlayerSessionIds: () => ['motion-billboard-1', 'watch-12'],
+        getVideoPlayerBySessionId: (id) => (id === 'watch-12' ? watching : billboard),
+    };
+    window.netflix = { appContext: { state: { playerApp: { getAPI: () => ({ videoPlayer }) } } } };
+    return {
+        calls,
+        direct: () => direct,
+        remove() {
+            delete window.netflix;
+            delete video.currentTime;
+        },
+    };
+}
+
+suite('party media: netflix', () => {
+    const NETFLIX = { site: 'netflix', id: '81234567' };
+
+    test('a seek goes through the player api, to the session being watched, never currentTime', async () => {
+        const h = await partyHarness({ party: NETFLIX });
+        const netflix = fakeNetflix(h.video);
+        try {
+            h.room({ pos: 20 });
+            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
+            assertDeepEqual(netflix.calls, [['seek', 20000]]);
+            assertEqual(netflix.direct(), 0);
+            assertDeepEqual(h.intents(), [], 'the seek we made is not an intent');
+        } finally {
+            netflix.remove();
+            h.destroy();
+        }
+    });
+
+    test('play and pause go through the api as well', async () => {
+        const h = await partyHarness({ party: NETFLIX });
+        const netflix = fakeNetflix(h.video);
+        try {
+            h.room({ paused: false });
+            assert(await partyUntil(() => !h.video.paused));
+            h.room({ paused: true, pos: h.video.currentTime });
+            assert(await partyUntil(() => h.video.paused));
+            assertDeepEqual(netflix.calls.map((one) => one[0]).filter((op) => op !== 'seek'), ['play', 'pause']);
+            assertDeepEqual(h.intents(), []);
+        } finally {
+            netflix.remove();
+            h.destroy();
+        }
+    });
+
+    test('with no player api, no seek is made and the party says so; play still works', async () => {
+        const statuses = [];
+        const h = await partyHarness({ party: NETFLIX, onStatus: (status) => statuses.push(status) });
+        try {
+            h.room({ pos: 20 });
+            await partyWait(100);
+            assert(h.video.currentTime < 1, 'never a currentTime write');
+            assert(statuses.includes('no-seek'));
+            assert(!h.media.canSeek());
+            h.room({ paused: false, pos: 0, at: Date.now() });
+            assert(await partyUntil(() => !h.video.paused), 'play falls back to the <video>');
+        } finally { h.destroy(); }
+    });
+
+    test('a nudge netflix puts back sends this member to seek-only, and is not an intent', async () => {
+        const h = await partyHarness({ party: NETFLIX });
+        const netflix = fakeNetflix(h.video);
+        try {
+            h.room({ paused: false, pos: 0, at: Date.now() - 700 });
+            assert(await partyUntil(() => h.video.playbackRate > 1), 'nudged');
+            h.video.playbackRate = 1; // Netflix putting its own rate back
+            await partyWait(100);
+            assertEqual(h.media.stats().profile, 'seekOnly');
+            assertDeepEqual(h.intents(), []);
+        } finally {
+            netflix.remove();
+            h.destroy();
+        }
     });
 });

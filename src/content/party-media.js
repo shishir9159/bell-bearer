@@ -75,8 +75,43 @@
     const VIDEO_CONTROLS = Object.freeze({
         play: (video) => quietly(video.play()),
         pause: (video) => video.pause(),
-        seek: (video, to) => { video.currentTime = to; },
+        seek: (video, to) => {
+            video.currentTime = to;
+            return true;
+        },
     });
+
+    /**
+     * One synchronous round trip to src/content/netflix-page.js, in the page's
+     * world. Null when nothing answered: the bridge is not in this page.
+     */
+    function askPage(message) {
+        let answer = null;
+        const take = (event) => {
+            try { answer = JSON.parse(event.detail); } catch (_) { answer = null; }
+        };
+        document.addEventListener('bb:party:ok', take);
+        try {
+            document.dispatchEvent(new CustomEvent('bb:party', { detail: JSON.stringify(message) }));
+        } finally {
+            document.removeEventListener('bb:party:ok', take);
+        }
+        return answer;
+    }
+
+    /**
+     * Netflix: its own player API, falling back to the <video> for play and
+     * pause. Never for a seek — Netflix answers a currentTime write with error
+     * M7375 — so a seek with no API to go through is not made at all.
+     */
+    function createApiControls(ask = askPage) {
+        const done = (answer) => !!(answer && answer.ok);
+        return {
+            play: (video) => { if (!done(ask({ type: 'play' }))) quietly(video.play()); },
+            pause: (video) => { if (!done(ask({ type: 'pause' }))) video.pause(); },
+            seek: (video, to) => done(ask({ type: 'seek', ms: Math.round(to * 1000) })),
+        };
+    }
 
     function createPartyMedia({
         site, getVideo, send,
@@ -92,7 +127,7 @@
         const profile = PartySites.get(site);
         const drift = PartyDrift.createDrift({ profile: 'nudge' });
         const ledger = createLedger();
-        const controls = VIDEO_CONTROLS;
+        const controls = profile.seek === 'api' ? createApiControls() : VIDEO_CONTROLS;
         const stats = { intents: 0, seeks: 0, nudges: 0 };
 
         let attached = false;
@@ -111,6 +146,9 @@
         let startTimer = null;
         let pingTimer = null;
         let status = 'joining';
+        let canSeek = true;
+        /** The last rate nudge written, while a player that may revert it is on probation. */
+        let lastNudge = null;
 
         const setStatus = (next, detail) => {
             if (next === status && !detail) return;
@@ -134,7 +172,10 @@
                 ledger.expect('seek', value, t);
                 seekAskedAt = t;
                 stats.seeks++;
-                controls.seek(video, value);
+                if (controls.seek(video, value)) return;
+                ledger.clear();
+                if (canSeek) onStatus('no-seek');
+                canSeek = false;
             } else if (kind === 'rate') {
                 if (Math.abs(video.playbackRate - value) < RATE_SLACK) return;
                 ledger.expect('rate', value, t);
@@ -217,6 +258,7 @@
             });
             if (action.kind === 'rate') {
                 stats.nudges++;
+                if (profile.rate === 'probe') lastNudge = { rate: action.rate, at: t };
                 write('rate', action.rate);
             } else if (action.kind === 'seek') {
                 if (action.rate) write('rate', action.rate);
@@ -273,6 +315,17 @@
             const rate = event.target.playbackRate;
             const t = now();
             if (ledger.consume('rate', rate, t) || !room || loading) return;
+            if (lastNudge && t - lastNudge.at < profile.probeMs && Math.abs(rate - room.rate) < RATE_SLACK) {
+                // The player put the room's rate back over our nudge. It will
+                // keep doing that, so this member is kept in sync by seeks.
+                // Events still queued behind this one read the same rate back
+                // and are the same revert, not the user choosing it.
+                lastNudge = null;
+                ledger.expect('rate', room.rate, t);
+                drift.setProfile('seekOnly');
+                drift.reset();
+                return;
+            }
             if (t - sourceAt < SOURCE_RESET_MS) {
                 // The page put its own remembered rate back while loading.
                 drift.reset();
@@ -398,6 +451,7 @@
         return {
             attach, detach, receive, setSolo,
             status: () => status,
+            canSeek: () => canSeek,
             room: () => room,
             stats: () => ({ ...stats, seekLatency: drift.seekLatency(), profile: drift.profile() }),
         };
@@ -439,7 +493,7 @@
         media.attach();
     }
 
-    const PartyMedia = { createPartyMedia, createLedger, VIDEO_CONTROLS, EXPECT_MS, SEEK_DEBOUNCE_MS, PENDING_MS };
+    const PartyMedia = { createPartyMedia, createLedger, createApiControls, askPage, VIDEO_CONTROLS, EXPECT_MS, SEEK_DEBOUNCE_MS, PENDING_MS };
 
     root.BB = root.BB || {};
     root.BB.PartyMedia = PartyMedia;

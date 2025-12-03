@@ -33,7 +33,7 @@
     /** Injected into the page's own world, per site. */
     const PAGE_FILES = Object.freeze({
         youtube: Object.freeze([]),
-        netflix: Object.freeze([]),
+        netflix: Object.freeze(['src/content/netflix-page.js']),
     });
 
     /** Where the bound tab is remembered; the worker itself does not survive the evening. */

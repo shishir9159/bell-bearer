@@ -7348,8 +7348,9 @@ const dayRecord = (at = T0) =>
     await checkAsync('starting a party brings the code into that tab only', async () => {
         const { loader, injected, session } = loaderWith();
         assert(await loader.bind(7, 'https://www.netflix.com/watch/81234567'));
-        eq(injected.map((one) => one.tab), [7]);
+        eq(injected.map((one) => one.tab), [7, 7]);
         eq(injected[0].files, [...PartyLoader.CONTENT_FILES]);
+        eq([injected[1].world, injected[1].files], ['MAIN', ['src/content/netflix-page.js']], 'the player bridge, in the page\'s world');
         eq(session[PartyLoader.KEY], { tabId: 7, site: 'netflix' });
         assert(!(await loader.bind(8, 'https://example.com/')), 'not a site the party plays on');
     });
