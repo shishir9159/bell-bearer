@@ -187,6 +187,39 @@ suite('player: holding the rate against the page', () => {
     });
 });
 
+suite('player: telling its own writes apart', () => {
+    test('REGRESSION: a boost is not adopted as the chosen rate', async () => {
+        // ratechange is queued. The flag that used to mark our own writes
+        // was cleared before the event ran, so the boost's 3x read as the
+        // user choosing 3x, and a new video then started at it.
+        const h = harness();
+        try {
+            h.player.setRate(1.5, { announce: false });
+            h.player.boostSpeed(10);
+            await wait(50);
+            assertEqual(h.player.desiredRate, 1.5);
+        } finally { h.destroy(); }
+    });
+
+    test('while a watch party holds the rate, its writes are not adopted and the keys go to it', async () => {
+        const h = harness();
+        const steps = [];
+        try {
+            h.player.setRate(1, { announce: false });
+            h.player.holdRate(true, { step: (direction) => { steps.push(direction); return 1.25; } });
+            assert(h.player.isRateHeld());
+            h.video.playbackRate = 0.93; // a sync nudge
+            await wait(50);
+            assertEqual(h.player.desiredRate, 1, 'a nudge is not a choice');
+            h.press(FASTER);
+            assertDeepEqual(steps, [1]);
+            assertEqual(h.video.playbackRate, 0.93, 'the party writes the rate, not the player');
+            h.player.holdRate(false);
+            assert(!h.player.isRateHeld());
+        } finally { h.destroy(); }
+    });
+});
+
 suite('player: temporary boost', () => {
     test('runs at 3x then restores the previous rate', async () => {
         const h = harness();

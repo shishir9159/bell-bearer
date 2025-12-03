@@ -6,6 +6,12 @@
 
 const partyWait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Wait for a player state rather than a fixed time: a page still loading can take longer than any guess. */
+async function partyUntil(condition, ms = 1500) {
+    for (const end = Date.now() + ms; !condition() && Date.now() < end;) await partyWait(20);
+    return condition();
+}
+
 /** `seconds` of 8 kHz 8-bit silence as a WAV blob: small, seekable, and it plays muted without a gesture. */
 function silentWav(seconds) {
     const samples = 8000 * seconds;
@@ -81,11 +87,10 @@ suite('party media: telling our writes from the user', () => {
         const h = await partyHarness();
         try {
             h.room({ paused: false });
-            await partyWait(200);
-            assert(!h.video.paused, 'the room said play');
+            assert(await partyUntil(() => !h.video.paused), 'the room said play');
             h.room({ paused: true, pos: h.video.currentTime });
-            await partyWait(200);
-            assert(h.video.paused, 'the room said pause');
+            assert(await partyUntil(() => h.video.paused), 'the room said pause');
+            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
             assertDeepEqual(h.intents(), [], 'our own writes are not intents');
         } finally { h.destroy(); }
     });
@@ -186,6 +191,38 @@ suite('party media: keeping up with the room', () => {
             assert(h.media.stats().nudges >= 1);
             assertEqual(h.media.stats().seeks, 0, 'under a second and a half behind is never a seek');
             assertDeepEqual(h.intents(), []);
+        } finally { h.destroy(); }
+    });
+
+    test('a nudge is never remembered as the chosen speed', async () => {
+        const watching = { video: null };
+        const player = window.BB.Player.createPlayer({ getVideoElement: () => watching.video, notify: () => {} });
+        const h = await partyHarness({ player });
+        watching.video = h.video;
+        player.attach();
+        try {
+            player.desiredRate = 1;
+            h.room({ paused: false, pos: 0, at: Date.now() - 700 });
+            await partyWait(300);
+            assert(h.video.playbackRate > 1, 'nudged');
+            assertEqual(player.desiredRate, 1);
+        } finally {
+            player.detach();
+            h.destroy();
+        }
+    });
+
+    test('the speed keys step the room rate, from the room rate', async () => {
+        const held = { step: null };
+        const player = { holdRate: (on, options) => { held.step = on ? options.step : null; } };
+        const h = await partyHarness({ player });
+        try {
+            h.room({ paused: false, pos: 0, at: Date.now() - 700 }); // mid-nudge
+            await partyWait(300);
+            assertEqual(held.step(1), 1.25, 'one rung above the room, not above the nudge');
+            assertDeepEqual(h.intents().map((one) => [one.op, one.rate]), [['rate', 1.25]]);
+            h.media.detach();
+            assertEqual(held.step, null, 'leaving hands the keys back');
         } finally { h.destroy(); }
     });
 

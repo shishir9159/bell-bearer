@@ -3881,6 +3881,13 @@ check('a seek is ours if it lands near where we sent it; a rate only if it is th
     assert(!ledger.consume('rate', 1, 10), 'the page putting its own rate back');
     assert(ledger.consume('rate', 0.95, 10));
 });
+check('two quick rate writes are both ours, though both events read the second', () => {
+    const ledger = PartyMedia.createLedger();
+    ledger.expect('rate', 1.5, 0);
+    ledger.expect('rate', 1.08, 0);
+    assert(ledger.consume('rate', 1.08, 5));
+    assert(ledger.consume('rate', 1.08, 6));
+});
 check('an expectation that never came back stops matching', () => {
     const ledger = PartyMedia.createLedger();
     ledger.expect('play', null, 0);

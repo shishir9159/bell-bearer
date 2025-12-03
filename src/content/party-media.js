@@ -28,6 +28,7 @@
     const PartyState = ns.PartyState || req('../shared/party-state.js');
     const PartyDrift = ns.PartyDrift || req('../shared/party-drift.js');
     const PartySites = ns.PartySites || req('../shared/party-sites.js');
+    const Speed = ns.Speed || req('../shared/speed.js');
 
     /** How long a write of ours may take to come back as its event. */
     const EXPECT_MS = 1500;
@@ -50,12 +51,17 @@
             expect(kind, value, now) {
                 waiting.push({ kind, value, until: now + EXPECT_MS });
             },
-            /** True, once, if this event is the echo of a write of ours. */
+            /**
+             * True if this event is the echo of a write of ours. A play or a
+             * pause matches once — a second one is the user's. A rate is not
+             * used up: its handler reads the element's rate as it is by then,
+             * so two quick writes send two events that both read the last.
+             */
             consume(kind, value, now) {
                 waiting = waiting.filter((one) => one.until > now);
                 const at = waiting.findIndex((one) => one.kind === kind && same(kind, one.value, value));
                 if (at < 0) return false;
-                waiting.splice(at, 1);
+                if (kind !== 'rate') waiting.splice(at, 1);
                 return true;
             },
             clear() { waiting = []; },
@@ -74,6 +80,8 @@
 
     function createPartyMedia({
         site, getVideo, send,
+        player = null,
+        notify = noop,
         clock = PartyClock.createClock(),
         now = PartyClock.localNow,
         mediaNow = () => PartySites.mediaOf(root.location.href),
@@ -295,6 +303,21 @@
             if (mine(event)) correct();
         }
 
+        /**
+         * The speed keys, while the party holds the rate: a step is from the
+         * room's rate, not from wherever a nudge has the player this second,
+         * and it is the room's to change.
+         */
+        function stepRoomRate(direction) {
+            if (!room) return null;
+            const rate = Speed.step(room.rate, direction);
+            drift.reset();
+            write('rate', rate);
+            sendIntent('rate', { rate });
+            notify(`Party speed: ${Speed.format(rate)}`, 'info');
+            return rate;
+        }
+
         function onNavigated() {
             if (!onRoomMedia()) setStatus('elsewhere');
         }
@@ -345,6 +368,7 @@
             attached = true;
             for (const [type, fn] of LISTENERS) document.addEventListener(type, fn, { capture: true, passive: true });
             if (profile.navigated) document.addEventListener(profile.navigated, onNavigated);
+            if (player) player.holdRate(true, { step: stepRoomRate });
             ping();
             pingTimer = setInterval(ping, CLOCK_PING_MS);
         }
@@ -360,6 +384,7 @@
             seekTimer = null;
             // Hand the rate back as the room had it, not mid-nudge.
             if (room && drift.nudging()) write('rate', room.rate);
+            if (player) player.holdRate(false);
             setStatus('left');
         }
 
@@ -399,6 +424,8 @@
         const media = createPartyMedia({
             site,
             getVideo: ns.Site.createPlayerLocator(site),
+            player: bb.player,
+            notify: ns.Notify ? (message, type) => ns.Notify.show(message, type) : noop,
             send: (msg) => { try { port.postMessage(msg); } catch (_) { media.detach(); } },
         });
         root.__bbPartyMedia = media;

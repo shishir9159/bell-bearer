@@ -34,12 +34,28 @@
 
     const BOOST_RATE = 3;
 
+    /** How long a rate we wrote may take to come back as its ratechange. */
+    const OWN_RATE_MS = 1000;
+
     function createPlayer({ getVideoElement, notify, shouldRemember = () => true }) {
         /** The rate the user asked for, or null while they have not asked. */
         let desiredRate = null;
 
-        /** Set while we are writing playbackRate, so we ignore our own event. */
-        let applying = false;
+        /**
+         * Rates we wrote, each until its ratechange comes back. This was an
+         * `applying` flag set around the write, but ratechange is a queued
+         * event: the flag was already cleared when it ran, so every write of
+         * ours read as the user's — and a boost at 3x was adopted as their
+         * chosen speed. Matching the value is what tells our event apart.
+         */
+        let written = [];
+
+        /**
+         * { step } while a watch party owns the rate. The party nudges it to
+         * keep in sync, which must never become the rate remembered here, and
+         * a speed step is a change for the whole room rather than this player.
+         */
+        let held = null;
 
         let sourceChangedAt = 0;
         let reapplies = 0;
@@ -70,16 +86,12 @@
             if (!video) return null;
 
             const target = Speed.clamp(rate);
-            applying = true;
-            try {
-                // A plain assignment is all that is needed. Never redefine the
-                // property: replacing the native setter with a value makes reads
-                // return the new number while the video keeps its old rate, which
-                // is the "speed changed but nothing sounds different" failure.
-                video.playbackRate = target;
-            } finally {
-                applying = false;
-            }
+            // A plain assignment is all that is needed. Never redefine the
+            // property: replacing the native setter with a value makes reads
+            // return the new number while the video keeps its old rate, which
+            // is the "speed changed but nothing sounds different" failure.
+            video.playbackRate = target;
+            written.push({ rate: video.playbackRate, until: Date.now() + OWN_RATE_MS });
 
             if (remember) desiredRate = video.playbackRate;
             if (announce) notify(`Playback speed: ${Speed.format(video.playbackRate)}`, 'info');
@@ -96,6 +108,7 @@
             if (!video) return null;
 
             cancelBoost({ restore: false }); // an explicit change wins over the boost
+            if (held && held.step) return held.step(direction);
             return setRate(Speed.step(video.playbackRate, direction));
         }
 
@@ -184,18 +197,29 @@
          * effect — this runs on `loadeddata`, after the reset has happened.
          */
         function onSourceReady(event) {
-            if (desiredRate === null || !shouldRemember()) return;
+            if (held || desiredRate === null || !shouldRemember()) return;
             const video = getVideoElement();
             if (event.target !== video) return;
             if (Speed.sameRate(video.playbackRate, desiredRate)) return;
             setRate(desiredRate, { announce: false });
         }
 
-        function onRateChange(event) {
-            if (applying || desiredRate === null) return;
+        /**
+         * Whether this ratechange is one of our own writes arriving. A match
+         * is not used up: the handler reads the element's rate as it is now,
+         * so two writes in a row (a boost straight after a step) deliver two
+         * events that both read the second rate.
+         */
+        function ownRate(rate) {
+            const now = Date.now();
+            written = written.filter((one) => one.until > now);
+            return written.some((one) => Speed.sameRate(one.rate, rate));
+        }
 
+        function onRateChange(event) {
             const video = getVideoElement();
             if (event.target !== video) return;
+            if (ownRate(video.playbackRate) || held || desiredRate === null) return;
             if (Speed.sameRate(video.playbackRate, desiredRate)) return;
 
             const withinReset = Date.now() - sourceChangedAt < REAPPLY_WINDOW_MS;
@@ -235,12 +259,22 @@
             cancelBoost({ restore: false });
         }
 
+        /**
+         * Hand the rate to a watch party, or take it back. `step(direction)`
+         * receives the speed keys while it is held.
+         */
+        function holdRate(on, { step = null } = {}) {
+            held = on ? { step } : null;
+        }
+
         return {
             attach, detach,
             currentRate, currentTime,
             setRate, faster, slower, resetSpeed,
             boostSpeed, cancelBoost,
             seekTo, skip,
+            holdRate,
+            isRateHeld: () => !!held,
             /** Test/debug view of the remembered rate. */
             get desiredRate() { return desiredRate; },
             set desiredRate(rate) { desiredRate = rate === null ? null : Speed.clamp(rate); },
