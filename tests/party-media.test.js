@@ -125,6 +125,20 @@ suite('party media: telling our writes from the user', () => {
         } finally { h.destroy(); }
     });
 
+    test('REGRESSION: a seek of the user’s is not pulled back by the drift before it lands', async () => {
+        // The browser fires a timeupdate between seeking and seeked. The
+        // debounce used to start at seeked, so that timeupdate let the drift
+        // correct a paused player back to the room's position mid-scrub.
+        const h = await partyHarness();
+        try {
+            await partyWait(window.BB.PartyMedia.DRIFT_EVAL_MS + 100); // the drift decides at most once a second
+            h.video.currentTime = 30;
+            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
+            assert(Math.abs(h.video.currentTime - 30) < 0.5, `pulled back to ${h.video.currentTime}`);
+            assertDeepEqual(h.intents().map((one) => [one.op, Math.round(one.pos)]), [['seek', 30]]);
+        } finally { h.destroy(); }
+    });
+
     test('a user rate change is an intent', async () => {
         const h = await partyHarness();
         try {

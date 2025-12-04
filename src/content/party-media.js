@@ -66,6 +66,10 @@
                 if (kind !== 'rate') waiting.splice(at, 1);
                 return true;
             },
+            /** Whether an event would match, without spending the match. */
+            has(kind, value, now) {
+                return waiting.some((one) => one.until > now && one.kind === kind && same(kind, one.value, value));
+            },
             clear() { waiting = []; },
         };
     }
@@ -304,7 +308,21 @@
                 else awaitPlaying = true;
                 return;
             }
-            if (suspended()) return;
+            if (!suspended()) userSeeked();
+        }
+
+        /**
+         * A seek of the user's starts the debounce at `seeking`, not at
+         * `seeked`. The browser fires a timeupdate between the two, and with
+         * nothing marking the seek as the user's yet, the drift saw a player
+         * far from the room and seeked it straight back mid-scrub.
+         */
+        function onSeeking(event) {
+            if (!mine(event) || suspended() || ledger.has('seek', event.target.currentTime, now())) return;
+            userSeeked();
+        }
+
+        function userSeeked() {
             clearTimeout(seekTimer);
             seekTimer = setTimeout(() => {
                 seekTimer = null;
@@ -478,7 +496,8 @@
         }
 
         const LISTENERS = [
-            ['play', onPlayOrPause], ['pause', onPlayOrPause], ['seeked', onSeeked], ['playing', onPlaying],
+            ['play', onPlayOrPause], ['pause', onPlayOrPause], ['seeking', onSeeking], ['seeked', onSeeked],
+            ['playing', onPlaying],
             ['ratechange', onRateChange], ['timeupdate', onTimeUpdate],
             ['loadstart', onSourceChanged], ['emptied', onSourceChanged], ['loadeddata', onSourceReady],
             ['waiting', onWaiting], ['canplay', onCanPlay],
@@ -563,7 +582,7 @@
 
     const PartyMedia = {
         createPartyMedia, createLedger, createApiControls, askPage, VIDEO_CONTROLS,
-        EXPECT_MS, SEEK_DEBOUNCE_MS, PENDING_MS, STALL_MS,
+        EXPECT_MS, SEEK_DEBOUNCE_MS, PENDING_MS, STALL_MS, DRIFT_EVAL_MS: PartyDrift.EVAL_MS,
     };
 
     root.BB = root.BB || {};

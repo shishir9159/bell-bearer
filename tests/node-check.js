@@ -3888,6 +3888,13 @@ check('two quick rate writes are both ours, though both events read the second',
     assert(ledger.consume('rate', 1.08, 5));
     assert(ledger.consume('rate', 1.08, 6));
 });
+check('asking whether an event is ours does not spend the match', () => {
+    const ledger = PartyMedia.createLedger();
+    ledger.expect('seek', 42, 0);
+    assert(ledger.has('seek', 42.2, 5), 'seeking');
+    assert(ledger.consume('seek', 42.2, 6), 'then seeked');
+    assert(!ledger.has('seek', 42.2, 7));
+});
 check('an expectation that never came back stops matching', () => {
     const ledger = PartyMedia.createLedger();
     ledger.expect('play', null, 0);
