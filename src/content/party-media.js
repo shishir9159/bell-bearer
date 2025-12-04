@@ -42,6 +42,8 @@
     /** A rate change this soon after a new source is the page resetting it, not the user. */
     const SOURCE_RESET_MS = 4000;
     const CLOCK_PING_MS = 60000;
+    /** A stall shorter than this is the player's ordinary hiccup, not worth holding a room over. */
+    const STALL_MS = 800;
 
     function createLedger() {
         let waiting = [];
@@ -139,6 +141,11 @@
         let snapNext = false;
         let solo = false;
         let loading = false;
+        /** YouTube is playing this member an ad: nothing here is the room's business until it ends. */
+        let ad = false;
+        /** Why the room has been told we are not ready, or null. */
+        let notReady = null;
+        let stallTimer = null;
         let sourceAt = -Infinity;
         let seekTimer = null;
         let seekAskedAt = null;
@@ -156,6 +163,7 @@
             onStatus(next, detail);
         };
         const mine = (event) => attached && !!event && event.target === getVideo();
+        const suspended = () => loading || ad;
         const onRoomMedia = () => !room || !room.media || PartySites.sameMedia(room.media, mediaNow());
 
         // --- writing ---------------------------------------------------
@@ -208,7 +216,7 @@
 
         function follow() {
             const video = getVideo();
-            if (!room || !video || loading || solo || pending) return;
+            if (!room || !video || suspended() || solo || pending) return;
             if (!onRoomMedia()) {
                 const url = roomMediaChanged && followMedia() && PartySites.urlFor(room.media);
                 roomMediaChanged = false;
@@ -231,7 +239,8 @@
             } else {
                 write('play');
             }
-            setStatus('synced');
+            if (room.hold) setStatus('waiting', room.hold.waiting);
+            else setStatus('synced');
             correct();
         }
 
@@ -248,7 +257,7 @@
         /** One drift decision, applied. Runs on timeupdate and whenever the room moves. */
         function correct() {
             const video = getVideo();
-            if (!room || !video || loading || solo || pending || seekTimer || !onRoomMedia()) return;
+            if (!room || !video || suspended() || solo || pending || seekTimer || !onRoomMedia()) return;
             const t = now();
             const action = drift.decide({
                 actual: video.currentTime,
@@ -280,7 +289,7 @@
         // --- listening to the page ------------------------------------
 
         function onPlayOrPause(event) {
-            if (!mine(event) || ledger.consume(event.type, null, now()) || loading) return;
+            if (!mine(event) || ledger.consume(event.type, null, now()) || suspended()) return;
             sendIntent(event.type);
         }
 
@@ -295,7 +304,7 @@
                 else awaitPlaying = true;
                 return;
             }
-            if (loading) return;
+            if (suspended()) return;
             clearTimeout(seekTimer);
             seekTimer = setTimeout(() => {
                 seekTimer = null;
@@ -304,17 +313,68 @@
         }
 
         function onPlaying(event) {
-            if (!mine(event) || !awaitPlaying) return;
+            if (!mine(event)) return;
+            checkAd();
+            if (!ad) report(null);
+            if (!awaitPlaying) return;
             awaitPlaying = false;
             const t = now();
             drift.seekDone(t, t - seekAskedAt);
+        }
+
+        // --- readiness --------------------------------------------------
+
+        /** Tell the room we are ready (`why` null) or why not — once per change. */
+        function report(why) {
+            clearTimeout(stallTimer);
+            stallTimer = null;
+            if (why === notReady) return;
+            notReady = why;
+            send(why ? { t: 'ready', ready: false, why } : { t: 'ready', ready: true });
+        }
+
+        function stall(why) {
+            if (solo || notReady || stallTimer) return;
+            stallTimer = setTimeout(() => report(why), STALL_MS);
+        }
+
+        /**
+         * Buffering is not pausing. `waiting` on a player that is still meant
+         * to be playing is a stall, and a stall says "not ready" — which may
+         * hold the room — rather than pausing everyone.
+         */
+        function onWaiting(event) {
+            if (!mine(event) || event.target.paused || ad) return;
+            stall('buffering');
+        }
+
+        function onCanPlay(event) {
+            if (mine(event) && !suspended()) report(null);
+        }
+
+        /**
+         * Ads differ per member, so one never holds the room: while it plays,
+         * this member's events are not intents and it is not corrected, and
+         * when it ends it catches up with wherever the room got to.
+         */
+        function checkAd() {
+            const showing = !!profile.ad && !!document.querySelector(profile.ad);
+            if (showing === ad) return;
+            ad = showing;
+            if (ad) {
+                drift.reset();
+                report('ad');
+            } else {
+                report(null);
+                follow();
+            }
         }
 
         function onRateChange(event) {
             if (!mine(event)) return;
             const rate = event.target.playbackRate;
             const t = now();
-            if (ledger.consume('rate', rate, t) || !room || loading) return;
+            if (ledger.consume('rate', rate, t) || !room || suspended()) return;
             if (lastNudge && t - lastNudge.at < profile.probeMs && Math.abs(rate - room.rate) < RATE_SLACK) {
                 // The player put the room's rate back over our nudge. It will
                 // keep doing that, so this member is kept in sync by seeks.
@@ -340,11 +400,16 @@
             loading = true;
             sourceAt = now();
             ledger.clear();
+            checkAd();
+            if (!ad) stall('loading');
         }
 
         function onSourceReady(event) {
             if (!mine(event) || !loading) return;
             loading = false;
+            checkAd();
+            if (ad) return;
+            report(null);
             const media = mediaNow();
             // Somebody here moved the room to another video (or the next
             // episode started on its own): that is a change for everyone.
@@ -353,7 +418,9 @@
         }
 
         function onTimeUpdate(event) {
-            if (mine(event)) correct();
+            if (!mine(event)) return;
+            checkAd();
+            correct();
         }
 
         /**
@@ -414,6 +481,7 @@
             ['play', onPlayOrPause], ['pause', onPlayOrPause], ['seeked', onSeeked], ['playing', onPlaying],
             ['ratechange', onRateChange], ['timeupdate', onTimeUpdate],
             ['loadstart', onSourceChanged], ['emptied', onSourceChanged], ['loadeddata', onSourceReady],
+            ['waiting', onWaiting], ['canplay', onCanPlay],
         ];
 
         function attach() {
@@ -431,7 +499,7 @@
             attached = false;
             for (const [type, fn] of LISTENERS) document.removeEventListener(type, fn, { capture: true });
             if (profile.navigated) document.removeEventListener(profile.navigated, onNavigated);
-            for (const timer of [seekTimer, startTimer, pending && pending.timer]) clearTimeout(timer);
+            for (const timer of [seekTimer, startTimer, stallTimer, pending && pending.timer]) clearTimeout(timer);
             clearInterval(pingTimer);
             pending = null;
             seekTimer = null;
@@ -493,7 +561,10 @@
         media.attach();
     }
 
-    const PartyMedia = { createPartyMedia, createLedger, createApiControls, askPage, VIDEO_CONTROLS, EXPECT_MS, SEEK_DEBOUNCE_MS, PENDING_MS };
+    const PartyMedia = {
+        createPartyMedia, createLedger, createApiControls, askPage, VIDEO_CONTROLS,
+        EXPECT_MS, SEEK_DEBOUNCE_MS, PENDING_MS, STALL_MS,
+    };
 
     root.BB = root.BB || {};
     root.BB.PartyMedia = PartyMedia;
