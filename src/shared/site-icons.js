@@ -1,12 +1,13 @@
 /**
  * Per-site branding for the dashboard's site launcher and the settings page's
- * site-specific panels: one colored glyph, a name and a one-line description
- * per site Bell Bearer knows how to work with.
+ * site-specific panels: the site's own mark, a name and a one-line
+ * description per site Bell Bearer knows how to work with.
  *
- * Each glyph is a single hand-picked path lifted from Simple Icons rather
+ * Each mark is a single hand-picked path lifted from Simple Icons rather
  * than the whole package — there is no bundler here to tree-shake an npm
  * dependency down to the icons actually used, so the same effect is had by
- * only ever copying in the one path a site needs.
+ * only ever copying in the one path a site needs. A site with no vector mark
+ * anywhere carries its favicon as an `image` instead.
  *
  * The `id` is the one src/content/site.js#detectSite returns, so a card, a
  * settings panel and the popup all name a site the same way.
@@ -66,36 +67,30 @@
             id: 'typeracer',
             name: 'TypeRacer',
             description: 'Races logged, the letter pairs you stall on, and what correcting them costs',
-            // The one glyph here that is not lifted from Simple Icons, because
-            // Simple Icons has no TypeRacer mark to lift. It is a keyboard,
-            // drawn as one path of plain key rectangles — which is also why it
-            // takes the page's ink rather than a brand colour: there is no
-            // brand mark to borrow one from, and an invented colour in a row
-            // of real ones reads as a mistake.
-            color: 'currentColor',
-            viewBox: '0 0 24 24',
-            path: 'M2 4h3v3h-3zM6.25 4h3v3h-3zM10.5 4h3v3h-3zM14.75 4h3v3h-3zM19 4h3v3h-3zM4.125 8.25h3v3h-3zM8.375 8.25h3v3h-3zM12.625 8.25h3v3h-3zM16.875 8.25h3v3h-3zM2 12.5h3v3h-3zM6.25 12.5h3v3h-3zM10.5 12.5h3v3h-3zM14.75 12.5h3v3h-3zM19 12.5h3v3h-3zM6.25 16.75h11.5v3h-11.5z',
+            // TypeRacer has no vector mark to lift: Simple Icons does not carry
+            // one, and the site ships nothing but a 16px favicon, a typewriter.
+            // So that favicon is the mark, as it is, drawn pixelated — smoothed
+            // up to card size, sixteen pixels turn to mud.
+            viewBox: '0 0 16 16',
+            image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAADOUlEQVR42oXNbUzUBQDH8X8vcG4RNajohW1kVAohcOLdgQE3noLyRBd5SNDlwx3n3aEEwp8QeZLjGXXCrBWy7rbaagVzNDmhE1sc3jycVzjJs6m14UbO6uTkAO3/bbeZ81V+t9/Lz36C8KDh4bGbPEiSYPnePyws3efOwjJ/zi/xhy/Azdt3WQgskZGh7hUeTaerfsLhmJh/HP59zsfi0j0KCrTWhzgkZEVFaGhYldN5QXocvj57m4XAMoWFO38OCVlRGbRCZWUXwXk8Myzf/3/864055v0BOjv7+c8JHo8Xp9OD13uDwCP41p1F5nyLzN7yP8S/XJ3lr7/9jIxMEHTBCTX1xxDFVlyuKS5fucr0jJeh7+y0dfSg0xvZrTPS0tqF46yL7x3nuHhxmr4+K2JNOzUNHyNEr5GhVKbT2NhM46FWkuQKSkv3olLlkr9FQ7rqTZRKFeHhz6LV7qauroHi4l3ExSWSXVKLYDCIiGIHfn+AyfNT5OdvIzv7bS7NeKnYLzJz5RoWSzvJyRmo1Vvx+e5itzvR66v5wHAQQSFTsFGRislkJisri8R4GanKDWwv1BAZGYlMJkO/U8tLL64iKmo1ZrOZQk0RG+KT2JiSgeCyqhn9ZD0fmdZz/KCJM0fyOGfL5svOVzlQuQtbVR6TA5sZ71dwqCKW7gMfcrotB5ctl8EjaxGkyR1IZ+Scan0KS4kKyd0AP26GsVco2xLBJds+cO2B8Te49kU4JWkxSO4WmHgXaSwWoVfchm2fnCHxdYY6FJywxHPYnM7J8li+aVLwdYeMo6KCgfIUhvavZbBdia0tgZ69adRtj0Ew7THQW5oDniZwv480Hotx69NMf7YDfhLBmcdvg89RkroGphrggh5pXEa9Lowysxlh9Fgm33avo6sqhVONmZxuUWLvS2PAEkN/7SaGqxMYO5rJycOJdItJDDe/xUi9jNE+FQNN0QicL4Wzydi7wmjWKJCCL5MF4HgNw6YnuWw1gtsMP6i4/lUERSnRSO4mcL0HjjiEz+s19BkTkK9eSVzUC/RUa7HW5lL7zioiwlZSlJPMifpiPi2Xk7sulKjnn6G5rAhrnRpL8cv8CyyYnz+qRn53AAAAAElFTkSuQmCC',
         },
         chatgpt: {
             id: 'chatgpt',
             name: 'ChatGPT',
             description: 'An outline and a branch tree for long chats, pins, prompt templates, a prompt queue and exports',
-            // A plain speech bubble rather than OpenAI's mark, in the page's
-            // ink like the other marks that are not a brand colour.
+            // OpenAI's mark, which is ChatGPT's own. The site draws it black on
+            // white, so it takes the page's ink the way Lichess's and X's do.
             color: 'currentColor',
             viewBox: '0 0 24 24',
-            path: 'M4.5 3h15A2.5 2.5 0 0 1 22 5.5v10a2.5 2.5 0 0 1-2.5 2.5H10l-4.6 3.7A.9.9 0 0 1 4 21v-3h.5A2.5 2.5 0 0 1 2 15.5v-10A2.5 2.5 0 0 1 4.5 3zm3 6.25a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5zm4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5zm4.5 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5z',
+            path: 'M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z',
         },
         claude: {
             id: 'claude',
             name: 'Claude',
             description: 'The same chat panel as ChatGPT — outline, branches, pins, prompts, a queue — and artifacts in exports',
-            // A plain bubble with lines of text in it rather than Anthropic's
-            // mark — and different enough from ChatGPT's dotted one to tell
-            // the two cards apart at a glance.
-            color: 'currentColor',
+            color: '#D97757',
             viewBox: '0 0 24 24',
-            path: 'M4.5 3h15A2.5 2.5 0 0 1 22 5.5v10a2.5 2.5 0 0 1-2.5 2.5H10l-4.6 3.7A.9.9 0 0 1 4 21v-3h.5A2.5 2.5 0 0 1 2 15.5v-10A2.5 2.5 0 0 1 4.5 3zM6.5 7.4v1.8h11V7.4zm0 4v1.8h7.5v-1.8z',
+            path: 'm4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z',
         },
         reddit: {
             id: 'reddit',
@@ -139,11 +134,14 @@
         return SITES[id] || null;
     }
 
-    /** An inline `<svg>` for the site, its brand color baked in via `fill`. */
+    /** An inline `<svg>` for the site: its path in its brand color, or its favicon. */
     function svg(id, { size = 24 } = {}) {
         const site = get(id);
         if (!site) return '';
-        return `<svg viewBox="${site.viewBox}" width="${size}" height="${size}" aria-hidden="true" focusable="false"><path fill="${site.color}" d="${site.path}"/></svg>`;
+        const mark = site.image
+            ? `<image href="${site.image}" width="100%" height="100%" style="image-rendering:pixelated"/>`
+            : `<path fill="${site.color}" d="${site.path}"/>`;
+        return `<svg viewBox="${site.viewBox}" width="${size}" height="${size}" aria-hidden="true" focusable="false">${mark}</svg>`;
     }
 
     const SiteIcons = { list, get, svg, tint, ORDER: Object.freeze(ORDER.slice()) };

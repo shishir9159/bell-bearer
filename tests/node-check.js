@@ -5961,7 +5961,9 @@ const dayRecord = (at = T0) =>
         for (const site of SiteIcons.list()) {
             assert(site && site.id, 'an id in ORDER with no entry in SITES');
             assert(site.name && site.description, `${site.id} is missing its plate`);
-            assert(/^M/.test(site.path), `${site.id}'s glyph is not a path`);
+            // A path from Simple Icons, or for a site that has no vector mark
+            // at all, its favicon.
+            assert(/^[Mm]/.test(site.path) || /^data:image\/png;base64,/.test(site.image), `${site.id} has no mark`);
         }
     });
     check('typeracer is one site, whichever subdomain a race is on', () => {
@@ -5994,6 +5996,7 @@ const dayRecord = (at = T0) =>
         eq(SiteIcons.get('typeracer').name, 'TypeRacer');
         assert(SiteIcons.list().some((site) => site.id === 'typeracer'), 'not in ORDER');
         assert(SiteIcons.svg('typeracer').includes('<svg'), 'draws nothing');
+        assert(/<image [^>]*image-rendering:pixelated/.test(SiteIcons.svg('typeracer')), 'its 16px favicon, not smoothed to mud');
     });
     check('the typeracer workspace has a panel behind every tab', () => {
         const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
@@ -6839,7 +6842,7 @@ const dayRecord = (at = T0) =>
         assert(!html.includes('<img'), 'markup from a prompt reached the page');
     });
 
-    check('chatgpt is in the launcher, in the page’s ink rather than a brand mark', () => {
+    check('chatgpt is in the launcher, its mark in the page’s ink', () => {
         const SiteIcons = require('../src/shared/site-icons.js');
         eq(SiteIcons.get('chatgpt').name, 'ChatGPT');
         eq(SiteIcons.get('chatgpt').color, 'currentColor');
@@ -6868,7 +6871,7 @@ const dayRecord = (at = T0) =>
     });
     check('claude has its card, a panel behind every tab, and its settings', () => {
         const SiteIcons = require('../src/shared/site-icons.js');
-        eq([SiteIcons.get('claude').name, SiteIcons.get('claude').color], ['Claude', 'currentColor']);
+        eq([SiteIcons.get('claude').name, SiteIcons.get('claude').color], ['Claude', '#D97757']);
         assert(SiteIcons.list().some((site) => site.id === 'claude'), 'not in ORDER');
         const html = readRepo('dashboard.html');
         const tabs = /claude: \[([\s\S]*?)\],/.exec(readRepo('dashboard.js'))[1];
