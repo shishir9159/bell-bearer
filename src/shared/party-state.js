@@ -79,6 +79,13 @@
         return MEDIA_ID[site] && MEDIA_ID[site].test(id) ? { site, id } : null;
     }
 
+    /** A rate the room plays at, as a number, or null for anything else. */
+    function validRate(rate) {
+        if (rate === null || rate === undefined || rate === '') return null;
+        const n = Number(rate);
+        return Number.isFinite(n) && n >= MIN_RATE && n <= MAX_RATE ? n : null;
+    }
+
     const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
     const isCount = (n) => Number.isInteger(n) && n >= 0;
 
@@ -101,9 +108,8 @@
         out.at = Number.isFinite(at) ? clamp(at, now - AT_PAST_MS, now + AT_FUTURE_MS) : now;
 
         if (msg.op === 'rate') {
-            const rate = Number(msg.rate);
-            if (!Number.isFinite(rate) || rate < MIN_RATE || rate > MAX_RATE) return null;
-            out.rate = rate;
+            out.rate = validRate(msg.rate);
+            if (out.rate === null) return null;
         }
         if (msg.op === 'media') {
             out.media = validMedia(msg.media);
@@ -150,7 +156,7 @@
 
     const PartyState = {
         OPS, MAX_POS, MIN_RATE, MAX_RATE, AT_PAST_MS, AT_FUTURE_MS, CONFLICT_MS, MEDIA_ID,
-        blank, expected, scheduled, validMedia, validateIntent, conflicts, apply,
+        blank, expected, scheduled, validRate, validMedia, validateIntent, conflicts, apply,
     };
 
     root.BB = root.BB || {};

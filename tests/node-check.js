@@ -3350,6 +3350,8 @@ check('an intent that cannot be one is refused', () => {
     eq(PartyState.validateIntent(intentOf({ id: -1 }), now), null);
     eq(PartyState.validateIntent(intentOf({ op: 'rate', rate: 16 }), now), null);
     eq(PartyState.validateIntent(intentOf({ op: 'rate', rate: 1.25 }), now).rate, 1.25);
+    eq(PartyState.validateIntent(intentOf({ op: 'rate', rate: null }), now), null, 'null is not a rate of 0');
+    eq(PartyState.validateIntent(intentOf({ op: 'rate', rate: '1.5' }), now).rate, 1.5);
 });
 check('a peer names a video by id, never by address', () => {
     const media = (m) => PartyState.validateIntent(intentOf({ op: 'media', media: m }), 10000);
@@ -3377,6 +3379,12 @@ check('acting on the room clears a hold, changing its speed does not', () => {
     eq(PartyState.apply(held, PartyState.validateIntent(intentOf(), 10000), 'ana').hold, null);
     const rated = PartyState.apply(held, PartyState.validateIntent(intentOf({ op: 'rate', rate: 2 }), 10000), 'ana');
     eq(rated.hold, { waiting: ['cat'], since: 10000 });
+});
+
+check('a room rate is a finite number the room could have accepted, or nothing', () => {
+    eq([0.25, 1, '2', 5].map(PartyState.validRate), [0.25, 1, 2, 5]);
+    eq([0.1, 5.5, 16, -1, NaN, Infinity, null, undefined, '', 'fast', {}].map(PartyState.validRate),
+        [null, null, null, null, null, null, null, null, null, null, null]);
 });
 
 // --------------------------------------------------------- party drift

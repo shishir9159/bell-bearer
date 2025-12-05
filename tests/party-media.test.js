@@ -143,7 +143,7 @@ suite('party media: telling our writes from the user', () => {
         const h = await partyHarness();
         try {
             h.video.playbackRate = 1.5;
-            await partyWait(100);
+            await partyWait(window.BB.PartyMedia.RATE_DEBOUNCE_MS + 100);
             assertDeepEqual(h.intents().map((one) => [one.op, one.rate]), [['rate', 1.5]]);
         } finally { h.destroy(); }
     });
@@ -235,7 +235,9 @@ suite('party media: keeping up with the room', () => {
             h.room({ paused: false, pos: 0, at: Date.now() - 700 }); // mid-nudge
             await partyWait(300);
             assertEqual(held.step(1), 1.25, 'one rung above the room, not above the nudge');
-            assertDeepEqual(h.intents().map((one) => [one.op, one.rate]), [['rate', 1.25]]);
+            assertEqual(held.step(1), 1.5, 'and a second press before the first went out is the next rung');
+            await partyWait(window.BB.PartyMedia.RATE_DEBOUNCE_MS + 100);
+            assertDeepEqual(h.intents().map((one) => [one.op, one.rate]), [['rate', 1.5]]);
             h.media.detach();
             assertEqual(held.step, null, 'leaving hands the keys back');
         } finally { h.destroy(); }
@@ -461,5 +463,47 @@ suite('party media: readiness', () => {
             h.destroy();
             player.remove();
         }
+    });
+});
+
+suite('party media: playback speed', () => {
+    test('a speed the room would refuse is put back, not sent', async () => {
+        const notes = [];
+        const h = await partyHarness({ notify: (message) => notes.push(message) });
+        try {
+            h.video.playbackRate = 8; // a site's custom speed, or another extension
+            await partyWait(window.BB.PartyMedia.RATE_DEBOUNCE_MS + 100);
+            assertDeepEqual(h.intents(), []);
+            assertEqual(h.video.playbackRate, 1, 'back on the room rate');
+            assert(/between 0.25/.test(notes.join()), `the user was not told: ${notes.join()}`);
+        } finally { h.destroy(); }
+    });
+
+    test('a burst of speed changes is one intent, at where it stopped', async () => {
+        const h = await partyHarness();
+        try {
+            for (const rate of [1.25, 1.5, 1.75]) {
+                h.video.playbackRate = rate;
+                await partyWait(40);
+            }
+            await partyWait(window.BB.PartyMedia.RATE_DEBOUNCE_MS + 100);
+            assertDeepEqual(h.intents().map((one) => [one.op, one.rate]), [['rate', 1.75]]);
+            assertEqual(h.video.playbackRate, 1.75, 'nothing pulled it back while it waited');
+        } finally { h.destroy(); }
+    });
+
+    test('a vector with a rate the room could not have is not played', async () => {
+        const h = await partyHarness();
+        try {
+            h.room({ rate: 1.5 });
+            await partyWait(50);
+            h.room({ rate: 40 });
+            await partyWait(50);
+            assertEqual(h.video.playbackRate, 1.5, '40x from a broken server');
+            h.room({ rate: null });
+            await partyWait(50);
+            assertEqual(h.video.playbackRate, 1.5, 'no rate at all is not 0x');
+            assertEqual(h.media.room().rate, 1.5);
+        } finally { h.destroy(); }
     });
 });

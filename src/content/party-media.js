@@ -39,6 +39,12 @@
     const SEEK_DEBOUNCE_MS = 300;
     /** An intent the authority never answers stops holding the room back after this. */
     const PENDING_MS = 3000;
+    /**
+     * Speed changes this close together are one change: a speed slider, or a
+     * key held down, fires a ratechange per step, and an intent per step would
+     * run into the authority's five-a-second limit and snap the rate back.
+     */
+    const RATE_DEBOUNCE_MS = 250;
     /** A rate change this soon after a new source is the page resetting it, not the user. */
     const SOURCE_RESET_MS = 4000;
     const CLOCK_PING_MS = 60000;
@@ -160,6 +166,8 @@
         let canSeek = true;
         /** The last rate nudge written, while a player that may revert it is on probation. */
         let lastNudge = null;
+        /** { rate, timer } while a speed change of the user's waits to be sent. */
+        let rateQueued = null;
 
         const setStatus = (next, detail) => {
             if (next === status && !detail) return;
@@ -189,9 +197,10 @@
                 if (canSeek) onStatus('no-seek');
                 canSeek = false;
             } else if (kind === 'rate') {
-                if (Math.abs(video.playbackRate - value) < RATE_SLACK) return;
+                if (!Number.isFinite(value) || Math.abs(video.playbackRate - value) < RATE_SLACK) return;
                 ledger.expect('rate', value, t);
-                video.playbackRate = value;
+                // Outside the range a browser plays at, the assignment throws.
+                try { video.playbackRate = value; } catch (_) { /* left where it was */ }
             }
         }
 
@@ -232,7 +241,9 @@
             drift.reset();
             clearTimeout(startTimer);
             const roomNow = clock.toRoom(now());
-            write('rate', room.rate);
+            // A speed change of the user's still waiting to go out is not undone by
+            // a vector that has not heard of it yet.
+            if (!rateQueued) write('rate', room.rate);
             if (room.paused || room.hold) {
                 write('pause');
             } else if (PartyState.scheduled(room, roomNow)) {
@@ -261,7 +272,7 @@
         /** One drift decision, applied. Runs on timeupdate and whenever the room moves. */
         function correct() {
             const video = getVideo();
-            if (!room || !video || suspended() || solo || pending || seekTimer || !onRoomMedia()) return;
+            if (!room || !video || suspended() || solo || pending || seekTimer || rateQueued || !onRoomMedia()) return;
             const t = now();
             const action = drift.decide({
                 actual: video.currentTime,
@@ -281,6 +292,10 @@
 
         function onState(msg) {
             const { t, ack, ...state } = msg;
+            // Whatever the room says, the player is only ever given a rate the
+            // room could have accepted. Anything else — a server bug, a
+            // hand-made message — keeps the rate the room last had.
+            state.rate = PartyState.validRate(state.rate) ?? (room ? room.rate : 1);
             const ours = !!pending && !!ack && ack.id === pending.id && (!me || ack.member === me);
             if (room && (state.seq < room.seq || (state.seq === room.seq && !snapNext && !ours))) return;
             roomMediaChanged = roomMediaChanged || !room || !PartySites.sameMedia(room.media, state.media);
@@ -410,7 +425,28 @@
                 write('rate', room.rate);
                 return;
             }
-            sendIntent('rate', { rate });
+            if (PartyState.validRate(rate) === null) {
+                // The site's own custom speed, or another extension, went
+                // past what the room takes. The authority would only reject
+                // it, so the room's rate goes back on here and the user is told.
+                write('rate', room.rate);
+                notify(`Party speed stays between ${Speed.format(PartyState.MIN_RATE)} and ${Speed.format(PartyState.MAX_RATE)}`, 'warning');
+                return;
+            }
+            queueRate(rate);
+        }
+
+        /** Send the speed the user settles on, once they stop changing it. */
+        function queueRate(rate) {
+            if (rateQueued) clearTimeout(rateQueued.timer);
+            rateQueued = {
+                rate,
+                timer: setTimeout(() => {
+                    const settled = rateQueued.rate;
+                    rateQueued = null;
+                    sendIntent('rate', { rate: settled });
+                }, RATE_DEBOUNCE_MS),
+            };
         }
 
         function onSourceChanged(event) {
@@ -448,10 +484,12 @@
          */
         function stepRoomRate(direction) {
             if (!room) return null;
-            const rate = Speed.step(room.rate, direction);
+            // From a step still waiting to be sent, so two quick presses are two rungs.
+            const rate = PartyState.validRate(Speed.step(rateQueued ? rateQueued.rate : room.rate, direction));
+            if (rate === null) return null;
             drift.reset();
             write('rate', rate);
-            sendIntent('rate', { rate });
+            queueRate(rate);
             notify(`Party speed: ${Speed.format(rate)}`, 'info');
             return rate;
         }
@@ -518,7 +556,8 @@
             attached = false;
             for (const [type, fn] of LISTENERS) document.removeEventListener(type, fn, { capture: true });
             if (profile.navigated) document.removeEventListener(profile.navigated, onNavigated);
-            for (const timer of [seekTimer, startTimer, stallTimer, pending && pending.timer]) clearTimeout(timer);
+            for (const timer of [seekTimer, startTimer, stallTimer, rateQueued && rateQueued.timer, pending && pending.timer]) clearTimeout(timer);
+            rateQueued = null;
             clearInterval(pingTimer);
             pending = null;
             seekTimer = null;
@@ -582,7 +621,7 @@
 
     const PartyMedia = {
         createPartyMedia, createLedger, createApiControls, askPage, VIDEO_CONTROLS,
-        EXPECT_MS, SEEK_DEBOUNCE_MS, PENDING_MS, STALL_MS, DRIFT_EVAL_MS: PartyDrift.EVAL_MS,
+        EXPECT_MS, SEEK_DEBOUNCE_MS, RATE_DEBOUNCE_MS, PENDING_MS, STALL_MS, DRIFT_EVAL_MS: PartyDrift.EVAL_MS,
     };
 
     root.BB = root.BB || {};
