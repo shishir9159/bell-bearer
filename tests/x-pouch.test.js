@@ -297,6 +297,25 @@
             teardown();
         });
 
+        test('it wears the colour and size of X’s own glyphs, and follows a theme switch', () => {
+            // X's glyphs are a muted grey in every theme, not the post's text
+            // colour — which ours used to take, and so stood out brighter.
+            const host = timeline();
+            const reply = host.querySelector('[data-testid="reply"]');
+            reply.innerHTML = '<svg viewBox="0 0 24 24" style="color: rgb(113, 118, 123); height: 18.75px; width: 18.75px"></svg>';
+            const ui = makeUi();
+            ui.injectPostButtons();
+            const sheet = () => document.getElementById(TwitterUi().ICON_LOOK_ID).textContent;
+            assert(sheet().includes('--bb-x-icon-color: rgb(113, 118, 123)'), sheet());
+            assert(sheet().includes('--bb-x-icon-size: 18.75px'), sheet());
+
+            reply.querySelector('svg').style.color = 'rgb(83, 100, 113)'; // Default after Lights out
+            ui.injectPostButtons();
+            assert(sheet().includes('--bb-x-icon-color: rgb(83, 100, 113)'), 'the switch was not followed');
+            document.getElementById(TwitterUi().ICON_LOOK_ID).remove();
+            teardown();
+        });
+
         test('with no bookmark in the row it still sits after Like', () => {
             timeline({ bookmark: false });
             makeUi({ twitterHideBookmark: false }).injectPostButtons();

@@ -41,6 +41,7 @@
     const PROFILE_BUTTON_ID = 'bb-x-profile-btn';
     const PICKER_ID = 'bb-x-picker';
     const KEEP = TwitterPanel.KEEP;
+    const ICON_LOOK_ID = 'bb-x-icon-look';
 
     const CONTEXT_LOST = 'Bell Bearer was updated — please refresh this page.';
 
@@ -591,7 +592,12 @@
             const hide = on('twitterHideBookmark');
             if (!wanted && !hide) return false;
 
+            let first = true;
             for (const article of TwitterPage.findAll('post')) {
+                if (wanted && first) {
+                    first = false;
+                    wearIconLook(TwitterPage.find('actions', article));
+                }
                 if (wanted && !article.querySelector('.bb-x-post-btn') &&
                     !article.hasAttribute('data-bb-unfilable')) {
                     if (!addPostButton(article)) article.setAttribute('data-bb-unfilable', '1');
@@ -599,6 +605,39 @@
                 if (hide) setBookmarkHidden(article, true);
             }
             return false;
+        }
+
+        /**
+         * The colour and size of X's own action glyphs, for ours to wear.
+         *
+         * Read off the page, never written down: X has three themes and a
+         * font-size setting, and its glyphs are a muted grey in each, not the
+         * post's text colour. Ours used to take that text colour at 72%,
+         * which came out brighter than every icon beside it. The values go
+         * into one sheet of custom properties rather than onto each button,
+         * so a theme switch — which re-renders the timeline and so runs this
+         * pass again — repaints every button already placed.
+         *
+         * Reply's glyph is the one read: Like and Repost change colour once
+         * pressed, Reply never does.
+         */
+        let iconLook = '';
+        function wearIconLook(actions) {
+            const glyph = actions && actions.querySelector('[data-testid="reply"] svg');
+            if (!glyph || typeof getComputedStyle !== 'function') return;
+            const style = getComputedStyle(glyph);
+            const size = parseFloat(style.height);
+            const look = `--bb-x-icon-color: ${style.color};` + (size > 0 ? ` --bb-x-icon-size: ${size}px;` : '');
+            if (look === iconLook && document.getElementById(ICON_LOOK_ID)) return;
+            iconLook = look;
+            let sheet = document.getElementById(ICON_LOOK_ID);
+            if (!sheet) {
+                sheet = document.createElement('style');
+                sheet.id = ICON_LOOK_ID;
+                sheet.setAttribute(KEEP, '1');
+                (document.head || document.documentElement).appendChild(sheet);
+            }
+            sheet.textContent = `:root { ${look} }`;
         }
 
         /**
@@ -1020,7 +1059,7 @@
     // would mean moving the address bar to /<handle>, which is the one thing a
     // page opened over file:// cannot do.
     const TwitterUi = {
-        createTwitterUi, NAV_ID, PROFILE_BUTTON_ID, PICKER_ID,
+        createTwitterUi, NAV_ID, PROFILE_BUTTON_ID, PICKER_ID, ICON_LOOK_ID,
         navLabel, navModels, slotFor, rowModel, postSlotBefore, stretchRow,
         wearRing, ringModel, centreRing,
     };

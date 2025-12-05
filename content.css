@@ -1790,10 +1790,12 @@
     flex: 0 0 auto;
 }
 
-/* Sized and coloured as one of X's own action glyphs. It stands where the
-   bookmark was, in a row of bare marks — so it is never labelled: a word
-   here would make it the only captioned control in the row and read as
-   something X had added. */
+/* Sized and coloured as one of X's own action glyphs — the two properties
+   are read off X's Reply glyph by wearIconLook in twitter-ui.js, so the
+   button follows X's theme and font size. It stands where the bookmark was,
+   in a row of bare marks — so it is never labelled: a word here would make
+   it the only captioned control in the row and read as something X had
+   added. */
 .bb-x-post-btn {
     display: inline-flex;
     align-items: center;
@@ -1804,15 +1806,19 @@
     border: 0;
     border-radius: 999px;
     background: transparent;
-    color: inherit;
-    opacity: .72;
+    color: var(--bb-x-icon-color, inherit);
     cursor: pointer;
-    transition: background-color .15s, opacity .15s, color .15s;
+    transition: background-color .15s, color .15s;
 }
 
-.bb-x-post-btn .bb-pouch-glyph { width: 18px; height: 18px; }
-.bb-x-post-btn:hover { opacity: 1; background: var(--bb-accent-soft); color: var(--bb-accent); }
-.bb-x-post-btn.bb-in-pouch { opacity: 1; color: var(--bb-accent); }
+/* A little over X's own glyph size: X's marks fill their 24-unit box, and
+   the pouch's is a squat row of lines that reads small at the same size. */
+.bb-x-post-btn .bb-pouch-glyph {
+    width: calc(var(--bb-x-icon-size, 18.75px) * 1.1);
+    height: calc(var(--bb-x-icon-size, 18.75px) * 1.1);
+}
+.bb-x-post-btn:hover { background: var(--bb-accent-soft); color: var(--bb-accent); }
+.bb-x-post-btn.bb-in-pouch { color: var(--bb-accent); }
 
 /* X's own bookmark button, standing down for ours. Hidden rather than
    removed: X re-renders the action row on every like, and its button
