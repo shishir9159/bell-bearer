@@ -284,6 +284,14 @@
         claudeQueueOpenTab: true,
         claudeExportDollars: true,
         claudeExportThinking: false,
+
+        // Watch party, as a party is started from this browser: the name the
+        // room shows for you (blank is "Guest"), who may drive — 'everyone'
+        // or 'host' and co-hosts — and whether the room waits for a member
+        // who is buffering. No controls yet; they come with the party panel.
+        partyName: '',
+        partyControl: 'everyone',
+        partyWaitForAll: true,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

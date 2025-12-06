@@ -30,6 +30,8 @@
     const PartyLoopback = ns.PartyLoopback || req('./party-loopback.js');
 
     const PORT = 'bb:party';
+    /** Runtime messages with this `to` are the session's. Only the worker sends them. */
+    const TARGET = 'bb:party-session';
     /**
      * The clock's paused cadence is fifteen seconds, and so is the room's
      * away threshold: a heartbeat on the dot, a few milliseconds late, marked
@@ -208,9 +210,28 @@
         return { connect, control, status };
     }
 
-    const PartySession = { PORT, HEARTBEAT_MAX_MS, FROM_TAB, createSession };
+    /** Listen for the party tab's port and the worker's messages. Returns the session. */
+    function boot(api = root.chrome) {
+        if (root.__bbPartySession) return root.__bbPartySession;
+        if (!api || !api.runtime || !api.runtime.onConnect) return null;
+        const session = createSession();
+        api.runtime.onConnect.addListener(session.connect);
+        api.runtime.onMessage.addListener((msg, sender, respond) => {
+            if (!msg || msg.to !== TARGET) return false;
+            session.control(msg).then(respond, () => respond({ ok: false }));
+            return true;
+        });
+        root.__bbPartySession = session;
+        return session;
+    }
+
+    const PartySession = { PORT, TARGET, HEARTBEAT_MAX_MS, FROM_TAB, createSession, boot };
 
     root.BB = root.BB || {};
     root.BB.PartySession = PartySession;
     if (typeof module !== 'undefined' && module.exports) module.exports = PartySession;
+
+    // offscreen.html has nothing else to start it, and an extension page may
+    // not carry an inline script. Anywhere else, whoever loads this boots it.
+    if (root.location && /\/offscreen\.html$/.test(root.location.pathname)) boot();
 })(typeof globalThis !== 'undefined' ? globalThis : this);

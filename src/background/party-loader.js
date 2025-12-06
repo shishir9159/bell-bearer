@@ -102,12 +102,21 @@
             return inject(tabId, site);
         }
 
+        /**
+         * Told when the party's own tab closes. A second tabs.onRemoved
+         * listener cannot find that out for itself: by the time it reads the
+         * bound tab, this one may already have cleared it.
+         */
+        const closed = [];
+
         async function onRemoved(tabId) {
             const now = await current();
-            if (now && now.tabId === tabId) await unbind();
+            if (!now || now.tabId !== tabId) return;
+            await unbind();
+            for (const fn of closed) fn(tabId);
         }
 
-        return { bind, unbind, inject, onUpdated, onRemoved, current };
+        return { bind, unbind, inject, onUpdated, onRemoved, current, onClosed: (fn) => { closed.push(fn); } };
     }
 
     const PartyLoader = { CONTENT_FILES, PAGE_FILES, KEY, siteOf, createLoader };

@@ -14,6 +14,7 @@
     "tabGroups",
     "contextMenus",
     "clipboardWrite",
+    "offscreen",
     "tts"
   ],
   "host_permissions": [

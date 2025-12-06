@@ -7383,9 +7383,13 @@ const dayRecord = (at = T0) =>
     });
     await checkAsync('leaving, or closing the tab, shuts the gate again', async () => {
         const { loader, injected, session } = loaderWith();
+        const closed = [];
+        loader.onClosed((tabId) => closed.push(tabId));
         await loader.bind(7, 'https://www.youtube.com/');
+        await loader.onRemoved(8);
         await loader.onRemoved(7);
         eq(session[PartyLoader.KEY], undefined);
+        eq(closed, [7], 'told about the party\'s tab, not any tab');
         await loader.onUpdated(7, done, { url: 'https://www.youtube.com/' });
         eq(injected.length, 1);
     });
@@ -7550,6 +7554,96 @@ const dayRecord = (at = T0) =>
         session.connect(other);
         assert(late.gone, 'its adapter detaches when the port does');
         assert(!other.gone, 'somebody else\'s port is not ours to close');
+    });
+
+    // ----------------------------------------------------- party worker
+
+    console.log('\n# party worker — the document a party lives in, open only while it does');
+    const PartyWorker = require('../src/background/party.js');
+
+    check('offscreen.html loads the session after everything it reads', () => {
+        const html = fs.readFileSync(`${__dirname}/../offscreen.html`, 'utf8');
+        const files = [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => one[1]);
+        for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
+        const at = (name) => files.findIndex((file) => file.endsWith(`/${name}.js`));
+        eq(['party-clock', 'party-state', 'party-room', 'party-loopback', 'party-session'].map(at), [0, 1, 2, 3, 4]);
+    });
+    check('the worker and the session agree on how the worker addresses it', () => {
+        eq(PartyWorker.SESSION, PartySession.TARGET);
+    });
+    check('only chrome asks for an offscreen document', () => {
+        const permissions = (name) => JSON.parse(fs.readFileSync(`${__dirname}/../${name}`, 'utf8')).permissions;
+        assert(permissions('manifest.json').includes('offscreen'));
+        assert(!permissions('manifest.firefox.json').includes('offscreen'), 'firefox has no chrome.offscreen');
+    });
+
+    /** A party over fakes: the document, the loader and the alarm, each writing down what it was asked. */
+    function partyWith({ answer = { ok: true }, bound = null } = {}) {
+        const calls = [];
+        const alarms = {};
+        let open = false;
+        const host = {
+            exists: async () => open,
+            open: async () => { calls.push('open'); open = true; },
+            close: async () => { calls.push('close'); open = false; },
+            ask: async (msg) => { calls.push(`ask ${msg.op}`); calls.asked = msg; return msg.op === 'start' ? answer : { ok: true }; },
+        };
+        const loader = {
+            bind: async (tabId) => { calls.push(`bind ${tabId}`); return true; },
+            unbind: async () => { calls.push('unbind'); },
+            current: async () => bound,
+        };
+        const api = { alarms: { create: (name, info) => { alarms[name] = info; }, clear: async (name) => { delete alarms[name]; } } };
+        return { party: PartyWorker.createParty({ api, loader, host }), calls, alarms };
+    }
+    const partyVideo = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+    await checkAsync('a party opens its document, and the tab\'s code goes in only once it is listening', async () => {
+        const { party, calls } = partyWith();
+        eq((await party.start(7, partyVideo)).ok, true);
+        eq(calls, ['open', 'ask start', 'bind 7']);
+        eq([calls.asked.mode, calls.asked.policy], ['loopback', { control: 'everyone', wait: true }], 'the settings\' defaults');
+    });
+    await checkAsync('a tab on another site starts nothing', async () => {
+        const { party, calls } = partyWith();
+        eq(await party.start(7, 'https://example.com/'), { ok: false, error: 'site' });
+        eq(calls, []);
+    });
+    await checkAsync('a start the session refuses leaves nothing open', async () => {
+        const { party, calls } = partyWith({ answer: { ok: false, error: 'full' } });
+        eq(await party.start(7, partyVideo), { ok: false, error: 'full' });
+        eq(calls, ['open', 'ask start', 'ask leave', 'close', 'unbind']);
+    });
+    await checkAsync('leaving closes the document and shuts the gate', async () => {
+        const { party, calls } = partyWith();
+        await party.start(7, partyVideo);
+        calls.length = 0;
+        await party.leave();
+        eq(calls, ['ask leave', 'close', 'unbind']);
+        eq(await party.status(), { ok: true, status: { active: false } }, 'asked with no document open, nothing is opened');
+    });
+    await checkAsync('the party\'s tab closing ends it half a minute on, unless it was started again', async () => {
+        for (const bound of [null, { tabId: 9, site: 'youtube' }]) {
+            const { party, calls, alarms } = partyWith({ bound });
+            await party.start(7, partyVideo);
+            party.onTabClosed(7);
+            eq(alarms[PartyWorker.LINGER_ALARM], { delayInMinutes: PartyWorker.LINGER_MIN });
+            eq(await party.onAlarm({ name: PartyWorker.LINGER_ALARM }), !bound);
+            eq(calls.includes('close'), !bound, bound ? 'moved to tab 9: kept' : 'nobody took it up: over');
+        }
+    });
+    await checkAsync('two starts close together open one offscreen document', async () => {
+        let documents = 0;
+        const api = {
+            runtime: {
+                getURL: (path) => `chrome-extension://x/${path}`,
+                getContexts: async () => Array.from({ length: documents }, () => ({})),
+            },
+            offscreen: { createDocument: () => new Promise((resolve) => setTimeout(() => { documents++; resolve(); }, 5)) },
+        };
+        const host = PartyWorker.offscreenHost(api);
+        await Promise.all([host.open(), host.open()]);
+        eq(documents, 1);
     });
 
     console.log('\n' + '='.repeat(52));
