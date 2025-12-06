@@ -7390,6 +7390,69 @@ const dayRecord = (at = T0) =>
         eq(injected.length, 1);
     });
 
+    // --------------------------------------------------- party loopback
+
+    console.log('\n# party loopback — the room, with no network in between');
+    const PartyLoopback = require('../src/offscreen/party-loopback.js');
+
+    /** A loopback and a way to open members on it, each keeping what it hears. */
+    function loopbackWith(policy = {}) {
+        const loop = PartyLoopback.createLoopback({ policy, now: () => 1000 });
+        const member = () => {
+            const heard = [];
+            const link = loop.open((msg) => heard.push(msg));
+            return { link, heard, last: (t) => heard.filter((msg) => msg.t === t).pop() };
+        };
+        return { loop, member };
+    }
+
+    check('a link is nobody until it says create or hello', () => {
+        const { loop, member } = loopbackWith();
+        const ana = member();
+        ana.link.send({ t: 'intent', id: 1, base: 0, op: 'play', pos: 0 });
+        eq([ana.heard, loop.room.members()], [[], []]);
+        ana.link.send({ t: 'create', v: 1, name: 'Ana' });
+        eq(ana.heard.map((msg) => msg.t), ['welcome', 'members'], 'its own welcome, caught before its id was known');
+        eq(ana.last('welcome').room.members.map((m) => [m.name, m.role]), [['Ana', 'host']]);
+        loop.close();
+    });
+    check('members on one loopback share the room', () => {
+        const { loop, member } = loopbackWith();
+        const ana = member();
+        const ben = member();
+        ana.link.send({ t: 'create', v: 1, name: 'Ana' });
+        ben.link.send({ t: 'hello', v: 1, name: 'Ben' });
+        ben.link.send({ t: 'intent', id: 1, base: 0, op: 'play', pos: 4 });
+        eq([ana.last('state').paused, ana.last('state').by], [false, ben.last('welcome').you]);
+        loop.close();
+    });
+    check('hanging up keeps the member for a resume; bye does not', () => {
+        const { loop, member } = loopbackWith();
+        const ana = member();
+        ana.link.send({ t: 'create', v: 1, name: 'Ana' });
+        const { you, resume } = ana.last('welcome');
+        ana.link.close();
+        const back = member();
+        back.link.send({ t: 'hello', v: 1, resume });
+        eq(back.last('welcome').you, you);
+        back.link.send({ t: 'bye' });
+        eq(loop.room.members(), []);
+        const late = member();
+        late.link.send({ t: 'hello', v: 1, resume });
+        eq(late.heard, [{ t: 'error', code: 'expired' }]);
+        loop.close();
+    });
+    check('a refused join is told why', () => {
+        const { loop, member } = loopbackWith();
+        const ana = member();
+        ana.link.send({ t: 'create', v: 1, name: 'Ana' });
+        ana.link.send({ t: 'policy', locked: true });
+        const ben = member();
+        ben.link.send({ t: 'hello', v: 1, name: 'Ben' });
+        eq(ben.heard, [{ t: 'error', code: 'locked' }]);
+        loop.close();
+    });
+
     console.log('\n' + '='.repeat(52));
     console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
     process.exit(failed ? 1 : 0);
