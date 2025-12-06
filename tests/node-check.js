@@ -7453,6 +7453,105 @@ const dayRecord = (at = T0) =>
         loop.close();
     });
 
+    // ---------------------------------------------------- party session
+
+    console.log('\n# party session — the member the party tab plugs into');
+    const PartySession = require('../src/offscreen/party-session.js');
+
+    /** A runtime port as the session sees it, with the tab's end to talk and hang up on. */
+    function tabPort(name = PartySession.PORT) {
+        const on = { message: [], disconnect: [] };
+        const port = {
+            name, heard: [], gone: false,
+            postMessage: (msg) => port.heard.push(JSON.parse(JSON.stringify(msg))),
+            disconnect() { port.gone = true; },
+            onMessage: { addListener: (fn) => on.message.push(fn) },
+            onDisconnect: { addListener: (fn) => on.disconnect.push(fn) },
+            say: (msg) => on.message.forEach((fn) => fn(msg)),
+            hangUp: () => on.disconnect.forEach((fn) => fn()),
+            last: (t) => port.heard.filter((msg) => msg.t === t).pop(),
+        };
+        return port;
+    }
+    async function inParty(t = 50000) {
+        const session = PartySession.createSession({ now: () => t });
+        const started = await session.control({ op: 'start', name: 'Ana', policy: { control: 'everyone' } });
+        const you = started.status.you;
+        const leave = () => session.control({ op: 'leave' });
+        return { session, started, you, leave };
+    }
+
+    await checkAsync('a tab joining is handed the room, and its play comes back acknowledged', async () => {
+        const { session, started, you, leave } = await inParty();
+        eq([started.ok, started.status.members.map((m) => [m.name, m.role])], [true, [['Ana', 'host']]]);
+        const tab = tabPort();
+        session.connect(tab);
+        const welcome = tab.last('welcome');
+        eq([welcome.you, welcome.room.state.paused], [you, true]);
+        tab.say({ t: 'intent', id: 1, base: welcome.room.state.seq, op: 'play', pos: 3, at: 50000 });
+        const state = tab.last('state');
+        eq([state.paused, state.pos, state.ack], [false, 3, { member: you, id: 1 }]);
+        await leave();
+    });
+    await checkAsync('the tab\'s ping is answered in room time, with the state when it is behind', async () => {
+        const { session, leave } = await inParty(50000);
+        const tab = tabPort();
+        session.connect(tab);
+        tab.heard.length = 0;
+        tab.say({ t: 'ping', c: 49990, seq: 0 });
+        eq(tab.heard.map((msg) => msg.t), ['pong'], 'up to date: just the pong');
+        eq(tab.last('pong'), { t: 'pong', c: 49990, s: 50000, s2: 50000 });
+        tab.say({ t: 'ping', c: 49995, seq: -1 });
+        eq(tab.heard.map((msg) => msg.t), ['pong', 'pong', 'state']);
+        await leave();
+    });
+    await checkAsync('a tab going keeps the member, and stops the room waiting on it', async () => {
+        const { session, you, leave } = await inParty();
+        const flags = () => session.status().members.map((m) => [m.ready, m.solo]);
+        for (const replaced of [false, true]) {
+            const before = tabPort();
+            session.connect(before);
+            before.say({ t: 'ready', ready: false, why: 'buffering' });
+            before.say({ t: 'solo', solo: true });
+            eq(flags(), [[false, true]]);
+            const after = tabPort();
+            if (replaced) session.connect(after);
+            else before.hangUp();
+            eq(flags(), [[true, false]], 'the next document starts ready and in the room');
+            if (!replaced) session.connect(after);
+            eq(after.last('welcome').you, you, 'the same member, not a new one');
+            if (!replaced) continue;
+            assert(before.last('detach') && before.gone, 'the tab taken over from is let go');
+            before.say({ t: 'intent', id: 1, base: 0, op: 'play', pos: 0, at: 50000 });
+            eq(session.status().state.paused, true, 'and no longer heard');
+        }
+        await leave();
+    });
+    await checkAsync('the tab cannot leave, kick or reconfigure the room', async () => {
+        const { session, leave } = await inParty();
+        const tab = tabPort();
+        session.connect(tab);
+        tab.say({ t: 'policy', control: 'host', locked: true });
+        tab.say({ t: 'bye' });
+        const now = session.status();
+        eq([now.active, now.members.length, now.policy.control, now.policy.locked], [true, 1, 'everyone', false]);
+        await leave();
+    });
+    await checkAsync('leaving lets the tab go, and a tab outside a party is hung up on at once', async () => {
+        const { session, leave } = await inParty();
+        const tab = tabPort();
+        session.connect(tab);
+        await leave();
+        assert(tab.last('detach') && tab.gone);
+        eq(session.status(), { active: false });
+        const late = tabPort();
+        const other = tabPort('bb:other');
+        session.connect(late);
+        session.connect(other);
+        assert(late.gone, 'its adapter detaches when the port does');
+        assert(!other.gone, 'somebody else\'s port is not ours to close');
+    });
+
     console.log('\n' + '='.repeat(52));
     console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
     process.exit(failed ? 1 : 0);
