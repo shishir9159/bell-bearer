@@ -7556,6 +7556,120 @@ const dayRecord = (at = T0) =>
         assert(!other.gone, 'somebody else\'s port is not ours to close');
     });
 
+    // -------------------------------------------------- party websocket
+
+    console.log('\n# party websocket — a party server, and getting back to it');
+    const PartyWs = require('../src/offscreen/party-ws.js');
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+    /** WebSockets the test plays the server for: accept, say, and die on demand. */
+    function fakeSockets() {
+        const all = [];
+        class Fake {
+            constructor(url) {
+                Object.assign(this, { url, sent: [], closed: false });
+                all.push(this);
+            }
+            send(text) { this.sent.push(JSON.parse(text)); }
+            close() { this.closed = true; }
+            accept() { this.onopen(); }
+            say(msg) { this.onmessage({ data: JSON.stringify(msg) }); }
+            die() { this.onclose(); }
+        }
+        return { Fake, all, last: () => all[all.length - 1] };
+    }
+    const wsWelcome = (you, resume) => ({ t: 'welcome', v: 1, you, resume, now: 0, room: { id: 'r1', policy: {}, members: [], state: { seq: 3 } } });
+
+    /** A transport on fake sockets, opened, with what it delivers kept. */
+    function wsLink(options) {
+        const sockets = fakeSockets();
+        const transport = PartyWs.createTransport({ WebSocket: sockets.Fake, random: () => 0, ...options });
+        const heard = [];
+        const link = transport.open((msg) => heard.push(msg));
+        return { ...sockets, transport, link, heard };
+    }
+
+    check('an invite round-trips, and only a ws address is one', () => {
+        const code = PartyWs.inviteCode({ url: 'wss://party.example/', room: 'r1', secret: 's3cr3t' });
+        assert(code.startsWith(PartyWs.PREFIX) && !/[+/=]/.test(code), code);
+        eq(PartyWs.readInvite(` ${code} `), { url: 'wss://party.example/', room: 'r1', secret: 's3cr3t' });
+        eq(PartyWs.readInvite(PartyWs.inviteCode({ url: 'https://party.example/', room: 'r1', secret: 's' })), null);
+        eq([PartyWs.readInvite('bbp1s.@@@'), PartyWs.readInvite('bbp1i.abc')], [null, null]);
+        eq([PartyWs.serverUrl(' ws://192.168.1.5:7070 '), PartyWs.serverUrl('192.168.1.5:7070')], ['ws://192.168.1.5:7070/', null]);
+        eq(PartyWs.createTransport({ url: 'http://x', WebSocket: fakeSockets().Fake }), null);
+    });
+    check('starting a room says create, and the secret that comes back stays in the transport', () => {
+        const w = wsLink({ url: 'ws://127.0.0.1:7070' });
+        w.link.send({ t: 'create', v: 1, name: 'Ana', policy: { control: 'host' } });
+        eq(w.all.map((ws) => ws.url), ['ws://127.0.0.1:7070/']);
+        w.link.send({ t: 'ping', c: 1, seq: 0 });
+        w.last().accept();
+        eq(w.last().sent, [{ t: 'create', v: 1, name: 'Ana', policy: { control: 'host' } }], 'nothing but the greeting before the welcome');
+        w.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        w.last().say(wsWelcome('m1', 'z1'));
+        eq(w.heard.map((msg) => msg.t), ['welcome']);
+        eq(PartyWs.readInvite(w.transport.invite()), { url: 'ws://127.0.0.1:7070/', room: 'r1', secret: 'k' });
+        w.transport.close();
+    });
+    check('an invite says hello with its room and secret', () => {
+        const w = wsLink({ code: PartyWs.inviteCode({ url: 'ws://h:1', room: 'r1', secret: 'k' }) });
+        w.link.send({ t: 'create', v: 1, name: 'Ben', policy: {} });
+        w.last().accept();
+        eq(w.last().sent, [{ t: 'hello', v: 1, room: 'r1', secret: 'k', name: 'Ben' }]);
+        w.transport.close();
+    });
+    await checkAsync('a dropped socket comes back as the same member, with only the latest of what was said while down', async () => {
+        const w = wsLink({ url: 'ws://h:1' });
+        w.link.send({ t: 'create', v: 1, name: 'Ana' });
+        w.last().accept();
+        w.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        w.last().say(wsWelcome('m1', 'z1'));
+        w.last().die();
+        eq(w.heard.map((msg) => msg.t), ['welcome', 'link']);
+        for (const msg of [
+            { t: 'intent', id: 4, base: 3, op: 'pause', pos: 10 }, { t: 'ping', c: 1, seq: 3 },
+            { t: 'intent', id: 5, base: 3, op: 'play', pos: 10 }, { t: 'request', op: 'pause' }, { t: 'ready', ready: false },
+        ]) w.link.send(msg);
+        await tick();
+        eq(w.all.length, 2, 'retried');
+        w.last().accept();
+        eq(w.last().sent, [{ t: 'hello', v: 1, room: 'r1', resume: 'z1' }]);
+        w.last().say(wsWelcome('m1', 'z2'));
+        eq(w.last().sent.slice(1), [{ t: 'ready', ready: false }, { t: 'intent', id: 5, base: 3, op: 'play', pos: 10 }]);
+        w.link.send({ t: 'ping', c: 2, seq: 3 });
+        eq(w.last().sent.length, 4, 'up again: sent as it is said');
+        w.transport.close();
+    });
+    await checkAsync('past the grace it joins again as someone new instead of ending the party', async () => {
+        const w = wsLink({ url: 'ws://h:1' });
+        w.link.send({ t: 'create', v: 1, name: 'Ana' });
+        w.last().accept();
+        w.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        w.last().say(wsWelcome('m1', 'z1'));
+        w.last().die();
+        await tick();
+        w.last().accept();
+        w.last().say({ t: 'error', code: 'expired' });
+        eq(w.all.length, 3);
+        w.last().accept();
+        eq(w.last().sent, [{ t: 'hello', v: 1, room: 'r1', secret: 'k', name: 'Ana' }]);
+        eq(w.heard.map((msg) => msg.t), ['welcome', 'link'], 'the expiry is not the session\'s business');
+        w.transport.close();
+    });
+    await checkAsync('an address that never answered, or a refusal, ends it without a retry', async () => {
+        for (const refused of [false, true]) {
+            const w = wsLink({ url: 'ws://h:1' });
+            w.link.send({ t: 'create', v: 1, name: 'Ana' });
+            if (refused) {
+                w.last().accept();
+                w.last().say({ t: 'error', code: 'bad-secret' });
+            } else {
+                w.last().die();
+            }
+            await tick();
+            eq([w.heard, w.all.length], [[{ t: 'error', code: refused ? 'bad-secret' : 'unreachable' }], 1]);
+        }
+    });
     // ----------------------------------------------------- party worker
 
     console.log('\n# party worker — the document a party lives in, open only while it does');
