@@ -7566,7 +7566,7 @@ const dayRecord = (at = T0) =>
         const files = [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => one[1]);
         for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
         const at = (name) => files.findIndex((file) => file.endsWith(`/${name}.js`));
-        eq(['party-clock', 'party-state', 'party-room', 'party-loopback', 'party-session'].map(at), [0, 1, 2, 3, 4]);
+        eq(['party-clock', 'party-state', 'party-room', 'party-loopback', 'party-ws', 'party-session'].map(at), [0, 1, 2, 3, 4, 5]);
     });
     check('the worker and the session agree on how the worker addresses it', () => {
         eq(PartyWorker.SESSION, PartySession.TARGET);
