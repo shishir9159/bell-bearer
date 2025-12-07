@@ -24,6 +24,8 @@
     const SESSION = 'bb:party-session';
     const LINGER_ALARM = 'bb-party-linger';
     const LINGER_MIN = 0.5;
+    /** Firefox unloads an idle background page after thirty seconds. */
+    const KEEPALIVE_MS = 20000;
     const ACTIONS = Object.freeze(['partyStart', 'partyLeave', 'partyStatus']);
 
     /** Chrome: the session in an offscreen document, reached by message. */
@@ -50,6 +52,54 @@
                 if (await exists()) await api.offscreen.closeDocument();
             },
             ask: (msg) => api.runtime.sendMessage({ ...msg, to: SESSION }),
+        };
+    }
+
+    /**
+     * Firefox: no offscreen documents, but the background is a page already
+     * and stays one while a party is on. The session is loaded into it the
+     * first time a party starts — offscreen.html's own script list, read from
+     * the file so the two browsers cannot load different sessions — and is
+     * called directly: a page's runtime.sendMessage never reaches itself.
+     *
+     * The page is still unloaded after thirty seconds with no event, so the
+     * session asks the tab to ping it every KEEPALIVE_MS; a port message is
+     * an event.
+     */
+    function pageHost(api, {
+        doc = root.document,
+        fetchText = async (url) => (await fetch(url)).text(),
+    } = {}) {
+        let loading = null;
+        const session = () => root.__bbPartySession || null;
+
+        async function load() {
+            const html = await fetchText(api.runtime.getURL(DOC));
+            for (const [, src] of html.matchAll(/<script src="([^"]+)"/g)) {
+                await new Promise((resolve, reject) => {
+                    const script = doc.createElement('script');
+                    script.src = api.runtime.getURL(src);
+                    script.onload = resolve;
+                    script.onerror = () => reject(new Error(`${src} did not load`));
+                    (doc.head || doc.documentElement).appendChild(script);
+                });
+            }
+            root.BB.PartySession.boot(api, { keepAliveMs: KEEPALIVE_MS });
+        }
+
+        return {
+            exists: async () => !!session() && session().status().active,
+            open() {
+                loading = loading || load().catch((error) => {
+                    loading = null;
+                    throw error;
+                });
+                return loading;
+            },
+            // Parsed scripts cannot be unloaded. With the party over the
+            // session holds nothing and runs nothing, and the page may go.
+            close: async () => {},
+            ask: (msg) => session().control(msg),
         };
     }
 
@@ -116,11 +166,13 @@
         }
     }
 
-    const PartyWorker = { DOC, SESSION, LINGER_ALARM, LINGER_MIN, ACTIONS, offscreenHost, createParty, handle };
+    const PartyWorker = { DOC, SESSION, LINGER_ALARM, LINGER_MIN, KEEPALIVE_MS, ACTIONS, offscreenHost, pageHost, createParty, handle };
 
     const api = root.chrome;
     if (api && api.runtime && api.runtime.onMessage && api.alarms && PartyLoader.loader) {
-        const host = api.offscreen && api.runtime.getContexts ? offscreenHost(api) : null;
+        // A service worker has no document; Firefox's background page does.
+        const host = api.offscreen && api.runtime.getContexts ? offscreenHost(api)
+            : root.document ? pageHost(api) : null;
         const party = createParty({ api, loader: PartyLoader.loader, host });
         PartyLoader.loader.onClosed(party.onTabClosed);
         api.alarms.onAlarm.addListener(party.onAlarm);

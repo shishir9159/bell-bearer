@@ -528,6 +528,16 @@
                     setStatus('rejected', msg.why);
                     break;
                 case 'pong': clock.add(msg, now()); break;
+                case 'keepalive': {
+                    // The session is in a background page that is unloaded
+                    // after thirty idle seconds (Firefox), and our ping is the
+                    // event that keeps it. A clock sample more often is free.
+                    const ms = Number(msg.ms);
+                    if (!(ms >= 1000)) break;
+                    clearInterval(pingTimer);
+                    pingTimer = setInterval(ping, Math.min(CLOCK_PING_MS, ms));
+                    break;
+                }
                 case 'detach': detach(); break;
                 default: break;
             }

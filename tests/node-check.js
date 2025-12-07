@@ -7646,6 +7646,41 @@ const dayRecord = (at = T0) =>
         eq(documents, 1);
     });
 
+    check('firefox\'s background page does not list the session: it is loaded when a party starts', () => {
+        const scripts = JSON.parse(fs.readFileSync(`${__dirname}/../manifest.firefox.json`, 'utf8')).background.scripts;
+        eq(scripts.filter((file) => /offscreen\//.test(file)), []);
+    });
+    await checkAsync('firefox loads offscreen.html\'s scripts into its page, in order, once, and asks the tab to keep it', async () => {
+        const html = fs.readFileSync(`${__dirname}/../offscreen.html`, 'utf8');
+        const appended = [];
+        const doc = {
+            createElement: () => ({}),
+            head: { appendChild: (script) => { appended.push(script.src); setTimeout(script.onload); } },
+        };
+        const api = {
+            runtime: {
+                getURL: (path) => `moz-extension://x/${path}`,
+                onConnect: { addListener: () => {} },
+                onMessage: { addListener: () => {} },
+            },
+        };
+        const host = PartyWorker.pageHost(api, { doc, fetchText: async () => html });
+        try {
+            await Promise.all([host.open(), host.open()]);
+            eq(appended, [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => `moz-extension://x/${one[1]}`));
+            assert(!(await host.exists()), 'loaded, but no party yet');
+            eq((await host.ask({ op: 'start', name: 'Ana' })).ok, true, 'called directly, not by message');
+            assert(await host.exists());
+            const tab = tabPort();
+            globalThis.__bbPartySession.connect(tab);
+            eq(tab.last('keepalive'), { t: 'keepalive', ms: PartyWorker.KEEPALIVE_MS });
+            await host.ask({ op: 'leave' });
+            assert(!(await host.exists()));
+        } finally {
+            delete globalThis.__bbPartySession;
+        }
+    });
+
     console.log('\n' + '='.repeat(52));
     console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
     process.exit(failed ? 1 : 0);

@@ -42,7 +42,7 @@
     /** What the tab may say to the room. Leaving, kicking and policy come from the UI, through the worker. */
     const FROM_TAB = Object.freeze(['intent', 'ready', 'solo', 'request']);
 
-    function createSession({ transports = { loopback: PartyLoopback.createLoopback }, now = PartyClock.localNow } = {}) {
+    function createSession({ transports = { loopback: PartyLoopback.createLoopback }, now = PartyClock.localNow, keepAliveMs = 0 } = {}) {
         const clock = PartyClock.createClock();
         /** Everything about the party we are in, or null. */
         let party = null;
@@ -144,6 +144,9 @@
             incoming.onMessage.addListener((msg) => fromTab(incoming, msg));
             incoming.onDisconnect.addListener(() => { if (port === incoming) letGo(false); });
             if (party.me) post(welcomeFor());
+            // Where the session lives in a page that unloads when idle, the tab's
+            // pings are what keep it: see PartyWorker.pageHost.
+            if (keepAliveMs) post({ t: 'keepalive', ms: keepAliveMs });
         }
 
         function heartbeat(burst) {
@@ -211,10 +214,10 @@
     }
 
     /** Listen for the party tab's port and the worker's messages. Returns the session. */
-    function boot(api = root.chrome) {
+    function boot(api = root.chrome, options = {}) {
         if (root.__bbPartySession) return root.__bbPartySession;
         if (!api || !api.runtime || !api.runtime.onConnect) return null;
-        const session = createSession();
+        const session = createSession(options);
         api.runtime.onConnect.addListener(session.connect);
         api.runtime.onMessage.addListener((msg, sender, respond) => {
             if (!msg || msg.to !== TARGET) return false;
