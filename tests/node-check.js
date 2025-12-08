@@ -7687,6 +7687,56 @@ const dayRecord = (at = T0) =>
         await session.control({ op: 'leave' });
     });
 
+    // ------------------------------------------------- party dev server
+
+    console.log('\n# party dev server — the session over a real socket');
+    const PartyDevServer = require('./party-dev-server.js');
+    const until = async (test, what) => {
+        for (let i = 0; i < 400 && !test(); i++) await tick();
+        assert(test(), `timed out waiting for ${what}`);
+    };
+
+    await checkAsync('two sessions meet through an invite, and come back as themselves after an outage', async () => {
+        const server = await PartyDevServer.startServer({ port: 0 });
+        const ana = PartySession.createSession();
+        const ben = PartySession.createSession();
+        try {
+            const made = await ana.control({ op: 'start', mode: 'server', url: server.url, name: 'Ana' });
+            const joined = await ben.control({ op: 'start', mode: 'server', code: made.status.invite, name: 'Ben' });
+            eq(joined.status.members.map((m) => [m.name, m.role]), [['Ana', 'host'], ['Ben', 'guest']]);
+            const tab = tabPort();
+            ben.connect(tab);
+            tab.say({ t: 'intent', id: 1, base: 0, op: 'play', pos: 5, at: Date.now() });
+            await until(() => ana.status().state.paused === false, 'Ben\'s play to reach Ana');
+
+            const [room] = server.rooms.values();
+            const before = [ana.status().you, ben.status().you];
+            server.sever();
+            eq(room.links.size, 0);
+            await until(() => room.links.size === 2 && ana.status().up && ben.status().up, 'both to reconnect');
+            eq([ana.status().you, ben.status().you], before, 'resumed, not joined anew');
+            eq(ana.status().members.length, 2);
+        } finally {
+            await ana.control({ op: 'leave' });
+            await ben.control({ op: 'leave' });
+            await server.close();
+        }
+    });
+    await checkAsync('the dev server refuses a wrong secret and an unknown room', async () => {
+        const server = await PartyDevServer.startServer({ port: 0 });
+        try {
+            const ana = PartySession.createSession();
+            const made = await ana.control({ op: 'start', mode: 'server', url: server.url });
+            const { url, room } = PartyWs.readInvite(made.status.invite);
+            const joinWith = (invite) => PartySession.createSession().control({ op: 'start', mode: 'server', code: PartyWs.inviteCode(invite) });
+            eq(await joinWith({ url, room, secret: 'guess' }), { ok: false, error: 'bad-secret' });
+            eq(await joinWith({ url, room: 'nope', secret: 'guess' }), { ok: false, error: 'no-room' });
+            await ana.control({ op: 'leave' });
+        } finally {
+            await server.close();
+        }
+    });
+
     // ----------------------------------------------------- party worker
 
     console.log('\n# party worker — the document a party lives in, open only while it does');

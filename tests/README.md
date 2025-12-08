@@ -82,6 +82,7 @@ that code, not a replacement — it cannot press a key or play a video.
 | `party-media.test.js` | The watch party's media adapter on real (silent) media: our writes are not intents, the user's are, and a vector sent before an intent was answered is not played |
 | `party-only.html` | The party specs alone, with the modules the party loader injects |
 | `party-dev-socket.js` | The party dev server's hand-written WebSocket (handshake, 8 KB text frames), and the lag, jitter and loss it can put on the wire |
+| `party-dev-server.js` | A party server to try the extension against before the real one exists: `party-room.js` behind that socket. `node tests/party-dev-server.js --lag 200 --jitter 150 --loss 5`. A fixture, not the product |
 | `node-check.js` | The Node gate — pure logic only, no DOM, no timers |
 
 ## How it works
