@@ -81,6 +81,7 @@ that code, not a replacement — it cannot press a key or play a video.
 | `chat-only.html` | The chat specs alone; `?suite=queue` narrows it to one suite |
 | `party-media.test.js` | The watch party's media adapter on real (silent) media: our writes are not intents, the user's are, and a vector sent before an intent was answered is not played |
 | `party-only.html` | The party specs alone, with the modules the party loader injects |
+| `party-dev-socket.js` | The party dev server's hand-written WebSocket (handshake, 8 KB text frames), and the lag, jitter and loss it can put on the wire |
 | `node-check.js` | The Node gate — pure logic only, no DOM, no timers |
 
 ## How it works
