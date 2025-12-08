@@ -16,9 +16,8 @@
  * the room without either hop knowing about the other.
  *
  * The authority is reached through a transport, which only has to carry the
- * wire protocol's own messages. The first is the loopback (party-loopback.js):
- * the room in this same document, so the whole media path works with no
- * network at all.
+ * wire protocol's own messages: the loopback (party-loopback.js), the room in
+ * this same document, or a party server over a WebSocket (party-ws.js).
  */
 (function (root) {
     'use strict';
@@ -28,6 +27,7 @@
     const PartyClock = ns.PartyClock || req('../shared/party-clock.js');
     const PartyRoom = ns.PartyRoom || req('../shared/party-room.js');
     const PartyLoopback = ns.PartyLoopback || req('./party-loopback.js');
+    const PartyWs = ns.PartyWs || req('./party-ws.js');
 
     const PORT = 'bb:party';
     /** Runtime messages with this `to` are the session's. Only the worker sends them. */
@@ -42,7 +42,10 @@
     /** What the tab may say to the room. Leaving, kicking and policy come from the UI, through the worker. */
     const FROM_TAB = Object.freeze(['intent', 'ready', 'solo', 'request']);
 
-    function createSession({ transports = { loopback: PartyLoopback.createLoopback }, now = PartyClock.localNow, keepAliveMs = 0 } = {}) {
+    const TRANSPORTS = Object.freeze({ loopback: PartyLoopback.createLoopback, server: PartyWs.createTransport });
+
+    /** `onEnd(code)` hears of a party the authority ended; one this browser left, or never got into, it does not. */
+    function createSession({ transports = TRANSPORTS, now = PartyClock.localNow, keepAliveMs = 0, onEnd = null } = {}) {
         const clock = PartyClock.createClock();
         /** Everything about the party we are in, or null. */
         let party = null;
@@ -93,10 +96,14 @@
             switch (msg.t) {
                 case 'welcome':
                     Object.assign(party, {
-                        me: msg.you, resume: msg.resume, roomId: msg.room.id,
+                        me: msg.you, resume: msg.resume, roomId: msg.room.id, up: true,
                         policy: msg.room.policy, members: msg.room.members, state: msg.room.state,
                     });
+                    party.joined();
                     break;
+                // The transport's own word that the authority is out of reach
+                // for now; the next welcome is it back.
+                case 'link': party.up = msg.up !== false; break;
                 case 'state': {
                     if (party.state && msg.seq < party.state.seq) return;
                     const { t, ack, ...state } = msg;
@@ -158,31 +165,39 @@
             party.pingTimer = setTimeout(() => heartbeat(burst - 1), delay);
         }
 
-        function start({ mode = 'loopback', name, policy } = {}) {
+        /** `url` starts a room on that server and `code` joins the one it names; the loopback needs neither. */
+        async function start({ mode = 'loopback', name, policy, url, code } = {}) {
             // Already in one: the worker is moving the party to another tab.
             if (party) return { ok: true, status: status() };
             const make = transports[mode];
             if (!make) return { ok: false, error: 'mode' };
-            const transport = make({ policy, now });
-            party = { mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null, ready: true, solo: false, pingTimer: null };
+            const transport = make({ policy, now, url, code });
+            if (!transport) return { ok: false, error: 'address' };
+            const mine = { mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null, ready: true, solo: false, up: false, pingTimer: null };
+            // A loopback welcomes inside the send below; a socket, some time later.
+            const joined = new Promise((resolve) => { mine.joined = resolve; });
+            party = mine;
             clock.reset();
             party.link = transport.open(fromAuthority);
             party.link.send({ t: 'create', v: PartyRoom.VERSION, name, policy });
-            // Refused on the spot (a loopback answers inside that send).
-            if (!party) return { ok: false, error: endedWith };
+            await joined;
+            if (party !== mine) return { ok: false, error: endedWith };
             heartbeat(PartyClock.BURST - 1);
             return { ok: true, status: status() };
         }
 
         function end(code) {
             if (!party) return;
-            const { transport, link, pingTimer } = party;
+            const { transport, link, pingTimer, joined, me } = party;
             party = null;
+            joined();
             clearTimeout(pingTimer);
             link.close();
             transport.close();
             letGo(true);
             endedWith = code || null;
+            // A start that failed is answered as one; only a party that was on needs telling about.
+            if (code && me && onEnd) onEnd(code);
         }
 
         function leave() {
@@ -195,7 +210,8 @@
             if (!party) return { active: false };
             return {
                 active: true, mode: party.mode, you: party.me, room: party.roomId, members: party.members,
-                policy: party.policy, state: party.state, rtt: clock.rtt(), tab: !!port,
+                policy: party.policy, state: party.state, rtt: clock.rtt(), tab: !!port, up: party.up,
+                invite: party.transport.invite ? party.transport.invite() : null,
             };
         }
 
@@ -217,7 +233,12 @@
     function boot(api = root.chrome, options = {}) {
         if (root.__bbPartySession) return root.__bbPartySession;
         if (!api || !api.runtime || !api.runtime.onConnect) return null;
-        const session = createSession(options);
+        const session = createSession({
+            onEnd(code) {
+                try { api.runtime.sendMessage({ action: 'partyEnded', code }).catch(() => {}); } catch (_) { /* the extension was reloaded: nobody left to tell */ }
+            },
+            ...options,
+        });
         api.runtime.onConnect.addListener(session.connect);
         api.runtime.onMessage.addListener((msg, sender, respond) => {
             if (!msg || msg.to !== TARGET) return false;
@@ -228,7 +249,7 @@
         return session;
     }
 
-    const PartySession = { PORT, TARGET, HEARTBEAT_MAX_MS, FROM_TAB, createSession, boot };
+    const PartySession = { PORT, TARGET, HEARTBEAT_MAX_MS, FROM_TAB, TRANSPORTS, createSession, boot };
 
     root.BB = root.BB || {};
     root.BB.PartySession = PartySession;

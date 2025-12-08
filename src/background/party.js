@@ -26,7 +26,7 @@
     const LINGER_MIN = 0.5;
     /** Firefox unloads an idle background page after thirty seconds. */
     const KEEPALIVE_MS = 20000;
-    const ACTIONS = Object.freeze(['partyStart', 'partyLeave', 'partyStatus']);
+    const ACTIONS = Object.freeze(['partyStart', 'partyJoin', 'partyLeave', 'partyStatus', 'partyEnded']);
 
     /** Chrome: the session in an offscreen document, reached by message. */
     function offscreenHost(api) {
@@ -69,6 +69,7 @@
     function pageHost(api, {
         doc = root.document,
         fetchText = async (url) => (await fetch(url)).text(),
+        onEnd,
     } = {}) {
         let loading = null;
         const session = () => root.__bbPartySession || null;
@@ -84,7 +85,7 @@
                     (doc.head || doc.documentElement).appendChild(script);
                 });
             }
-            root.BB.PartySession.boot(api, { keepAliveMs: KEEPALIVE_MS });
+            root.BB.PartySession.boot(api, { keepAliveMs: KEEPALIVE_MS, onEnd });
         }
 
         return {
@@ -114,13 +115,20 @@
             return { ok: true };
         }
 
-        async function start(tabId, url) {
+        /**
+         * `how` is empty for a party in this browser alone, `{server}` to
+         * start a room on a party server (the setting's when it names none),
+         * or `{code}` to join the room an invite names.
+         */
+        async function start(tabId, url, how = {}) {
             if (!host) return { ok: false, error: 'unsupported' };
             if (!PartyLoader.siteOf(url)) return { ok: false, error: 'site' };
-            const s = await Settings.get(['partyName', 'partyControl', 'partyWaitForAll']);
+            const s = await Settings.get(['partyName', 'partyControl', 'partyWaitForAll', 'partyServerUrl']);
+            const onServer = !!how.code || how.server !== undefined;
             await host.open();
             const answer = await host.ask({
-                op: 'start', mode: 'loopback', name: s.partyName,
+                op: 'start', mode: onServer ? 'server' : 'loopback', name: s.partyName,
+                url: how.server || s.partyServerUrl, code: how.code,
                 policy: { control: s.partyControl, wait: s.partyWaitForAll },
             });
             if (!answer || !answer.ok) {
@@ -156,12 +164,20 @@
 
     async function handle(api, party, message, sender) {
         switch (message.action) {
-            case 'partyStart': {
+            case 'partyStart':
+            case 'partyJoin': {
                 // From the page's own content script, or from the popup, which has no tab.
                 const tab = (sender && sender.tab) || (await api.tabs.query({ active: true, lastFocusedWindow: true }))[0];
-                return tab ? party.start(tab.id, tab.url || '') : { ok: false, error: 'tab' };
+                const how = message.action === 'partyJoin' ? { code: String(message.code || '') }
+                    : message.server !== undefined ? { server: String(message.server || '') } : {};
+                return tab ? party.start(tab.id, tab.url || '', how) : { ok: false, error: 'tab' };
             }
             case 'partyLeave': return party.leave();
+            // The session's own word that the authority ended the party (a
+            // kick, a room the server no longer has). The tab was let go with
+            // it; what is left is the document and the gate. A page cannot
+            // end the party this way.
+            case 'partyEnded': return sender && sender.tab ? { ok: false } : party.leave();
             default: return party.status();
         }
     }
@@ -172,7 +188,9 @@
     if (api && api.runtime && api.runtime.onMessage && api.alarms && PartyLoader.loader) {
         // A service worker has no document; Firefox's background page does.
         const host = api.offscreen && api.runtime.getContexts ? offscreenHost(api)
-            : root.document ? pageHost(api) : null;
+            // The session shares this page, so it is told directly: a page's
+            // runtime.sendMessage never reaches itself.
+            : root.document ? pageHost(api, { onEnd: () => party.leave() }) : null;
         const party = createParty({ api, loader: PartyLoader.loader, host });
         PartyLoader.loader.onClosed(party.onTabClosed);
         api.alarms.onAlarm.addListener(party.onAlarm);

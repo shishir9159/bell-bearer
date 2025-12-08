@@ -292,6 +292,9 @@
         partyName: '',
         partyControl: 'everyone',
         partyWaitForAll: true,
+        // The party server a room is started on when none is given: a hosted
+        // one (wss://) or the host's own (ws://ip:port). Blank is none.
+        partyServerUrl: '',
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

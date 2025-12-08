@@ -7670,6 +7670,23 @@ const dayRecord = (at = T0) =>
             eq([w.heard, w.all.length], [[{ t: 'error', code: refused ? 'bad-secret' : 'unreachable' }], 1]);
         }
     });
+    await checkAsync('a session on a server waits for the welcome, and offers the invite', async () => {
+        const sockets = fakeSockets();
+        const server = (options) => PartyWs.createTransport({ ...options, WebSocket: sockets.Fake });
+        const session = PartySession.createSession({ transports: { server }, now: () => 1000 });
+        eq(await session.control({ op: 'start', mode: 'server', url: 'nonsense' }), { ok: false, error: 'address' });
+        const starting = session.control({ op: 'start', mode: 'server', url: 'ws://h:1', name: 'Ana' });
+        sockets.last().accept();
+        sockets.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        sockets.last().say(wsWelcome('m1', 'z1'));
+        const started = await starting;
+        eq([started.ok, started.status.you, started.status.up], [true, 'm1', true]);
+        eq(PartyWs.readInvite(started.status.invite).room, 'r1');
+        sockets.last().die();
+        eq(session.status().up, false, 'reconnecting');
+        await session.control({ op: 'leave' });
+    });
+
     // ----------------------------------------------------- party worker
 
     console.log('\n# party worker — the document a party lives in, open only while it does');
@@ -7745,6 +7762,47 @@ const dayRecord = (at = T0) =>
             eq(await party.onAlarm({ name: PartyWorker.LINGER_ALARM }), !bound);
             eq(calls.includes('close'), !bound, bound ? 'moved to tab 9: kept' : 'nobody took it up: over');
         }
+    });
+    await checkAsync('a server party starts on the address given, else the setting\'s, and an invite joins', async () => {
+        const tab = { tab: { id: 7, url: partyVideo } };
+        const asked = async (message) => {
+            const { party, calls } = partyWith();
+            await PartyWorker.handle({}, party, message, tab);
+            const { mode, url, code } = calls.asked;
+            return { mode, url, code };
+        };
+        eq(await asked({ action: 'partyStart' }), { mode: 'loopback', url: '', code: undefined });
+        eq(await asked({ action: 'partyStart', server: 'ws://10.0.0.2:7070' }), { mode: 'server', url: 'ws://10.0.0.2:7070', code: undefined });
+        eq(await asked({ action: 'partyStart', server: '' }), { mode: 'server', url: '', code: undefined }, 'partyServerUrl, blank by default');
+        eq(await asked({ action: 'partyJoin', code: 'bbp1s.x' }), { mode: 'server', url: '', code: 'bbp1s.x' });
+    });
+    await checkAsync('a party the authority ended is closed down; a page cannot claim one was', async () => {
+        const { party, calls } = partyWith();
+        await party.start(7, partyVideo);
+        calls.length = 0;
+        eq(await PartyWorker.handle({}, party, { action: 'partyEnded' }, { tab: { id: 7 } }), { ok: false });
+        eq(calls, []);
+        await PartyWorker.handle({}, party, { action: 'partyEnded', code: 'kicked' }, { url: 'chrome-extension://x/offscreen.html' });
+        eq(calls, ['ask leave', 'close', 'unbind']);
+    });
+    await checkAsync('the session reports a kick, but not a start that failed or a leave', async () => {
+        const ended = [];
+        const loop = PartyLoopback.createLoopback();
+        const session = PartySession.createSession({ transports: { loopback: () => loop }, now: () => 1000, onEnd: (code) => ended.push(code) });
+        await session.control({ op: 'start', name: 'Ana' });
+        const ben = loop.open(() => {});
+        ben.send({ t: 'hello', v: 1, name: 'Ben' });
+        const [ana, benId] = loop.room.members().map((m) => m.id);
+        loop.room.handle(ana, { t: 'role', member: benId, role: 'host' }, 1000);
+        eq(ended, [], 'handing over is not ending');
+        ben.send({ t: 'kick', member: ana });
+        eq([ended, session.status().active], [['kicked'], false]);
+        const left = PartySession.createSession({ now: () => 1000, onEnd: (code) => ended.push(code) });
+        await left.control({ op: 'start' });
+        await left.control({ op: 'leave' });
+        const refused = PartySession.createSession({ transports: { loopback: () => ({ open: (deliver) => ({ send: () => deliver({ t: 'error', code: 'full' }), close() {} }), close() {} }) }, onEnd: (code) => ended.push(code) });
+        eq(await refused.control({ op: 'start' }), { ok: false, error: 'full' });
+        eq(ended, ['kicked']);
     });
     await checkAsync('two starts close together open one offscreen document', async () => {
         let documents = 0;
