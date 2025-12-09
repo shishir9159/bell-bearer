@@ -1182,6 +1182,11 @@ party runs it in the host's browser, and a server party expects a server that
 behaves the same way — and `tests/party-vectors.json` pins the behaviour down
 case by case, the way `src/background/proto.js` pins down sowon's wire format.
 
+A server is checked against those same cases over real sockets with
+`node tests/party-conformance.js ws://host:port` (Node 22 or later, no
+dependencies). `node tests/party-dev-server.js` is a stand-in to develop the
+extension against, and passes it.
+
 ### Transport
 
 - WebSocket, text frames, one JSON object per frame, at most **8 KB**. A frame
