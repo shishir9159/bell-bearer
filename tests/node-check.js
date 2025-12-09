@@ -7707,6 +7707,10 @@ const dayRecord = (at = T0) =>
         'a=fingerprint:sha-256 F4:67:98:82:5B:D5:65:2C:A6:D9:49:17:C8:B8:7C:97:66:64:0E:FF:E0:17:7C:82:8B:34:F0:80:D0:B4:1D:81',
         'a=setup:actpass', 'a=mid:0', 'a=sctp-port:5000', 'a=max-message-size:262144', '',
     ].join('\r\n');
+    const inviteFields = (desc = PartyCode.parseSdp(CHROME_OFFER)) => ({
+        tag: Uint8Array.from([1, 2, 3, 4]), desc, room: Uint8Array.from([9, 9, 9, 9, 9, 9]), secret: new Uint8Array(16).fill(7),
+    });
+
     check('a chrome offer comes down to credentials, a fingerprint and its udp addresses', () => {
         const desc = PartyCode.parseSdp(CHROME_OFFER);
         eq([desc.ufrag, desc.pwd, desc.mid, desc.fingerprint.length, desc.fingerprint[0]], ['q9Zr', 'hT3k+vJ9sLx/0bWq2Fe7yRnA', '0', 32, 0xf4]);
@@ -7715,6 +7719,23 @@ const dayRecord = (at = T0) =>
             { type: 'srflx', address: '203.0.113.7', port: 55253 },
         ], 'tcp dropped');
         eq(PartyCode.parseSdp('v=0\r\na=ice-ufrag:abcd\r\n'), null);
+    });
+    check('an invite round-trips in under 200 characters, and a reply is not an invite', () => {
+        const code = PartyCode.inviteCode(inviteFields());
+        assert(code.startsWith('bbp1i.') && code.length < 200 && /^[A-Za-z0-9._-]+$/.test(code), `${code.length}: ${code}`);
+        const back = PartyCode.readInvite(` ${code}\n`);
+        const { mid, ...carried } = PartyCode.parseSdp(CHROME_OFFER);
+        eq([back.desc, [...back.tag], [...back.secret]], [carried, [1, 2, 3, 4], new Array(16).fill(7)], 'all but the mid, which an answer takes from its offer');
+        eq([PartyCode.readInvite(code.slice(0, -3)), PartyCode.readInvite(code.replace('bbp1i.', 'bbp1r.')), PartyCode.readInvite('bbp1i.!!')], [null, null, null]);
+    });
+    check('ipv6 and odd-length credentials survive the packing', () => {
+        const desc = {
+            ufrag: 'Ab+/9', pwd: 'x'.repeat(22) + '/+/', fingerprint: new Array(32).fill(0xab),
+            candidates: [{ type: 'host', address: '2001:db8::7', port: 1 }, { type: 'relay', address: 'fe80::1:2', port: 65535 }],
+        };
+        const back = PartyCode.readInvite(PartyCode.inviteCode(inviteFields(desc))).desc;
+        eq([back.ufrag, back.pwd], [desc.ufrag, desc.pwd]);
+        eq(back.candidates.map((c) => [c.type, c.address, c.port]), [['host', '2001:db8:0:0:0:0:0:7', 1], ['relay', 'fe80:0:0:0:0:0:1:2', 65535]]);
     });
     check('the rebuilt description is sdp that parses back to the same description', () => {
         const desc = PartyCode.parseSdp(CHROME_OFFER);
@@ -7725,6 +7746,25 @@ const dayRecord = (at = T0) =>
         }
         const lines = PartyCode.buildSdp(desc, { type: 'offer' }).split('\r\n').filter((line) => line.startsWith('a=candidate'));
         eq(lines[1], 'a=candidate:2 1 udp 1694498559 203.0.113.7 55253 typ srflx raddr 0.0.0.0 rport 0');
+    });
+    await checkAsync('a reply is signed with the invite\'s secret, and a changed byte or another secret fails it', async () => {
+        const { tag, desc, secret } = inviteFields();
+        const code = await PartyCode.replyCode({ tag, desc }, secret);
+        assert(code.startsWith('bbp1r.') && code.length < 160, code);
+        const reply = PartyCode.readReply(code);
+        eq([[...reply.tag], reply.desc.candidates.length], [[1, 2, 3, 4], 2]);
+        assert(await PartyCode.verifyReply(reply, secret));
+        assert(!(await PartyCode.verifyReply(reply, new Uint8Array(16))), 'another secret');
+        const bytes = PartyCode.fromBase64Url(code.slice(6));
+        bytes[12] ^= 1;
+        assert(!(await PartyCode.verifyReply(PartyCode.readReply('bbp1r.' + PartyCode.toBase64Url(bytes)), secret)), 'tampered');
+    });
+    check('a code says in words which addresses it gives away', () => {
+        eq(PartyCode.describe({ candidates: [
+            { type: 'host', address: '5b8d7825-a86d-4a3e-a5cb-aabdf9f47caf.local', port: 1 },
+            { type: 'host', address: '192.168.1.5', port: 2 }, { type: 'srflx', address: '203.0.113.5', port: 54012 },
+            { type: 'relay', address: '2001:db8:0:0:0:0:0:1', port: 3478 },
+        ] }), ['this computer on your network (address hidden)', 'local network 192.168.1.5:2', 'public 203.0.113.5:54012', 'relay [2001:db8:0:0:0:0:0:1]:3478']);
     });
 
     // ------------------------------------------------- party dev server

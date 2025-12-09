@@ -134,7 +134,210 @@
         return lines.join('\r\n') + '\r\n';
     }
 
-    const PartyCode = { MAX_CANDIDATES, TYPES, parseSdp, buildSdp };
+    // ------------------------------------------------------------ packing
+
+    const VERSION = 1;
+    const PREFIX = Object.freeze({ invite: 'bbp1i.', reply: 'bbp1r.' });
+    const KINDS = Object.freeze({ invite: 1, reply: 2, offer: 3, answer: 4 });
+    const TAG_BYTES = 4;
+    const ROOM_BYTES = 6;
+    const SECRET_BYTES = 16;
+    const MAC_BYTES = 8;
+    const FAMILIES = Object.freeze(['ipv4', 'ipv6', 'mdns']);
+
+    function toBase64Url(bytes) {
+        let binary = '';
+        for (const b of bytes) binary += String.fromCharCode(b);
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function fromBase64Url(text) {
+        if (!/^[A-Za-z0-9_-]*$/.test(text)) return null;
+        try {
+            return Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function randomBytes(n) {
+        const bytes = new Uint8Array(n);
+        root.crypto.getRandomValues(bytes);
+        return bytes;
+    }
+
+    const sameBytes = (a, b) => a.length === b.length && a.every((byte, i) => byte === b[i]);
+
+    function writer() {
+        const out = [];
+        return {
+            byte: (b) => out.push(b & 0xff),
+            bytes: (bs) => { for (const b of bs) out.push(b); },
+            u16: (n) => out.push((n >> 8) & 0xff, n & 0xff),
+            done: () => Uint8Array.from(out),
+        };
+    }
+
+    /** Reads past the end throw; decode() turns that into null. */
+    function reader(bytes) {
+        let at = 0;
+        const take = (n) => {
+            if (at + n > bytes.length) throw new Error('short');
+            at += n;
+            return bytes.slice(at - n, at);
+        };
+        return {
+            byte: () => take(1)[0],
+            bytes: take,
+            u16: () => { const [hi, lo] = take(2); return (hi << 8) | lo; },
+            left: () => bytes.length - at,
+        };
+    }
+
+    /**
+     * ICE credentials are drawn from exactly the base64 alphabet, so each
+     * character is six bits: Chrome's 24-character password is 18 bytes.
+     */
+    function writeIce(w, text) {
+        w.byte(text.length);
+        let acc = 0;
+        let bits = 0;
+        for (const ch of text) {
+            acc = ((acc << 6) | ICE_CHARS.indexOf(ch)) & 0xffff;
+            bits += 6;
+            while (bits >= 8) {
+                bits -= 8;
+                w.byte(acc >> bits);
+            }
+        }
+        if (bits) w.byte(acc << (8 - bits));
+    }
+
+    function readIce(r) {
+        const length = r.byte();
+        const packed = r.bytes(Math.ceil((length * 6) / 8));
+        let text = '';
+        let acc = 0;
+        let bits = 0;
+        for (const b of packed) {
+            acc = ((acc << 8) | b) & 0xffff;
+            bits += 8;
+            while (bits >= 6 && text.length < length) {
+                bits -= 6;
+                text += ICE_CHARS[(acc >> bits) & 63];
+            }
+        }
+        return text;
+    }
+
+    const EXTRAS = { invite: [['room', ROOM_BYTES], ['secret', SECRET_BYTES]], reply: [['mac', MAC_BYTES]], offer: [], answer: [] };
+
+    /** `fields` is {tag, desc} plus the kind's extras, as byte arrays. */
+    function pack(kind, fields) {
+        const w = writer();
+        w.byte(VERSION);
+        w.byte(KINDS[kind]);
+        w.bytes(fields.tag);
+        writeIce(w, fields.desc.ufrag);
+        writeIce(w, fields.desc.pwd);
+        w.bytes(fields.desc.fingerprint);
+        const candidates = fields.desc.candidates.map((c) => ({ ...c, packed: packAddress(c.address) })).filter((c) => c.packed);
+        w.byte(candidates.length);
+        for (const c of candidates) {
+            w.byte((TYPES.indexOf(c.type) << 4) | FAMILIES.indexOf(c.packed.family));
+            w.bytes(c.packed.bytes);
+            w.u16(c.port);
+        }
+        for (const [name] of EXTRAS[kind]) w.bytes(fields[name]);
+        return w.done();
+    }
+
+    /** {kind, tag, desc, …extras} from bytes, or null. */
+    function unpack(bytes) {
+        try {
+            const r = reader(bytes);
+            if (r.byte() !== VERSION) return null;
+            const kindByte = r.byte();
+            const kind = Object.keys(KINDS).find((k) => KINDS[k] === kindByte);
+            if (!kind) return null;
+            const out = { kind, tag: r.bytes(TAG_BYTES) };
+            const desc = { ufrag: readIce(r), pwd: readIce(r), fingerprint: Array.from(r.bytes(FINGERPRINT_BYTES)), candidates: [] };
+            for (let n = r.byte(); n > 0; n--) {
+                const head = r.byte();
+                const type = TYPES[head >> 4];
+                const family = FAMILIES[head & 15];
+                if (!type || !family) return null;
+                const address = unpackAddress(family, r.bytes(family === 'ipv4' ? 4 : 16));
+                desc.candidates.push({ type, address, port: r.u16() });
+            }
+            out.desc = desc;
+            for (const [name, size] of EXTRAS[kind]) out[name] = r.bytes(size);
+            return r.left() === 0 ? out : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async function hmac(secret, bytes) {
+        const subtle = root.crypto.subtle;
+        const key = await subtle.importKey('raw', secret, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        return new Uint8Array(await subtle.sign('HMAC', key, bytes));
+    }
+
+    const inviteCode = ({ tag, desc, room, secret }) => PREFIX.invite + toBase64Url(pack('invite', { tag, desc, room, secret }));
+
+    function readInvite(code) {
+        const text = String(code || '').trim();
+        if (!text.startsWith(PREFIX.invite)) return null;
+        const bytes = fromBase64Url(text.slice(PREFIX.invite.length));
+        const out = bytes && unpack(bytes);
+        return out && out.kind === 'invite' ? out : null;
+    }
+
+    /** The reply is signed over everything but its own mac, so it is async. */
+    async function replyCode({ tag, desc }, secret) {
+        const unsigned = pack('reply', { tag, desc, mac: new Uint8Array(MAC_BYTES) });
+        const body = unsigned.slice(0, unsigned.length - MAC_BYTES);
+        const mac = (await hmac(secret, body)).slice(0, MAC_BYTES);
+        return PREFIX.reply + toBase64Url(Uint8Array.from([...body, ...mac]));
+    }
+
+    /** {tag, desc} of a reply, unverified; which secret checks it depends on the tag. */
+    function readReply(code) {
+        const text = String(code || '').trim();
+        if (!text.startsWith(PREFIX.reply)) return null;
+        const bytes = fromBase64Url(text.slice(PREFIX.reply.length));
+        const out = bytes && unpack(bytes);
+        return out && out.kind === 'reply' ? { ...out, body: bytes.slice(0, bytes.length - MAC_BYTES) } : null;
+    }
+
+    async function verifyReply(reply, secret) {
+        const mac = (await hmac(secret, reply.body)).slice(0, MAC_BYTES);
+        return sameBytes(mac, reply.mac);
+    }
+
+    const PRIVATE_V4 = /^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/;
+
+    /**
+     * The addresses a code gives away, in plain words — the code is a string
+     * of letters, and the person pasting it into a chat should be able to see
+     * that it holds their public IP and a port.
+     */
+    function describe(desc) {
+        return desc.candidates.map((c) => {
+            const where = c.address.includes(':') ? `[${c.address}]:${c.port}` : `${c.address}:${c.port}`;
+            if (c.type === 'relay') return `relay ${where}`;
+            if (c.address.endsWith('.local')) return 'this computer on your network (address hidden)';
+            if (c.type === 'host' && (PRIVATE_V4.test(c.address) || /^f[cd]|^fe80/.test(c.address))) return `local network ${where}`;
+            return `public ${where}`;
+        });
+    }
+
+    const PartyCode = {
+        VERSION, PREFIX, KINDS, TAG_BYTES, ROOM_BYTES, SECRET_BYTES, MAC_BYTES, MAX_CANDIDATES, TYPES,
+        toBase64Url, fromBase64Url, randomBytes, sameBytes, hmac,
+        parseSdp, buildSdp, pack, unpack, inviteCode, readInvite, replyCode, readReply, verifyReply, describe,
+    };
 
     root.BB = root.BB || {};
     root.BB.PartyCode = PartyCode;
