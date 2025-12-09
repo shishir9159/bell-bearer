@@ -7687,6 +7687,46 @@ const dayRecord = (at = T0) =>
         await session.control({ op: 'leave' });
     });
 
+    // ------------------------------------------------------ party codes
+
+    console.log('\n# party codes — a peer connection in a chat message');
+    const PartyCode = require('../src/shared/party-code.js');
+
+    /**
+     * Chrome 154's own offer for a negotiated data channel, gathered against
+     * two STUN servers. The public address and the ICE credentials are
+     * replaced with stand-ins of the same shape; the rest is as Chrome wrote it.
+     */
+    const CHROME_OFFER = [
+        'v=0', 'o=- 2274914143508482837 2 IN IP4 127.0.0.1', 's=-', 't=0 0', 'a=group:BUNDLE 0', 'a=extmap-allow-mixed', 'a=msid-semantic: WMS',
+        'm=application 55253 UDP/DTLS/SCTP webrtc-datachannel', 'c=IN IP4 203.0.113.7',
+        'a=candidate:3725240560 1 udp 2113937151 5b8d7825-a86d-4a3e-a5cb-aabdf9f47caf.local 55253 typ host generation 0 network-cost 999',
+        'a=candidate:2790751920 1 udp 1677729535 203.0.113.7 55253 typ srflx raddr 0.0.0.0 rport 0 generation 0 network-cost 999',
+        'a=candidate:1 1 tcp 1518280447 192.168.1.20 9 typ host tcptype active generation 0',
+        'a=ice-ufrag:q9Zr', 'a=ice-pwd:hT3k+vJ9sLx/0bWq2Fe7yRnA', 'a=ice-options:trickle',
+        'a=fingerprint:sha-256 F4:67:98:82:5B:D5:65:2C:A6:D9:49:17:C8:B8:7C:97:66:64:0E:FF:E0:17:7C:82:8B:34:F0:80:D0:B4:1D:81',
+        'a=setup:actpass', 'a=mid:0', 'a=sctp-port:5000', 'a=max-message-size:262144', '',
+    ].join('\r\n');
+    check('a chrome offer comes down to credentials, a fingerprint and its udp addresses', () => {
+        const desc = PartyCode.parseSdp(CHROME_OFFER);
+        eq([desc.ufrag, desc.pwd, desc.mid, desc.fingerprint.length, desc.fingerprint[0]], ['q9Zr', 'hT3k+vJ9sLx/0bWq2Fe7yRnA', '0', 32, 0xf4]);
+        eq(desc.candidates, [
+            { type: 'host', address: '5b8d7825-a86d-4a3e-a5cb-aabdf9f47caf.local', port: 55253 },
+            { type: 'srflx', address: '203.0.113.7', port: 55253 },
+        ], 'tcp dropped');
+        eq(PartyCode.parseSdp('v=0\r\na=ice-ufrag:abcd\r\n'), null);
+    });
+    check('the rebuilt description is sdp that parses back to the same description', () => {
+        const desc = PartyCode.parseSdp(CHROME_OFFER);
+        for (const type of ['offer', 'answer']) {
+            const sdp = PartyCode.buildSdp(desc, { type, mid: '0' });
+            assert(sdp.includes(`a=setup:${type === 'offer' ? 'actpass' : 'active'}\r\n`) && sdp.endsWith('\r\n'), sdp);
+            eq(PartyCode.parseSdp(sdp), desc);
+        }
+        const lines = PartyCode.buildSdp(desc, { type: 'offer' }).split('\r\n').filter((line) => line.startsWith('a=candidate'));
+        eq(lines[1], 'a=candidate:2 1 udp 1694498559 203.0.113.7 55253 typ srflx raddr 0.0.0.0 rport 0');
+    });
+
     // ------------------------------------------------- party dev server
 
     console.log('\n# party dev server — the session over a real socket');
