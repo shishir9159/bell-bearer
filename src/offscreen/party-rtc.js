@@ -1,0 +1,246 @@
+/**
+ * A party member reached over WebRTC: the connection an invite code opens,
+ * and the link the room's messages travel on once it is open.
+ *
+ * Signaling is whatever carried the codes — a chat message (manual codes) or
+ * a tracker (party-tracker.js) — so this never trickles: it waits for ICE
+ * gathering to finish, or GATHER_MS, and puts every address into the one
+ * description the code is made from. The data channels are negotiated (fixed
+ * ids on both sides) so nothing has to be announced in-band before they open.
+ *
+ * Two channels, because pings and everything else want opposite things:
+ *
+ * - `ctl` is reliable and ordered, for intents, state and membership.
+ * - `tick` is unordered with no retransmits, for pings. A ping that is late
+ *   is useless, and one retransmitted inflates the RTT it measures and holds
+ *   up the ordered channel behind it.
+ *
+ * Before either carries the room, the two ends bind the channel to the codes:
+ * each sends a nonce and proves the invite's secret over the other's nonce and
+ * both DTLS fingerprints. The reply's MAC already shows the guest read the
+ * invite; this shows that the browser at the other end of the encrypted
+ * session is the one that holds those codes, and not something that spliced
+ * itself in with certificates of its own.
+ */
+(function (root) {
+    'use strict';
+
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+    const ns = root.BB || {};
+    const PartyCode = ns.PartyCode || req('../shared/party-code.js');
+
+    const CTL = Object.freeze({ negotiated: true, id: 0, ordered: true });
+    const TICK = Object.freeze({ negotiated: true, id: 1, ordered: false, maxRetransmits: 0 });
+    const GATHER_MS = 2500;
+    /** How long an invite waits for its reply. Its ports are only held that long. */
+    const INVITE_MS = 10 * 60 * 1000;
+    /** From the answer being set to the channel open and bound. */
+    const CONNECT_MS = 20000;
+    const MAX_FRAME = 8192;
+    const BIND_LABEL = new TextEncoder().encode('bb-party/bind');
+    /** Carried on `tick`; everything else goes on `ctl`. */
+    const TICKS = Object.freeze(['ping', 'pong']);
+
+    function openPeer({ iceServers = [], RTC = root.RTCPeerConnection } = {}) {
+        const pc = new RTC({ iceServers });
+        return { pc, ctl: pc.createDataChannel('ctl', CTL), tick: pc.createDataChannel('tick', TICK) };
+    }
+
+    /** Resolves once ICE has gathered, or after `ms`, whichever is first. */
+    function gather(pc, ms = GATHER_MS) {
+        return new Promise((resolve) => {
+            if (pc.iceGatheringState === 'complete') return resolve();
+            const timer = setTimeout(done, ms);
+            function done() {
+                clearTimeout(timer);
+                pc.removeEventListener('icegatheringstatechange', check);
+                resolve();
+            }
+            function check() { if (pc.iceGatheringState === 'complete') done(); }
+            pc.addEventListener('icegatheringstatechange', check);
+        });
+    }
+
+    /** Our own description, set as the browser made it, gathered, and reduced to what a code carries. */
+    async function describeLocal(pc, ms) {
+        await pc.setLocalDescription();
+        await gather(pc, ms);
+        const desc = PartyCode.parseSdp(pc.localDescription.sdp);
+        if (!desc) throw new Error('no usable local description');
+        return desc;
+    }
+
+    const concat = (...parts) => Uint8Array.from(parts.flatMap((part) => [...part]));
+
+    /** Resolves true once `ctl` is open and both ends have proven the secret; false on anything else. */
+    function bind(peer, { secret, hostFp, guestFp, timeoutMs = CONNECT_MS }) {
+        const { pc, ctl } = peer;
+        return new Promise((resolve) => {
+            const mine = PartyCode.randomBytes(16);
+            const proof = (nonce) => PartyCode.hmac(secret, concat(BIND_LABEL, nonce, hostFp, guestFp));
+            let sentProof = false;
+            let theirsOk = false;
+            let settled = false;
+            const timer = setTimeout(() => finish(false), timeoutMs);
+
+            function finish(ok) {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                // The other end may speak the moment it is bound, before
+                // whoever awaits this has put a link on the channel.
+                peer.early = [];
+                ctl.onmessage = peer.tick.onmessage = ok ? (event) => peer.early.push(event) : null;
+                pc.removeEventListener('connectionstatechange', watch);
+                resolve(ok);
+            }
+            function watch() { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') finish(false); }
+            const say = (msg) => { try { ctl.send(JSON.stringify(msg)); } catch (_) { finish(false); } };
+            function open() { say({ t: 'bind', n: PartyCode.toBase64Url(mine) }); }
+
+            ctl.onmessage = async (event) => {
+                let msg;
+                try { msg = JSON.parse(event.data); } catch (_) { return finish(false); }
+                if (msg && msg.t === 'bind' && !sentProof) {
+                    const nonce = PartyCode.fromBase64Url(String(msg.n || ''));
+                    if (!nonce || nonce.length !== 16) return finish(false);
+                    sentProof = true;
+                    say({ t: 'proof', m: PartyCode.toBase64Url(await proof(nonce)) });
+                } else if (msg && msg.t === 'proof' && !theirsOk) {
+                    const theirs = PartyCode.fromBase64Url(String(msg.m || ''));
+                    if (!theirs || !PartyCode.sameBytes(theirs, await proof(mine))) return finish(false);
+                    theirsOk = true;
+                } else {
+                    return finish(false);
+                }
+                if (sentProof && theirsOk) finish(true);
+            };
+            pc.addEventListener('connectionstatechange', watch);
+            if (ctl.readyState === 'open') open();
+            else ctl.onopen = open;
+        });
+    }
+
+    /**
+     * The host's side of one guest: an offer, gathered, as a code. `answer`
+     * takes that guest's reply, decoded, and resolves with the bound peer, or
+     * null for a reply to another invite, a forged one, or a connection that
+     * never came up.
+     */
+    async function createInvite({ room, iceServers, RTC, gatherMs, now = Date.now } = {}) {
+        const peer = openPeer({ iceServers, RTC });
+        let desc;
+        try {
+            desc = await describeLocal(peer.pc, gatherMs);
+        } catch (error) {
+            peer.pc.close();
+            throw error;
+        }
+        const tag = PartyCode.randomBytes(PartyCode.TAG_BYTES);
+        const secret = PartyCode.randomBytes(PartyCode.SECRET_BYTES);
+        let used = false;
+        return {
+            code: PartyCode.inviteCode({ tag, desc, room, secret }),
+            tag, desc, expires: now() + INVITE_MS,
+            /** Whether this reply is for this invite. The MAC is checked by answer(). */
+            fits: (reply) => PartyCode.sameBytes(reply.tag, tag),
+            async answer(reply) {
+                if (used || !PartyCode.sameBytes(reply.tag, tag) || !(await PartyCode.verifyReply(reply, secret))) return null;
+                used = true;
+                try {
+                    await peer.pc.setRemoteDescription({ type: 'answer', sdp: PartyCode.buildSdp(reply.desc, { type: 'answer', mid: desc.mid }) });
+                } catch (_) {
+                    peer.pc.close();
+                    return null;
+                }
+                if (await bind(peer, { secret, hostFp: desc.fingerprint, guestFp: reply.desc.fingerprint })) return peer;
+                peer.pc.close();
+                return null;
+            },
+            close: () => peer.pc.close(),
+        };
+    }
+
+    /**
+     * The guest's side: take the invite, answer it, and hand back the reply
+     * code for the user to send. `bound` resolves with the peer once the host
+     * has applied the reply, or null. Null straight away for a code that is
+     * not an invite.
+     */
+    async function acceptInvite(code, { iceServers, RTC, gatherMs } = {}) {
+        const invite = PartyCode.readInvite(code);
+        if (!invite) return null;
+        const peer = openPeer({ iceServers, RTC });
+        let desc;
+        try {
+            await peer.pc.setRemoteDescription({ type: 'offer', sdp: PartyCode.buildSdp(invite.desc, { type: 'offer' }) });
+            desc = await describeLocal(peer.pc, gatherMs);
+        } catch (_) {
+            peer.pc.close();
+            return null;
+        }
+        const reply = await PartyCode.replyCode({ tag: invite.tag, desc }, invite.secret);
+        const bound = bind(peer, { secret: invite.secret, hostFp: invite.desc.fingerprint, guestFp: desc.fingerprint, timeoutMs: INVITE_MS })
+            .then((ok) => {
+                if (ok) return peer;
+                peer.pc.close();
+                return null;
+            });
+        return { reply, room: invite.room, desc, peer, bound, close: () => peer.pc.close() };
+    }
+
+    /**
+     * A bound peer as a link: wire messages in and out, as JSON. `onDown`
+     * hears once that the connection is gone for good — failed, closed, or
+     * its control channel shut.
+     */
+    function peerLink(peer, { deliver, onDown = () => {} }) {
+        const { pc, ctl, tick } = peer;
+        let down = false;
+
+        function receive(event) {
+            let msg;
+            try { msg = JSON.parse(event.data); } catch (_) { return; }
+            if (msg && typeof msg === 'object' && typeof msg.t === 'string') deliver(msg);
+        }
+        function gone() {
+            if (down) return;
+            down = true;
+            ctl.onmessage = tick.onmessage = ctl.onclose = null;
+            pc.removeEventListener('connectionstatechange', watch);
+            onDown();
+        }
+        function watch() { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') gone(); }
+
+        ctl.onmessage = receive;
+        tick.onmessage = receive;
+        for (const event of peer.early || []) receive(event);
+        peer.early = [];
+        ctl.onclose = gone;
+        pc.addEventListener('connectionstatechange', watch);
+
+        return {
+            send(msg) {
+                if (down || !msg || typeof msg.t !== 'string') return;
+                const text = JSON.stringify(msg);
+                if (text.length > MAX_FRAME) return;
+                const channel = TICKS.includes(msg.t) && tick.readyState === 'open' ? tick : ctl;
+                try { channel.send(text); } catch (_) { /* closing; onclose follows */ }
+            },
+            close() {
+                gone();
+                pc.close();
+            },
+            state: () => pc.connectionState,
+        };
+    }
+
+    const PartyRtc = {
+        CTL, TICK, GATHER_MS, INVITE_MS, CONNECT_MS, MAX_FRAME, TICKS,
+        openPeer, gather, describeLocal, bind, createInvite, acceptInvite, peerLink,
+    };
+
+    root.BB = root.BB || {};
+    root.BB.PartyRtc = PartyRtc;
+    if (typeof module !== 'undefined' && module.exports) module.exports = PartyRtc;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
