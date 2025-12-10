@@ -7448,6 +7448,21 @@ const dayRecord = (at = T0) =>
         eq(late.heard, [{ t: 'error', code: 'expired' }]);
         loop.close();
     });
+    check('a resume on a new link is welcomed there, and the old link is nobody', () => {
+        const { loop, member } = loopbackWith();
+        const ana = member();
+        ana.link.send({ t: 'create', v: 1, name: 'Ana' });
+        const { you, resume } = ana.last('welcome');
+        const back = member();
+        back.link.send({ t: 'hello', v: 1, resume });
+        eq([back.last('welcome').you, ana.heard.filter((msg) => msg.t === 'welcome').length], [you, 1], 'not sent down the old link');
+        ana.link.send({ t: 'intent', id: 1, base: 0, op: 'play', pos: 0 });
+        ana.link.close();
+        eq([loop.room.state().paused, loop.room.members().length], [true, 1]);
+        back.link.send({ t: 'intent', id: 2, base: 0, op: 'play', pos: 0 });
+        eq(loop.room.state().paused, false, 'the old link hanging up did not take the new one with it');
+        loop.close();
+    });
     check('a refused join is told why', () => {
         const { loop, member } = loopbackWith();
         const ana = member();

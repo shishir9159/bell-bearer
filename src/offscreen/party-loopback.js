@@ -28,31 +28,40 @@
         const links = new Map();
         /**
          * The room welcomes a member from inside join(), before join() has
-         * returned the id that welcome is for. What it sends in that moment
-         * is caught here and handed over once the id is known.
+         * returned the id that welcome is for. Everything it sends in that
+         * moment is caught here and handed on once the id is known — all of
+         * it, not only what has no link yet: a member resuming while its old
+         * link is still registered used to have its welcome sent down the old
+         * link, to a guest whose data channel was already gone.
          */
         let caught = null;
         const room = PartyRoom.createRoom({
             id: PartyRoom.mintRandom('p'), policy, mint,
             send(id, msg) {
-                const deliver = links.get(id);
-                if (deliver) deliver(msg);
-                else if (caught) caught.push({ id, msg });
+                if (caught) return caught.push({ id, msg });
+                const link = links.get(id);
+                if (link) link.deliver(msg);
             },
         });
         const ticker = setInterval(() => room.tick(now()), TICK_MS);
 
-        function join(hello, deliver) {
+        function join(hello, entry) {
             caught = [];
             const result = room.join({ name: hello.name, resume: hello.resume }, now());
             const early = caught;
             caught = null;
             if (result.error) {
-                deliver({ t: 'error', code: result.error });
+                entry.deliver({ t: 'error', code: result.error });
                 return null;
             }
-            links.set(result.member, deliver);
-            for (const one of early) if (one.id === result.member) deliver(one.msg);
+            // Resumed from another link: the newest one is the member now.
+            const old = links.get(result.member);
+            if (old && old !== entry) old.member = null;
+            links.set(result.member, entry);
+            for (const one of early) {
+                const link = links.get(one.id);
+                if (link) link.deliver(one.msg);
+            }
             return result.member;
         }
 
@@ -60,18 +69,22 @@
             room,
             /** A link for one member; `deliver` receives what the room sends it. */
             open(deliver) {
-                let member = null;
+                const entry = { deliver, member: null, joined: false };
                 return {
                     send(msg) {
                         if (!msg || typeof msg.t !== 'string') return;
-                        if (member === null) {
-                            if (msg.t === 'create' || msg.t === 'hello') member = join(msg, deliver);
+                        if (!entry.joined) {
+                            if (msg.t !== 'create' && msg.t !== 'hello') return;
+                            entry.member = join(msg, entry);
+                            entry.joined = entry.member !== null;
                             return;
                         }
-                        const from = member;
+                        // Taken over by a resume on another link, or gone: nobody.
+                        const from = entry.member;
+                        if (from === null) return;
                         if (msg.t === 'bye') {
                             links.delete(from);
-                            member = null;
+                            entry.member = null;
                         }
                         room.handle(from, msg, now());
                     },
@@ -81,8 +94,8 @@
                      * within the minute gets it back.
                      */
                     close() {
-                        if (member !== null) links.delete(member);
-                        member = null;
+                        if (entry.member !== null && links.get(entry.member) === entry) links.delete(entry.member);
+                        entry.member = null;
                     },
                 };
             },
