@@ -3910,8 +3910,10 @@ check('an expectation that never came back stops matching', () => {
 });
 check('the browser suite loads the party the way the loader injects it', () => {
     const html = require('fs').readFileSync(`${__dirname}/index.html`, 'utf8');
+    const files = require('../src/background/party-loader.js').CONTENT_FILES;
     const loaded = [...html.matchAll(/src="\.\.\/(src\/[^"]*party[^"]*)"/g)].map((one) => one[1]);
-    eq(loaded, [...require('../src/background/party-loader.js').CONTENT_FILES]);
+    // What offscreen.html loads comes after these, for its own specs: it is not the tab's.
+    eq(loaded.slice(0, files.length), [...files]);
 });
 
 // ------------------------------------------------------------ activity
@@ -7765,6 +7767,145 @@ const dayRecord = (at = T0) =>
             { type: 'host', address: '192.168.1.5', port: 2 }, { type: 'srflx', address: '203.0.113.5', port: 54012 },
             { type: 'relay', address: '2001:db8:0:0:0:0:0:1', port: 3478 },
         ] }), ['this computer on your network (address hidden)', 'local network 192.168.1.5:2', 'public 203.0.113.5:54012', 'relay [2001:db8:0:0:0:0:0:1]:3478']);
+    });
+
+    // ------------------------------------------------------- party webrtc
+
+    console.log('\n# party webrtc — invites, replies, and the channel bound to them');
+    const PartyRtc = require('../src/offscreen/party-rtc.js');
+
+    /**
+     * Peer connections that connect only when two of them hold each other's
+     * descriptions — matched by DTLS fingerprint, as the real handshake is —
+     * and whose negotiated channels then open in pairs by id.
+     */
+    function fakeRtc() {
+        const all = [];
+        const later = (fn) => setTimeout(fn, 1);
+        const fpOf = (description) => PartyCode.parseSdp(description.sdp).fingerprint.join();
+        class Channel {
+            constructor(pc, options) { Object.assign(this, { pc, id: options.id, readyState: 'connecting', sent: [] }); }
+            send(data) {
+                if (this.readyState !== 'open') throw new Error('not open');
+                this.sent.push(JSON.parse(data));
+                const other = this.pc.other.channels.find((c) => c.id === this.id);
+                later(() => other.readyState === 'open' && other.onmessage && other.onmessage({ data }));
+            }
+        }
+        class RTC extends EventTarget {
+            constructor(config) {
+                super();
+                Object.assign(this, { config, fp: new Array(32).fill(all.length + 1), channels: [], iceGatheringState: 'new', connectionState: 'new' });
+                all.push(this);
+            }
+            createDataChannel(label, options) {
+                const channel = new Channel(this, options);
+                this.channels.push(channel);
+                return channel;
+            }
+            async setLocalDescription() {
+                const type = this.remoteDescription ? 'answer' : 'offer';
+                const n = this.fp[0];
+                const desc = { ufrag: `u${n}xx`, pwd: 'p'.repeat(22) + n, fingerprint: this.fp, candidates: [{ type: 'host', address: '127.0.0.1', port: 5000 + n }] };
+                this.localDescription = { type, sdp: PartyCode.buildSdp(desc, { type }) };
+                later(() => {
+                    this.iceGatheringState = 'complete';
+                    this.dispatchEvent(new Event('icegatheringstatechange'));
+                });
+                this.meet();
+            }
+            async setRemoteDescription(description) {
+                this.remoteDescription = description;
+                this.meet();
+            }
+            meet() {
+                if (!this.localDescription || !this.remoteDescription) return;
+                const other = all.find((pc) => pc !== this && pc.fp.join() === fpOf(this.remoteDescription));
+                if (!other || !other.localDescription || !other.remoteDescription || fpOf(other.remoteDescription) !== this.fp.join()) return;
+                [this.other, other.other] = [other, this];
+                for (const pc of [this, other]) later(() => pc.state('connected', 'open'));
+            }
+            state(connection, channels) {
+                this.connectionState = connection;
+                for (const c of this.channels) {
+                    c.readyState = channels;
+                    const fn = channels === 'open' ? c.onopen : c.onclose;
+                    if (fn) fn();
+                }
+                this.dispatchEvent(new Event('connectionstatechange'));
+            }
+            close() {
+                if (this.connectionState === 'closed') return;
+                this.state('closed', 'closed');
+                if (this.other) later(() => this.other.state('failed', 'closed'));
+            }
+        }
+        return { RTC, all };
+    }
+    /** A host's invite, a guest's reply to it, and the host applying the reply. */
+    async function rtcPair(options = {}) {
+        const { RTC, all } = fakeRtc();
+        const invite = await PartyRtc.createInvite({ room: new Uint8Array(6), RTC, gatherMs: 50, ...options });
+        const guest = await PartyRtc.acceptInvite(invite.code, { RTC, gatherMs: 50 });
+        return { RTC, all, invite, guest, host: invite.answer(PartyCode.readReply(guest.reply)) };
+    }
+
+    await checkAsync('an invite answered by its reply opens a bound channel both ways', async () => {
+        const { invite, guest, host, all } = await rtcPair({ iceServers: [{ urls: 'stun:x' }] });
+        eq(all[0].config, { iceServers: [{ urls: 'stun:x' }] });
+        assert(invite.code.startsWith('bbp1i.') && guest.reply.startsWith('bbp1r.'));
+        const [hostPeer, guestPeer] = await Promise.all([host, guest.bound]);
+        assert(hostPeer && guestPeer, 'both bound');
+        eq(all[0].channels.map((c) => c.sent.map((msg) => msg.t)), [['bind', 'proof'], []], 'binding is on ctl alone');
+        eq(await invite.answer(PartyCode.readReply(guest.reply)), null, 'an invite opens one connection');
+    });
+    await checkAsync('a link sends pings on tick and the rest on ctl, and hears what arrived while it was being made', async () => {
+        const { host, guest } = await rtcPair();
+        const [hostPeer, guestPeer] = await Promise.all([host, guest.bound]);
+        const heard = [];
+        const guestLink = PartyRtc.peerLink(guestPeer, { deliver: () => {} });
+        guestLink.send({ t: 'hello', v: 1, name: 'Ben' });
+        guestLink.send({ t: 'ping', c: 1, seq: 0 });
+        guestLink.send({ t: 'intent', pad: 'x'.repeat(PartyRtc.MAX_FRAME) });
+        await tick();
+        PartyRtc.peerLink(hostPeer, { deliver: (msg) => heard.push(msg.t) });
+        await tick();
+        eq(heard, ['hello', 'ping'], 'the oversized frame never went');
+        eq([guestPeer.ctl.sent.map((msg) => msg.t).slice(2), guestPeer.tick.sent.map((msg) => msg.t)], [['hello'], ['ping']]);
+    });
+    await checkAsync('a reply to another invite, or one signed with another secret, is not answered', async () => {
+        const { RTC } = fakeRtc();
+        const room = new Uint8Array(6);
+        const [one, two] = [await PartyRtc.createInvite({ room, RTC, gatherMs: 50 }), await PartyRtc.createInvite({ room, RTC, gatherMs: 50 })];
+        const guest = await PartyRtc.acceptInvite(one.code, { RTC, gatherMs: 50 });
+        const reply = PartyCode.readReply(guest.reply);
+        eq([two.fits(reply), one.fits(reply)], [false, true]);
+        eq(await two.answer(reply), null);
+        const forged = PartyCode.readReply(await PartyCode.replyCode({ tag: reply.tag, desc: reply.desc }, new Uint8Array(16)));
+        eq(await one.answer(forged), null);
+        eq(await PartyRtc.acceptInvite('bbp1r.nope', { RTC }), null);
+    });
+    await checkAsync('the channel is only bound when both ends hold the same secret', async () => {
+        const { RTC } = fakeRtc();
+        const [a, b] = [PartyRtc.openPeer({ RTC }), PartyRtc.openPeer({ RTC })];
+        await a.pc.setLocalDescription();
+        await b.pc.setRemoteDescription(a.pc.localDescription);
+        await b.pc.setLocalDescription();
+        await a.pc.setRemoteDescription(b.pc.localDescription);
+        const fps = { hostFp: a.pc.fp, guestFp: b.pc.fp, timeoutMs: 500 };
+        eq(await Promise.all([
+            PartyRtc.bind(a, { ...fps, secret: new Uint8Array(16).fill(1) }),
+            PartyRtc.bind(b, { ...fps, secret: new Uint8Array(16).fill(2) }),
+        ]), [false, false]);
+    });
+    await checkAsync('a link hears once that its peer has gone', async () => {
+        const { host, guest } = await rtcPair();
+        const [hostPeer, guestPeer] = await Promise.all([host, guest.bound]);
+        let downs = 0;
+        PartyRtc.peerLink(hostPeer, { deliver: () => {}, onDown: () => downs++ });
+        PartyRtc.peerLink(guestPeer, { deliver: () => {} }).close();
+        await tick();
+        eq([downs, hostPeer.pc.connectionState], [1, 'failed']);
     });
 
     // ------------------------------------------------- party dev server
