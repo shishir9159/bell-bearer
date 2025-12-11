@@ -7917,6 +7917,25 @@ const dayRecord = (at = T0) =>
             PartyRtc.bind(b, { ...fps, secret: new Uint8Array(16).fill(2) }),
         ]), [false, false]);
     });
+    check('the ice settings become ice servers, with a turn server\'s credentials taken out of its url', () => {
+        eq(PartyRtc.iceServers({ stun: ' stun:a.example:19302  stun:b.example ', turn: 'turn:ana:s3cr:et@relay.example:3478?transport=udp turns:relay.example:5349 http://x' }), [
+            { urls: ['stun:a.example:19302', 'stun:b.example'] },
+            { urls: 'turn:relay.example:3478?transport=udp', username: 'ana', credential: 's3cr:et' },
+            { urls: 'turns:relay.example:5349' },
+        ]);
+        eq(PartyRtc.iceServers({ stun: 'nonsense', turn: '' }), []);
+    });
+    check('two stun servers seeing two ports on one address is a symmetric nat', () => {
+        const two = [{ urls: ['stun:a', 'stun:b'] }];
+        const nat = (candidates, servers = two) => PartyRtc.natOf({ candidates }, servers);
+        const host = { type: 'host', address: '5b8d7825-a86d-4a3e-a5cb-aabdf9f47caf.local', port: 1 };
+        const srflx = (port, address = '203.0.113.7') => ({ type: 'srflx', address, port });
+        eq(nat([host, srflx(5000)]), 'consistent');
+        eq(nat([host, srflx(5000), srflx(5001)]), 'symmetric');
+        eq(nat([host, srflx(5000), srflx(6000, '2001:db8:0:0:0:0:0:1')]), 'consistent', 'an ipv4 and an ipv6 mapping');
+        eq([nat([host]), nat([host], [])], ['blocked', 'unknown'], 'nobody answered; nobody was asked');
+        eq(nat([srflx(5000)], [{ urls: 'stun:a' }]), 'unknown', 'one server has nothing to compare with');
+    });
     await checkAsync('a link hears once that its peer has gone', async () => {
         const { host, guest } = await rtcPair();
         const [hostPeer, guestPeer] = await Promise.all([host, guest.bound]);
@@ -7948,6 +7967,7 @@ const dayRecord = (at = T0) =>
         const { invite } = await session.control({ op: 'invite' });
         assert(invite.code.startsWith('bbp1i.') && invite.expires > Date.now(), invite.code);
         eq(invite.addresses, ['local network 127.0.0.1:5001']);
+        eq([invite.nat, session.status().nat], ['blocked', 'blocked'], 'two stun servers asked, and neither answered the fake');
         eq(session.status().invites.map((one) => one.code), [invite.code]);
 
         const ben = await rawGuest(invite.code, RTC);
@@ -8110,6 +8130,7 @@ const dayRecord = (at = T0) =>
         eq((await party.start(7, partyVideo)).ok, true);
         eq(calls, ['open', 'ask start', 'bind 7']);
         eq([calls.asked.mode, calls.asked.policy], ['loopback', { control: 'everyone', wait: true }], 'the settings\' defaults');
+        eq(calls.asked.ice, { stun: 'stun:stun.l.google.com:19302 stun:stun.cloudflare.com:3478', turn: '' });
     });
     await checkAsync('a tab on another site starts nothing', async () => {
         const { party, calls } = partyWith();

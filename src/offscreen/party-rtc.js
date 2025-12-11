@@ -41,6 +41,42 @@
     /** Carried on `tick`; everything else goes on `ctl`. */
     const TICKS = Object.freeze(['ping', 'pong']);
 
+    /**
+     * RTCIceServers from the settings' two strings: STUN addresses, and TURN
+     * ones written turn:user:pass@host:port. An ICE url cannot carry a user,
+     * so the credentials are taken out of it; anything else is dropped.
+     */
+    function iceServers({ stun = '', turn = '' } = {}) {
+        const words = (text) => String(text || '').split(/\s+/).filter(Boolean);
+        const stuns = words(stun).filter((url) => /^stuns?:[^\s@]+$/.test(url));
+        const turns = words(turn).map((url) => url.match(/^(turns?):(?:([^:@]+):([^@]+)@)?([^@]+)$/)).filter(Boolean)
+            .map(([, scheme, username, credential, rest]) => ({ urls: `${scheme}:${rest}`, ...(username ? { username, credential } : {}) }));
+        return [...(stuns.length ? [{ urls: stuns }] : []), ...turns];
+    }
+
+    /**
+     * What our own gathered description says about the NAT in front of us.
+     * Each STUN server reports the public address and port it saw us from;
+     * a NAT that gives every destination a port of its own (symmetric) shows
+     * one address with two ports, and a peer cannot punch through to a port
+     * it never learns. Chrome drops a candidate that repeats one it has, so
+     * a well-behaved NAT shows one port however many servers were asked.
+     *
+     * 'symmetric', 'consistent', 'blocked' (no server answered: UDP is
+     * filtered, and only a TURN relay over TCP will do), or 'unknown' with
+     * fewer than two STUN servers to compare.
+     */
+    function natOf(desc, servers = []) {
+        const stuns = servers.flatMap((one) => [].concat(one.urls)).filter((url) => /^stuns?:/.test(url)).length;
+        const ports = new Map();
+        for (const c of desc.candidates) {
+            if (c.type === 'srflx') ports.set(c.address, new Set([...(ports.get(c.address) || []), c.port]));
+        }
+        if (!ports.size) return stuns ? 'blocked' : 'unknown';
+        if ([...ports.values()].some((set) => set.size > 1)) return 'symmetric';
+        return stuns >= 2 ? 'consistent' : 'unknown';
+    }
+
     function openPeer({ iceServers = [], RTC = root.RTCPeerConnection } = {}) {
         const pc = new RTC({ iceServers });
         return { pc, ctl: pc.createDataChannel('ctl', CTL), tick: pc.createDataChannel('tick', TICK) };
@@ -237,7 +273,7 @@
 
     const PartyRtc = {
         CTL, TICK, GATHER_MS, INVITE_MS, CONNECT_MS, MAX_FRAME, TICKS,
-        openPeer, gather, describeLocal, bind, createInvite, acceptInvite, peerLink,
+        iceServers, natOf, openPeer, gather, describeLocal, bind, createInvite, acceptInvite, peerLink,
     };
 
     root.BB = root.BB || {};

@@ -29,7 +29,7 @@
     const PartyLoopback = ns.PartyLoopback || req('./party-loopback.js');
     const PartyRtc = ns.PartyRtc || req('./party-rtc.js');
 
-    /** Until the settings carry their own: two providers, so one being down is not the party's problem. */
+    /** For a start that names none; the worker passes the settings'. Two providers, so one being down is not the party's problem. */
     const DEFAULT_ICE = Object.freeze([{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }]);
 
     function createHost({
@@ -40,7 +40,10 @@
         /** Invites not yet answered, newest last. */
         const pending = [];
         const guests = new Set();
+        /** What the last invite's gathering said about our NAT; see PartyRtc.natOf. */
+        let nat = null;
         let closed = false;
+        const view = (invite) => ({ code: invite.code, expires: invite.expires, addresses: PartyCode.describe(invite.desc), nat: invite.nat });
 
         function forget(invite) {
             const at = pending.indexOf(invite);
@@ -71,7 +74,12 @@
             /** The host's own link. */
             open: (deliver) => loop.open(deliver),
 
-            /** A new invite for one more guest: {code, expires, addresses}. */
+            /**
+             * A new invite for one more guest: {code, expires, addresses, nat}.
+             * A 'symmetric' or 'blocked' nat is the one to warn about before
+             * the code is sent: without a TURN server, or a party server,
+             * the guest will most likely never get through.
+             */
             async createInvite() {
                 if (closed) return null;
                 const invite = await PartyRtc.createInvite({ room, iceServers, RTC, gatherMs });
@@ -79,12 +87,14 @@
                     invite.close();
                     return null;
                 }
+                invite.nat = PartyRtc.natOf(invite.desc, iceServers);
+                nat = invite.nat;
                 invite.timer = setTimeout(() => {
                     forget(invite);
                     invite.close();
                 }, inviteMs);
                 pending.push(invite);
-                return { code: invite.code, expires: invite.expires, addresses: PartyCode.describe(invite.desc) };
+                return view(invite);
             },
 
             /**
@@ -110,7 +120,8 @@
                 return { ok: true };
             },
 
-            pending: () => pending.map((one) => ({ code: one.code, expires: one.expires, addresses: PartyCode.describe(one.desc) })),
+            pending: () => pending.map(view),
+            nat: () => nat,
             guests: () => guests.size,
 
             close() {
@@ -171,6 +182,7 @@
 
         return {
             invite: () => (accepted ? accepted.reply : null),
+            nat: () => (accepted ? PartyRtc.natOf(accepted.desc, iceServers) : null),
             open(receive) {
                 deliver = receive;
                 return {

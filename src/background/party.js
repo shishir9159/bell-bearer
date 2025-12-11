@@ -138,11 +138,11 @@
             if (!PartyLoader.siteOf(url)) return { ok: false, error: 'site' };
             const mode = modeOf(how);
             if (!mode) return { ok: false, error: 'code' };
-            const s = await Settings.get(['partyName', 'partyControl', 'partyWaitForAll', 'partyServerUrl']);
+            const s = await Settings.get(['partyName', 'partyControl', 'partyWaitForAll', 'partyServerUrl', 'partyIceServers', 'partyTurn']);
             await host.open();
             const answer = await host.ask({
                 op: 'start', mode, name: s.partyName,
-                url: how.server || s.partyServerUrl, code: how.code,
+                url: how.server || s.partyServerUrl, code: how.code, ice: { stun: s.partyIceServers, turn: s.partyTurn },
                 policy: { control: s.partyControl, wait: s.partyWaitForAll },
             });
             if (!answer || !answer.ok) {

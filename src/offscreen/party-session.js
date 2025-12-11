@@ -29,6 +29,7 @@
     const PartyRoom = ns.PartyRoom || req('../shared/party-room.js');
     const PartyLoopback = ns.PartyLoopback || req('./party-loopback.js');
     const PartyWs = ns.PartyWs || req('./party-ws.js');
+    const PartyRtc = ns.PartyRtc || req('./party-rtc.js');
     const PartyHost = ns.PartyHost || req('./party-host.js');
 
     const PORT = 'bb:party';
@@ -187,12 +188,13 @@
         }
 
         /** `url` starts a room on that server and `code` joins the one it names; the loopback needs neither. */
-        async function start({ mode = 'loopback', name, policy, url, code, iceServers } = {}) {
+        /** `ice` is the settings' {stun, turn} strings, for a peer-to-peer party. */
+        async function start({ mode = 'loopback', name, policy, url, code, ice } = {}) {
             // Already in one: the worker is moving the party to another tab.
             if (party) return { ok: true, status: status() };
             const make = transports[mode];
             if (!make) return { ok: false, error: 'mode' };
-            const transport = make({ policy, now, url, code, iceServers });
+            const transport = make({ policy, now, url, code, iceServers: ice ? PartyRtc.iceServers(ice) : undefined });
             if (!transport) return { ok: false, error: 'address' };
             const mine = { mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null, ready: true, solo: false, up: false, pingTimer: null, beating: false, started: false };
             // A loopback welcomes inside the send below; a socket, some time later.
@@ -235,6 +237,7 @@
                 policy: party.policy, state: party.state, rtt: clock.rtt(), tab: !!port, up: party.up,
                 invite: party.transport.invite ? party.transport.invite() : null,
                 invites: party.transport.pending ? party.transport.pending() : undefined,
+                nat: party.transport.nat ? party.transport.nat() : undefined,
             };
         }
 

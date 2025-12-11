@@ -295,6 +295,13 @@
         // The party server a room is started on when none is given: a hosted
         // one (wss://) or the host's own (ws://ip:port). Blank is none.
         partyServerUrl: '',
+        // A peer-to-peer party's STUN servers, space-separated. Two, so the
+        // invite can tell a NAT that maps each destination to its own port
+        // (symmetric, where direct connections fail) from one that does not.
+        partyIceServers: 'stun:stun.l.google.com:19302 stun:stun.cloudflare.com:3478',
+        // A TURN server for when direct fails: turn:user:pass@host:port, or
+        // several separated by spaces. Blank is none.
+        partyTurn: '',
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));
