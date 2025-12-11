@@ -7578,6 +7578,10 @@ const dayRecord = (at = T0) =>
     console.log('\n# party websocket — a party server, and getting back to it');
     const PartyWs = require('../src/offscreen/party-ws.js');
     const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+    const until = async (test, what) => {
+        for (let i = 0; i < 400 && !test(); i++) await tick();
+        assert(test(), `timed out waiting for ${what}`);
+    };
 
     /** WebSockets the test plays the server for: accept, say, and die on demand. */
     function fakeSockets() {
@@ -7923,14 +7927,65 @@ const dayRecord = (at = T0) =>
         eq([downs, hostPeer.pc.connectionState], [1, 'failed']);
     });
 
+    // --------------------------------------------------- party p2p host
+
+    console.log('\n# party p2p host — the room in this browser, guests on data channels');
+    const PartyHost = require('../src/offscreen/party-host.js');
+
+    /** A guest as the host sees one: its own end of an invite, speaking the wire protocol on it. */
+    async function rawGuest(code, RTC) {
+        const guest = await PartyRtc.acceptInvite(code, { RTC, gatherMs: 50 });
+        const heard = [];
+        const bound = guest.bound.then((peer) => peer && PartyRtc.peerLink(peer, { deliver: (msg) => heard.push(msg) }));
+        return { reply: guest.reply, bound, heard, last: (t) => heard.filter((msg) => msg.t === t).pop() };
+    }
+
+    await checkAsync('a guest answering the host\'s invite joins the room the host is in', async () => {
+        const { RTC } = fakeRtc();
+        const session = PartySession.createSession({ transports: { codes: (o) => PartyHost.createHost({ ...o, RTC, gatherMs: 50 }) }, now: () => Date.now() });
+        const started = await session.control({ op: 'start', mode: 'codes', name: 'Ana' });
+        eq([started.ok, started.status.invites], [true, []]);
+        const { invite } = await session.control({ op: 'invite' });
+        assert(invite.code.startsWith('bbp1i.') && invite.expires > Date.now(), invite.code);
+        eq(invite.addresses, ['local network 127.0.0.1:5001']);
+        eq(session.status().invites.map((one) => one.code), [invite.code]);
+
+        const ben = await rawGuest(invite.code, RTC);
+        eq(await session.control({ op: 'accept', code: ben.reply }), { ok: true });
+        eq(session.status().invites, [], 'used up');
+        const link = await ben.bound;
+        link.send({ t: 'hello', v: 1, name: 'Ben' });
+        await until(() => ben.last('welcome'), 'Ben\'s welcome');
+        eq(ben.last('welcome').room.members.map((m) => [m.name, m.role]), [['Ana', 'host'], ['Ben', 'guest']]);
+        link.send({ t: 'intent', id: 1, base: 0, op: 'play', pos: 2, at: Date.now() });
+        await until(() => session.status().state.paused === false, 'Ben\'s play to reach Ana');
+        await session.control({ op: 'leave' });
+        await until(() => link.state() === 'failed', 'Ben to hear the host go');
+    });
+    await checkAsync('the host turns away what is not a reply to one of its open invites', async () => {
+        const { RTC } = fakeRtc();
+        const host = PartyHost.createHost({ RTC, gatherMs: 50 });
+        const other = PartyHost.createHost({ RTC, gatherMs: 50 });
+        const theirs = await rawGuest((await other.createInvite()).code, RTC);
+        eq(await host.accept('bbp1i.abc'), { ok: false, error: 'code' });
+        eq(await host.accept(theirs.reply), { ok: false, error: 'unknown' });
+        host.close();
+        other.close();
+    });
+    await checkAsync('an invite nobody answers gives its ports back', async () => {
+        const { RTC, all } = fakeRtc();
+        const host = PartyHost.createHost({ RTC, gatherMs: 50, inviteMs: 20 });
+        await host.createInvite();
+        eq(host.pending().length, 1);
+        await until(() => host.pending().length === 0, 'the invite to lapse');
+        eq(all[0].connectionState, 'closed');
+        host.close();
+    });
+
     // ------------------------------------------------- party dev server
 
     console.log('\n# party dev server — the session over a real socket');
     const PartyDevServer = require('./party-dev-server.js');
-    const until = async (test, what) => {
-        for (let i = 0; i < 400 && !test(); i++) await tick();
-        assert(test(), `timed out waiting for ${what}`);
-    };
 
     await checkAsync('two sessions meet through an invite, and come back as themselves after an outage', async () => {
         const server = await PartyDevServer.startServer({ port: 0 });
@@ -7983,7 +8038,8 @@ const dayRecord = (at = T0) =>
         const files = [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => one[1]);
         for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
         const at = (name) => files.findIndex((file) => file.endsWith(`/${name}.js`));
-        eq(['party-clock', 'party-state', 'party-room', 'party-loopback', 'party-ws', 'party-session'].map(at), [0, 1, 2, 3, 4, 5]);
+        const order = ['party-clock', 'party-state', 'party-room', 'party-loopback', 'party-ws', 'party-code', 'party-rtc', 'party-host', 'party-session'];
+        eq(order.map(at), order.map((_, i) => i));
     });
     check('the worker and the session agree on how the worker addresses it', () => {
         eq(PartyWorker.SESSION, PartySession.TARGET);
@@ -8061,6 +8117,16 @@ const dayRecord = (at = T0) =>
         eq(await asked({ action: 'partyStart', server: 'ws://10.0.0.2:7070' }), { mode: 'server', url: 'ws://10.0.0.2:7070', code: undefined });
         eq(await asked({ action: 'partyStart', server: '' }), { mode: 'server', url: '', code: undefined }, 'partyServerUrl, blank by default');
         eq(await asked({ action: 'partyJoin', code: 'bbp1s.x' }), { mode: 'server', url: '', code: 'bbp1s.x' });
+        eq(await asked({ action: 'partyStart', mode: 'codes' }), { mode: 'codes', url: '', code: undefined });
+    });
+    await checkAsync('a pasted reply lets a guest into the party on, and an invite is asked of it', async () => {
+        const { party, calls } = partyWith();
+        eq(await PartyWorker.handle({}, party, { action: 'partyInvite' }, {}), { ok: false, error: 'inactive' });
+        await party.start(7, partyVideo);
+        calls.length = 0;
+        await PartyWorker.handle({}, party, { action: 'partyJoin', code: ' bbp1r.abc ' }, {});
+        await PartyWorker.handle({}, party, { action: 'partyInvite' }, {});
+        eq([calls, calls.asked], [['ask accept', 'ask invite'], { op: 'invite' }], 'no new party, no tab bound');
     });
     await checkAsync('a party the authority ended is closed down; a page cannot claim one was', async () => {
         const { party, calls } = partyWith();

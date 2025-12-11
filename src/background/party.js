@@ -26,7 +26,16 @@
     const LINGER_MIN = 0.5;
     /** Firefox unloads an idle background page after thirty seconds. */
     const KEEPALIVE_MS = 20000;
-    const ACTIONS = Object.freeze(['partyStart', 'partyJoin', 'partyLeave', 'partyStatus', 'partyEnded']);
+    const ACTIONS = Object.freeze(['partyStart', 'partyJoin', 'partyInvite', 'partyLeave', 'partyStatus', 'partyEnded']);
+    /** PartyCode.PREFIX.reply: a guest's answer to our invite, pasted in on the host's side. */
+    const REPLY = 'bbp1r.';
+
+    /** Which of the session's transports a start asks for. */
+    function modeOf(how) {
+        if (how.codes) return 'codes';
+        if (how.code || how.server !== undefined) return 'server';
+        return 'loopback';
+    }
 
     /** Chrome: the session in an offscreen document, reached by message. */
     function offscreenHost(api) {
@@ -118,16 +127,16 @@
         /**
          * `how` is empty for a party in this browser alone, `{server}` to
          * start a room on a party server (the setting's when it names none),
-         * or `{code}` to join the room an invite names.
+         * `{codes}` to host one peer to peer, or `{code}` to join the room
+         * an invite names.
          */
         async function start(tabId, url, how = {}) {
             if (!host) return { ok: false, error: 'unsupported' };
             if (!PartyLoader.siteOf(url)) return { ok: false, error: 'site' };
             const s = await Settings.get(['partyName', 'partyControl', 'partyWaitForAll', 'partyServerUrl']);
-            const onServer = !!how.code || how.server !== undefined;
             await host.open();
             const answer = await host.ask({
-                op: 'start', mode: onServer ? 'server' : 'loopback', name: s.partyName,
+                op: 'start', mode: modeOf(how), name: s.partyName,
                 url: how.server || s.partyServerUrl, code: how.code,
                 policy: { control: s.partyControl, wait: s.partyWaitForAll },
             });
@@ -150,8 +159,16 @@
             return host.ask({ op: 'status' });
         }
 
+        /** The session's own ops on a party already on: a new invite, or a guest's reply to one. */
+        async function ask(msg) {
+            if (!host || !(await host.exists())) return { ok: false, error: 'inactive' };
+            return host.ask(msg);
+        }
+
         return {
             start, leave, status,
+            invite: () => ask({ op: 'invite' }),
+            accept: (code) => ask({ op: 'accept', code }),
             onTabClosed: () => api.alarms.create(LINGER_ALARM, { delayInMinutes: LINGER_MIN }),
             /** Half a minute on: started again from another tab, the party stays; otherwise it is over. */
             async onAlarm(alarm) {
@@ -164,14 +181,19 @@
 
     async function handle(api, party, message, sender) {
         switch (message.action) {
-            case 'partyStart':
-            case 'partyJoin': {
+            case 'partyJoin':
+                // Pasting a reply is the host letting a guest in, not joining anything.
+                if (String(message.code || '').trim().startsWith(REPLY)) return party.accept(String(message.code).trim());
+            // falls through
+            case 'partyStart': {
                 // From the page's own content script, or from the popup, which has no tab.
                 const tab = (sender && sender.tab) || (await api.tabs.query({ active: true, lastFocusedWindow: true }))[0];
                 const how = message.action === 'partyJoin' ? { code: String(message.code || '') }
-                    : message.server !== undefined ? { server: String(message.server || '') } : {};
+                    : message.mode === 'codes' ? { codes: true }
+                        : message.server !== undefined ? { server: String(message.server || '') } : {};
                 return tab ? party.start(tab.id, tab.url || '', how) : { ok: false, error: 'tab' };
             }
+            case 'partyInvite': return party.invite();
             case 'partyLeave': return party.leave();
             // The session's own word that the authority ended the party (a
             // kick, a room the server no longer has). The tab was let go with
@@ -182,7 +204,7 @@
         }
     }
 
-    const PartyWorker = { DOC, SESSION, LINGER_ALARM, LINGER_MIN, KEEPALIVE_MS, ACTIONS, offscreenHost, pageHost, createParty, handle };
+    const PartyWorker = { DOC, SESSION, LINGER_ALARM, LINGER_MIN, KEEPALIVE_MS, ACTIONS, REPLY, modeOf, offscreenHost, pageHost, createParty, handle };
 
     const api = root.chrome;
     if (api && api.runtime && api.runtime.onMessage && api.alarms && PartyLoader.loader) {

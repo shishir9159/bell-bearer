@@ -17,7 +17,8 @@
  *
  * The authority is reached through a transport, which only has to carry the
  * wire protocol's own messages: the loopback (party-loopback.js), the room in
- * this same document, or a party server over a WebSocket (party-ws.js).
+ * this same document, a party server over a WebSocket (party-ws.js), or the
+ * room this browser hosts for guests on data channels (party-host.js).
  */
 (function (root) {
     'use strict';
@@ -28,6 +29,7 @@
     const PartyRoom = ns.PartyRoom || req('../shared/party-room.js');
     const PartyLoopback = ns.PartyLoopback || req('./party-loopback.js');
     const PartyWs = ns.PartyWs || req('./party-ws.js');
+    const PartyHost = ns.PartyHost || req('./party-host.js');
 
     const PORT = 'bb:party';
     /** Runtime messages with this `to` are the session's. Only the worker sends them. */
@@ -42,7 +44,9 @@
     /** What the tab may say to the room. Leaving, kicking and policy come from the UI, through the worker. */
     const FROM_TAB = Object.freeze(['intent', 'ready', 'solo', 'request']);
 
-    const TRANSPORTS = Object.freeze({ loopback: PartyLoopback.createLoopback, server: PartyWs.createTransport });
+    const TRANSPORTS = Object.freeze({
+        loopback: PartyLoopback.createLoopback, server: PartyWs.createTransport, codes: PartyHost.createHost,
+    });
 
     /** `onEnd(code)` hears of a party the authority ended; one this browser left, or never got into, it does not. */
     function createSession({ transports = TRANSPORTS, now = PartyClock.localNow, keepAliveMs = 0, onEnd = null } = {}) {
@@ -166,12 +170,12 @@
         }
 
         /** `url` starts a room on that server and `code` joins the one it names; the loopback needs neither. */
-        async function start({ mode = 'loopback', name, policy, url, code } = {}) {
+        async function start({ mode = 'loopback', name, policy, url, code, iceServers } = {}) {
             // Already in one: the worker is moving the party to another tab.
             if (party) return { ok: true, status: status() };
             const make = transports[mode];
             if (!make) return { ok: false, error: 'mode' };
-            const transport = make({ policy, now, url, code });
+            const transport = make({ policy, now, url, code, iceServers });
             if (!transport) return { ok: false, error: 'address' };
             const mine = { mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null, ready: true, solo: false, up: false, pingTimer: null };
             // A loopback welcomes inside the send below; a socket, some time later.
@@ -212,6 +216,7 @@
                 active: true, mode: party.mode, you: party.me, room: party.roomId, members: party.members,
                 policy: party.policy, state: party.state, rtt: clock.rtt(), tab: !!port, up: party.up,
                 invite: party.transport.invite ? party.transport.invite() : null,
+                invites: party.transport.pending ? party.transport.pending() : undefined,
             };
         }
 
@@ -222,6 +227,15 @@
                     leave();
                     return { ok: true };
                 case 'status': return { ok: true, status: status() };
+                // A peer-to-peer host's invites: one per guest, made on demand.
+                case 'invite': {
+                    if (!party || !party.transport.createInvite) return { ok: false, error: 'mode' };
+                    const invite = await party.transport.createInvite();
+                    return invite ? { ok: true, invite } : { ok: false, error: 'invite' };
+                }
+                case 'accept':
+                    if (!party || !party.transport.accept) return { ok: false, error: 'mode' };
+                    return party.transport.accept(String(msg.code || ''));
                 default: return { ok: false, error: 'op' };
             }
         }
