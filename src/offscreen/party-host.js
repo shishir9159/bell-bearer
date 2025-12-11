@@ -16,6 +16,9 @@
  * Each invite is one guest. Its peer connection holds the ports the code
  * names, so an invite nobody answers is closed after INVITE_MS rather than
  * kept open all evening.
+ *
+ * The guest's side is here too: it answers the invite and says hello on the
+ * channel, and from then on is an ordinary member of a room it cannot see.
  */
 (function (root) {
     'use strict';
@@ -122,7 +125,76 @@
         };
     }
 
-    const PartyHost = { DEFAULT_ICE, createHost };
+    /**
+     * A guest's side of a code party. The invite is answered at once, and
+     * the reply is what the user sends back to the host (`invite()`, as a
+     * server party's code is). Until the host pastes it in there is no
+     * authority to be welcomed by, so the session is told it is waiting — a
+     * start that held out for the welcome would never hand the user the
+     * reply the welcome depends on.
+     */
+    function createGuest({ code, iceServers = DEFAULT_ICE, RTC, gatherMs } = {}) {
+        if (!PartyCode.readInvite(code)) return null;
+        let deliver = () => {};
+        let accepted = null;
+        let link = null;
+        let asked = false;
+        let closed = false;
+
+        async function answer(create) {
+            try {
+                accepted = await PartyRtc.acceptInvite(code, { iceServers, RTC, gatherMs });
+            } catch (_) {
+                accepted = null;
+            }
+            if (closed) return accepted && accepted.close();
+            if (!accepted) return deliver({ t: 'error', code: 'invite' });
+            deliver({ t: 'link', up: false, waiting: true });
+            const peer = await accepted.bound;
+            if (closed) return null;
+            if (!peer) return deliver({ t: 'error', code: 'expired' });
+            link = PartyRtc.peerLink(peer, {
+                deliver: (msg) => deliver(msg),
+                // There is no way back to a host that has gone without a new
+                // invite, so the party ends here and the video plays on solo.
+                onDown: () => { if (!closed) deliver({ t: 'error', code: 'host-left' }); },
+            });
+            link.send({ t: 'hello', v: create.v, name: create.name });
+            return null;
+        }
+
+        function close() {
+            closed = true;
+            if (link) link.close();
+            else if (accepted) accepted.close();
+        }
+
+        return {
+            invite: () => (accepted ? accepted.reply : null),
+            open(receive) {
+                deliver = receive;
+                return {
+                    send(msg) {
+                        if (!msg || typeof msg.t !== 'string' || closed) return;
+                        if (msg.t === 'create') {
+                            if (asked) return;
+                            asked = true;
+                            answer(msg);
+                        } else if (link) {
+                            link.send(msg);
+                        }
+                    },
+                    close,
+                };
+            },
+            close,
+        };
+    }
+
+    /** The session's `codes` transport: an invite to answer makes a guest, none makes a host. */
+    const createTransport = (options = {}) => (options.code ? createGuest(options) : createHost(options));
+
+    const PartyHost = { DEFAULT_ICE, createHost, createGuest, createTransport };
 
     root.BB = root.BB || {};
     root.BB.PartyHost = PartyHost;

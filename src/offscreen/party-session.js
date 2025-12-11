@@ -45,7 +45,7 @@
     const FROM_TAB = Object.freeze(['intent', 'ready', 'solo', 'request']);
 
     const TRANSPORTS = Object.freeze({
-        loopback: PartyLoopback.createLoopback, server: PartyWs.createTransport, codes: PartyHost.createHost,
+        loopback: PartyLoopback.createLoopback, server: PartyWs.createTransport, codes: PartyHost.createTransport,
     });
 
     /** `onEnd(code)` hears of a party the authority ended; one this browser left, or never got into, it does not. */
@@ -104,10 +104,17 @@
                         policy: msg.room.policy, members: msg.room.members, state: msg.room.state,
                     });
                     party.joined();
+                    // Welcomed after the start returned: a guest the host let in.
+                    if (party.started) beat();
                     break;
                 // The transport's own word that the authority is out of reach
-                // for now; the next welcome is it back.
-                case 'link': party.up = msg.up !== false; break;
+                // for now; the next welcome is it back. `waiting` is one that
+                // cannot be reached until the user does something — hands a
+                // code over — so the start returns rather than wait on them.
+                case 'link':
+                    party.up = msg.up !== false;
+                    if (msg.waiting) party.joined();
+                    break;
                 case 'state': {
                     if (party.state && msg.seq < party.state.seq) return;
                     const { t, ack, ...state } = msg;
@@ -132,6 +139,10 @@
         function fromTab(from, msg) {
             if (from !== port || !party || !msg || typeof msg.t !== 'string') return;
             if (msg.t === 'ping') {
+                // With no sample of the authority's clock yet, room time is
+                // only our own; a pong made from it would be kept by the tab's
+                // clock as its best sample, at the smallest RTT there is.
+                if (clock.rtt() === null) return;
                 const s = clock.toRoom(now());
                 post({ t: 'pong', c: msg.c, s, s2: s });
                 if (party.state && msg.seq !== party.state.seq) post({ t: 'state', ...party.state });
@@ -160,6 +171,12 @@
             if (keepAliveMs) post({ t: 'keepalive', ms: keepAliveMs });
         }
 
+        function beat() {
+            if (party.beating) return;
+            party.beating = true;
+            heartbeat(PartyClock.BURST - 1);
+        }
+
         function heartbeat(burst) {
             if (!party) return;
             const rtt = clock.rtt();
@@ -177,7 +194,7 @@
             if (!make) return { ok: false, error: 'mode' };
             const transport = make({ policy, now, url, code, iceServers });
             if (!transport) return { ok: false, error: 'address' };
-            const mine = { mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null, ready: true, solo: false, up: false, pingTimer: null };
+            const mine = { mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null, ready: true, solo: false, up: false, pingTimer: null, beating: false, started: false };
             // A loopback welcomes inside the send below; a socket, some time later.
             const joined = new Promise((resolve) => { mine.joined = resolve; });
             party = mine;
@@ -186,13 +203,14 @@
             party.link.send({ t: 'create', v: PartyRoom.VERSION, name, policy });
             await joined;
             if (party !== mine) return { ok: false, error: endedWith };
-            heartbeat(PartyClock.BURST - 1);
+            party.started = true;
+            if (party.me) beat();
             return { ok: true, status: status() };
         }
 
         function end(code) {
             if (!party) return;
-            const { transport, link, pingTimer, joined, me } = party;
+            const { transport, link, pingTimer, joined, started } = party;
             party = null;
             joined();
             clearTimeout(pingTimer);
@@ -201,7 +219,7 @@
             letGo(true);
             endedWith = code || null;
             // A start that failed is answered as one; only a party that was on needs telling about.
-            if (code && me && onEnd) onEnd(code);
+            if (code && started && onEnd) onEnd(code);
         }
 
         function leave() {

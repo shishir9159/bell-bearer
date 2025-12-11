@@ -29,11 +29,14 @@
     const ACTIONS = Object.freeze(['partyStart', 'partyJoin', 'partyInvite', 'partyLeave', 'partyStatus', 'partyEnded']);
     /** PartyCode.PREFIX.reply: a guest's answer to our invite, pasted in on the host's side. */
     const REPLY = 'bbp1r.';
+    /** The codes that join a party, by prefix, and the transport each needs. */
+    const JOINS = Object.freeze({ 'bbp1s.': 'server', 'bbp1i.': 'codes' });
 
-    /** Which of the session's transports a start asks for. */
+    /** Which of the session's transports a start asks for, or null for a code that is none of ours. */
     function modeOf(how) {
+        if (how.code) return JOINS[how.code.slice(0, 6)] || null;
         if (how.codes) return 'codes';
-        if (how.code || how.server !== undefined) return 'server';
+        if (how.server !== undefined) return 'server';
         return 'loopback';
     }
 
@@ -133,10 +136,12 @@
         async function start(tabId, url, how = {}) {
             if (!host) return { ok: false, error: 'unsupported' };
             if (!PartyLoader.siteOf(url)) return { ok: false, error: 'site' };
+            const mode = modeOf(how);
+            if (!mode) return { ok: false, error: 'code' };
             const s = await Settings.get(['partyName', 'partyControl', 'partyWaitForAll', 'partyServerUrl']);
             await host.open();
             const answer = await host.ask({
-                op: 'start', mode: modeOf(how), name: s.partyName,
+                op: 'start', mode, name: s.partyName,
                 url: how.server || s.partyServerUrl, code: how.code,
                 policy: { control: s.partyControl, wait: s.partyWaitForAll },
             });
@@ -188,7 +193,7 @@
             case 'partyStart': {
                 // From the page's own content script, or from the popup, which has no tab.
                 const tab = (sender && sender.tab) || (await api.tabs.query({ active: true, lastFocusedWindow: true }))[0];
-                const how = message.action === 'partyJoin' ? { code: String(message.code || '') }
+                const how = message.action === 'partyJoin' ? { code: String(message.code || '').trim() }
                     : message.mode === 'codes' ? { codes: true }
                         : message.server !== undefined ? { server: String(message.server || '') } : {};
                 return tab ? party.start(tab.id, tab.url || '', how) : { ok: false, error: 'tab' };
@@ -204,7 +209,7 @@
         }
     }
 
-    const PartyWorker = { DOC, SESSION, LINGER_ALARM, LINGER_MIN, KEEPALIVE_MS, ACTIONS, REPLY, modeOf, offscreenHost, pageHost, createParty, handle };
+    const PartyWorker = { DOC, SESSION, LINGER_ALARM, LINGER_MIN, KEEPALIVE_MS, ACTIONS, REPLY, JOINS, modeOf, offscreenHost, pageHost, createParty, handle };
 
     const api = root.chrome;
     if (api && api.runtime && api.runtime.onMessage && api.alarms && PartyLoader.loader) {

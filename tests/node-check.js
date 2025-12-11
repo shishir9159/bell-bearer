@@ -7972,6 +7972,40 @@ const dayRecord = (at = T0) =>
         host.close();
         other.close();
     });
+    await checkAsync('two sessions meet through an invite and its reply, and the guest\'s ends with the host\'s', async () => {
+        const { RTC } = fakeRtc();
+        const ended = [];
+        const transports = { codes: (o) => PartyHost.createTransport({ ...o, RTC, gatherMs: 50 }) };
+        const ana = PartySession.createSession({ transports });
+        const ben = PartySession.createSession({ transports, onEnd: (code) => ended.push(code) });
+        await ana.control({ op: 'start', mode: 'codes', name: 'Ana' });
+        const { invite } = await ana.control({ op: 'invite' });
+
+        const waiting = await ben.control({ op: 'start', mode: 'codes', code: invite.code, name: 'Ben' });
+        eq([waiting.ok, waiting.status.you, waiting.status.up], [true, null, false], 'back with the reply, not the welcome');
+        assert(waiting.status.invite.startsWith('bbp1r.'), waiting.status.invite);
+        const tab = tabPort();
+        ben.connect(tab);
+        tab.say({ t: 'ping', c: 1, seq: 0 });
+        eq(tab.heard, [], 'no pong made up before there is a room clock to make it from');
+
+        eq(await ana.control({ op: 'accept', code: waiting.status.invite }), { ok: true });
+        await until(() => ben.status().up && ben.status().rtt !== null, 'Ben to be welcomed and timed');
+        eq(ben.status().members.map((m) => [m.name, m.role]), [['Ana', 'host'], ['Ben', 'guest']]);
+        eq(tab.last('welcome').you, ben.status().you, 'the tab bound while waiting hears the welcome');
+        tab.say({ t: 'intent', id: 1, base: 0, op: 'play', pos: 7, at: Date.now() });
+        await until(() => ana.status().state.paused === false, 'Ben\'s play to reach Ana');
+
+        await ana.control({ op: 'leave' });
+        await until(() => !ben.status().active, 'Ben\'s party to end');
+        eq([ended, tab.last('error')], [['host-left'], { t: 'error', code: 'host-left' }]);
+    });
+    await checkAsync('an invite that cannot be read ends the guest\'s start at once', async () => {
+        const { RTC } = fakeRtc();
+        const guest = (code) => PartySession.createSession({ transports: { codes: (o) => PartyHost.createTransport({ ...o, code, RTC, gatherMs: 50 }) } })
+            .control({ op: 'start', mode: 'codes', code });
+        eq(await guest('bbp1i.nope'), { ok: false, error: 'address' });
+    });
     await checkAsync('an invite nobody answers gives its ports back', async () => {
         const { RTC, all } = fakeRtc();
         const host = PartyHost.createHost({ RTC, gatherMs: 50, inviteMs: 20 });
@@ -8118,6 +8152,12 @@ const dayRecord = (at = T0) =>
         eq(await asked({ action: 'partyStart', server: '' }), { mode: 'server', url: '', code: undefined }, 'partyServerUrl, blank by default');
         eq(await asked({ action: 'partyJoin', code: 'bbp1s.x' }), { mode: 'server', url: '', code: 'bbp1s.x' });
         eq(await asked({ action: 'partyStart', mode: 'codes' }), { mode: 'codes', url: '', code: undefined });
+        eq(await asked({ action: 'partyJoin', code: ' bbp1i.x ' }), { mode: 'codes', url: '', code: 'bbp1i.x' });
+    });
+    await checkAsync('a code that is none of ours opens nothing', async () => {
+        const { party, calls } = partyWith();
+        eq(await PartyWorker.handle({}, party, { action: 'partyJoin', code: 'hello' }, { tab: { id: 7, url: partyVideo } }), { ok: false, error: 'code' });
+        eq(calls, []);
     });
     await checkAsync('a pasted reply lets a guest into the party on, and an invite is asked of it', async () => {
         const { party, calls } = partyWith();
