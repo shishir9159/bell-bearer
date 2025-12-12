@@ -157,6 +157,43 @@
         });
     }
 
+    // The three steps of one exchange, whatever carries the descriptions:
+    // an invite code and its reply, or sealed blobs through a tracker.
+
+    /** A new peer and its offer, gathered and reduced. */
+    async function makeOffer({ iceServers, RTC, gatherMs } = {}) {
+        const peer = openPeer({ iceServers, RTC });
+        try {
+            return { peer, desc: await describeLocal(peer.pc, gatherMs) };
+        } catch (error) {
+            peer.pc.close();
+            throw error;
+        }
+    }
+
+    /** A new peer answering someone's offer, or null if the browser will not take it. */
+    async function makeAnswer(remote, { iceServers, RTC, gatherMs } = {}) {
+        const peer = openPeer({ iceServers, RTC });
+        try {
+            await peer.pc.setRemoteDescription({ type: 'offer', sdp: PartyCode.buildSdp(remote, { type: 'offer' }) });
+            return { peer, desc: await describeLocal(peer.pc, gatherMs) };
+        } catch (_) {
+            peer.pc.close();
+            return null;
+        }
+    }
+
+    /** Our offer's answer, applied; false (and the peer closed) if the browser will not take it. */
+    async function takeAnswer(peer, local, remote) {
+        try {
+            await peer.pc.setRemoteDescription({ type: 'answer', sdp: PartyCode.buildSdp(remote, { type: 'answer', mid: local.mid }) });
+            return true;
+        } catch (_) {
+            peer.pc.close();
+            return false;
+        }
+    }
+
     /**
      * The host's side of one guest: an offer, gathered, as a code. `answer`
      * takes that guest's reply, decoded, and resolves with the bound peer, or
@@ -164,14 +201,7 @@
      * never came up.
      */
     async function createInvite({ room, iceServers, RTC, gatherMs, now = Date.now } = {}) {
-        const peer = openPeer({ iceServers, RTC });
-        let desc;
-        try {
-            desc = await describeLocal(peer.pc, gatherMs);
-        } catch (error) {
-            peer.pc.close();
-            throw error;
-        }
+        const { peer, desc } = await makeOffer({ iceServers, RTC, gatherMs });
         const tag = PartyCode.randomBytes(PartyCode.TAG_BYTES);
         const secret = PartyCode.randomBytes(PartyCode.SECRET_BYTES);
         let used = false;
@@ -183,12 +213,7 @@
             async answer(reply) {
                 if (used || !PartyCode.sameBytes(reply.tag, tag) || !(await PartyCode.verifyReply(reply, secret))) return null;
                 used = true;
-                try {
-                    await peer.pc.setRemoteDescription({ type: 'answer', sdp: PartyCode.buildSdp(reply.desc, { type: 'answer', mid: desc.mid }) });
-                } catch (_) {
-                    peer.pc.close();
-                    return null;
-                }
+                if (!(await takeAnswer(peer, desc, reply.desc))) return null;
                 if (await bind(peer, { secret, hostFp: desc.fingerprint, guestFp: reply.desc.fingerprint })) return peer;
                 peer.pc.close();
                 return null;
@@ -206,15 +231,9 @@
     async function acceptInvite(code, { iceServers, RTC, gatherMs } = {}) {
         const invite = PartyCode.readInvite(code);
         if (!invite) return null;
-        const peer = openPeer({ iceServers, RTC });
-        let desc;
-        try {
-            await peer.pc.setRemoteDescription({ type: 'offer', sdp: PartyCode.buildSdp(invite.desc, { type: 'offer' }) });
-            desc = await describeLocal(peer.pc, gatherMs);
-        } catch (_) {
-            peer.pc.close();
-            return null;
-        }
+        const answered = await makeAnswer(invite.desc, { iceServers, RTC, gatherMs });
+        if (!answered) return null;
+        const { peer, desc } = answered;
         const reply = await PartyCode.replyCode({ tag: invite.tag, desc }, invite.secret);
         const bound = bind(peer, { secret: invite.secret, hostFp: invite.desc.fingerprint, guestFp: desc.fingerprint, timeoutMs: INVITE_MS })
             .then((ok) => {
@@ -273,7 +292,8 @@
 
     const PartyRtc = {
         CTL, TICK, GATHER_MS, INVITE_MS, CONNECT_MS, MAX_FRAME, TICKS,
-        iceServers, natOf, openPeer, gather, describeLocal, bind, createInvite, acceptInvite, peerLink,
+        iceServers, natOf, openPeer, gather, describeLocal, bind,
+        makeOffer, makeAnswer, takeAnswer, createInvite, acceptInvite, peerLink,
     };
 
     root.BB = root.BB || {};
