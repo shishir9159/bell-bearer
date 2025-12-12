@@ -28,6 +28,7 @@
     const ns = root.BB || {};
     const PartyCode = ns.PartyCode || req('../shared/party-code.js');
     const PartyRtc = ns.PartyRtc || req('./party-rtc.js');
+    const PartyHost = ns.PartyHost || req('./party-host.js');
 
     const PREFIX = 'bbp1t.';
     const SECRET_BYTES = 16;
@@ -40,6 +41,8 @@
     /** A joiner's offers are announced again this often, for a host that arrived after them. */
     const RENEW_MS = 10000;
     const RETRY_MS = 5000;
+    /** How long a joiner looks for the host before saying nobody is there. */
+    const JOIN_MS = 30000;
     const LABELS = Object.freeze({ topic: 'bb-party/topic', seal: 'bb-party/seal' });
 
     const binary = (bytes) => String.fromCharCode(...bytes);
@@ -158,9 +161,165 @@
         };
     }
 
+    // ---------------------------------------------------------- rendezvous
+
+    /** What every announce carries; the torrent fields are there because trackers expect them. */
+    const ANNOUNCE = Object.freeze({ uploaded: 0, downloaded: 0, left: 0 });
+
+    /**
+     * The host in the swarm: every sealed offer that opens under our key is
+     * answered, and the peer it makes is handed to `admit` once bound. An
+     * offer is answered once however often its joiner announces it again.
+     */
+    function hostSwarm({ secret, urls, admit, iceServers, RTC, gatherMs, WebSocket }) {
+        const answered = new Set();
+        let swarm = null;
+        let closed = false;
+
+        async function hear(msg, reply) {
+            if (!msg.offer || answered.has(msg.offer_id)) return;
+            const bytes = await unseal(keys.key, msg.offer.sdp);
+            const offer = bytes && PartyCode.unpack(bytes);
+            if (!offer || offer.kind !== 'offer' || answered.has(msg.offer_id)) return;
+            answered.add(msg.offer_id);
+            const made = await PartyRtc.makeAnswer(offer.desc, { iceServers, RTC, gatherMs });
+            if (!made) return;
+            if (closed) return made.peer.pc.close();
+            const sdp = await seal(keys.key, PartyCode.pack('answer', { tag: offer.tag, desc: made.desc }));
+            reply({ to_peer_id: msg.peer_id, offer_id: msg.offer_id, answer: { type: 'answer', sdp } });
+            const bound = await PartyRtc.bind(made.peer, { secret, hostFp: made.desc.fingerprint, guestFp: offer.desc.fingerprint });
+            if (bound && !closed) admit(made.peer);
+            else made.peer.pc.close();
+        }
+
+        let keys = null;
+        const ready = keysFor(secret).then((derived) => {
+            keys = derived;
+            if (!closed) swarm = createSwarm({ urls, topic: keys.topic, WebSocket, hear, announce: () => ({ ...ANNOUNCE, numwant: 0 }) });
+        });
+        return {
+            ready,
+            up: () => (swarm ? swarm.up() : 0),
+            close() {
+                closed = true;
+                if (swarm) swarm.close();
+            },
+        };
+    }
+
+    /**
+     * A joiner looking for the host: OFFERS sealed offers, announced to every
+     * tracker and again every RENEW_MS, until an answer to one of them opens
+     * and binds. `done` resolves {peer}, or {error}: 'tracker' when no
+     * tracker ever answered (the codes are the way in then), 'no-host' when
+     * they did and nobody took an offer up.
+     */
+    function joinSwarm({ secret, urls, iceServers, RTC, gatherMs, WebSocket, timeoutMs = JOIN_MS }) {
+        let finish = () => {};
+        let cancelled = false;
+        let cancelSwarm = () => {};
+        const done = new Promise((resolve) => { finish = resolve; });
+
+        (async () => {
+            const keys = await keysFor(secret);
+            const offers = await Promise.all(Array.from({ length: OFFERS }, async () => {
+                const { peer, desc } = await PartyRtc.makeOffer({ iceServers, RTC, gatherMs });
+                const tag = PartyCode.randomBytes(PartyCode.TAG_BYTES);
+                const sdp = await seal(keys.key, PartyCode.pack('offer', { tag, desc }));
+                return { id: binary(PartyCode.randomBytes(HASH_BYTES)), peer, desc, tag, sdp, taken: false };
+            }));
+            let settled = false;
+            const swarm = createSwarm({
+                urls, topic: keys.topic, WebSocket,
+                announce: () => ({ ...ANNOUNCE, numwant: OFFERS, offers: offers.map((one) => ({ offer_id: one.id, offer: { type: 'offer', sdp: one.sdp } })) }),
+                async hear(msg) {
+                    const mine = msg.answer && offers.find((one) => one.id === msg.offer_id);
+                    if (!mine || mine.taken || settled) return;
+                    const bytes = await unseal(keys.key, msg.answer.sdp);
+                    const answer = bytes && PartyCode.unpack(bytes);
+                    if (!answer || answer.kind !== 'answer' || !PartyCode.sameBytes(answer.tag, mine.tag) || mine.taken) return;
+                    mine.taken = true;
+                    if (!(await PartyRtc.takeAnswer(mine.peer, mine.desc, answer.desc))) return;
+                    const bound = await PartyRtc.bind(mine.peer, { secret, hostFp: answer.desc.fingerprint, guestFp: mine.desc.fingerprint });
+                    if (bound) settle({ peer: mine.peer });
+                    else mine.peer.pc.close();
+                },
+            });
+            const renew = setInterval(() => swarm.announce(), RENEW_MS);
+            const timer = setTimeout(() => settle({ error: swarm.up() ? 'no-host' : 'tracker' }), timeoutMs);
+            function settle(result) {
+                if (settled) return;
+                settled = true;
+                clearInterval(renew);
+                clearTimeout(timer);
+                // Connected, or given up: out of the swarm, so the offers
+                // stop going to the host and nobody answers them again.
+                swarm.close();
+                for (const one of offers) if (one.peer !== result.peer) one.peer.pc.close();
+                if (cancelled && result.peer) result.peer.pc.close();
+                finish(cancelled ? { error: 'closed' } : result);
+            }
+            if (cancelled) settle({ error: 'closed' });
+            else cancelSwarm = () => settle({ error: 'closed' });
+        })().catch(() => finish({ error: 'tracker' }));
+
+        return {
+            done,
+            cancel() {
+                cancelled = true;
+                cancelSwarm();
+            },
+        };
+    }
+
+    // ---------------------------------------------------------- transports
+
+    /**
+     * The session's `tracker` transport. With no code this browser hosts: a
+     * code party's host (party-host.js), whose guests arrive through the
+     * swarm rather than by pasted reply, and whose invite is the tracker
+     * code. With one it joins the room the code names.
+     */
+    function createTransport(options = {}) {
+        const urls = trackerUrls(options.trackers);
+        const net = { urls, iceServers: options.iceServers || PartyHost.DEFAULT_ICE, RTC: options.RTC, gatherMs: options.gatherMs, WebSocket: options.WebSocket };
+        if (options.code) {
+            const secret = readCode(options.code);
+            if (!secret) return null;
+            let joining = null;
+            let cancelled = false;
+            return PartyHost.guestOf({
+                connect() {
+                    if (cancelled) return { error: 'closed' };
+                    joining = joinSwarm({ secret, ...net });
+                    return joining.done;
+                },
+                cancel() {
+                    cancelled = true;
+                    if (joining) joining.cancel();
+                },
+                invite: () => options.code.trim(),
+            });
+        }
+        const { code, secret } = newCode();
+        const host = PartyHost.createHost(options);
+        const swarm = hostSwarm({ secret, admit: host.admit, ...net });
+        return {
+            open: host.open,
+            invite: () => code,
+            guests: host.guests,
+            /** How many trackers are answering: none means nobody can find this party, and codes are the way in. */
+            trackers: swarm.up,
+            close() {
+                swarm.close();
+                host.close();
+            },
+        };
+    }
+
     const PartyTracker = {
-        PREFIX, SECRET_BYTES, OFFERS, DEFAULT_TRACKERS, INTERVAL_MIN_S, INTERVAL_MAX_S, RENEW_MS, RETRY_MS, LABELS,
-        newCode, readCode, trackerUrls, keysFor, seal, unseal, createSwarm,
+        PREFIX, SECRET_BYTES, OFFERS, DEFAULT_TRACKERS, INTERVAL_MIN_S, INTERVAL_MAX_S, RENEW_MS, RETRY_MS, JOIN_MS, LABELS,
+        newCode, readCode, trackerUrls, keysFor, seal, unseal, createSwarm, hostSwarm, joinSwarm, createTransport,
     };
 
     root.BB = root.BB || {};

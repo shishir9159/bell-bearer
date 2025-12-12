@@ -8041,6 +8041,48 @@ const dayRecord = (at = T0) =>
     console.log('\n# party tracker — meeting through a webtorrent tracker, sealed');
     const PartyTracker = require('../src/offscreen/party-tracker.js');
 
+    /**
+     * A WebTorrent tracker in memory, doing what the real ones do with a
+     * swarm: offers handed one each to other peers on the same hash, answers
+     * handed to `to_peer_id`, and `stopped` leaving. `seen` keeps every frame
+     * it was sent, to check what a tracker gets to read.
+     */
+    function fakeTracker({ down = false } = {}) {
+        const swarms = new Map();
+        const seen = [];
+        class Socket {
+            constructor(url) {
+                Object.assign(this, { url, readyState: 0 });
+                setTimeout(() => {
+                    if (down) return this.onclose && this.onclose();
+                    this.readyState = 1;
+                    if (this.onopen) this.onopen();
+                }, 1);
+            }
+            send(text) {
+                const msg = JSON.parse(text);
+                seen.push(msg);
+                const swarm = swarms.get(msg.info_hash) || new Map();
+                swarms.set(msg.info_hash, swarm);
+                const tell = (socket, out) => setTimeout(() => socket.onmessage && socket.onmessage({ data: JSON.stringify({ action: 'announce', info_hash: msg.info_hash, ...out }) }), 1);
+                if (msg.answer) {
+                    const to = swarm.get(msg.to_peer_id);
+                    if (to) tell(to, { peer_id: msg.peer_id, offer_id: msg.offer_id, answer: msg.answer });
+                    return;
+                }
+                if (msg.event === 'stopped') return swarm.delete(msg.peer_id);
+                swarm.set(msg.peer_id, this);
+                tell(this, { interval: 120, complete: 0, incomplete: swarm.size });
+                const others = [...swarm.entries()].filter(([id]) => id !== msg.peer_id);
+                (msg.offers || []).forEach((one, i) => {
+                    if (others[i]) tell(others[i][1], { peer_id: msg.peer_id, offer_id: one.offer_id, offer: one.offer });
+                });
+            }
+            close() { this.readyState = 3; }
+        }
+        return { Socket, seen, swarms };
+    }
+
     await checkAsync('a tracker code is the secret, and the swarm and key come from it alone', async () => {
         const { code, secret } = PartyTracker.newCode();
         assert(code.startsWith('bbp1t.') && code.length === 28, code);
@@ -8053,6 +8095,32 @@ const dayRecord = (at = T0) =>
         eq([await PartyTracker.unseal(other.key, sealed), await PartyTracker.unseal(one.key, 'short')], [null, null], 'a stranger\'s blob');
         eq(PartyTracker.trackerUrls(' wss://a.example  http://b ws://c:8000 '), ['wss://a.example', 'ws://c:8000']);
         eq(PartyTracker.trackerUrls(''), [...PartyTracker.DEFAULT_TRACKERS]);
+    });
+    await checkAsync('two sessions meet through a tracker, which reads nothing of what they said', async () => {
+        const { RTC } = fakeRtc();
+        const tracker = fakeTracker();
+        const transports = { tracker: (o) => PartyTracker.createTransport({ ...o, RTC, gatherMs: 50, WebSocket: tracker.Socket }) };
+        const ana = PartySession.createSession({ transports });
+        const ben = PartySession.createSession({ transports });
+        const started = await ana.control({ op: 'start', mode: 'tracker', name: 'Ana', trackers: 'wss://t1 wss://t2' });
+        const code = started.status.invite;
+        await until(() => ana.status().trackers === 2, 'both trackers to answer the host');
+        const joined = await ben.control({ op: 'start', mode: 'tracker', code, name: 'Ben', trackers: 'wss://t1 wss://t2' });
+        eq([joined.ok, joined.status.members.map((m) => [m.name, m.role])], [true, [['Ana', 'host'], ['Ben', 'guest']]]);
+        await until(() => [...tracker.swarms.values()].every((swarm) => swarm.size === 1), 'Ben to leave the swarm');
+
+        const said = JSON.stringify(tracker.seen);
+        assert(!said.includes(code.slice(6)) && !said.includes('a=fingerprint') && !said.includes('127.0.0.1'), 'no secret, sdp or address');
+        eq(tracker.seen.filter((msg) => msg.answer).length, 1, 'answered once though announced to two trackers');
+        await ana.control({ op: 'leave' });
+        await until(() => !ben.status().active, 'Ben\'s party to end with the host\'s');
+    });
+    await checkAsync('a joiner says whether the trackers or the host were missing', async () => {
+        const { RTC } = fakeRtc();
+        const { secret } = PartyTracker.newCode();
+        const join = (tracker) => PartyTracker.joinSwarm({ secret, urls: ['wss://t'], RTC, gatherMs: 50, WebSocket: tracker.Socket, timeoutMs: 100 }).done;
+        eq(await join(fakeTracker({ down: true })), { error: 'tracker' });
+        eq(await join(fakeTracker()), { error: 'no-host' });
     });
 
     // ------------------------------------------------- party dev server
@@ -8111,7 +8179,7 @@ const dayRecord = (at = T0) =>
         const files = [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => one[1]);
         for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
         const at = (name) => files.findIndex((file) => file.endsWith(`/${name}.js`));
-        const order = ['party-clock', 'party-state', 'party-room', 'party-loopback', 'party-ws', 'party-code', 'party-rtc', 'party-host', 'party-session'];
+        const order = ['party-clock', 'party-state', 'party-room', 'party-loopback', 'party-ws', 'party-code', 'party-rtc', 'party-host', 'party-tracker', 'party-session'];
         eq(order.map(at), order.map((_, i) => i));
     });
     check('the worker and the session agree on how the worker addresses it', () => {
@@ -8193,6 +8261,8 @@ const dayRecord = (at = T0) =>
         eq(await asked({ action: 'partyJoin', code: 'bbp1s.x' }), { mode: 'server', url: '', code: 'bbp1s.x' });
         eq(await asked({ action: 'partyStart', mode: 'codes' }), { mode: 'codes', url: '', code: undefined });
         eq(await asked({ action: 'partyJoin', code: ' bbp1i.x ' }), { mode: 'codes', url: '', code: 'bbp1i.x' });
+        eq(await asked({ action: 'partyStart', mode: 'tracker' }), { mode: 'tracker', url: '', code: undefined });
+        eq(await asked({ action: 'partyJoin', code: 'bbp1t.x' }), { mode: 'tracker', url: '', code: 'bbp1t.x' });
     });
     await checkAsync('a code that is none of ours opens nothing', async () => {
         const { party, calls } = partyWith();

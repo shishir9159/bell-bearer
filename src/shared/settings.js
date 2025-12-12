@@ -302,6 +302,9 @@
         // A TURN server for when direct fails: turn:user:pass@host:port, or
         // several separated by spaces. Blank is none.
         partyTurn: '',
+        // The WebTorrent trackers a tracker party meets through (wss://,
+        // space-separated). They see who connects and when, never what is said.
+        partyTrackers: 'wss://tracker.openwebtorrent.com wss://tracker.webtorrent.dev',
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

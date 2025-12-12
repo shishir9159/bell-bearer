@@ -30,12 +30,13 @@
     /** PartyCode.PREFIX.reply: a guest's answer to our invite, pasted in on the host's side. */
     const REPLY = 'bbp1r.';
     /** The codes that join a party, by prefix, and the transport each needs. */
-    const JOINS = Object.freeze({ 'bbp1s.': 'server', 'bbp1i.': 'codes' });
+    const JOINS = Object.freeze({ 'bbp1s.': 'server', 'bbp1i.': 'codes', 'bbp1t.': 'tracker' });
 
     /** Which of the session's transports a start asks for, or null for a code that is none of ours. */
     function modeOf(how) {
         if (how.code) return JOINS[how.code.slice(0, 6)] || null;
         if (how.codes) return 'codes';
+        if (how.tracker) return 'tracker';
         if (how.server !== undefined) return 'server';
         return 'loopback';
     }
@@ -130,19 +131,20 @@
         /**
          * `how` is empty for a party in this browser alone, `{server}` to
          * start a room on a party server (the setting's when it names none),
-         * `{codes}` to host one peer to peer, or `{code}` to join the room
-         * an invite names.
+         * `{codes}` or `{tracker}` to host one peer to peer, or `{code}` to
+         * join the room an invite names.
          */
         async function start(tabId, url, how = {}) {
             if (!host) return { ok: false, error: 'unsupported' };
             if (!PartyLoader.siteOf(url)) return { ok: false, error: 'site' };
             const mode = modeOf(how);
             if (!mode) return { ok: false, error: 'code' };
-            const s = await Settings.get(['partyName', 'partyControl', 'partyWaitForAll', 'partyServerUrl', 'partyIceServers', 'partyTurn']);
+            const s = await Settings.get(['partyName', 'partyControl', 'partyWaitForAll', 'partyServerUrl', 'partyIceServers', 'partyTurn', 'partyTrackers']);
             await host.open();
             const answer = await host.ask({
                 op: 'start', mode, name: s.partyName,
-                url: how.server || s.partyServerUrl, code: how.code, ice: { stun: s.partyIceServers, turn: s.partyTurn },
+                url: how.server || s.partyServerUrl, code: how.code,
+                ice: { stun: s.partyIceServers, turn: s.partyTurn }, trackers: s.partyTrackers,
                 policy: { control: s.partyControl, wait: s.partyWaitForAll },
             });
             if (!answer || !answer.ok) {
@@ -194,7 +196,7 @@
                 // From the page's own content script, or from the popup, which has no tab.
                 const tab = (sender && sender.tab) || (await api.tabs.query({ active: true, lastFocusedWindow: true }))[0];
                 const how = message.action === 'partyJoin' ? { code: String(message.code || '').trim() }
-                    : message.mode === 'codes' ? { codes: true }
+                    : message.mode === 'codes' || message.mode === 'tracker' ? { [message.mode]: true }
                         : message.server !== undefined ? { server: String(message.server || '') } : {};
                 return tab ? party.start(tab.id, tab.url || '', how) : { ok: false, error: 'tab' };
             }

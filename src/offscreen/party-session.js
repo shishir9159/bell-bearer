@@ -18,7 +18,8 @@
  * The authority is reached through a transport, which only has to carry the
  * wire protocol's own messages: the loopback (party-loopback.js), the room in
  * this same document, a party server over a WebSocket (party-ws.js), or the
- * room this browser hosts for guests on data channels (party-host.js).
+ * room this browser hosts for guests on data channels (party-host.js), who
+ * found it by code or through a tracker (party-tracker.js).
  */
 (function (root) {
     'use strict';
@@ -31,6 +32,7 @@
     const PartyWs = ns.PartyWs || req('./party-ws.js');
     const PartyRtc = ns.PartyRtc || req('./party-rtc.js');
     const PartyHost = ns.PartyHost || req('./party-host.js');
+    const PartyTracker = ns.PartyTracker || req('./party-tracker.js');
 
     const PORT = 'bb:party';
     /** Runtime messages with this `to` are the session's. Only the worker sends them. */
@@ -47,6 +49,7 @@
 
     const TRANSPORTS = Object.freeze({
         loopback: PartyLoopback.createLoopback, server: PartyWs.createTransport, codes: PartyHost.createTransport,
+        tracker: PartyTracker.createTransport,
     });
 
     /** `onEnd(code)` hears of a party the authority ended; one this browser left, or never got into, it does not. */
@@ -188,13 +191,13 @@
         }
 
         /** `url` starts a room on that server and `code` joins the one it names; the loopback needs neither. */
-        /** `ice` is the settings' {stun, turn} strings, for a peer-to-peer party. */
-        async function start({ mode = 'loopback', name, policy, url, code, ice } = {}) {
+        /** `ice` is the settings' {stun, turn} strings, and `trackers` theirs, for a peer-to-peer party. */
+        async function start({ mode = 'loopback', name, policy, url, code, ice, trackers } = {}) {
             // Already in one: the worker is moving the party to another tab.
             if (party) return { ok: true, status: status() };
             const make = transports[mode];
             if (!make) return { ok: false, error: 'mode' };
-            const transport = make({ policy, now, url, code, iceServers: ice ? PartyRtc.iceServers(ice) : undefined });
+            const transport = make({ policy, now, url, code, trackers, iceServers: ice ? PartyRtc.iceServers(ice) : undefined });
             if (!transport) return { ok: false, error: 'address' };
             const mine = { mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null, ready: true, solo: false, up: false, pingTimer: null, beating: false, started: false };
             // A loopback welcomes inside the send below; a socket, some time later.
@@ -238,6 +241,7 @@
                 invite: party.transport.invite ? party.transport.invite() : null,
                 invites: party.transport.pending ? party.transport.pending() : undefined,
                 nat: party.transport.nat ? party.transport.nat() : undefined,
+                trackers: party.transport.trackers ? party.transport.trackers() : undefined,
             };
         }
 
