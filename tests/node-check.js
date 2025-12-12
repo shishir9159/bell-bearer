@@ -8036,6 +8036,25 @@ const dayRecord = (at = T0) =>
         host.close();
     });
 
+    // ---------------------------------------------------- party tracker
+
+    console.log('\n# party tracker — meeting through a webtorrent tracker, sealed');
+    const PartyTracker = require('../src/offscreen/party-tracker.js');
+
+    await checkAsync('a tracker code is the secret, and the swarm and key come from it alone', async () => {
+        const { code, secret } = PartyTracker.newCode();
+        assert(code.startsWith('bbp1t.') && code.length === 28, code);
+        eq([...PartyTracker.readCode(` ${code} `)], [...secret]);
+        eq([PartyTracker.readCode('bbp1t.abc'), PartyTracker.readCode('bbp1i.' + code.slice(6))], [null, null]);
+        const [one, again, other] = await Promise.all([secret, secret, PartyTracker.newCode().secret].map(PartyTracker.keysFor));
+        eq([one.topic.length, one.topic === again.topic, one.topic === other.topic], [20, true, false]);
+        const sealed = await PartyTracker.seal(one.key, Uint8Array.from([1, 2, 3]));
+        eq([...(await PartyTracker.unseal(again.key, sealed))], [1, 2, 3]);
+        eq([await PartyTracker.unseal(other.key, sealed), await PartyTracker.unseal(one.key, 'short')], [null, null], 'a stranger\'s blob');
+        eq(PartyTracker.trackerUrls(' wss://a.example  http://b ws://c:8000 '), ['wss://a.example', 'ws://c:8000']);
+        eq(PartyTracker.trackerUrls(''), [...PartyTracker.DEFAULT_TRACKERS]);
+    });
+
     // ------------------------------------------------- party dev server
 
     console.log('\n# party dev server — the session over a real socket');
