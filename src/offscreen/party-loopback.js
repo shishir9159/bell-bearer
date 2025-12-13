@@ -24,7 +24,7 @@
     /** How often the room's timeouts run: away, removal, a hold that has waited long enough. */
     const TICK_MS = 1000;
 
-    function createLoopback({ policy = {}, now = PartyClock.localNow, mint } = {}) {
+    function createLoopback({ policy = {}, now = PartyClock.localNow, mint, state } = {}) {
         const links = new Map();
         /**
          * The room welcomes a member from inside join(), before join() has
@@ -36,7 +36,7 @@
          */
         let caught = null;
         const room = PartyRoom.createRoom({
-            id: PartyRoom.mintRandom('p'), policy, mint,
+            id: PartyRoom.mintRandom('p'), policy, mint, state,
             send(id, msg) {
                 if (caught) return caught.push({ id, msg });
                 const link = links.get(id);

@@ -27,6 +27,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const PartyCode = ns.PartyCode || req('../shared/party-code.js');
+    const PartyState = ns.PartyState || req('../shared/party-state.js');
     const PartyRtc = ns.PartyRtc || req('./party-rtc.js');
     const PartyHost = ns.PartyHost || req('./party-host.js');
 
@@ -374,23 +375,30 @@
      *   scratch and resumes the member with the token its welcome carried.
      *   While that happens only the latest of each thing said is kept, as
      *   over a WebSocket (party-ws.js).
+     * - Nobody answering at all means the host is gone. The member next in
+     *   line takes the room over, as it stood, under the same code (see
+     *   takeOver); the others find them in the swarm and join as new members.
      */
-    function createGuest({ secret, code, net, joinMs = JOIN_MS, stallMs = DISCONNECT_MS }) {
+    function createGuest({ secret, code, net, host: hostOptions, roomNow, joinMs = JOIN_MS, stallMs = DISCONNECT_MS }) {
         let deliver = () => {};
         let hello = null;
         let link = null;
         let conn = null;
         let pending = null;
+        let hosting = null;
         let stall = null;
         let up = false;
         let closed = false;
-        const seen = { you: null, resume: null, members: [], state: null, policy: null };
+        const seen = { you: null, owner: null, resume: null, members: [], state: null, policy: null };
         const held = new Map();
 
         function hear(msg) {
             switch (msg.t) {
                 case 'welcome':
                     Object.assign(seen, { you: msg.you, resume: msg.resume, members: msg.room.members, state: msg.room.state, policy: msg.room.policy });
+                    // Whose browser the room is in: whoever made it, first in
+                    // the roster. Not the host role, which can be handed on.
+                    seen.owner = msg.room.members.length ? msg.room.members[0].id : null;
                     up = true;
                     deliver(msg);
                     for (const t of HELD) if (held.has(t)) link.send(held.get(t));
@@ -459,10 +467,42 @@
                 up = false;
                 deliver({ t: 'link', up: false });
             }
-            const result = await meet(joinMs);
+            // Whoever is next in line waits less before deciding the host is
+            // gone, and everyone else longer, so they find the new one.
+            const next = successor() === seen.you;
+            const result = await meet(next ? joinMs / 2 : joinMs * 2);
             if (result.peer) return attach(result);
             if (result.error === 'closed') return null;
+            if (result.error === 'no-host' && next) return takeOver();
             return deliver({ t: 'error', code: 'host-left' });
+        }
+
+        /**
+         * Who carries the room on: whoever the room had made host by the
+         * time it went (the owner's bye promotes someone), else its rule for
+         * a host gone quiet — the first co-host, else the earliest joiner.
+         * The owner is left out by id, so a guest that heard the last roster
+         * and one that did not still pick the same member.
+         */
+        function successor() {
+            const here = seen.members.filter((m) => m.id !== seen.owner && !m.away);
+            const next = here.find((m) => m.role === 'host') || here.find((m) => m.role === 'cohost') || here[0];
+            return next ? next.id : null;
+        }
+
+        /**
+         * The host is gone and this member is next: host the room here, under
+         * the same code, from the state it last had. The vector is re-based
+         * on this browser's clock — the old room's `at` was the old host's —
+         * so what was playing carries on from where it had got to.
+         */
+        function takeOver() {
+            const state = seen.state && { ...seen.state, pos: PartyState.expected(seen.state, roomNow()), at: Date.now(), hold: null };
+            const room = PartyHost.createHost({ ...hostOptions, policy: seen.policy || hostOptions.policy, state });
+            hosting = { room, swarm: hostSwarm({ secret, admit: room.admit, ...net }) };
+            seen.resume = null;
+            link = room.open(hear);
+            greet();
         }
 
         function close() {
@@ -470,10 +510,15 @@
             clearTimeout(stall);
             if (pending) pending.cancel();
             if (link) link.close();
+            if (hosting) {
+                hosting.swarm.close();
+                hosting.room.close();
+            }
         }
 
         return {
             invite: () => code,
+            trackers: () => (hosting ? hosting.swarm.up() : undefined),
             open(receive) {
                 deliver = receive;
                 return {
@@ -515,7 +560,8 @@
             const secret = readCode(options.code);
             if (!secret) return null;
             return createGuest({
-                secret, code: options.code.trim(), net, joinMs: options.joinMs, stallMs: options.stallMs,
+                secret, code: options.code.trim(), net, host: options, joinMs: options.joinMs, stallMs: options.stallMs,
+                roomNow: options.roomNow || Date.now,
             });
         }
         const { code, secret } = newCode();

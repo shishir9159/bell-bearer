@@ -77,10 +77,15 @@
 
     const cleanName = (name) => String(name || '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX) || 'Guest';
 
-    function createRoom({ id, policy = {}, send, mint = mintRandom }) {
+    /**
+     * `state` starts the room where another left off — a peer-to-peer
+     * party whose host went, carried on by the next in line — with its seq,
+     * so the members' newest-seq-wins rule still holds across the change.
+     */
+    function createRoom({ id, policy = {}, send, mint = mintRandom, state: from = null }) {
         const members = new Map();
         let joined = 0;
-        let state = PartyState.blank();
+        let state = from ? { ...PartyState.blank(), ...from, hold: null } : PartyState.blank();
         /** The last accepted change, for the conflict rule. */
         let last = null;
         const rules = {

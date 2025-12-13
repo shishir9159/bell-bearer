@@ -197,7 +197,12 @@
             if (party) return { ok: true, status: status() };
             const make = transports[mode];
             if (!make) return { ok: false, error: 'mode' };
-            const transport = make({ policy, now, url, code, trackers, iceServers: ice ? PartyRtc.iceServers(ice) : undefined });
+            const transport = make({
+                policy, now, url, code, trackers,
+                iceServers: ice ? PartyRtc.iceServers(ice) : undefined,
+                // A transport that may have to host the room itself needs to know where it had got to.
+                roomNow: () => clock.toRoom(now()),
+            });
             if (!transport) return { ok: false, error: 'address' };
             const mine = { mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null, ready: true, solo: false, up: false, pingTimer: null, beating: false, started: false };
             // A loopback welcomes inside the send below; a socket, some time later.

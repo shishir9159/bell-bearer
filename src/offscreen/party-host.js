@@ -32,9 +32,9 @@
     const DEFAULT_ICE = Object.freeze([{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }]);
 
     function createHost({
-        policy, now, iceServers = DEFAULT_ICE, RTC, gatherMs, inviteMs = PartyRtc.INVITE_MS,
+        policy, now, state, iceServers = DEFAULT_ICE, RTC, gatherMs, inviteMs = PartyRtc.INVITE_MS,
     } = {}) {
-        const loop = PartyLoopback.createLoopback({ policy, now });
+        const loop = PartyLoopback.createLoopback({ policy, now, state });
         const room = PartyCode.randomBytes(PartyCode.ROOM_BYTES);
         /** Invites not yet answered, newest last. */
         const pending = [];

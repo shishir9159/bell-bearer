@@ -8192,6 +8192,34 @@ const dayRecord = (at = T0) =>
             await party.leave();
         }
     });
+    await checkAsync('with the host gone the earliest joiner carries the room on, and the others find them', async () => {
+        const party = await trackerParty();
+        try {
+            const ana = await party.add('Ana');
+            await until(() => ana.session.status().trackers === 1, 'the host in the swarm');
+            const ben = await party.add('Ben', ana.code);
+            const cat = await party.add('Cat', ana.code);
+            const tab = tabPort();
+            ben.session.connect(tab);
+            tab.say({ t: 'intent', id: 1, base: 0, op: 'play', pos: 30, at: Date.now() });
+            await until(() => cat.session.status().state.paused === false && roles(cat.session).length === 3, 'Ben\'s play to reach Cat');
+            const seq = cat.session.status().state.seq;
+            const before = cat.session.status().you;
+
+            // Ana's bye has the old room promote Ben on its way out, so the
+            // roles alone read right before anyone has moved: wait for Ben
+            // to be hosting and Cat to be welcomed into his room.
+            await ana.session.control({ op: 'leave' });
+            await until(() => ben.session.status().trackers !== undefined && cat.session.status().up && cat.session.status().you !== before,
+                'Ben to host, and Cat to find him');
+            eq([roles(ben.session), roles(cat.session)], [['Ben:host', 'Cat:guest'], ['Ben:host', 'Cat:guest']]);
+            const state = cat.session.status().state;
+            eq([state.paused, state.seq >= seq, state.pos >= 30], [false, true, true], 'still playing, from where it had got to');
+            eq(ben.session.status().invite, ana.code, 'the same code finds the room');
+        } finally {
+            await party.leave();
+        }
+    });
     await checkAsync('a joiner says whether the trackers or the host were missing', async () => {
         const { RTC } = fakeRtc();
         const { secret } = PartyTracker.newCode();
