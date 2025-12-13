@@ -8133,9 +8133,28 @@ const dayRecord = (at = T0) =>
         const said = JSON.stringify(tracker.seen);
         assert(!said.includes(code.slice(6)) && !said.includes('a=fingerprint') && !said.includes('127.0.0.1'), 'no secret, sdp or address');
         eq(tracker.seen.filter((msg) => msg.answer).length, 1, 'answered once though announced to two trackers');
+        await ben.control({ op: 'leave' });
         await ana.control({ op: 'leave' });
-        await until(() => !ben.status().active, 'Ben\'s party to end with the host\'s');
     });
+
+    /** A tracker party on fakes, with its waits cut to milliseconds, and members to add to it. */
+    async function trackerParty() {
+        const { RTC, all } = fakeRtc();
+        const tracker = fakeTracker();
+        const knobs = { RTC, gatherMs: 20, WebSocket: tracker.Socket, joinMs: 400, renewMs: 40, stallMs: 30 };
+        const transports = { tracker: (o) => PartyTracker.createTransport({ ...o, ...knobs }) };
+        const sessions = [];
+        const add = async (name, code) => {
+            const session = PartySession.createSession({ transports, now: () => Date.now() });
+            sessions.push(session);
+            const started = await session.control({ op: 'start', mode: 'tracker', name, code, trackers: 'wss://t' });
+            assert(started.ok, `${name} started: ${started.error}`);
+            return { session, code: started.status.invite };
+        };
+        const leave = () => Promise.all(sessions.map((one) => one.control({ op: 'leave' })));
+        return { all, tracker, add, leave };
+    }
+    const roles = (session) => session.status().members.map((m) => `${m.name}:${m.role}`);
 
     await checkAsync('a restart through the tracker is answered on the peer the host already has', async () => {
         const { RTC } = fakeRtc();
@@ -8154,6 +8173,24 @@ const dayRecord = (at = T0) =>
         const other = await PartyTracker.restartSwarm({ ...net, secret: PartyTracker.newCode().secret, peer: joined.peer, tag: joined.tag, timeoutMs: 100 }).done;
         eq(other, false, 'nobody answers a restart sealed under another code');
         host.close();
+    });
+    await checkAsync('a stalled connection is restarted through the tracker, and the member never leaves', async () => {
+        const party = await trackerParty();
+        try {
+            const ana = await party.add('Ana');
+            await until(() => ana.session.status().trackers === 1, 'the host in the swarm');
+            const ben = await party.add('Ben', ana.code);
+            const you = ben.session.status().you;
+            const benPc = party.all.find((pc) => pc.connectionState === 'connected' && pc.localDescription.type === 'offer');
+            const answers = () => party.tracker.seen.filter((msg) => msg.answer).length;
+            eq(answers(), 1);
+            benPc.stall();
+            await until(() => answers() === 2 && benPc.connectionState === 'connected', 'the host to answer the restart');
+            eq([benPc.restarts, ben.session.status().you, ben.session.status().up], [1, you, true], 'same peer, same member, never down');
+            eq(roles(ana.session), ['Ana:host', 'Ben:guest']);
+        } finally {
+            await party.leave();
+        }
     });
     await checkAsync('a joiner says whether the trackers or the host were missing', async () => {
         const { RTC } = fakeRtc();

@@ -43,8 +43,12 @@
     const RETRY_MS = 5000;
     /** How long a joiner looks for the host before saying nobody is there. */
     const JOIN_MS = 30000;
+    /** A stalled connection is left this long to heal itself before ICE is restarted. */
+    const DISCONNECT_MS = 5000;
     /** How long a restart waits for the host's answer before meeting it again from scratch. */
     const RESTART_MS = 15000;
+    /** What a guest keeps while its way to the host is down, latest of each (PartyWs.HELD). */
+    const HELD = Object.freeze(['ready', 'solo', 'intent']);
     const LABELS = Object.freeze({ topic: 'bb-party/topic', seal: 'bb-party/seal' });
 
     const binary = (bytes) => String.fromCharCode(...bytes);
@@ -360,6 +364,142 @@
     // ---------------------------------------------------------- transports
 
     /**
+     * A tracker party's guest. Unlike a code party's it has a way back when
+     * its connection goes, because the tracker is still there to meet in:
+     *
+     * - 'disconnected' often heals by itself (consent freshness); past
+     *   DISCONNECT_MS it is restarted through the tracker, keeping the peer,
+     *   the channels and the member.
+     * - 'failed', or a restart nobody answered, meets the host again from
+     *   scratch and resumes the member with the token its welcome carried.
+     *   While that happens only the latest of each thing said is kept, as
+     *   over a WebSocket (party-ws.js).
+     */
+    function createGuest({ secret, code, net, joinMs = JOIN_MS, stallMs = DISCONNECT_MS }) {
+        let deliver = () => {};
+        let hello = null;
+        let link = null;
+        let conn = null;
+        let pending = null;
+        let stall = null;
+        let up = false;
+        let closed = false;
+        const seen = { you: null, resume: null, members: [], state: null, policy: null };
+        const held = new Map();
+
+        function hear(msg) {
+            switch (msg.t) {
+                case 'welcome':
+                    Object.assign(seen, { you: msg.you, resume: msg.resume, members: msg.room.members, state: msg.room.state, policy: msg.room.policy });
+                    up = true;
+                    deliver(msg);
+                    for (const t of HELD) if (held.has(t)) link.send(held.get(t));
+                    held.clear();
+                    return;
+                case 'members': seen.members = msg.list; break;
+                case 'policy': seen.policy = { control: msg.control, wait: msg.wait, locked: msg.locked }; break;
+                case 'state': {
+                    const { t, ack, ...state } = msg;
+                    if (!seen.state || state.seq >= seen.state.seq) seen.state = state;
+                    break;
+                }
+                case 'error':
+                    // A room that does not know our token — we were gone past
+                    // the grace, or it is a new host's — is joined as someone
+                    // new rather than the party ended.
+                    if (msg.code === 'expired' && seen.resume) {
+                        seen.resume = null;
+                        greet();
+                        return;
+                    }
+                    break;
+                default: break;
+            }
+            deliver(msg);
+        }
+
+        function greet() {
+            link.send(seen.resume ? { t: 'hello', v: hello.v, resume: seen.resume } : { t: 'hello', v: hello.v, name: hello.name });
+        }
+
+        function attach(result) {
+            conn = result;
+            link = PartyRtc.peerLink(result.peer, { deliver: hear, onDown: lost, onState });
+            greet();
+        }
+
+        function onState(state) {
+            clearTimeout(stall);
+            if (state === 'disconnected') stall = setTimeout(restart, stallMs);
+        }
+
+        async function restart() {
+            if (closed || pending || !conn) return;
+            pending = restartSwarm({ secret, ...net, peer: conn.peer, tag: conn.tag });
+            const ok = await pending.done;
+            pending = null;
+            // Restarted, the link never went. Otherwise it is let go, and lost() takes over.
+            if (!ok && !closed && link) link.close();
+        }
+
+        async function meet(timeoutMs) {
+            pending = joinSwarm({ secret, ...net, timeoutMs });
+            const result = await pending.done;
+            pending = null;
+            if (closed && result.peer) result.peer.pc.close();
+            return closed ? { error: 'closed' } : result;
+        }
+
+        async function lost() {
+            clearTimeout(stall);
+            if (closed) return;
+            link = null;
+            conn = null;
+            if (up) {
+                up = false;
+                deliver({ t: 'link', up: false });
+            }
+            const result = await meet(joinMs);
+            if (result.peer) return attach(result);
+            if (result.error === 'closed') return null;
+            return deliver({ t: 'error', code: 'host-left' });
+        }
+
+        function close() {
+            closed = true;
+            clearTimeout(stall);
+            if (pending) pending.cancel();
+            if (link) link.close();
+        }
+
+        return {
+            invite: () => code,
+            open(receive) {
+                deliver = receive;
+                return {
+                    send(msg) {
+                        if (!msg || typeof msg.t !== 'string' || closed) return;
+                        if (msg.t === 'create') {
+                            if (hello) return;
+                            hello = msg;
+                            meet(joinMs).then((result) => {
+                                if (result.peer) attach(result);
+                                else if (result.error !== 'closed') deliver({ t: 'error', code: result.error });
+                            });
+                        } else if (up && link) {
+                            link.send(msg);
+                        } else if (HELD.includes(msg.t)) {
+                            held.set(msg.t, msg);
+                        }
+                    },
+                    close,
+                };
+            },
+            close,
+        };
+    }
+
+    /**
      * The session's `tracker` transport. With no code this browser hosts: a
      * code party's host (party-host.js), whose guests arrive through the
      * swarm rather than by pasted reply, and whose invite is the tracker
@@ -367,23 +507,15 @@
      */
     function createTransport(options = {}) {
         const urls = trackerUrls(options.trackers);
-        const net = { urls, iceServers: options.iceServers || PartyHost.DEFAULT_ICE, RTC: options.RTC, gatherMs: options.gatherMs, WebSocket: options.WebSocket };
+        const net = {
+            urls, iceServers: options.iceServers || PartyHost.DEFAULT_ICE,
+            RTC: options.RTC, gatherMs: options.gatherMs, WebSocket: options.WebSocket, renewMs: options.renewMs,
+        };
         if (options.code) {
             const secret = readCode(options.code);
             if (!secret) return null;
-            let joining = null;
-            let cancelled = false;
-            return PartyHost.guestOf({
-                connect() {
-                    if (cancelled) return { error: 'closed' };
-                    joining = joinSwarm({ secret, ...net });
-                    return joining.done;
-                },
-                cancel() {
-                    cancelled = true;
-                    if (joining) joining.cancel();
-                },
-                invite: () => options.code.trim(),
+            return createGuest({
+                secret, code: options.code.trim(), net, joinMs: options.joinMs, stallMs: options.stallMs,
             });
         }
         const { code, secret } = newCode();
@@ -403,7 +535,8 @@
     }
 
     const PartyTracker = {
-        PREFIX, SECRET_BYTES, OFFERS, DEFAULT_TRACKERS, INTERVAL_MIN_S, INTERVAL_MAX_S, RENEW_MS, RETRY_MS, JOIN_MS, RESTART_MS, LABELS,
+        PREFIX, SECRET_BYTES, OFFERS, DEFAULT_TRACKERS, INTERVAL_MIN_S, INTERVAL_MAX_S, RENEW_MS, RETRY_MS, JOIN_MS,
+        RESTART_MS, DISCONNECT_MS, HELD, LABELS,
         newCode, readCode, trackerUrls, keysFor, seal, unseal, createSwarm, hostSwarm, joinSwarm, restartSwarm, createTransport,
     };
 

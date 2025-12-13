@@ -247,9 +247,10 @@
     /**
      * A bound peer as a link: wire messages in and out, as JSON. `onDown`
      * hears once that the connection is gone for good — failed, closed, or
-     * its control channel shut.
+     * its control channel shut — and `onState` every connection state
+     * before that, for a transport that can restart ICE on 'disconnected'.
      */
-    function peerLink(peer, { deliver, onDown = () => {} }) {
+    function peerLink(peer, { deliver, onDown = () => {}, onState = () => {} }) {
         const { pc, ctl, tick } = peer;
         let down = false;
 
@@ -265,7 +266,10 @@
             pc.removeEventListener('connectionstatechange', watch);
             onDown();
         }
-        function watch() { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') gone(); }
+        function watch() {
+            if (pc.connectionState === 'failed' || pc.connectionState === 'closed') gone();
+            else onState(pc.connectionState);
+        }
 
         ctl.onmessage = receive;
         tick.onmessage = receive;
