@@ -7823,9 +7823,11 @@ const dayRecord = (at = T0) =>
                 return channel;
             }
             async setLocalDescription() {
-                const type = this.remoteDescription ? 'answer' : 'offer';
+                // An answer if a remote offer is waiting for one; otherwise an offer, as after restartIce().
+                const type = this.owed ? 'answer' : 'offer';
+                this.owed = false;
                 const n = this.fp[0];
-                const desc = { ufrag: `u${n}xx`, pwd: 'p'.repeat(22) + n, fingerprint: this.fp, candidates: [{ type: 'host', address: '127.0.0.1', port: 5000 + n }] };
+                const desc = { ufrag: `u${n}x${this.restarts || 0}`, pwd: 'p'.repeat(22) + n, fingerprint: this.fp, candidates: [{ type: 'host', address: '127.0.0.1', port: 5000 + n }] };
                 this.localDescription = { type, sdp: PartyCode.buildSdp(desc, { type }) };
                 later(() => {
                     this.iceGatheringState = 'complete';
@@ -7835,10 +7837,29 @@ const dayRecord = (at = T0) =>
             }
             async setRemoteDescription(description) {
                 this.remoteDescription = description;
+                this.owed = description.type === 'offer';
                 this.meet();
+            }
+            restartIce() { this.restarts = (this.restarts || 0) + 1; }
+            /** A connection that has lost its path for now, as Chrome reports one before consent freshness gives up. */
+            stall() {
+                this.connectionState = 'disconnected';
+                this.dispatchEvent(new Event('connectionstatechange'));
             }
             meet() {
                 if (!this.localDescription || !this.remoteDescription) return;
+                // Renegotiated (an ICE restart) on a connection already made:
+                // the path comes back, and the channels never went.
+                if (this.other) {
+                    if (this.localDescription.type !== 'answer' && this.remoteDescription.type !== 'answer') return;
+                    for (const pc of [this, this.other]) {
+                        later(() => {
+                            pc.connectionState = 'connected';
+                            pc.dispatchEvent(new Event('connectionstatechange'));
+                        });
+                    }
+                    return;
+                }
                 const other = all.find((pc) => pc !== this && pc.fp.join() === fpOf(this.remoteDescription));
                 if (!other || !other.localDescription || !other.remoteDescription || fpOf(other.remoteDescription) !== this.fp.join()) return;
                 [this.other, other.other] = [other, this];
@@ -8114,6 +8135,25 @@ const dayRecord = (at = T0) =>
         eq(tracker.seen.filter((msg) => msg.answer).length, 1, 'answered once though announced to two trackers');
         await ana.control({ op: 'leave' });
         await until(() => !ben.status().active, 'Ben\'s party to end with the host\'s');
+    });
+
+    await checkAsync('a restart through the tracker is answered on the peer the host already has', async () => {
+        const { RTC } = fakeRtc();
+        const tracker = fakeTracker();
+        const { secret } = PartyTracker.newCode();
+        const net = { secret, urls: ['wss://t'], RTC, gatherMs: 20, WebSocket: tracker.Socket, renewMs: 40 };
+        const admitted = [];
+        const host = PartyTracker.hostSwarm({ ...net, admit: (peer) => admitted.push(peer) });
+        await until(() => host.up() === 1, 'the host in the swarm');
+        const joined = await PartyTracker.joinSwarm({ ...net, timeoutMs: 400 }).done;
+        assert(joined.peer && joined.tag.length === 4, 'joined, with the tag a restart goes by');
+        await until(() => admitted.length === 1, 'the host to admit the joiner');
+        const ok = await PartyTracker.restartSwarm({ ...net, peer: joined.peer, tag: joined.tag, timeoutMs: 400 }).done;
+        eq([ok, admitted.length, joined.peer.pc.restarts], [true, 1, 1], 'no second peer on the host');
+        eq(tracker.seen.filter((msg) => msg.answer).length, 2, 'a restart sent as several offers is answered once');
+        const other = await PartyTracker.restartSwarm({ ...net, secret: PartyTracker.newCode().secret, peer: joined.peer, tag: joined.tag, timeoutMs: 100 }).done;
+        eq(other, false, 'nobody answers a restart sealed under another code');
+        host.close();
     });
     await checkAsync('a joiner says whether the trackers or the host were missing', async () => {
         const { RTC } = fakeRtc();
