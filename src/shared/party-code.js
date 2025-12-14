@@ -14,7 +14,7 @@
  * Chrome is deprecating) — a synthesized remote description is ordinary
  * signaling that happens to have arrived compressed.
  *
- *     invite  bbp1i.  ver kind tag | ufrag pwd fingerprint candidates | room secret
+ *     invite  bbp1i.  ver kind tag | ufrag pwd fingerprint candidates | room secret expires
  *     reply   bbp1r.  ver kind tag | ufrag pwd fingerprint candidates | mac
  *
  * `tag` names the invite a reply answers: one invite is one peer connection,
@@ -136,13 +136,16 @@
 
     // ------------------------------------------------------------ packing
 
-    const VERSION = 1;
+    /** 2 added the invite's expiry, so a guest can see how long is left before joining. */
+    const VERSION = 2;
     const PREFIX = Object.freeze({ invite: 'bbp1i.', reply: 'bbp1r.' });
     const KINDS = Object.freeze({ invite: 1, reply: 2, offer: 3, answer: 4 });
     const TAG_BYTES = 4;
     const ROOM_BYTES = 6;
     const SECRET_BYTES = 16;
     const MAC_BYTES = 8;
+    /** Whole seconds since the epoch, big-endian: good until 2106. */
+    const EXPIRES_BYTES = 4;
     const FAMILIES = Object.freeze(['ipv4', 'ipv6', 'mdns']);
 
     function toBase64Url(bytes) {
@@ -230,7 +233,7 @@
         return text;
     }
 
-    const EXTRAS = { invite: [['room', ROOM_BYTES], ['secret', SECRET_BYTES]], reply: [['mac', MAC_BYTES]], offer: [], answer: [] };
+    const EXTRAS = { invite: [['room', ROOM_BYTES], ['secret', SECRET_BYTES], ['expires', EXPIRES_BYTES]], reply: [['mac', MAC_BYTES]], offer: [], answer: [] };
 
     /** `fields` is {tag, desc} plus the kind's extras, as byte arrays. */
     function pack(kind, fields) {
@@ -284,14 +287,22 @@
         return new Uint8Array(await subtle.sign('HMAC', key, bytes));
     }
 
-    const inviteCode = ({ tag, desc, room, secret }) => PREFIX.invite + toBase64Url(pack('invite', { tag, desc, room, secret }));
+    /** `expires` is in ms like every other time here; the code keeps whole seconds. */
+    function inviteCode({ tag, desc, room, secret, expires }) {
+        const s = Math.floor(expires / 1000);
+        const stamp = [s >>> 24, s >>> 16, s >>> 8, s].map((b) => b & 0xff);
+        return PREFIX.invite + toBase64Url(pack('invite', { tag, desc, room, secret, expires: stamp }));
+    }
 
+    /** {kind, tag, desc, room, secret, expires} with `expires` in ms, or null. */
     function readInvite(code) {
         const text = String(code || '').trim();
         if (!text.startsWith(PREFIX.invite)) return null;
         const bytes = fromBase64Url(text.slice(PREFIX.invite.length));
         const out = bytes && unpack(bytes);
-        return out && out.kind === 'invite' ? out : null;
+        if (!out || out.kind !== 'invite') return null;
+        const [a, b, c, d] = out.expires;
+        return { ...out, expires: (a * 2 ** 24 + (b << 16) + (c << 8) + d) * 1000 };
     }
 
     /** The reply is signed over everything but its own mac, so it is async. */
@@ -334,7 +345,7 @@
     }
 
     const PartyCode = {
-        VERSION, PREFIX, KINDS, TAG_BYTES, ROOM_BYTES, SECRET_BYTES, MAC_BYTES, MAX_CANDIDATES, TYPES,
+        VERSION, PREFIX, KINDS, TAG_BYTES, ROOM_BYTES, SECRET_BYTES, MAC_BYTES, EXPIRES_BYTES, MAX_CANDIDATES, TYPES,
         toBase64Url, fromBase64Url, randomBytes, sameBytes, hmac,
         parseSdp, buildSdp, pack, unpack, inviteCode, readInvite, replyCode, readReply, verifyReply, describe,
     };

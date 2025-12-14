@@ -215,6 +215,10 @@
             async connect({ waiting }) {
                 accepted = await PartyRtc.acceptInvite(code, { iceServers, RTC, gatherMs });
                 if (!accepted) return { error: 'invite' };
+                if (accepted.expired) {
+                    accepted = null;
+                    return { error: 'expired' };
+                }
                 if (cancelled) {
                     accepted.close();
                     return { error: 'closed' };

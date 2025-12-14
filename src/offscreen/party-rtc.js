@@ -34,6 +34,12 @@
     const GATHER_MS = 2500;
     /** How long an invite waits for its reply. Its ports are only held that long. */
     const INVITE_MS = 10 * 60 * 1000;
+    /**
+     * The expiry in an invite is the host's clock and the check is the
+     * guest's, on another machine; a minute of slack keeps a clock that is a
+     * little off from refusing an invite that is still being held open.
+     */
+    const SKEW_MS = 60 * 1000;
     /** From the answer being set to the channel open and bound. */
     const CONNECT_MS = 20000;
     const MAX_FRAME = 8192;
@@ -205,9 +211,10 @@
         const tag = PartyCode.randomBytes(PartyCode.TAG_BYTES);
         const secret = PartyCode.randomBytes(PartyCode.SECRET_BYTES);
         let used = false;
+        const expires = now() + INVITE_MS;
         return {
-            code: PartyCode.inviteCode({ tag, desc, room, secret }),
-            tag, desc, expires: now() + INVITE_MS,
+            code: PartyCode.inviteCode({ tag, desc, room, secret, expires }),
+            tag, desc, expires,
             /** Whether this reply is for this invite. The MAC is checked by answer(). */
             fits: (reply) => PartyCode.sameBytes(reply.tag, tag),
             async answer(reply) {
@@ -226,22 +233,24 @@
      * The guest's side: take the invite, answer it, and hand back the reply
      * code for the user to send. `bound` resolves with the peer once the host
      * has applied the reply, or null. Null straight away for a code that is
-     * not an invite.
+     * not an invite, or {expired} for one the host has already let go of.
      */
-    async function acceptInvite(code, { iceServers, RTC, gatherMs } = {}) {
+    async function acceptInvite(code, { iceServers, RTC, gatherMs, now = Date.now } = {}) {
         const invite = PartyCode.readInvite(code);
         if (!invite) return null;
+        const left = invite.expires + SKEW_MS - now();
+        if (left <= 0) return { expired: true };
         const answered = await makeAnswer(invite.desc, { iceServers, RTC, gatherMs });
         if (!answered) return null;
         const { peer, desc } = answered;
         const reply = await PartyCode.replyCode({ tag: invite.tag, desc }, invite.secret);
-        const bound = bind(peer, { secret: invite.secret, hostFp: invite.desc.fingerprint, guestFp: desc.fingerprint, timeoutMs: INVITE_MS })
+        const bound = bind(peer, { secret: invite.secret, hostFp: invite.desc.fingerprint, guestFp: desc.fingerprint, timeoutMs: Math.min(left, INVITE_MS + SKEW_MS) })
             .then((ok) => {
                 if (ok) return peer;
                 peer.pc.close();
                 return null;
             });
-        return { reply, room: invite.room, desc, peer, bound, close: () => peer.pc.close() };
+        return { reply, room: invite.room, expires: invite.expires, desc, peer, bound, close: () => peer.pc.close() };
     }
 
     /**
@@ -295,7 +304,7 @@
     }
 
     const PartyRtc = {
-        CTL, TICK, GATHER_MS, INVITE_MS, CONNECT_MS, MAX_FRAME, TICKS,
+        CTL, TICK, GATHER_MS, INVITE_MS, SKEW_MS, CONNECT_MS, MAX_FRAME, TICKS,
         iceServers, natOf, openPeer, gather, describeLocal, bind,
         makeOffer, makeAnswer, takeAnswer, createInvite, acceptInvite, peerLink,
     };

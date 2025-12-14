@@ -7730,6 +7730,7 @@ const dayRecord = (at = T0) =>
     ].join('\r\n');
     const inviteFields = (desc = PartyCode.parseSdp(CHROME_OFFER)) => ({
         tag: Uint8Array.from([1, 2, 3, 4]), desc, room: Uint8Array.from([9, 9, 9, 9, 9, 9]), secret: new Uint8Array(16).fill(7),
+        expires: 4102444800789,
     });
 
     check('a chrome offer comes down to credentials, a fingerprint and its udp addresses', () => {
@@ -7747,6 +7748,7 @@ const dayRecord = (at = T0) =>
         const back = PartyCode.readInvite(` ${code}\n`);
         const { mid, ...carried } = PartyCode.parseSdp(CHROME_OFFER);
         eq([back.desc, [...back.tag], [...back.secret]], [carried, [1, 2, 3, 4], new Array(16).fill(7)], 'all but the mid, which an answer takes from its offer');
+        eq(back.expires, 4102444800000, 'the expiry, to the second, past the 32-bit sign bit');
         eq([PartyCode.readInvite(code.slice(0, -3)), PartyCode.readInvite(code.replace('bbp1i.', 'bbp1r.')), PartyCode.readInvite('bbp1i.!!')], [null, null, null]);
     });
     check('ipv6 and odd-length credentials survive the packing', () => {
@@ -7924,6 +7926,15 @@ const dayRecord = (at = T0) =>
         const forged = PartyCode.readReply(await PartyCode.replyCode({ tag: reply.tag, desc: reply.desc }, new Uint8Array(16)));
         eq(await one.answer(forged), null);
         eq(await PartyRtc.acceptInvite('bbp1r.nope', { RTC }), null);
+    });
+    await checkAsync('an invite past its expiry is refused before anything is gathered, with a minute for clock skew', async () => {
+        const { RTC } = fakeRtc();
+        const invite = await PartyRtc.createInvite({ room: new Uint8Array(6), RTC, gatherMs: 50, now: () => 1000000 });
+        const at = (ms) => PartyRtc.acceptInvite(invite.code, { RTC, gatherMs: 50, now: () => ms });
+        const late = await at(invite.expires + PartyRtc.SKEW_MS - 500);
+        assert(late && late.reply && late.expires === invite.expires, 'inside the slack');
+        late.close();
+        eq(await at(invite.expires + PartyRtc.SKEW_MS + 500), { expired: true });
     });
     await checkAsync('the channel is only bound when both ends hold the same secret', async () => {
         const { RTC } = fakeRtc();
