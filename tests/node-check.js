@@ -7558,6 +7558,20 @@ const dayRecord = (at = T0) =>
         eq([now.active, now.members.length, now.policy.control, now.policy.locked], [true, 1, 'everyone', false]);
         await leave();
     });
+    await checkAsync('the host\'s controls from the popup reach the room, with only the fields each one takes', async () => {
+        const loop = PartyLoopback.createLoopback();
+        const session = PartySession.createSession({ transports: { loopback: () => loop }, now: () => 1000 });
+        await session.control({ op: 'start', name: 'Ana', policy: { control: 'everyone', wait: true } });
+        for (const name of ['Ben', 'Cy']) loop.open(() => {}).send({ t: 'hello', v: 1, name });
+        const [, ben, cy] = session.status().members.map((m) => m.id);
+        eq(await session.control({ op: 'policy', control: 'host', locked: true, member: ben }), { ok: true });
+        eq(session.status().policy, { control: 'host', wait: true, locked: true });
+        await session.control({ op: 'role', member: ben, role: 'cohost' });
+        await session.control({ op: 'kick', member: cy });
+        eq(session.status().members.map((m) => [m.name, m.role]), [['Ana', 'host'], ['Ben', 'cohost']]);
+        await session.control({ op: 'leave' });
+        eq(await session.control({ op: 'kick', member: ben }), { ok: false, error: 'inactive' });
+    });
     await checkAsync('leaving lets the tab go, and a tab outside a party is hung up on at once', async () => {
         const { session, leave } = await inParty();
         const tab = tabPort();
@@ -8014,6 +8028,16 @@ const dayRecord = (at = T0) =>
         await session.control({ op: 'leave' });
         await until(() => link.state() === 'failed', 'Ben to hear the host go');
     });
+    await checkAsync('an invite taken back gives its ports back, and cannot be taken back twice', async () => {
+        const { RTC } = fakeRtc();
+        const session = PartySession.createSession({ transports: { codes: (o) => PartyHost.createHost({ ...o, RTC, gatherMs: 50 }) }, now: () => Date.now() });
+        await session.control({ op: 'start', mode: 'codes', name: 'Ana' });
+        const [{ invite: one }, { invite: two }] = [await session.control({ op: 'invite' }), await session.control({ op: 'invite' })];
+        eq(await session.control({ op: 'revoke', code: one.code }), { ok: true });
+        eq(await session.control({ op: 'revoke', code: one.code }), { ok: false });
+        eq(session.status().invites.map((invite) => invite.code), [two.code]);
+        await session.control({ op: 'leave' });
+    });
     await checkAsync('the host turns away what is not a reply to one of its open invites', async () => {
         const { RTC } = fakeRtc();
         const host = PartyHost.createHost({ RTC, gatherMs: 50 });
@@ -8323,8 +8347,12 @@ const dayRecord = (at = T0) =>
             unbind: async () => { calls.push('unbind'); },
             current: async () => bound,
         };
-        const api = { alarms: { create: (name, info) => { alarms[name] = info; }, clear: async (name) => { delete alarms[name]; } } };
-        return { party: PartyWorker.createParty({ api, loader, host }), calls, alarms };
+        const session = {};
+        const api = {
+            alarms: { create: (name, info) => { alarms[name] = info; }, clear: async (name) => { delete alarms[name]; } },
+            storage: { session: { set: async (items) => Object.assign(session, items) } },
+        };
+        return { party: PartyWorker.createParty({ api, loader, host }), calls, alarms, session };
     }
     const partyVideo = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
 
@@ -8394,14 +8422,26 @@ const dayRecord = (at = T0) =>
         await PartyWorker.handle({}, party, { action: 'partyInvite' }, {});
         eq([calls, calls.asked], [['ask accept', 'ask invite'], { op: 'invite' }], 'no new party, no tab bound');
     });
-    await checkAsync('a party the authority ended is closed down; a page cannot claim one was', async () => {
-        const { party, calls } = partyWith();
+    await checkAsync('a party the authority ended is closed down, and why is kept for the popup; a page cannot claim one was', async () => {
+        const { party, calls, session } = partyWith();
         await party.start(7, partyVideo);
         calls.length = 0;
         eq(await PartyWorker.handle({}, party, { action: 'partyEnded' }, { tab: { id: 7 } }), { ok: false });
         eq(calls, []);
         await PartyWorker.handle({}, party, { action: 'partyEnded', code: 'kicked' }, { url: 'chrome-extension://x/offscreen.html' });
         eq(calls, ['ask leave', 'close', 'unbind']);
+        eq(session[PartyWorker.ENDED_KEY].code, 'kicked');
+    });
+    await checkAsync('the popup\'s host controls are passed on as they are, and nothing else is', async () => {
+        const { party, calls } = partyWith();
+        eq(await PartyWorker.handle({}, party, { action: 'partyControl', op: 'kick', member: 'm2' }, {}), { ok: false, error: 'inactive' });
+        await party.start(7, partyVideo);
+        calls.length = 0;
+        await PartyWorker.handle({}, party, { action: 'partyControl', op: 'policy', control: 'host' }, {});
+        eq(calls.asked, { op: 'policy', control: 'host' });
+        eq(await PartyWorker.handle({}, party, { action: 'partyControl', op: 'leave' }, {}), { ok: false, error: 'op' });
+        eq(await PartyWorker.handle({}, party, { action: 'partyControl', op: 'start' }, {}), { ok: false, error: 'op' });
+        eq(calls, ['ask policy']);
     });
     await checkAsync('the session reports a kick, but not a start that failed or a leave', async () => {
         const ended = [];

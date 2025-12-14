@@ -46,6 +46,16 @@
     const HEARTBEAT_MAX_MS = PartyRoom.AWAY_MS / 2;
     /** What the tab may say to the room. Leaving, kicking and policy come from the UI, through the worker. */
     const FROM_TAB = Object.freeze(['intent', 'ready', 'solo', 'request']);
+    /**
+     * The host's controls, as the worker passes them on from the popup. Only
+     * the named fields go to the room; which member may use them is the
+     * authority's to decide, and a guest's are dropped there.
+     */
+    const HOST_OPS = Object.freeze({
+        policy: ({ control, wait, locked }) => ({ t: 'policy', control, wait, locked }),
+        role: ({ member, role }) => ({ t: 'role', member, role }),
+        kick: ({ member }) => ({ t: 'kick', member }),
+    });
 
     const TRANSPORTS = Object.freeze({
         loopback: PartyLoopback.createLoopback, server: PartyWs.createTransport, codes: PartyHost.createTransport,
@@ -266,6 +276,15 @@
                 case 'accept':
                     if (!party || !party.transport.accept) return { ok: false, error: 'mode' };
                     return party.transport.accept(String(msg.code || ''));
+                case 'revoke':
+                    if (!party || !party.transport.revoke) return { ok: false, error: 'mode' };
+                    return { ok: party.transport.revoke(String(msg.code || '')) };
+                case 'policy':
+                case 'role':
+                case 'kick':
+                    if (!party) return { ok: false, error: 'inactive' };
+                    party.link.send(HOST_OPS[msg.op](msg));
+                    return { ok: true };
                 default: return { ok: false, error: 'op' };
             }
         }
@@ -293,7 +312,7 @@
         return session;
     }
 
-    const PartySession = { PORT, TARGET, HEARTBEAT_MAX_MS, FROM_TAB, TRANSPORTS, createSession, boot };
+    const PartySession = { PORT, TARGET, HEARTBEAT_MAX_MS, FROM_TAB, HOST_OPS, TRANSPORTS, createSession, boot };
 
     root.BB = root.BB || {};
     root.BB.PartySession = PartySession;

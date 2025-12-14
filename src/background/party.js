@@ -26,7 +26,15 @@
     const LINGER_MIN = 0.5;
     /** Firefox unloads an idle background page after thirty seconds. */
     const KEEPALIVE_MS = 20000;
-    const ACTIONS = Object.freeze(['partyStart', 'partyJoin', 'partyInvite', 'partyLeave', 'partyStatus', 'partyEnded']);
+    const ACTIONS = Object.freeze(['partyStart', 'partyJoin', 'partyInvite', 'partyLeave', 'partyStatus', 'partyEnded', 'partyControl']);
+    /** PartySession's host controls and revoking an invite: all the popup's, passed on as they are. */
+    const CONTROL_OPS = Object.freeze(['policy', 'role', 'kick', 'revoke']);
+    /**
+     * Why the last party ended, when the authority ended it: the popup is
+     * usually closed at that moment, so it reads this the next time it opens,
+     * and clears it once shown.
+     */
+    const ENDED_KEY = 'bbPartyEnded';
     /** PartyCode.PREFIX.reply: a guest's answer to our invite, pasted in on the host's side. */
     const REPLY = 'bbp1r.';
     /** The codes that join a party, by prefix, and the transport each needs. */
@@ -172,10 +180,18 @@
             return host.ask(msg);
         }
 
+        /** The authority ended the party: keep why, for the popup, then tidy up as for a leave. */
+        async function ended(code) {
+            try { await api.storage.session.set({ [ENDED_KEY]: { code: String(code || ''), at: Date.now() } }); } catch (_) { /* the popup just will not say why */ }
+            return leave();
+        }
+
         return {
-            start, leave, status,
+            start, leave, status, ended,
             invite: () => ask({ op: 'invite' }),
             accept: (code) => ask({ op: 'accept', code }),
+            /** {op, …fields} for one of CONTROL_OPS. */
+            control: (msg) => ask(msg),
             onTabClosed: () => api.alarms.create(LINGER_ALARM, { delayInMinutes: LINGER_MIN }),
             /** Half a minute on: started again from another tab, the party stays; otherwise it is over. */
             async onAlarm(alarm) {
@@ -206,12 +222,17 @@
             // kick, a room the server no longer has). The tab was let go with
             // it; what is left is the document and the gate. A page cannot
             // end the party this way.
-            case 'partyEnded': return sender && sender.tab ? { ok: false } : party.leave();
+            case 'partyEnded': return sender && sender.tab ? { ok: false } : party.ended(message.code);
+            case 'partyControl': {
+                if (!CONTROL_OPS.includes(message.op)) return { ok: false, error: 'op' };
+                const { action, ...msg } = message;
+                return party.control(msg);
+            }
             default: return party.status();
         }
     }
 
-    const PartyWorker = { DOC, SESSION, LINGER_ALARM, LINGER_MIN, KEEPALIVE_MS, ACTIONS, REPLY, JOINS, modeOf, offscreenHost, pageHost, createParty, handle };
+    const PartyWorker = { DOC, SESSION, LINGER_ALARM, LINGER_MIN, KEEPALIVE_MS, ACTIONS, CONTROL_OPS, ENDED_KEY, REPLY, JOINS, modeOf, offscreenHost, pageHost, createParty, handle };
 
     const api = root.chrome;
     if (api && api.runtime && api.runtime.onMessage && api.alarms && PartyLoader.loader) {
@@ -219,7 +240,7 @@
         const host = api.offscreen && api.runtime.getContexts ? offscreenHost(api)
             // The session shares this page, so it is told directly: a page's
             // runtime.sendMessage never reaches itself.
-            : root.document ? pageHost(api, { onEnd: () => party.leave() }) : null;
+            : root.document ? pageHost(api, { onEnd: (code) => party.ended(code) }) : null;
         const party = createParty({ api, loader: PartyLoader.loader, host });
         PartyLoader.loader.onClosed(party.onTabClosed);
         api.alarms.onAlarm.addListener(party.onAlarm);

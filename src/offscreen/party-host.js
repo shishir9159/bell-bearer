@@ -123,6 +123,15 @@
             /** A guest bound some other way — through a tracker — let into the room. */
             admit,
 
+            /** Take back an invite not yet answered; false if it was answered, expired or never ours. */
+            revoke(code) {
+                const invite = pending.find((one) => one.code === code);
+                if (!invite) return false;
+                forget(invite);
+                invite.close();
+                return true;
+            },
+
             pending: () => pending.map(view),
             nat: () => nat,
             guests: () => guests.size,
