@@ -8511,6 +8511,25 @@ const dayRecord = (at = T0) =>
         }
     });
 
+    // ------------------------------------------------------ party panel
+
+    console.log('\n# party panel — the popup\'s views, loaded only when asked for');
+    globalThis.BB.Settings = globalThis.BB.Settings || require('../src/shared/settings.js');
+    globalThis.BB.PartyCode = PartyCode;
+    globalThis.BB.Ui = globalThis.BB.Ui || {};
+    const PartyPanel = require('../src/page/party-panel.js');
+    check('the popup lists no party file: they are appended, in order, when a party is wanted', () => {
+        const html = fs.readFileSync(`${__dirname}/../popup.html`, 'utf8');
+        assert(!/<script src="[^"]*party[^"]*"/.test(html) && !/party\.css/.test(html), 'popup.html must not load the party');
+        const popup = fs.readFileSync(`${__dirname}/../popup.js`, 'utf8');
+        const files = JSON.parse(`[${/PARTY_FILES = \[([^\]]+)\]/.exec(popup)[1].replace(/'/g, '"')}]`);
+        eq(files.slice(0, 2), ['src/shared/party-code.js', 'src/page/party-panel.js'], 'the panel after the codes it reads, before the views');
+        for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), file);
+    });
+    check('a countdown is m:ss and never goes below nothing', () => {
+        eq([PartyPanel.countdown(61400, 0), PartyPanel.countdown(9000, 0), PartyPanel.countdown(0, 5000)], ['1:01', '0:09', '0:00']);
+    });
+
     console.log('\n' + '='.repeat(52));
     console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
     process.exit(failed ? 1 : 0);

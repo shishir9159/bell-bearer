@@ -55,6 +55,14 @@
                 <button id="openReaderBtn" class="btn-reader" type="button" disabled>Open the reader</button>
                 <span class="reader-bar-note" id="readerBarNote" aria-live="polite"></span>
             </div>
+            <!-- A second home for this bar, on Netflix, is #netflixPanel below:
+                 popup.js moves it there, so there is one bar and one set of
+                 listeners. -->
+            <div class="party-bar" id="partyBar" hidden>
+                <button id="partyStartBtn" class="btn-reader" type="button">Start a party</button>
+                <button id="partyJoinBtn" class="btn-party-join" type="button">Join</button>
+                <span class="reader-bar-note">Watch this video in sync</span>
+            </div>
             <div class="main-content" id="mainContent">
                 <div class="video-list" id="videoList"></div>
 
@@ -87,6 +95,14 @@
         <div class="leet-panel" id="leetPanel" hidden>
             <div class="leet-pop-body" id="leetPopupBody"></div>
         </div>
+
+        <!-- Netflix: the watch party's bar, and nothing else. -->
+        <div id="netflixPanel" hidden></div>
+
+        <!-- The watch party, once it is asked for or on: start, join, the
+             code exchange, the room and how it ended. Drawn by
+             src/page/party-panel.js, which is only loaded when needed. -->
+        <div class="party-view" id="partyView" hidden></div>
 
         <!-- Anywhere else the popup is the header alone (and the speed bar,
              on a page with a <video>). -->

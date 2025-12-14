@@ -69,6 +69,8 @@
 
             on('dashboardBtn', 'click', () => openDashboard(ChessSites.get(this.site) ? `#site/${this.site}` : ''));
             on('openReaderBtn', 'click', () => this.openReader());
+            on('partyStartBtn', 'click', () => this.openParty('start'));
+            on('partyJoinBtn', 'click', () => this.openParty('join'));
 
             // The daily-limit override. It draws itself or stays hidden, and
             // is not a chess-panel control: the limit can bite while you are
@@ -177,6 +179,16 @@
 
             document.getElementById('youtubePanel').hidden = this.site !== 'youtube';
             if (this.site === 'youtube') this.setupReaderBar();
+            // The party plays on YouTube and Netflix. On Netflix its bar is
+            // the popup's only content, so it moves out of the YouTube panel.
+            const partyBar = document.getElementById('partyBar');
+            partyBar.hidden = this.site !== 'youtube' && this.site !== 'netflix';
+            if (this.site === 'netflix') {
+                const netflix = document.getElementById('netflixPanel');
+                netflix.appendChild(partyBar);
+                netflix.hidden = false;
+            }
+            this.resumeParty();
             const chessSite = ChessSites.get(this.site);
             document.getElementById('chessPanel').hidden = !chessSite;
 
@@ -238,6 +250,34 @@
             // A tab opened before the extension was installed or reloaded
             // has no content script to answer.
             note.textContent = 'Reload the YouTube tab first — Bell Bearer is not running in it yet';
+        }
+
+        // ----------------------------------------------------- watch party
+
+        /**
+         * A party on, or one that just ended, is what the popup opens on.
+         * Asked of storage rather than of the worker, so a popup with no
+         * party in sight loads none of the party's code.
+         */
+        async resumeParty() {
+            let found = {};
+            try { found = await chrome.storage.session.get(['bbPartyTab', 'bbPartyEnded']); } catch (_) { /* no party to find */ }
+            if (found.bbPartyTab || found.bbPartyEnded) this.openParty(null);
+        }
+
+        /** The party's views over the rest of the popup; `view` is what was asked for, null to land where the party is. */
+        async openParty(view) {
+            await loadParty();
+            document.body.classList.add('is-party');
+            if (!this.party) {
+                this.party = window.BB.PartyPanel.createPanel({
+                    body: document.getElementById('partyView'),
+                    site: this.site,
+                    openDashboard,
+                    onClose: () => document.body.classList.remove('is-party'),
+                });
+            }
+            await this.party.open(view);
         }
 
         // ------------------------------------------------------ speed bar
@@ -402,6 +442,28 @@
                     ${video.bookmarks.map((bookmark, index) => renderBookmark(video, bookmark, index)).join('')}
                 </div>`;
         }
+    }
+
+    /** The party's styles and scripts, in order, the first time they are wanted. */
+    const PARTY_FILES = ['src/shared/party-code.js', 'src/page/party-panel.js'];
+    let partyLoading = null;
+    function loadParty() {
+        partyLoading = partyLoading || (async () => {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'party.css';
+            document.head.appendChild(link);
+            for (const src of PARTY_FILES) {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = src;
+                    script.onload = resolve;
+                    script.onerror = () => reject(new Error(`${src} did not load`));
+                    document.body.appendChild(script);
+                });
+            }
+        })();
+        return partyLoading;
     }
 
     function openDashboard(hash) {

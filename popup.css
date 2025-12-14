@@ -252,6 +252,38 @@ header h1 {
     font-size: 11.5px;
 }
 
+/* The watch party's way in, under the reader's. Its views are party.css,
+   loaded with the party's code. */
+.party-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--border);
+}
+
+.btn-party-join {
+    flex-shrink: 0;
+    padding: 5px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--btn-radius);
+    background: var(--surface-3);
+    color: var(--text-muted);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.btn-party-join:hover { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* While the party's views are up they are the popup, under the header, at
+   full height on every site — Netflix's popup is otherwise only as tall as
+   its one bar. */
+body.is-party .container { height: 600px; min-height: 600px; }
+body.is-party .container > :not(header):not(#partyView) { display: none !important; }
+
 /* The speed icon. It paints with currentColor, so it takes the skin's accent
    ink the way the other controls on an accent-soft ground do, and follows a
    theme change without anything having to redraw it. */
