@@ -157,7 +157,7 @@
      * start that held out for the welcome would never give the user the code
      * the welcome depends on.
      */
-    function guestOf({ connect, cancel, invite = () => null, nat = () => null }) {
+    function guestOf({ connect, cancel, invite = () => null, nat = () => null, expires = () => null }) {
         let deliver = () => {};
         let link = null;
         let asked = false;
@@ -194,7 +194,7 @@
         }
 
         return {
-            invite, nat,
+            invite, nat, expires,
             open(receive) {
                 deliver = receive;
                 return {
@@ -242,6 +242,8 @@
             },
             invite: () => (accepted ? accepted.reply : null),
             nat: () => (accepted ? PartyRtc.natOf(accepted.desc, iceServers) : null),
+            /** When the invite answered runs out: the host lets go of it then, so this is how long the reply is good for. */
+            expires: () => (accepted ? accepted.expires : null),
         });
     }
 

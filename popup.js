@@ -445,7 +445,7 @@
     }
 
     /** The party's styles and scripts, in order, the first time they are wanted. */
-    const PARTY_FILES = ['src/shared/party-code.js', 'src/page/party-panel.js'];
+    const PARTY_FILES = ['src/shared/party-code.js', 'src/page/party-panel.js', 'src/page/party-start-view.js', 'src/page/party-join-view.js'];
     let partyLoading = null;
     function loadParty() {
         partyLoading = partyLoading || (async () => {

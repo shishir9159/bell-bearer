@@ -8060,6 +8060,7 @@ const dayRecord = (at = T0) =>
         const waiting = await ben.control({ op: 'start', mode: 'codes', code: invite.code, name: 'Ben' });
         eq([waiting.ok, waiting.status.you, waiting.status.up], [true, null, false], 'back with the reply, not the welcome');
         assert(waiting.status.invite.startsWith('bbp1r.'), waiting.status.invite);
+        eq(waiting.status.expires, Math.floor(invite.expires / 1000) * 1000, 'the reply is good for as long as the invite is held open');
         const tab = tabPort();
         ben.connect(tab);
         tab.say({ t: 'ping', c: 1, seq: 0 });
@@ -8518,6 +8519,9 @@ const dayRecord = (at = T0) =>
     globalThis.BB.PartyCode = PartyCode;
     globalThis.BB.Ui = globalThis.BB.Ui || {};
     const PartyPanel = require('../src/page/party-panel.js');
+    const StartView = require('../src/page/party-start-view.js');
+    const JoinViews = require('../src/page/party-join-view.js');
+
     check('the popup lists no party file: they are appended, in order, when a party is wanted', () => {
         const html = fs.readFileSync(`${__dirname}/../popup.html`, 'utf8');
         assert(!/<script src="[^"]*party[^"]*"/.test(html) && !/party\.css/.test(html), 'popup.html must not load the party');
@@ -8528,6 +8532,33 @@ const dayRecord = (at = T0) =>
     });
     check('a countdown is m:ss and never goes below nothing', () => {
         eq([PartyPanel.countdown(61400, 0), PartyPanel.countdown(9000, 0), PartyPanel.countdown(0, 5000)], ['1:01', '0:09', '0:00']);
+    });
+    check('a pasted code is named before it is joined, with an invite\'s address and time left', () => {
+        const { readCode } = JoinViews.join;
+        const invite = PartyCode.inviteCode({ ...inviteFields(), expires: 1000000 + 9 * 60000 });
+        eq(readCode(invite, { now: 1000000 }), { ok: true, kind: 'Invite code', note: ' · from 203.0.113.7:55253 · 9 min left' });
+        eq(readCode(invite, { now: 1000000 + 10 * 60000 }).ok, false, 'expired');
+        eq(readCode(invite.slice(0, -4)).ok, false, 'cut short');
+        eq(readCode(PartyWs.inviteCode({ url: 'wss://party.example/', room: 'r', secret: 's' })), { ok: true, kind: 'Server code', note: ' · on party.example' });
+        eq([readCode('bbp1t.abc').ok, readCode('bbp1r.abc').ok, readCode('hello').kind, readCode('  ')], [true, false, 'Not a party code', null]);
+    });
+    await checkAsync('the tracker probe counts the sockets that open in time, and closes every one', async () => {
+        const made = [];
+        class Socket {
+            constructor(url) {
+                this.url = url;
+                made.push(this);
+                if (url.includes('up')) setTimeout(() => this.onopen());
+                if (url.includes('bad')) setTimeout(() => this.onerror());
+            }
+            close() { this.closed = true; }
+        }
+        const n = await StartView.probeTrackers('wss://up.one wss://bad.two  wss://slow.three https://no.four', { Socket, ms: 30 });
+        eq([n, made.map((one) => one.url), made.every((one) => one.closed)], [1, ['wss://up.one', 'wss://bad.two', 'wss://slow.three'], true]);
+    });
+    check('every way a party ends that the session can report has words, and each way on is a view', () => {
+        for (const code of ['host-left', 'expired', 'tracker', 'invite', 'no-host', 'kicked']) assert(JoinViews.ended.knows(code), code);
+        for (const one of Object.values(JoinViews.ended.ENDINGS)) assert(['join', 'start', 'codes'].includes(one.go), one.go);
     });
 
     console.log('\n' + '='.repeat(52));

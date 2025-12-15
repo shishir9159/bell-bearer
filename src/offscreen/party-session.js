@@ -257,6 +257,7 @@
                 invites: party.transport.pending ? party.transport.pending() : undefined,
                 nat: party.transport.nat ? party.transport.nat() : undefined,
                 trackers: party.transport.trackers ? party.transport.trackers() : undefined,
+                expires: party.transport.expires ? party.transport.expires() : undefined,
             };
         }
 
