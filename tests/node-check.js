@@ -7342,7 +7342,7 @@ const dayRecord = (at = T0) =>
     });
     check('every file the loader injects is on disk', () => {
         const files = [...PartyLoader.CONTENT_FILES, ...Object.values(PartyLoader.PAGE_FILES).flat()];
-        for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
+        for (const file of [...files, 'party.css']) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
     });
 
     /** Just the chrome.* the loader touches, recording what it injects. */
