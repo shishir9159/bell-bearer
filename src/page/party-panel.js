@@ -40,6 +40,10 @@
         unreachable: 'Nobody answered at that address.',
         code: 'That is not a party code.',
         unsupported: 'This browser cannot hold a party.',
+        reply: 'That is not a reply. A reply starts with bbp1r.',
+        'reply-code': 'That is not a reply. A reply starts with bbp1r.',
+        'reply-unknown': 'That reply is to an invite that is no longer open. Send them a new one.',
+        'reply-refused': 'That reply did not connect. Send them a new invite and try again.',
     });
 
     const ICONS = {

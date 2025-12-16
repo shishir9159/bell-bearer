@@ -7342,7 +7342,7 @@ const dayRecord = (at = T0) =>
     });
     check('every file the loader injects is on disk', () => {
         const files = [...PartyLoader.CONTENT_FILES, ...Object.values(PartyLoader.PAGE_FILES).flat()];
-        for (const file of [...files, 'party.css']) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
+        for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
     });
 
     /** Just the chrome.* the loader touches, recording what it injects. */
@@ -8528,7 +8528,7 @@ const dayRecord = (at = T0) =>
         const popup = fs.readFileSync(`${__dirname}/../popup.js`, 'utf8');
         const files = JSON.parse(`[${/PARTY_FILES = \[([^\]]+)\]/.exec(popup)[1].replace(/'/g, '"')}]`);
         eq(files.slice(0, 2), ['src/shared/party-code.js', 'src/page/party-panel.js'], 'the panel after the codes it reads, before the views');
-        for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), file);
+        for (const file of [...files, 'party.css']) assert(fs.existsSync(`${__dirname}/../${file}`), file);
     });
     check('a countdown is m:ss and never goes below nothing', () => {
         eq([PartyPanel.countdown(61400, 0), PartyPanel.countdown(9000, 0), PartyPanel.countdown(0, 5000)], ['1:01', '0:09', '0:00']);

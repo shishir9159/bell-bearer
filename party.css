@@ -428,3 +428,53 @@
 
 .party-lock[aria-checked="true"] .party-switch { background: var(--accent); }
 .party-lock[aria-checked="true"] .party-switch::after { left: 14px; }
+
+/* ---- Invites. */
+.party-warn {
+    display: flex;
+    gap: 9px;
+    align-items: flex-start;
+    padding: 9px 11px;
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-radius: var(--card-radius);
+    color: var(--warning);
+}
+
+.party-warn svg { flex-shrink: 0; margin-top: 1px; }
+.party-warn div { font-size: 11px; line-height: 1.4; color: var(--text); }
+.party-warn strong { color: var(--warning); }
+#partyNat:empty { display: none; }
+
+.party-share { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+.party-mono { font-family: var(--font-mono); color: var(--text); }
+
+.party-code-in.is-short { min-height: 34px; height: 34px; padding: 7px 10px; }
+.party-end.is-tucked { margin-top: -2px; }
+.party-btn.is-tiny { padding: 5px 14px; font-size: 12px; }
+
+.party-pendings { display: flex; flex-direction: column; gap: 4px; }
+.party-pendings:empty { display: none; }
+
+.party-pending {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+}
+
+.party-pending-code {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.party-pending-left { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); }
