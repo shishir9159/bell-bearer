@@ -162,6 +162,11 @@
                 if (party.state && msg.seq !== party.state.seq) post({ t: 'state', ...party.state });
                 return;
             }
+            // How far the tab's player is from the room: the popup's to show, not the room's business.
+            if (msg.t === 'drift') {
+                party.drift = Number.isFinite(msg.ms) ? msg.ms : null;
+                return;
+            }
             if (!FROM_TAB.includes(msg.t)) return;
             if (msg.t === 'ready') party.ready = msg.ready !== false;
             if (msg.t === 'solo') party.solo = msg.solo === true;
@@ -258,6 +263,7 @@
                 nat: party.transport.nat ? party.transport.nat() : undefined,
                 trackers: party.transport.trackers ? party.transport.trackers() : undefined,
                 expires: party.transport.expires ? party.transport.expires() : undefined,
+                drift: party.drift,
             };
         }
 

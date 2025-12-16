@@ -305,6 +305,9 @@
         // The WebTorrent trackers a tracker party meets through (wss://,
         // space-separated). They see who connects and when, never what is said.
         partyTrackers: 'wss://tracker.openwebtorrent.com wss://tracker.webtorrent.dev',
+        // A party moving to its next video takes this tab there too. Off, the
+        // chip says the party is elsewhere and offers the way there instead.
+        partyFollowMedia: true,
     });
 
     const KEYS = Object.freeze(Object.keys(DEFAULTS));

@@ -50,6 +50,8 @@
     const CLOCK_PING_MS = 60000;
     /** A stall shorter than this is the player's ordinary hiccup, not worth holding a room over. */
     const STALL_MS = 800;
+    /** How often the session hears how far off we are, for the popup's "Synced ±40 ms". */
+    const DRIFT_REPORT_MS = 5000;
 
     function createLedger() {
         let waiting = [];
@@ -135,6 +137,7 @@
         followMedia = () => true,
         go = (url) => root.location.assign(url),
         onStatus = noop,
+        onRoom = noop,
     }) {
         const profile = PartySites.get(site);
         const drift = PartyDrift.createDrift({ profile: 'nudge' });
@@ -168,6 +171,9 @@
         let lastNudge = null;
         /** { rate, timer } while a speed change of the user's waits to be sent. */
         let rateQueued = null;
+        /** Seconds ahead of the room (behind when negative) at the last check, or null before one. */
+        let lastDrift = null;
+        let driftSentAt = -Infinity;
 
         const setStatus = (next, detail) => {
             if (next === status && !detail) return;
@@ -274,9 +280,15 @@
             const video = getVideo();
             if (!room || !video || suspended() || solo || pending || seekTimer || rateQueued || !onRoomMedia()) return;
             const t = now();
+            const expected = PartyState.expected(room, clock.toRoom(t));
+            lastDrift = video.currentTime - expected;
+            if (t - driftSentAt >= DRIFT_REPORT_MS) {
+                driftSentAt = t;
+                send({ t: 'drift', ms: Math.round(lastDrift * 1000) });
+            }
             const action = drift.decide({
                 actual: video.currentTime,
-                expected: PartyState.expected(room, clock.toRoom(t)),
+                expected,
                 rate: room.rate, paused: video.paused, now: t,
                 bufferedAhead: video.readyState ? bufferedAhead(video) : Infinity,
             });
@@ -541,6 +553,9 @@
                 case 'detach': detach(); break;
                 default: break;
             }
+            // The rest of what the room says (who is in it, who asks for a
+            // pause, the link dropping, how it ended) is the chip's to show.
+            if (msg.t !== 'pong' && msg.t !== 'keepalive') onRoom(msg);
         }
 
         const LISTENERS = [
@@ -584,8 +599,18 @@
             if (!solo) follow();
         }
 
+        /** Back to the video the room is on, from wherever the user wandered. */
+        function goToRoomMedia() {
+            const url = room && room.media && PartySites.urlFor(room.media);
+            if (url) go(url);
+        }
+
         return {
-            attach, detach, receive, setSolo,
+            attach, detach, receive, setSolo, goToRoomMedia,
+            /** Ask the hosts for what host control will not let us do ourselves. */
+            request: (op) => send({ t: 'request', op }),
+            solo: () => solo,
+            drift: () => lastDrift,
             status: () => status,
             canSeek: () => canSeek,
             room: () => room,
@@ -611,13 +636,23 @@
         } catch (_) {
             return; // the extension reloaded under this page
         }
+        // Follow the room to its next video unless the setting says not to;
+        // read once, and the room is followed until it has answered.
+        let follows = true;
+        if (ns.Settings) ns.Settings.get(['partyFollowMedia']).then((s) => { follows = s.partyFollowMedia !== false; }, noop);
+        const getVideo = ns.Site.createPlayerLocator(site);
+        const chip = ns.PartyChip ? ns.PartyChip.createChip({ site, getVideo, api }) : null;
         const media = createPartyMedia({
             site,
-            getVideo: ns.Site.createPlayerLocator(site),
+            getVideo,
             player: bb.player,
             notify: ns.Notify ? (message, type) => ns.Notify.show(message, type) : noop,
             send: (msg) => { try { port.postMessage(msg); } catch (_) { media.detach(); } },
+            followMedia: () => follows,
+            onStatus: chip ? (next, detail) => chip.status(next, detail) : noop,
+            onRoom: chip ? (msg) => chip.room(msg) : noop,
         });
+        if (chip) chip.bind(media);
         root.__bbPartyMedia = media;
         bb.party = media;
         port.onMessage.addListener(media.receive);
@@ -631,7 +666,7 @@
 
     const PartyMedia = {
         createPartyMedia, createLedger, createApiControls, askPage, VIDEO_CONTROLS,
-        EXPECT_MS, SEEK_DEBOUNCE_MS, RATE_DEBOUNCE_MS, PENDING_MS, STALL_MS, DRIFT_EVAL_MS: PartyDrift.EVAL_MS,
+        EXPECT_MS, SEEK_DEBOUNCE_MS, RATE_DEBOUNCE_MS, PENDING_MS, STALL_MS, DRIFT_REPORT_MS, DRIFT_EVAL_MS: PartyDrift.EVAL_MS,
     };
 
     root.BB = root.BB || {};

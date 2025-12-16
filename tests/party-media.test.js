@@ -289,6 +289,43 @@ suite('party media: which video', () => {
     });
 });
 
+suite('party media: what the chip is told', () => {
+    test('what the room says besides the vector reaches the chip, and the clock's own talk does not', async () => {
+        const heard = [];
+        const h = await partyHarness({ onRoom: (msg) => heard.push(msg.t) });
+        try {
+            h.media.receive({ t: 'members', list: [] });
+            h.media.receive({ t: 'request', from: 'm2', op: 'pause' });
+            h.media.receive({ t: 'link', up: false });
+            h.media.receive({ t: 'pong', c: 1, s: 1, s2: 1 });
+            assertDeepEqual(heard, ['welcome', 'members', 'request', 'link']);
+        } finally { h.destroy(); }
+    });
+
+    test('a member playing along says how far off it is, and no more than every few seconds', async () => {
+        const h = await partyHarness();
+        try {
+            h.room({ paused: false, pos: 0 });
+            assert(await partyUntil(() => h.sent.some((msg) => msg.t === 'drift'), 3000), 'a drift report');
+            const reports = h.sent.filter((msg) => msg.t === 'drift');
+            assertEqual(reports.length, 1);
+            assert(Number.isInteger(reports[0].ms) && typeof h.media.drift() === 'number', JSON.stringify(reports));
+        } finally { h.destroy(); }
+    });
+
+    test('left on another video, the way back is the room's video, built here', async () => {
+        const h = await partyHarness({ followMedia: () => false });
+        try {
+            h.moveTo({ site: 'youtube', id: 'bbbbbbbbbbb' });
+            h.room({ paused: true });
+            assertEqual(h.media.status(), 'elsewhere');
+            assertDeepEqual(h.gone, [], 'not followed');
+            h.media.goToRoomMedia();
+            assertDeepEqual(h.gone, ['https://www.youtube.com/watch?v=dQw4w9WgXcQ']);
+        } finally { h.destroy(); }
+    });
+});
+
 /**
  * Netflix's player API as the page world has it, with a billboard session
  * ahead of the one being watched. Its seek moves the video the way Netflix's

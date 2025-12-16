@@ -7548,6 +7548,23 @@ const dayRecord = (at = T0) =>
         }
         await leave();
     });
+    await checkAsync('the tab says how far off its player is, for the popup, and the room never hears it', async () => {
+        const loop = PartyLoopback.createLoopback();
+        const session = PartySession.createSession({ transports: { loopback: () => loop }, now: () => 1000 });
+        await session.control({ op: 'start', name: 'Ana' });
+        const heard = [];
+        const room = loop.room.handle;
+        loop.room.handle = (id, msg, at) => { heard.push(msg.t); return room(id, msg, at); };
+        const tab = tabPort();
+        session.connect(tab);
+        eq(session.status().drift, undefined, 'nothing said yet');
+        tab.say({ t: 'drift', ms: -42 });
+        tab.say({ t: 'drift', ms: 'far' });
+        tab.say({ t: 'drift', ms: 38 });
+        tab.say({ t: 'ready', ready: true });
+        eq([session.status().drift, heard], [38, ['ready']], 'what the tab says for the room still reaches it');
+        await session.control({ op: 'leave' });
+    });
     await checkAsync('the tab cannot leave, kick or reconfigure the room', async () => {
         const { session, leave } = await inParty();
         const tab = tabPort();
