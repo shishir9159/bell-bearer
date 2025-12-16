@@ -26,7 +26,7 @@
     const LINGER_MIN = 0.5;
     /** Firefox unloads an idle background page after thirty seconds. */
     const KEEPALIVE_MS = 20000;
-    const ACTIONS = Object.freeze(['partyStart', 'partyJoin', 'partyInvite', 'partyLeave', 'partyStatus', 'partyEnded', 'partyControl']);
+    const ACTIONS = Object.freeze(['partyStart', 'partyJoin', 'partyInvite', 'partyLeave', 'partyStatus', 'partyEnded', 'partyControl', 'partyPopup']);
     /** PartySession's host controls and revoking an invite: all the popup's, passed on as they are. */
     const CONTROL_OPS = Object.freeze(['policy', 'role', 'kick', 'revoke']);
     /**
@@ -223,6 +223,14 @@
             // it; what is left is the document and the gate. A page cannot
             // end the party this way.
             case 'partyEnded': return sender && sender.tab ? { ok: false } : party.ended(message.code);
+            // The chip's "Get a new invite": the popup is where invites are pasted.
+            case 'partyPopup':
+                try {
+                    await api.action.openPopup();
+                    return { ok: true };
+                } catch (_) {
+                    return { ok: false, error: 'popup' };
+                }
             case 'partyControl': {
                 if (!CONTROL_OPS.includes(message.op)) return { ok: false, error: 'op' };
                 const { action, ...msg } = message;

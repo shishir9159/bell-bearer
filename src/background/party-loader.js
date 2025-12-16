@@ -27,6 +27,8 @@
         'src/shared/party-state.js',
         'src/shared/party-drift.js',
         'src/shared/party-sites.js',
+        // Before party-media, which builds the chip as it boots.
+        'src/content/party-chip.js',
         'src/content/party-media.js',
     ]);
 
