@@ -31,6 +31,8 @@
         'src/content/party-chip.js',
         'src/content/party-media.js',
     ]);
+    /** The chip's styles, inserted with the code rather than listed with content.css for every page. */
+    const CSS_FILES = Object.freeze(['party-page.css']);
 
     /** Injected into the page's own world, per site. */
     const PAGE_FILES = Object.freeze({
@@ -65,6 +67,7 @@
 
         async function inject(tabId, site) {
             try {
+                await api.scripting.insertCSS({ target: { tabId }, files: [...CSS_FILES] });
                 await api.scripting.executeScript({ target: { tabId }, files: [...CONTENT_FILES] });
                 const page = PAGE_FILES[site] || [];
                 if (page.length) {
@@ -121,7 +124,7 @@
         return { bind, unbind, inject, onUpdated, onRemoved, current, onClosed: (fn) => { closed.push(fn); } };
     }
 
-    const PartyLoader = { CONTENT_FILES, PAGE_FILES, KEY, siteOf, createLoader };
+    const PartyLoader = { CONTENT_FILES, CSS_FILES, PAGE_FILES, KEY, siteOf, createLoader };
 
     // The worker registers its listeners at top level, synchronously, or a
     // restarted worker misses the event that woke it.

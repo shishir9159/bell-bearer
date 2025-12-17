@@ -7341,22 +7341,26 @@ const dayRecord = (at = T0) =>
         }
     });
     check('every file the loader injects is on disk', () => {
-        const files = [...PartyLoader.CONTENT_FILES, ...Object.values(PartyLoader.PAGE_FILES).flat()];
+        const files = [...PartyLoader.CONTENT_FILES, ...PartyLoader.CSS_FILES, ...Object.values(PartyLoader.PAGE_FILES).flat()];
         for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
     });
 
     /** Just the chrome.* the loader touches, recording what it injects. */
     function loaderWith(session = {}) {
         const injected = [];
+        const styled = [];
         const api = {
             storage: { session: {
                 get: async (key) => (key in session ? { [key]: session[key] } : {}),
                 set: async (values) => { Object.assign(session, values); },
                 remove: async (key) => { delete session[key]; },
             } },
-            scripting: { executeScript: async ({ target, files, world }) => { injected.push({ tab: target.tabId, files, world }); } },
+            scripting: {
+                executeScript: async ({ target, files, world }) => { injected.push({ tab: target.tabId, files, world }); },
+                insertCSS: async ({ target, files }) => { styled.push({ tab: target.tabId, files }); },
+            },
         };
-        return { loader: PartyLoader.createLoader(api), injected, session };
+        return { loader: PartyLoader.createLoader(api), injected, styled, session };
     }
     const done = { status: 'complete' };
 
@@ -7366,8 +7370,9 @@ const dayRecord = (at = T0) =>
         eq(injected, []);
     });
     await checkAsync('starting a party brings the code into that tab only', async () => {
-        const { loader, injected, session } = loaderWith();
+        const { loader, injected, styled, session } = loaderWith();
         assert(await loader.bind(7, 'https://www.netflix.com/watch/81234567'));
+        eq(styled, [{ tab: 7, files: ['party-page.css'] }], 'the chip\'s styles, with its code');
         eq(injected.map((one) => one.tab), [7, 7]);
         eq(injected[0].files, [...PartyLoader.CONTENT_FILES]);
         eq([injected[1].world, injected[1].files], ['MAIN', ['src/content/netflix-page.js']], 'the player bridge, in the page\'s world');
