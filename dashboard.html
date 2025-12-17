@@ -282,6 +282,64 @@
                     <div class="cookie-sites" id="limitSitesPanel"></div>
                 </div>
 
+                <!-- The watch party's settings. The popup sets the first
+                     three as a party starts; these are the same keys, bound
+                     by id like everything else here. -->
+                <div class="settings-section" data-plate="Watch party">
+                    <p>Watch a YouTube video or a Netflix episode in sync with other people, each on their own account. Start or join one from the popup on the video.</p>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="partyName">Your name in the room</label>
+                        <input type="text" class="text-control" id="partyName" maxlength="40" placeholder="How the room sees you" autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="partyControl">Who controls playback</label>
+                        <select id="partyControl">
+                            <option value="everyone">Everyone</option>
+                            <option value="host">Host and co-hosts</option>
+                        </select>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="partyWaitForAll">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Wait for anyone buffering — the room holds until they catch up. Off, they catch up on their own and nobody waits</span>
+                    </div>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="partyFollowMedia">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="setting-label">Follow the party to its next video — off, the page says the party is elsewhere and offers the way there</span>
+                    </div>
+
+                    <p class="settings-hint">A party server, for the Server way to connect: a hosted one (<code>wss://</code>), or one you run yourself (<code>ws://ip:port</code>).</p>
+                    <div class="settings-option" style="margin-top: 8px;">
+                        <label class="setting-label" for="partyServerUrl">Party server</label>
+                        <input type="text" class="text-control" style="flex: 1;" id="partyServerUrl" placeholder="wss://party.example" autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <p class="settings-hint">Peer-to-peer parties, by codes or through trackers, find each other with STUN. When a direct connection cannot be made — a symmetric NAT on either side — a TURN server relays it: <code>turn:user:pass@host:port</code>. Several of any of these go separated by spaces.</p>
+                    <div class="settings-option" style="margin-top: 8px;">
+                        <label class="setting-label" for="partyIceServers">STUN servers</label>
+                        <input type="text" class="text-control" style="flex: 1;" id="partyIceServers" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="partyTurn">TURN server</label>
+                        <input type="text" class="text-control" style="flex: 1;" id="partyTurn" placeholder="turn:user:pass@host:port" autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <p class="settings-hint">The WebTorrent trackers a Tracker party meets through. They see which addresses connect and when, never what is said.</p>
+                    <div class="settings-option" style="margin-top: 8px;">
+                        <label class="setting-label" for="partyTrackers">Trackers</label>
+                        <input type="text" class="text-control" style="flex: 1;" id="partyTrackers" autocomplete="off" spellcheck="false">
+                    </div>
+                </div>
+
                 <div class="settings-section" data-plate="Site-specific">
                     <p>Settings that only make sense for one particular site — pick it to see them.</p>
                     <div class="sites-grid" id="settingsSitesGrid"></div>

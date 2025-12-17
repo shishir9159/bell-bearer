@@ -8552,6 +8552,12 @@ const dayRecord = (at = T0) =>
         eq(files.slice(0, 2), ['src/shared/party-code.js', 'src/page/party-panel.js'], 'the panel after the codes it reads, before the views');
         for (const file of [...files, 'party.css']) assert(fs.existsSync(`${__dirname}/../${file}`), file);
     });
+    check('every party setting has its control in the dashboard, bound by its id', () => {
+        const html = fs.readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+        const keys = Object.keys(globalThis.BB.Settings.DEFAULTS).filter((key) => key.startsWith('party'));
+        eq(keys.length, 8);
+        for (const key of keys) assert(html.includes(`id="${key}"`), key);
+    });
     check('a countdown is m:ss and never goes below nothing', () => {
         eq([PartyPanel.countdown(61400, 0), PartyPanel.countdown(9000, 0), PartyPanel.countdown(0, 5000)], ['1:01', '0:09', '0:00']);
     });
