@@ -3287,6 +3287,17 @@ html.bb-reader-open body { overflow: hidden !important; }
     height: 100% !important;
 }
 
+/* The video's own box fills the player too. YouTube positions it now, so it
+   is the video's containing block — and it holds nothing but the absolutely
+   placed video, so it had no height of its own, the video's 100% came to 0,
+   and the reader played sound over a black screen. */
+.bb-reader-screen #movie_player .html5-video-container {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
 .bb-reader-screen #movie_player video.html5-main-video {
     width: 100% !important;
     height: 100% !important;

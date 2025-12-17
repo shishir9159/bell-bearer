@@ -36,7 +36,9 @@
     /**
      * YouTube's shape, as far as the reader cares: the player between two
      * siblings inside a container, so "put back against its sibling" and
-     * "put back at its index" can be told apart.
+     * "put back at its index" can be told apart. The video sits in its own
+     * positioned container, absolutely placed and sized inline, as YouTube's
+     * stylesheet has it now.
      */
     function stagePage() {
         teardown();
@@ -44,7 +46,8 @@
         host.id = HOST_ID;
         host.innerHTML = `
             <div id="bb-reader-test-home"><span class="before"></span><div id="movie_player"
-                 class="html5-video-player"><video class="html5-main-video"></video></div><span
+                 class="html5-video-player"><div class="html5-video-container" style="position:relative;z-index:10"><video
+                 class="video-stream html5-main-video" style="position:absolute;width:640px;height:360px;left:0;top:0"></video></div></div><span
                  class="after"></span></div>`;
         document.body.appendChild(host);
         return {
@@ -405,6 +408,13 @@
                 assertEqual(reader.element.dataset.layout, id);
                 const box = page.player.getBoundingClientRect();
                 assert(box.width > 100 && box.height > 50, `${id} left the player ${box.width}×${box.height}`);
+                // REGRESSION: the picture went black with the sound still
+                // playing. The video's container holds nothing but the
+                // absolutely placed video, so it had no height, and the
+                // video's height of 100% came to 0.
+                const picture = page.player.querySelector('video').getBoundingClientRect();
+                assert(Math.abs(picture.height - box.height) < 1 && Math.abs(picture.width - box.width) < 1,
+                    `${id} gave the picture ${picture.width}×${picture.height} of a ${box.width}×${box.height} player`);
                 assert(reader.element.contains(page.player), `${id} lost the player`);
             }
             assertEqual(fetches(), 1, 'switching layout fetched the transcript again');
