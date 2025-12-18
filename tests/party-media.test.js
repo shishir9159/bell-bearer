@@ -290,7 +290,7 @@ suite('party media: which video', () => {
 });
 
 suite('party media: what the chip is told', () => {
-    test('what the room says besides the vector reaches the chip, and the clock's own talk does not', async () => {
+    test('what the room says besides the vector reaches the chip, and the clock\'s own talk does not', async () => {
         const heard = [];
         const h = await partyHarness({ onRoom: (msg) => heard.push(msg.t) });
         try {
@@ -313,7 +313,7 @@ suite('party media: what the chip is told', () => {
         } finally { h.destroy(); }
     });
 
-    test('left on another video, the way back is the room's video, built here', async () => {
+    test('left on another video, the way back is the room\'s video, built here', async () => {
         const h = await partyHarness({ followMedia: () => false });
         try {
             h.moveTo({ site: 'youtube', id: 'bbbbbbbbbbb' });
