@@ -13,7 +13,8 @@
 
 <h1>watch party specs</h1>
 <div class="sub">
-    The party's media specs, with only the modules the party loader injects.
+    The party's media specs, with only the modules the party loader injects
+    and the session they talk to.
     They play real (silent) media, and Chrome does not load media in a tab
     that has never been on screen — a hidden run sits on the first spec until
     it times out. Run tests/index.html before committing.
@@ -35,10 +36,17 @@
 <script src="../src/content/party-media.js"></script>
 <script src="../src/content/netflix-page.js"></script>
 <!-- And what offscreen.html loads, for the session the tab talks to. -->
+<script src="../src/shared/party-room.js"></script>
+<script src="../src/offscreen/party-loopback.js"></script>
+<script src="../src/offscreen/party-ws.js"></script>
 <script src="../src/shared/party-code.js"></script>
 <script src="../src/offscreen/party-rtc.js"></script>
+<script src="../src/offscreen/party-host.js"></script>
+<script src="../src/offscreen/party-tracker.js"></script>
+<script src="../src/offscreen/party-session.js"></script>
 
 <script src="party-media.test.js"></script>
+<script src="party-session.test.js"></script>
 <script src="party-rtc.test.js"></script>
 
 <script>
