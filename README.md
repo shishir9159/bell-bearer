@@ -29,6 +29,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Daily time limit**: A budget, or a window of hours, on any site you name — counted while you are actually looking at it, snoozable ten minutes at a time
 - **Rosters**: Who you follow on Twitter and the subreddits you have joined, out to a text file and back in again, slowly
 - **Chess.com and Lichess**: Games, time management and time at the board; a clock warning and moves read aloud while you play
+- **Watch party**: A YouTube video or a Netflix episode in sync with other people, each on their own account — through a server, your own relay, browser-to-browser codes or public trackers
 - **LeetCode**: Each problem timed on LeetCode's own stopwatch, submissions recorded from its own traffic, an FSRS-5 review schedule graded in one click, your notes and code templates on the page, and a mock-interview mode that hides the hints
 - **TypeRacer**: Every race logged from the keystrokes themselves — the letter pairs you stall on, the characters you reach for wrongly, and what correcting them costs you in words per minute — plus a typing caret and a synthesised key sound
 - **Reward System**: Track watch credits to spend them on popcorn for later
@@ -792,6 +793,108 @@ While you play, per time control:
 The time control is inferred from the starting clock, since the increment is
 not on the page.
 
+## Watch party
+
+Watch a YouTube video or a Netflix episode in sync with other people. Everyone
+plays it from their own account, over their own connection. What travels
+between you is play, pause, seek, speed and which video, never the picture, so
+nothing is streamed, nothing goes near Netflix's DRM, and a member costs the
+room about fifty bytes a second.
+
+On a YouTube or Netflix video the popup has **Start a party** and **Join**.
+Starting asks how the party connects:
+
+| Way | What you hand out | What carries the party |
+| --- | --- | --- |
+| **Server** | one code, for anyone | a party server someone hosts, at `wss://…` |
+| **Relay** | one code, for anyone | the same server run on your own PC, at `ip:port` |
+| **Codes** | an invite per guest, who sends a reply back | nothing: browser to browser |
+| **Tracker** | one code, for anyone | nothing once you have met; public WebTorrent trackers introduce you |
+
+It also asks who controls playback, whether the room waits for someone who is
+buffering, and the name the room sees. Those three and the server's address are
+remembered for next time, and are the same settings as **Settings › Watch
+party**.
+
+**Codes** need nothing but a browser, and take the most work. A code party is a
+star around the host, one connection per guest, so each guest gets an invite of
+their own. The invite *is* your address, and before you send it the popup spells
+out which IP and port it carries ("You share public 203.0.113.5:54012 and LAN
+192.168.1.14:54012"). It lasts ten minutes. The guest pastes it into **Join** and
+gets a reply to send back; you paste that under **Their reply** and they are in.
+Once the connection opens, both ends prove they hold the same invite, so someone
+who swapped the codes on the way is refused. Behind a symmetric NAT, a guest
+outside your network may not reach you at all, and the invite screen warns you
+before you hand one out: add a TURN server in Settings, or use a server. A code
+party ends with its host, because nothing else is holding it together.
+
+**Tracker** parties meet without the exchange. The code is a secret, and both
+the swarm the party meets in and the key its signaling is sealed with are
+derived from it, so a tracker sees which addresses connect and when, never the
+code or a word of what is said. The Tracker tile says how many of your trackers
+are answering before you pick it, and if none does, the start fails and offers
+codes instead. When the host leaves, the next in line hosts after about fifteen
+seconds and everyone else reconnects to them.
+
+**Server** and **Relay** are the sturdiest. A member who drops (a closed lid,
+a Wi-Fi change) comes back as the same member within a minute, and a host who
+goes quiet for fifteen seconds hands the room to a co-host, or failing one to
+whoever joined first. The server is not
+part of this repository; [Watch party protocol](#watch-party-protocol) is what
+one has to do.
+
+**Join** takes any code starting `bbp1`. What it is, and for an invite where it
+comes from and how long it has left, is read out under the box as you paste.
+
+### In the room
+
+While you are in a party the popup opens on the room: who is watching, how each
+of them is doing (ready, buffering, loading, an ad, away, watching solo) and
+their round trip. Someone the room has had to wait for too often is marked
+*lagging*, and catches up by seeking rather than holding everyone again.
+
+The host can let everyone control playback or only hosts and co-hosts, wait for
+whoever buffers or let them catch up, lock the room against new joiners, and
+make anyone co-host or host or remove them. The room never waits for an ad:
+YouTube shows different people different ones, so an ad is caught up on
+afterwards.
+
+### On the page
+
+A chip over the player says one thing at a time, the most pressing first: that
+the party ended, that the link is down and you are playing on your own until it
+is back, that the party is on another video (with the way there), who the room
+is waiting for, or, usually, how closely you are in sync. It goes into
+fullscreen and into the reader with the video.
+
+- **Host control.** A guest's play, pause or seek is turned straight back, and
+  the chip offers **Request pause**, which appears on the host's page with a
+  one-click Pause, and **Watch solo**, which steps out of the room's playback
+  until **Rejoin**.
+- **Speed.** The `>` and `<` keys step the room's speed rather than yours.
+- **The next video.** When the room moves on, you follow, unless **Settings ›
+  Watch party › Follow the party to its next video** is off. The address is
+  always built here from the video's id; a peer never sends a link.
+- **Drift.** A small lag is taken up by playing a few percent faster or slower
+  until you are back in step, which nobody notices. Only past 1.5 seconds out
+  does it seek.
+- **Netflix.** Setting the video's position directly makes Netflix stop with
+  error M7375, so seeks go through Netflix's own player. Once Netflix is seen
+  putting the speed back after a nudge, every correction there is a seek
+  instead, and since each seek rebuffers, the bar for one is higher. If its
+  player cannot be found, the chip says so and the party is play and pause
+  only.
+
+### What it costs when you are not in one
+
+Nothing. None of the party is in the manifest. Its page code is injected into
+the one tab a party is started or joined from, at that moment, and again only
+if that tab reloads; the popup loads its party screens the first time they are
+opened. The connection lives in an offscreen document that exists only while a
+party does, and is closed when you leave, or half a minute after the party's tab
+closes. Firefox has no offscreen documents, so there the same scripts are loaded
+into the background page when a party starts.
+
 ## Offline Installation
 
 ### Method 1: Load as Unpacked Extension (Recommended for Development)
@@ -810,6 +913,8 @@ For Firefox, rename `manifest.firefox.json` to `manifest.json` first (it needs
 No build step, by design: every file is a classic script that attaches its
 exports to a shared `BB` namespace, and the load order is the order in
 `manifest.json` (or in the `<script>` tags of `popup.html` / `dashboard.html`).
+The watch party is the exception: none of it is listed anywhere a page would
+load it, and its load orders are the lists named below.
 
 ```
 src/shared/     pure logic, used by every surface
@@ -847,6 +952,12 @@ src/shared/     pure logic, used by every surface
   prompt-queue.js  queued and scheduled prompts, holds and leases, reset times
   zip.js           a store-only zip for the bulk export
   time.js dom.js   formatting and escaping
+  party-clock.js   the room clock: its offset from the lowest-latency ping, and when to ping
+  party-state.js   the party's state vector, where it says the video is now, the conflict rule
+  party-drift.js   how far out of step a member is, and whether to nudge the rate or seek
+  party-room.js    the party's authority: policy, holds, liveness, handover
+  party-code.js    invite and reply codes: a WebRTC description in ~150 characters, and back
+  party-sites.js   YouTube and Netflix to the party: video ids, addresses, what each will take
 
 src/content/    injected into every page
   main.js          bootstrap — decides what runs where
@@ -893,6 +1004,12 @@ src/content/    injected into every page
   leet-page.js     watches LeetCode's fetches for verdicts; drives Monaco
   claude-page.js   reads Claude's completion stream off a clone: its end, and its exact limit
 
+  Injected into a party's one tab by src/background/party-loader.js
+  (CONTENT_FILES, PAGE_FILES, CSS_FILES), never listed in a manifest:
+  party-chip.js    the status chip over the player, and the host's pause-request toast
+  party-media.js   the party on the player: our writes against the user's, drift, readiness
+  netflix-page.js  MAIN world: Netflix's own player, for seeking without error M7375
+
 src/background/ the service worker, pulled in by background.js
   proto.js         the sowon wire format
   sowon.js         focus reporting
@@ -901,6 +1018,16 @@ src/background/ the service worker, pulled in by background.js
   activity-heartbeat.js  the alarm that feeds the activity store
   skim.js          tabs, history, and the actions Skim can run
   prompt-queue.js  the one alarm a scheduled prompt needs, and waking its chat
+  party-loader.js  the party's gate: binds it to one tab and injects it there
+  party.js         opens and closes the party's offscreen document; start, join, leave
+
+src/offscreen/  the party session, loaded by offscreen.html only while a party is on
+  party-loopback.js the room in-process, behind the wire protocol
+  party-ws.js      a party server over WebSocket, with resume and backoff
+  party-rtc.js     WebRTC invites and replies, channel binding, the NAT probe
+  party-host.js    a peer-to-peer host: the room, relayed to each guest's data channel
+  party-tracker.js tracker rendezvous, sealed signaling, ICE restart, re-election
+  party-session.js what the tab's port plugs into; picks the transport; the popup's status
 
 src/page/       shared by popup.html and dashboard.html
   ui.js            modals, toasts, clipboard, files, theme
@@ -923,6 +1050,13 @@ src/page/       shared by popup.html and dashboard.html
   chat-settings.js a chat site's settings panel
   popup-width.js   applies the popup size setting, from popup.html's <head>
 
+  The popup's party, appended by popup.js (PARTY_FILES) the first time it is opened:
+  party-panel.js   the frame: one status a second from the worker, every screen drawn from it
+  party-start-view.js party-join-view.js party-room-view.js party-invite-view.js
+
+offscreen.html  the party session's script list; Firefox reads it into the background page
+party.css       the popup's party screens, for every skin
+party-page.css  the chip and toast on the page, inserted with them
 skins.css       the token layer for every skin — linked before popup/dashboard css
 skin-fonts.css  @font-face for the skin families
 fonts/          the woff2 subsets those faces load
@@ -953,6 +1087,7 @@ Importing writes those keys back, replacing what is there.
 - `tabs` / `tabGroups`: For the sowon focus report
 - `tts`: To read chess moves aloud (Chrome only; Firefox has no such API)
 - `history` / `sessions`: Skim’s history search and its “reopen the last tab I closed” action, both read only when you ask for them
+- `offscreen`: The watch party's connection, in a document that exists only while you are in a party — a service worker is stopped after thirty idle seconds, and a party is an evening (Chrome only; Firefox holds it in its background page)
 - `host_permissions`: To access YouTube.com
 
 ## Persistance Storage
@@ -1171,6 +1306,22 @@ four hundred names runs over days by design. `leaseBy` is the page currently
 holding the job — two tabs would otherwise follow the same account twice — and it
 is handed back before each navigation, with `leaseUntil` covering the case where
 the tab is simply closed.
+
+A watch party keeps nothing in `chrome.storage.local` beyond its `party*`
+settings. The room, its members and its invites live in the session and are
+gone with it. Two keys sit in `chrome.storage.session`, which the browser
+empties when it closes:
+
+```javascript
+{
+  bbPartyTab:   { tabId: 123, site: "youtube" },    // the party's tab, while one is on
+  bbPartyEnded: { code: "host-left", at: 0 }        // why the last party ended, until the popup has said so
+}
+```
+
+`bbPartyTab` is there because the worker is not: it is stopped and started all
+evening, and has to know which tab to inject into again when that tab reloads.
+`bbPartyEnded` is there because a party usually ends while the popup is closed.
 
 ## Watch party protocol
 

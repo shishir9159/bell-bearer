@@ -80,7 +80,10 @@ that code, not a replacement — it cannot press a key or play a video.
 | `chat-claude.test.js` | The same core on a claude.ai-shaped page: rows tied by place and words, hover-drawn arrows, the stream bridge, exact limits |
 | `chat-only.html` | The chat specs alone; `?suite=queue` narrows it to one suite |
 | `party-media.test.js` | The watch party's media adapter on real (silent) media: our writes are not intents, the user's are, and a vector sent before an intent was answered is not played |
+| `party-session.test.js` | The whole media path with no network: a real `<video>`, the adapter a party tab gets, and the session with its loopback room, joined by a port |
+| `party-rtc.test.js` | Invite and reply codes against the browser's own WebRTC: a description rebuilt from a code is one Chrome will connect with |
 | `party-only.html` | The party specs alone, with the modules the party loader injects |
+| `party-vectors.json` | Cases every party authority must pass, run by `node-check.js` against `party-room.js` and by `party-conformance.js` against a live server |
 | `party-dev-socket.js` | The party dev server's hand-written WebSocket (handshake, 8 KB text frames), and the lag, jitter and loss it can put on the wire |
 | `party-dev-server.js` | A party server to try the extension against before the real one exists: `party-room.js` behind that socket. `node tests/party-dev-server.js --lag 200 --jitter 150 --loss 5`. A fixture, not the product |
 | `party-conformance.js` | Replays `party-vectors.json` against a live party server in real time: `node tests/party-conformance.js ws://localhost:7070`. Run it against a server without jitter or loss |
