@@ -202,6 +202,51 @@
         { "to": "b", "msg": { "t": "error", "code": "kicked" } },
         { "to": "a", "msg": { "t": "members", "list": [{ "id": "@a" }] } }
       ]
+    },
+    {
+      "name": "a line of chat reaches everyone, its sender too, cleaned and named",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 1000, "from": "b", "msg": { "t": "chat", "text": "  mine is \n buffering,\u0000 sorry " } },
+        { "at": 3000, "from": "b", "msg": { "t": "chat", "text": " \t " } }
+      ],
+      "expect": [
+        { "to": "a", "msg": { "t": "chat", "from": "@b", "name": "Ben", "at": 1000, "text": "mine is buffering, sorry" } },
+        { "to": "b", "msg": { "t": "chat", "from": "@b", "name": "Ben", "at": 1000, "text": "mine is buffering, sorry" } }
+      ],
+      "absent": [{ "to": "a", "msg": { "t": "chat", "at": 3000 } }]
+    },
+    {
+      "name": "chat has a budget of its own: a sixth line in five seconds is dropped, and play still goes",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 1001, "from": "a", "msg": { "t": "chat", "text": "1" } },
+        { "at": 1002, "from": "a", "msg": { "t": "chat", "text": "2" } },
+        { "at": 1003, "from": "a", "msg": { "t": "chat", "text": "3" } },
+        { "at": 1004, "from": "a", "msg": { "t": "chat", "text": "4" } },
+        { "at": 1005, "from": "a", "msg": { "t": "chat", "text": "5" } },
+        { "at": 1006, "from": "a", "msg": { "t": "chat", "text": "6" } },
+        { "at": 1007, "from": "a", "msg": { "t": "intent", "id": 1, "base": 0, "op": "play", "pos": 0, "at": 1007 } }
+      ],
+      "expect": [
+        { "to": "a", "msg": { "t": "chat", "text": "5" } },
+        { "to": "a", "msg": { "t": "state", "seq": 1, "paused": false, "ack": { "member": "@a", "id": 1 } } }
+      ],
+      "absent": [{ "to": "a", "msg": { "t": "chat", "text": "6" } }]
+    },
+    {
+      "name": "whoever joins later is sent the recent chat after their welcome, marked past",
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 1000, "from": "a", "msg": { "t": "chat", "text": "starting in a minute" } },
+        { "at": 2000, "join": "b", "name": "Ben" }
+      ],
+      "expect": [
+        { "to": "b", "msg": { "t": "welcome", "you": "@b" } },
+        { "to": "b", "msg": { "t": "chat", "from": "@a", "name": "Ana", "at": 1000, "text": "starting in a minute", "past": true } }
+      ],
+      "absent": [{ "to": "a", "msg": { "t": "chat", "past": true } }]
     }
   ]
 }

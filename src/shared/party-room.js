@@ -25,6 +25,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const PartyState = ns.PartyState || req('./party-state.js');
+    const PartyChat = ns.PartyChat || req('./party-chat.js');
 
     const VERSION = 1;
     const MAX_MEMBERS = 16;
@@ -77,15 +78,27 @@
 
     const cleanName = (name) => String(name || '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX) || 'Guest';
 
+    /** A line of chat carried over from another room, as that room sent it, or null. */
+    function carried(line) {
+        if (!line || typeof line.id !== 'string' || !line.id || !Number.isFinite(line.at)) return null;
+        const text = PartyChat.clean(line.text);
+        return text ? { id: line.id, from: String(line.from || ''), name: cleanName(line.name), at: line.at, text } : null;
+    }
+
     /**
      * `state` starts the room where another left off — a peer-to-peer
      * party whose host went, carried on by the next in line — with its seq,
      * so the members' newest-seq-wins rule still holds across the change.
+     * `chat` is that room's last lines, so whoever joins the new one still
+     * sees what was said; they keep their ids, which is why an id is minted
+     * rather than counted — a new room counting from one again would reuse
+     * ids every member already holds, and have its lines dropped as repeats.
      */
-    function createRoom({ id, policy = {}, send, mint = mintRandom, state: from = null }) {
+    function createRoom({ id, policy = {}, send, mint = mintRandom, state: from = null, chat: said = [] }) {
         const members = new Map();
         let joined = 0;
         let state = from ? { ...PartyState.blank(), ...from, hold: null } : PartyState.blank();
+        const history = (said || []).map(carried).filter(Boolean).slice(-PartyChat.HISTORY);
         /** The last accepted change, for the conflict rule. */
         let last = null;
         const rules = {
@@ -109,12 +122,19 @@
         }
         const announceMembers = () => broadcast({ t: 'members', list: roster() });
 
+        /**
+         * The chat's history follows the welcome rather than riding in it:
+         * fifty lines of five hundred characters is three times the largest
+         * frame the protocol allows, and a welcome over it is dropped on the
+         * way, which would leave the member never welcomed at all.
+         */
         function welcome(m, now) {
             send(m.id, {
                 t: 'welcome', v: VERSION, you: m.id, resume: m.resume,
                 room: { id, policy: { ...rules }, members: roster(), state: { ...state } },
                 now,
             });
+            for (const line of history) send(m.id, { t: 'chat', ...line, past: true });
         }
 
         /**
@@ -140,7 +160,7 @@
                 id: mint('m'), resume: mint('r'), name: cleanName(name),
                 role: members.size === 0 ? 'host' : 'guest', order: joined++,
                 lastSeen: now, away: false, ready: true, why: null, solo: false,
-                rtt: null, lagging: false, laggingUntil: 0, holdTimes: [], intents: [],
+                rtt: null, lagging: false, laggingUntil: 0, holdTimes: [], intents: [], chats: [],
             };
             members.set(m.id, m);
             welcome(m, now);
@@ -249,6 +269,25 @@
             broadcast(stateMessage({ ack: { member: m.id, id: it.id } }));
         }
 
+        /**
+         * A line of chat, to everyone, its sender too: the echo is how the
+         * sender knows it went. Past the budget, or with nothing left once
+         * cleaned, it is dropped without a word — there is nothing a member
+         * could do with a refusal that its own copy of the budget has not
+         * already done.
+         */
+        function chat(m, msg, now) {
+            const budget = PartyChat.allow(m.chats, now);
+            m.chats = budget.recent;
+            const text = PartyChat.clean(msg.text);
+            if (!budget.ok || !text) return;
+            m.chats.push(now);
+            const line = { id: mint('c'), from: m.id, name: m.name, at: now, text };
+            history.push(line);
+            if (history.length > PartyChat.HISTORY) history.shift();
+            broadcast({ t: 'chat', ...line });
+        }
+
         function handle(from, msg, now) {
             const m = members.get(from);
             if (!m || !msg || typeof msg.t !== 'string') return;
@@ -298,6 +337,9 @@
                     break;
                 case 'ready':
                     ready(m, msg, now);
+                    break;
+                case 'chat':
+                    chat(m, msg, now);
                     break;
                 case 'solo':
                     m.solo = msg.solo === true;

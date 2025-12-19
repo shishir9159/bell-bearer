@@ -3766,6 +3766,68 @@ check('a member leaving or stepping out is not waited for', () => {
     eq(gone.room.state().hold, null);
 });
 
+// ---------------------------------------------------------- party chat
+
+const PartyChat = require('../src/shared/party-chat.js');
+const say = (text) => ({ t: 'chat', text });
+
+console.log('\n# party chat');
+check('a line is one line of plain text, cut at a whole character', () => {
+    eq(PartyChat.clean('  hi \n\t there\u0000\u001b[31m '), 'hi there[31m');
+    eq([PartyChat.clean('   '), PartyChat.clean(42), PartyChat.clean(null)], ['', '', '']);
+    const long = `${'a'.repeat(PartyChat.MAX_CHARS - 1)}😀😀`;
+    eq(Array.from(PartyChat.clean(long)).length, PartyChat.MAX_CHARS);
+    assert(PartyChat.clean(long).endsWith('😀'), 'the emoji is kept whole, not half a surrogate');
+});
+check('a line reaches everyone, its sender too, named and with an id of its own', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    r.room.handle(ben, say('  the drone shot   is unreal '), 1200);
+    const line = { t: 'chat', id: 'c5', from: ben, name: 'Ben', at: 1200, text: 'the drone shot is unreal' };
+    eq([r.got(ana, 'chat'), r.got(ben, 'chat')], [[line], [line]]);
+    r.room.handle(ben, say(' \n '), 1300);
+    r.room.handle(ben, { t: 'chat' }, 1300);
+    eq(r.got(ana, 'chat').length, 1, 'nothing to say is not said');
+});
+check('chat has its own budget: a sixth line in five seconds is dropped, and a pause still goes', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    for (let i = 0; i < 6; i++) r.room.handle(ana, say(`line ${i}`), 1000 + i * 100);
+    eq(r.got(ana, 'chat').map((msg) => msg.text), ['line 0', 'line 1', 'line 2', 'line 3', 'line 4']);
+    r.room.handle(ana, play({ op: 'pause' }), 1700);
+    eq([r.got(ana, 'reject'), r.room.state().paused], [[], true]);
+    r.room.handle(ana, say('later'), 1000 + PartyChat.WINDOW_MS);
+    eq(r.got(ana, 'chat').pop().text, 'later', 'the window moves on');
+});
+check('whoever joins or comes back is sent the last lines after the welcome, oldest first', () => {
+    const r = roomOf();
+    const ana = r.join('Ana');
+    const ben = r.join('Ben');
+    const resume = r.got(ben, 'welcome')[0].resume;
+    for (let i = 0; i < PartyChat.HISTORY + 2; i++) r.room.handle(i % 2 ? ana : ben, say(`line ${i}`), i * 3000);
+    r.clear();
+    const cy = r.join('Cy', 200000);
+    const toCy = r.sent.filter((one) => one.to === cy).map((one) => one.msg);
+    eq(toCy[0].t, 'welcome');
+    const past = toCy.filter((msg) => msg.t === 'chat');
+    eq([past.length, past[0].text, past.pop().text], [PartyChat.HISTORY, 'line 2', `line ${PartyChat.HISTORY + 1}`]);
+    assert(toCy.filter((msg) => msg.t === 'chat').every((msg) => msg.past === true), 'marked as history');
+    r.clear();
+    r.room.join({ resume }, 200500);
+    eq(r.got(ben, 'chat').length, PartyChat.HISTORY, 'a resume is replayed the same, for the member to drop what it has');
+});
+check('a room carried on from another keeps its lines and their ids, and mints new ones', () => {
+    const old = [{ id: 'cold1', from: 'm9', name: 'Ana', at: 10, text: 'still here?' }, { id: '', text: 'no id' }, { id: 'cold2', at: 11, text: ' ' }];
+    const sent = [];
+    const room = PartyRoom.createRoom({ id: 'room2', chat: old, send: (to, msg) => sent.push({ to, msg }) });
+    const ben = room.join({ name: 'Ben' }, 0).member;
+    room.handle(ben, say('yes'), 100);
+    const lines = sent.filter((one) => one.msg.t === 'chat').map((one) => one.msg);
+    eq(lines.map((msg) => [msg.id, msg.name, msg.text, msg.past]), [['cold1', 'Ana', 'still here?', true], [lines[1].id, 'Ben', 'yes', undefined]]);
+    assert(/^c[0-9a-f]{16}$/.test(lines[1].id), 'a minted id, not a count that could meet an old one');
+});
+
 // ------------------------------------------------ party protocol vectors
 
 /**
@@ -8342,7 +8404,7 @@ const dayRecord = (at = T0) =>
         const files = [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => one[1]);
         for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
         const at = (name) => files.findIndex((file) => file.endsWith(`/${name}.js`));
-        const order = ['party-clock', 'party-state', 'party-room', 'party-loopback', 'party-ws', 'party-code', 'party-rtc', 'party-host', 'party-tracker', 'party-session'];
+        const order = ['party-clock', 'party-state', 'party-chat', 'party-room', 'party-loopback', 'party-ws', 'party-code', 'party-rtc', 'party-host', 'party-tracker', 'party-session'];
         eq(order.map(at), order.map((_, i) => i));
     });
     check('the worker and the session agree on how the worker addresses it', () => {
