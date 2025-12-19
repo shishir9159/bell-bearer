@@ -31,10 +31,11 @@
     /** For a start that names none; the worker passes the settings'. Two providers, so one being down is not the party's problem. */
     const DEFAULT_ICE = Object.freeze([{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }]);
 
+    /** `state` and `chat` carry on a room that another host had: see PartyRoom.createRoom. */
     function createHost({
-        policy, now, state, iceServers = DEFAULT_ICE, RTC, gatherMs, inviteMs = PartyRtc.INVITE_MS,
+        policy, now, state, chat, iceServers = DEFAULT_ICE, RTC, gatherMs, inviteMs = PartyRtc.INVITE_MS,
     } = {}) {
-        const loop = PartyLoopback.createLoopback({ policy, now, state });
+        const loop = PartyLoopback.createLoopback({ policy, now, state, chat });
         const room = PartyCode.randomBytes(PartyCode.ROOM_BYTES);
         /** Invites not yet answered, newest last. */
         const pending = [];

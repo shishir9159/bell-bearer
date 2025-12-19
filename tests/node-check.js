@@ -7832,6 +7832,21 @@ const dayRecord = (at = T0) =>
         eq(w.last().sent.length, 4, 'up again: sent as it is said');
         w.transport.close();
     });
+    await checkAsync('lines typed while the socket is down go on the way back, as many as the room takes at once', async () => {
+        const w = wsLink({ url: 'ws://h:1' });
+        w.link.send({ t: 'create', v: 1, name: 'Ana' });
+        w.last().accept();
+        w.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        w.last().say(wsWelcome('m1', 'z1'));
+        w.last().die();
+        for (let i = 1; i <= PartyChat.BURST + 2; i++) w.link.send({ t: 'chat', text: `line ${i}` });
+        w.link.send({ t: 'ready', ready: false });
+        await tick();
+        w.last().accept();
+        w.last().say(wsWelcome('m1', 'z2'));
+        eq(w.last().sent.slice(1).map((msg) => msg.text || msg.t), ['ready', 'line 3', 'line 4', 'line 5', 'line 6', 'line 7']);
+        w.transport.close();
+    });
     await checkAsync('past the grace it joins again as someone new instead of ending the party', async () => {
         const w = wsLink({ url: 'ws://h:1' });
         w.link.send({ t: 'create', v: 1, name: 'Ana' });
@@ -8395,7 +8410,9 @@ const dayRecord = (at = T0) =>
             const tab = tabPort();
             ben.session.connect(tab);
             tab.say({ t: 'intent', id: 1, base: 0, op: 'play', pos: 30, at: Date.now() });
-            await until(() => cat.session.status().state.paused === false && roles(cat.session).length === 3, 'Ben\'s play to reach Cat');
+            tab.say({ t: 'chat', text: 'the cliffs!' });
+            await until(() => cat.session.status().state.paused === false && roles(cat.session).length === 3 && tab.last('chat-line'), 'Ben\'s play to reach Cat');
+            const said = tab.last('chat-line').line;
             const seq = cat.session.status().state.seq;
             const before = cat.session.status().you;
 
@@ -8409,6 +8426,13 @@ const dayRecord = (at = T0) =>
             const state = cat.session.status().state;
             eq([state.paused, state.seq >= seq, state.pos >= 30], [false, true, true], 'still playing, from where it had got to');
             eq(ben.session.status().invite, ana.code, 'the same code finds the room');
+
+            const dan = await party.add('Dan', ana.code);
+            const danTab = tabPort();
+            dan.session.connect(danTab);
+            const heardBy = () => danTab.heard.flatMap((msg) => (msg.t === 'chat-log' ? msg.lines : msg.t === 'chat-line' ? [msg.line] : []));
+            await until(() => heardBy().some((line) => line.text === 'the cliffs!'), 'Dan, joining after the handover, to see what was said before it');
+            eq(heardBy().find((line) => !line.sys).id, said.id, 'under the id everyone else already has it by');
         } finally {
             await party.leave();
         }

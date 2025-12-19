@@ -28,6 +28,8 @@
     const ns = root.BB || {};
     const PartyCode = ns.PartyCode || req('../shared/party-code.js');
     const PartyState = ns.PartyState || req('../shared/party-state.js');
+    const PartyChat = ns.PartyChat || req('../shared/party-chat.js');
+    const PartyWs = ns.PartyWs || req('./party-ws.js');
     const PartyRtc = ns.PartyRtc || req('./party-rtc.js');
     const PartyHost = ns.PartyHost || req('./party-host.js');
 
@@ -389,8 +391,9 @@
         let stall = null;
         let up = false;
         let closed = false;
-        const seen = { you: null, owner: null, resume: null, members: [], state: null, policy: null };
+        const seen = { you: null, owner: null, resume: null, members: [], state: null, policy: null, chat: [] };
         const held = new Map();
+        let lines = [];
 
         function hear(msg) {
             switch (msg.t) {
@@ -402,9 +405,18 @@
                     up = true;
                     deliver(msg);
                     for (const t of HELD) if (held.has(t)) link.send(held.get(t));
+                    for (const line of lines) link.send(line);
                     held.clear();
+                    lines = [];
                     return;
                 case 'members': seen.members = msg.list; break;
+                // The room's last lines, for the room this member may have to
+                // carry on: whoever joins it after the handover still sees them.
+                case 'chat': {
+                    const { t, past, ...line } = msg;
+                    seen.chat = [...seen.chat.filter((one) => one.id !== line.id), line].slice(-PartyChat.HISTORY);
+                    break;
+                }
                 case 'policy': seen.policy = { control: msg.control, wait: msg.wait, locked: msg.locked }; break;
                 case 'state': {
                     const { t, ack, ...state } = msg;
@@ -498,7 +510,7 @@
          */
         function takeOver() {
             const state = seen.state && { ...seen.state, pos: PartyState.expected(seen.state, roomNow()), at: Date.now(), hold: null };
-            const room = PartyHost.createHost({ ...hostOptions, policy: seen.policy || hostOptions.policy, state });
+            const room = PartyHost.createHost({ ...hostOptions, policy: seen.policy || hostOptions.policy, state, chat: seen.chat });
             hosting = { room, swarm: hostSwarm({ secret, admit: room.admit, ...net }) };
             seen.resume = null;
             link = room.open(hear);
@@ -535,6 +547,8 @@
                             link.send(msg);
                         } else if (HELD.includes(msg.t)) {
                             held.set(msg.t, msg);
+                        } else if (msg.t === 'chat') {
+                            lines = PartyWs.holdLine(lines, msg);
                         }
                     },
                     close,

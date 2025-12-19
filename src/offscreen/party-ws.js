@@ -33,6 +33,10 @@
 (function (root) {
     'use strict';
 
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+    const ns = root.BB || {};
+    const PartyChat = ns.PartyChat || req('../shared/party-chat.js');
+
     /** Invite codes for a server party: this, then base64url of {url, room, secret}. */
     const PREFIX = 'bbp1s.';
     const VERSION = 1;
@@ -44,6 +48,14 @@
     const SILENT_MS = 20000;
     /** What is kept while the socket is down, latest of each. Sent in this order on the way back. */
     const HELD = Object.freeze(['ready', 'solo', 'intent']);
+
+    /**
+     * Chat is not "latest of each": every line typed during a reconnect was
+     * meant, and dropping it left the user watching their words vanish. As
+     * many are kept as the room takes at once; more than that, sent together
+     * on the way back, it would drop anyway.
+     */
+    const holdLine = (lines, msg) => [...lines, msg].slice(-PartyChat.BURST);
 
     function toBase64Url(text) {
         const bytes = new TextEncoder().encode(text);
@@ -107,6 +119,7 @@
         let retryTimer = null;
         let quietTimer = null;
         const held = new Map();
+        let lines = [];
 
         function transmit(msg) {
             const text = JSON.stringify(msg);
@@ -188,7 +201,9 @@
                     attempt = 0;
                     deliver(msg);
                     for (const t of HELD) if (held.has(t)) transmit(held.get(t));
+                    for (const line of lines) transmit(line);
                     held.clear();
+                    lines = [];
                     return;
                 case 'error':
                     if (msg.code === 'expired' && resume && secret) {
@@ -228,6 +243,8 @@
                             transmit(msg);
                         } else if (HELD.includes(msg.t)) {
                             held.set(msg.t, msg);
+                        } else if (msg.t === 'chat') {
+                            lines = holdLine(lines, msg);
                         }
                     },
                     close,
@@ -239,7 +256,7 @@
 
     const PartyWs = {
         PREFIX, VERSION, MAX_FRAME, BACKOFF_MIN_MS, BACKOFF_MAX_MS, CONNECT_MS, SILENT_MS, HELD,
-        serverUrl, inviteCode, readInvite, createTransport,
+        serverUrl, inviteCode, readInvite, holdLine, createTransport,
     };
 
     root.BB = root.BB || {};
