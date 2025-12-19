@@ -3827,6 +3827,27 @@ check('a room carried on from another keeps its lines and their ids, and mints n
     eq(lines.map((msg) => [msg.id, msg.name, msg.text, msg.past]), [['cold1', 'Ana', 'still here?', true], [lines[1].id, 'Ben', 'yes', undefined]]);
     assert(/^c[0-9a-f]{16}$/.test(lines[1].id), 'a minted id, not a count that could meet an old one');
 });
+check('a member\'s log keeps each line once, in the order it came, and no more than it may', () => {
+    const log = PartyChat.createLog(3);
+    const line = (id) => ({ id, text: id });
+    eq(['a', 'b', 'a', 'c', 'd'].map((id) => log.add(line(id))), [true, true, false, true, true]);
+    eq(log.lines().map((one) => one.id), ['b', 'c', 'd']);
+    eq(log.add(line('a')), false, 'pushed out, and still not taken back as new when a resume replays it');
+    eq([PartyChat.fromWire({ id: 'c1', text: ' hi ', at: 5 }), PartyChat.fromWire({ id: 'c2', text: '' }), PartyChat.fromWire({ text: 'x' })],
+        [{ id: 'c1', from: null, name: 'Someone', at: 5, text: 'hi' }, null, null]);
+});
+check('the notes say who came, went, stepped out or hosts, and never about yourself', () => {
+    const m = (id, name, extra = {}) => ({ id, name, role: 'guest', solo: false, ...extra });
+    const before = [m('me', 'Nadia', { role: 'host' }), m('a', 'Ana'), m('r', 'Rafi'), m('s', 'Sam')];
+    const after = [m('me', 'Nadia', { solo: true }), m('a', 'Ana', { role: 'host' }), m('r', 'Rafi', { solo: true }), m('b', 'Ben')];
+    eq(PartyChat.memberNotes(before, after, 'me'), ['Ana is the host now', 'Rafi stepped out to watch solo', 'Ben joined', 'Sam left']);
+    eq(PartyChat.memberNotes(after, before, 'me'), ['Rafi rejoined', 'Sam joined', 'Ben left']);
+    const members = [m('me', 'Nadia'), m('s', 'Sam'), m('a', 'Ana')];
+    const held = (waiting) => ({ hold: { waiting } });
+    eq(PartyChat.waitNote({ hold: null }, held(['s']), members, 'me'), 'Waiting for Sam…');
+    eq(PartyChat.waitNote(held(['s']), held(['s', 'me', 'a', 'x']), members, 'me'), 'Waiting for Ana and 1 more…');
+    eq([PartyChat.waitNote(held(['s']), held(['s']), members, 'me'), PartyChat.waitNote(null, held(['me']), members, 'me')], [null, null]);
+});
 
 // ------------------------------------------------ party protocol vectors
 
@@ -7631,6 +7652,58 @@ const dayRecord = (at = T0) =>
         tab.say({ t: 'ready', ready: true });
         eq([session.status().drift, heard], [38, ['ready']], 'what the tab says for the room still reaches it');
         await session.control({ op: 'leave' });
+    });
+    await checkAsync('chat said on the tab comes back as the log keeps it, and others\' lines are unread until the panel is open', async () => {
+        const loop = PartyLoopback.createLoopback();
+        const session = PartySession.createSession({ transports: { loopback: () => loop }, now: () => 1000 });
+        const { status } = await session.control({ op: 'start', name: 'Ana' });
+        const ben = loop.open(() => {});
+        ben.send({ t: 'hello', v: 1, name: 'Ben' });
+        const tab = tabPort();
+        session.connect(tab);
+        tab.say({ t: 'chat', text: ' hi all ' });
+        const mine = tab.last('chat-line');
+        eq([mine.line.text, mine.line.from, mine.line.name, mine.unread], ['hi all', status.you, 'Ana', 0]);
+        ben.send({ t: 'chat', text: 'hey' });
+        ben.send({ t: 'chat', text: 'ready?' });
+        eq(session.status().chat, { unread: 2, last: 'Ben' });
+        tab.say({ t: 'chat-read', open: true });
+        ben.send({ t: 'chat', text: 'now?' });
+        eq([session.status().chat, tab.last('chat-line').unread], [{ unread: 0, last: null }, 0], 'read as it comes');
+        tab.hangUp();
+        ben.send({ t: 'chat', text: 'hello?' });
+        eq(session.status().chat.unread, 1, 'open on a tab that has gone is nobody reading');
+        const next = tabPort();
+        session.connect(next);
+        const log = next.last('chat-log');
+        eq([log.open, log.unread], [true, 1], 'the next tab opens it again');
+        eq(log.lines.map((one) => one.sys ? `(${one.text})` : `${one.name}: ${one.text}`), ['(Ben joined)', 'Ana: hi all', 'Ben: hey', 'Ben: ready?', 'Ben: now?', 'Ben: hello?']);
+        await session.control({ op: 'leave' });
+    });
+    await checkAsync('the room\'s history is not unread; a line missed while away, replayed after the next welcome, is', async () => {
+        let deliver = null;
+        const welcome = (you) => ({ t: 'welcome', v: 1, you, resume: 'r', room: { id: 'p', policy: {}, members: [], state: { seq: 0, paused: true } } });
+        const transport = { open: (fn) => { deliver = fn; return { send: (msg) => { if (msg.t === 'create') fn(welcome('m1')); }, close() {} }; }, close() {} };
+        const session = PartySession.createSession({ transports: { loopback: () => transport }, now: () => 1000 });
+        await session.control({ op: 'start', name: 'Ana' });
+        const line = (id, extra = {}) => ({ t: 'chat', id, from: 'm2', name: 'Ben', at: 900, text: id, past: true, ...extra });
+        deliver(line('c1'));
+        eq(session.status().chat.unread, 0, 'said before we came');
+        deliver(welcome('m1'));
+        deliver(line('c1'));
+        deliver(line('c2'));
+        deliver(line('c3', { from: 'm1', past: undefined }));
+        eq(session.status().chat, { unread: 1, last: 'Ben' }, 'c1 we had, c2 we missed, c3 is our own');
+        await session.control({ op: 'leave' });
+    });
+    await checkAsync('the popup\'s "Open on page" reaches the tab, if there is one', async () => {
+        const { session, leave } = await inParty();
+        eq(await session.control({ op: 'chat' }), { ok: false });
+        const tab = tabPort();
+        session.connect(tab);
+        eq([await session.control({ op: 'chat' }), !!tab.last('chat-show')], [{ ok: true }, true]);
+        await leave();
+        eq(await session.control({ op: 'chat' }), { ok: false, error: 'inactive' });
     });
     await checkAsync('the tab cannot leave, kick or reconfigure the room', async () => {
         const { session, leave } = await inParty();

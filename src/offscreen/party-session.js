@@ -28,6 +28,7 @@
     const ns = root.BB || {};
     const PartyClock = ns.PartyClock || req('../shared/party-clock.js');
     const PartyRoom = ns.PartyRoom || req('../shared/party-room.js');
+    const PartyChat = ns.PartyChat || req('../shared/party-chat.js');
     const PartyLoopback = ns.PartyLoopback || req('./party-loopback.js');
     const PartyWs = ns.PartyWs || req('./party-ws.js');
     const PartyRtc = ns.PartyRtc || req('./party-rtc.js');
@@ -45,7 +46,7 @@
      */
     const HEARTBEAT_MAX_MS = PartyRoom.AWAY_MS / 2;
     /** What the tab may say to the room. Leaving, kicking and policy come from the UI, through the worker. */
-    const FROM_TAB = Object.freeze(['intent', 'ready', 'solo', 'request']);
+    const FROM_TAB = Object.freeze(['intent', 'ready', 'solo', 'request', 'chat']);
     /**
      * The host's controls, as the worker passes them on from the popup. Only
      * the named fields go to the room; which member may use them is the
@@ -109,6 +110,41 @@
             room: { id: party.roomId, policy: party.policy, members: party.members, state: party.state },
         });
 
+        // ------------------------------------------------------------ chat
+        //
+        // The log is kept here, not in the tab, for the reason the member
+        // is: the tab reloads — following the room to its next video is a
+        // reload — and the conversation should not go with it. Each tab that
+        // connects is handed the lot, in its own clock's time.
+
+        const forTab = (line) => ({ ...line, at: Math.round(clock.toLocal(line.at)) });
+        /** Somebody is reading: the panel is open, on a tab that is here. */
+        const reading = () => party.chatOpen && !!port;
+
+        function keep(line, news) {
+            if (!party.log.add(line)) return;
+            if (news && !reading()) {
+                party.unread++;
+                party.lastFrom = line.name;
+            }
+            post({ t: 'chat-line', line: forTab(line), unread: party.unread });
+        }
+
+        function heard(msg) {
+            const line = PartyChat.fromWire(msg);
+            // The first welcome's past lines are what was said before we
+            // came: history, not news. After a later welcome (a resume, a new
+            // host) a past line we do not have was said while we were away.
+            if (line) keep(line, line.from !== party.me && !(msg.past && party.welcomes < 2));
+        }
+
+        /** Notes are this member's own, made from what the room says; `stamp` puts the time on one. */
+        function note(texts, stamp = false) {
+            for (const text of texts) {
+                if (text) keep({ id: `n${++party.notes}`, sys: true, stamp, at: clock.toRoom(now()), text }, false);
+            }
+        }
+
         function fromAuthority(msg) {
             if (!party || !msg || typeof msg.t !== 'string') return;
             switch (msg.t) {
@@ -117,6 +153,7 @@
                         me: msg.you, resume: msg.resume, roomId: msg.room.id, up: true,
                         policy: msg.room.policy, members: msg.room.members, state: msg.room.state,
                     });
+                    party.welcomes++;
                     party.joined();
                     // Welcomed after the start returned: a guest the host let in.
                     if (party.started) beat();
@@ -132,10 +169,18 @@
                 case 'state': {
                     if (party.state && msg.seq < party.state.seq) return;
                     const { t, ack, ...state } = msg;
+                    note([PartyChat.waitNote(party.state, state, party.members, party.me)], true);
                     party.state = state;
                     break;
                 }
-                case 'members': party.members = msg.list; break;
+                case 'members':
+                    note(PartyChat.memberNotes(party.members, msg.list, party.me));
+                    party.members = msg.list;
+                    break;
+                // The tab is handed the line as the log keeps it, not the wire's.
+                case 'chat':
+                    heard(msg);
+                    return;
                 case 'policy': party.policy = { control: msg.control, wait: msg.wait, locked: msg.locked }; break;
                 case 'pong':
                     // Our own hop to the authority. The tab's pong is made below.
@@ -167,6 +212,15 @@
                 party.drift = Number.isFinite(msg.ms) ? msg.ms : null;
                 return;
             }
+            // The chat panel opening or closing on the page: open, nothing is unread.
+            if (msg.t === 'chat-read') {
+                party.chatOpen = msg.open === true;
+                if (party.chatOpen) {
+                    party.unread = 0;
+                    party.lastFrom = null;
+                }
+                return;
+            }
             if (!FROM_TAB.includes(msg.t)) return;
             if (msg.t === 'ready') party.ready = msg.ready !== false;
             if (msg.t === 'solo') party.solo = msg.solo === true;
@@ -184,7 +238,11 @@
             port = incoming;
             incoming.onMessage.addListener((msg) => fromTab(incoming, msg));
             incoming.onDisconnect.addListener(() => { if (port === incoming) letGo(false); });
-            if (party.me) post(welcomeFor());
+            if (party.me) {
+                post(welcomeFor());
+                // Open again if it was open: the tab went to the room's next video mid-conversation.
+                post({ t: 'chat-log', lines: party.log.lines().map(forTab), unread: party.unread, open: party.chatOpen });
+            }
             // Where the session lives in a page that unloads when idle, the tab's
             // pings are what keep it: see PartyWorker.pageHost.
             if (keepAliveMs) post({ t: 'keepalive', ms: keepAliveMs });
@@ -219,7 +277,11 @@
                 roomNow: () => clock.toRoom(now()),
             });
             if (!transport) return { ok: false, error: 'address' };
-            const mine = { mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null, ready: true, solo: false, up: false, pingTimer: null, beating: false, started: false };
+            const mine = {
+                mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null,
+                ready: true, solo: false, up: false, pingTimer: null, beating: false, started: false, welcomes: 0,
+                log: PartyChat.createLog(), notes: 0, unread: 0, lastFrom: null, chatOpen: false,
+            };
             // A loopback welcomes inside the send below; a socket, some time later.
             const joined = new Promise((resolve) => { mine.joined = resolve; });
             party = mine;
@@ -264,6 +326,7 @@
                 trackers: party.transport.trackers ? party.transport.trackers() : undefined,
                 expires: party.transport.expires ? party.transport.expires() : undefined,
                 drift: party.drift,
+                chat: { unread: party.unread, last: party.lastFrom },
             };
         }
 
@@ -292,6 +355,11 @@
                     if (!party) return { ok: false, error: 'inactive' };
                     party.link.send(HOST_OPS[msg.op](msg));
                     return { ok: true };
+                // The popup's "Open on page": the tab opens its chat, and says so once it has.
+                case 'chat':
+                    if (!party) return { ok: false, error: 'inactive' };
+                    post({ t: 'chat-show' });
+                    return { ok: !!port };
                 default: return { ok: false, error: 'op' };
             }
         }
