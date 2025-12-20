@@ -8,8 +8,12 @@
  * room to its next video is a reload — so all this keeps is a copy to draw.
  * The panel itself is not built until it is first opened.
  *
- * It goes over the player's right edge, inside the player like the chip,
- * which is what carries it into fullscreen and the reader with the video.
+ * Where it goes. Frame G draws it beside the player, in the space YouTube
+ * gives its own column, and that is where it goes when the page has room
+ * there. With none (theater, a narrow window, and Netflix, which is all
+ * player), in fullscreen, and in the reader, it goes over the player's right
+ * edge instead — inside the player, like the chip, which is what carries it
+ * into fullscreen and the reader with the video.
  *
  * Everything a member said is set as text. A name or a line is never markup.
  */
@@ -21,6 +25,11 @@
     const PartyChat = ns.PartyChat || req('../shared/party-chat.js');
     const PartyChip = ns.PartyChip || req('./party-chip.js');
 
+    /** Frame G's panel: 328 wide, 12 in from whatever it sits against. */
+    const WIDTH = 328;
+    const GAP = 12;
+    /** The reader's root (reader.js): the player in there has the transcript beside it, not room. */
+    const READER = '#bb-reader';
     /** Scrolled up further than this, a new line does not pull the reader back down to it. */
     const STICK_PX = 40;
     /**
@@ -44,6 +53,8 @@
         let el = null;
         let parts = null;
         let sentAt = [];
+        let watching = null;
+        let frame = 0;
         let gone = false;
 
         function make(tag, className, text) {
@@ -152,9 +163,49 @@
             else if (act.dataset.act === 'send') say();
         }
 
+        /** Beside the player if the page has room to its right, else over its right edge. */
         function place() {
-            const parent = PartyChip.hostOf(site, getVideo, doc) || doc.body;
+            frame = 0;
+            if (!el || !s.open) return;
+            const player = PartyChip.hostOf(site, getVideo, doc);
+            const box = player && player.getBoundingClientRect();
+            const beside = !!box && box.width > 0 && !doc.fullscreenElement && !player.closest(READER) &&
+                doc.documentElement.clientWidth - box.right >= WIDTH + 2 * GAP;
+            const parent = beside || !player ? doc.body : player;
             if (el.parentNode !== parent) parent.appendChild(el);
+            el.classList.toggle('is-beside', beside);
+            if (!beside) {
+                el.style.left = el.style.top = el.style.height = '';
+                return;
+            }
+            // Placed on the page rather than the screen, so it scrolls with
+            // the player it sits beside and nothing has to follow the scroll.
+            const base = root.getComputedStyle(doc.body).position === 'static'
+                ? { left: -root.scrollX, top: -root.scrollY } : doc.body.getBoundingClientRect();
+            el.style.left = `${Math.round(box.right - base.left + GAP)}px`;
+            el.style.top = `${Math.round(box.top - base.top + GAP)}px`;
+            el.style.height = `${Math.round(box.height - 2 * GAP)}px`;
+        }
+
+        const schedule = () => { if (!frame) frame = root.requestAnimationFrame(place); };
+
+        /** While open: the player changing size (theater, the reader, fullscreen) or the window, moves it. */
+        function watch(on) {
+            if (on && !watching) {
+                const player = PartyChip.hostOf(site, getVideo, doc);
+                const observer = root.ResizeObserver && player ? new root.ResizeObserver(schedule) : null;
+                if (observer) observer.observe(player);
+                root.addEventListener('resize', schedule);
+                doc.addEventListener('fullscreenchange', schedule);
+                watching = { observer };
+            } else if (!on && watching) {
+                if (watching.observer) watching.observer.disconnect();
+                root.removeEventListener('resize', schedule);
+                doc.removeEventListener('fullscreenchange', schedule);
+                if (frame) root.cancelAnimationFrame(frame);
+                frame = 0;
+                watching = null;
+            }
         }
 
         function open() {
@@ -163,7 +214,10 @@
             s.open = true;
             s.unread = 0;
             el.hidden = false;
+            // In the page before the lines are drawn: a list not yet laid
+            // out has no height to scroll to its newest line with.
             place();
+            watch(true);
             drawHead();
             drawLines();
             send({ t: 'chat-read', open: true });
@@ -174,6 +228,7 @@
             if (!s.open) return;
             s.open = false;
             if (el) el.hidden = true;
+            watch(false);
             send({ t: 'chat-read', open: false });
             onChange();
         }
@@ -215,6 +270,7 @@
             /** Gone with the party. */
             remove() {
                 gone = true;
+                watch(false);
                 if (el) el.remove();
                 el = null;
             },
@@ -222,7 +278,7 @@
         };
     }
 
-    const PartyChatPanel = { clockTime, createChatPanel };
+    const PartyChatPanel = { WIDTH, GAP, clockTime, createChatPanel };
 
     root.BB = root.BB || {};
     root.BB.PartyChatPanel = PartyChatPanel;

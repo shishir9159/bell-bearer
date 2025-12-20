@@ -108,6 +108,11 @@
 
 .bb-party-chat[hidden] { display: none; }
 
+/* Beside the player, on the page: its left, top and height are set in script
+   from the player's box. Under YouTube's masthead (2020) as the page scrolls
+   up beneath it, like the reader, and over the column it sits on. */
+.bb-party-chat.is-beside { right: auto; bottom: auto; max-width: none; z-index: 2019; }
+
 .bb-party-chat-head {
     display: flex;
     align-items: center;
