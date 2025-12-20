@@ -3950,6 +3950,9 @@ check('the loader injects each party module after the ones it reads', () => {
     const files = require('../src/background/party-loader.js').CONTENT_FILES;
     const at = (name) => files.indexOf(`src/shared/${name}.js`);
     assert(at('party-state') >= 0 && at('party-state') < at('party-sites'), 'party-sites reads PartyState');
+    const page = (name) => files.indexOf(`src/content/${name}.js`);
+    assert(at('party-chat') >= 0 && page('party-chip') < page('party-chat-panel'), 'the chat reads PartyChat and the chip\'s player');
+    assert(page('party-chat-panel') < page('party-media'), 'party-media builds the chat as it boots');
 });
 
 // ---------------------------------------------------------- party media

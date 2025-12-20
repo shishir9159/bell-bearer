@@ -27,11 +27,14 @@
         'src/shared/party-state.js',
         'src/shared/party-drift.js',
         'src/shared/party-sites.js',
-        // Before party-media, which builds the chip as it boots.
+        'src/shared/party-chat.js',
+        // Before party-media, which builds the chip and the chat as it boots;
+        // the chat after the chip, whose player it hangs off too.
         'src/content/party-chip.js',
+        'src/content/party-chat-panel.js',
         'src/content/party-media.js',
     ]);
-    /** The chip's styles, inserted with the code rather than listed with content.css for every page. */
+    /** The chip's and the chat's styles, inserted with the code rather than listed with content.css for every page. */
     const CSS_FILES = Object.freeze(['party-page.css']);
 
     /** Injected into the page's own world, per site. */

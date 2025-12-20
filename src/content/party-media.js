@@ -641,16 +641,28 @@
         let follows = true;
         if (ns.Settings) ns.Settings.get(['partyFollowMedia']).then((s) => { follows = s.partyFollowMedia !== false; }, noop);
         const getVideo = ns.Site.createPlayerLocator(site);
-        const chip = ns.PartyChip ? ns.PartyChip.createChip({ site, getVideo, api }) : null;
+        const post = (msg) => { try { port.postMessage(msg); } catch (_) { media.detach(); } };
+        let chip = null;
+        const chat = ns.PartyChatPanel
+            ? ns.PartyChatPanel.createChatPanel({ site, getVideo, api, send: post, onChange: () => { if (chip) chip.refresh(); } })
+            : null;
+        chip = ns.PartyChip ? ns.PartyChip.createChip({ site, getVideo, api, chat }) : null;
         const media = createPartyMedia({
             site,
             getVideo,
             player: bb.player,
             notify: ns.Notify ? (message, type) => ns.Notify.show(message, type) : noop,
-            send: (msg) => { try { port.postMessage(msg); } catch (_) { media.detach(); } },
+            send: post,
             followMedia: () => follows,
-            onStatus: chip ? (next, detail) => chip.status(next, detail) : noop,
-            onRoom: chip ? (msg) => chip.room(msg) : noop,
+            onStatus(next, detail) {
+                if (chip) chip.status(next, detail);
+                // The conversation goes with the party; the chip may stay to say how it ended.
+                if (next === 'left' && chat) chat.remove();
+            },
+            onRoom(msg) {
+                if (chip) chip.room(msg);
+                if (chat) chat.room(msg);
+            },
         });
         if (chip) chip.bind(media);
         root.__bbPartyMedia = media;

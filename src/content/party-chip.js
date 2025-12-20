@@ -30,7 +30,18 @@
     const BAD = 'is-bad';
     const esc = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-    function createChip({ site, getVideo, api = root.chrome, doc = root.document, now = () => Date.now() }) {
+    /** The player on this page, which the chip and the chat hang off: it is what goes into fullscreen and the reader. */
+    function hostOf(site, getVideo, doc = root.document) {
+        for (const selector of HOSTS[site] || []) {
+            const found = doc.querySelector(selector);
+            if (found) return found;
+        }
+        const video = getVideo();
+        return video && video.parentElement;
+    }
+
+    /** `chat` is the chat panel, which a click on the chip opens, and whose unread lines the chip counts. */
+    function createChip({ site, getVideo, api = root.chrome, doc = root.document, now = () => Date.now(), chat = null }) {
         const icon = (() => { try { return api.runtime.getURL('icons/icon128.png'); } catch (_) { return ''; } })();
         const el = doc.createElement('div');
         el.className = 'bb-party-chip';
@@ -67,22 +78,18 @@
             if (s.status === 'synced') {
                 const d = media && media.drift();
                 const count = s.members.filter((m) => !m.away).length;
+                const unread = chat ? chat.unread() : 0;
                 return {
                     dot: ON, label: typeof d === 'number' ? `Synced ±${Math.round(Math.abs(d) * 1000)} ms` : 'Synced',
-                    sub: count ? `· ${count} watching` : '',
+                    // The design draws nothing for a line said while the
+                    // chat is shut, so the chip says it in frame E's words.
+                    sub: unread ? `· ${unread} new in chat` : count ? `· ${count} watching` : '',
                 };
             }
             return { dot: OFF, label: 'Joining the party…' };
         }
 
-        function host() {
-            for (const selector of HOSTS[site] || []) {
-                const found = doc.querySelector(selector);
-                if (found) return found;
-            }
-            const video = getVideo();
-            return video && video.parentElement;
-        }
+        const host = () => hostOf(site, getVideo, doc);
 
         const button = (label, act, filled) => `<button type="button" class="bb-party-btn${filled ? '' : ' is-quiet'}" data-act="${act}">${esc(label)}</button>`;
 
@@ -94,7 +101,8 @@
                 at.appendChild(toast);
             }
             const line = said();
-            el.innerHTML = `<div class="bb-party-chip-line">${icon ? `<img src="${icon}" alt="">` : ''}
+            // The design draws no way to open the chat on the page; the chip is the party's one presence there, so it is the way.
+            el.innerHTML = `<div class="bb-party-chip-line"${chat ? ' data-act="chat" title="Chat"' : ''}>${icon ? `<img src="${icon}" alt="">` : ''}
                 <span class="bb-party-dot ${line.dot}"></span>
                 <span class="bb-party-label">${esc(line.label)}</span>${line.sub ? `<span class="bb-party-sub">${esc(line.sub)}</span>` : ''}</div>
                 ${line.a ? `<div class="bb-party-acts">${button(...line.a, true)}${line.b ? button(...line.b, false) : ''}</div>` : ''}`;
@@ -145,6 +153,7 @@
                 case 'pause': if (video) video.pause(); toast.hidden = true; break;
                 case 'play': if (video) video.play().catch(() => {}); toast.hidden = true; break;
                 case 'ignore': toast.hidden = true; break;
+                case 'chat': chat.toggle(); break;
                 case 'dismiss': remove(); return;
                 case 'invite':
                     try { api.runtime.sendMessage({ action: 'partyPopup' }).catch(() => {}); } catch (_) { /* the extension reloaded */ }
@@ -208,6 +217,8 @@
                 }
                 draw();
             },
+            /** Say it again: the chat's unread count moved. */
+            refresh: draw,
             said,
             element: el,
             toast,
@@ -215,7 +226,7 @@
         };
     }
 
-    const PartyChip = { NOTICE_MS, TOAST_MS, createChip };
+    const PartyChip = { NOTICE_MS, TOAST_MS, HOSTS, hostOf, createChip };
 
     root.BB = root.BB || {};
     root.BB.PartyChip = PartyChip;
