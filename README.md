@@ -29,7 +29,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Daily time limit**: A budget, or a window of hours, on any site you name — counted while you are actually looking at it, snoozable ten minutes at a time
 - **Rosters**: Who you follow on Twitter and the subreddits you have joined, out to a text file and back in again, slowly
 - **Chess.com and Lichess**: Games, time management and time at the board; a clock warning and moves read aloud while you play
-- **Watch party**: A YouTube video or a Netflix episode in sync with other people, each on their own account — through a server, your own relay, browser-to-browser codes or public trackers
+- **Watch party**: A YouTube video or a Netflix episode in sync with other people, each on their own account — through a server, your own relay, browser-to-browser codes or public trackers — with a chat beside the player
 - **LeetCode**: Each problem timed on LeetCode's own stopwatch, submissions recorded from its own traffic, an FSRS-5 review schedule graded in one click, your notes and code templates on the page, and a mock-interview mode that hides the hints
 - **TypeRacer**: Every race logged from the keystrokes themselves — the letter pairs you stall on, the characters you reach for wrongly, and what correcting them costs you in words per minute — plus a typing caret and a synthesised key sound
 - **Reward System**: Track watch credits to spend them on popcorn for later
@@ -885,6 +885,21 @@ fullscreen and into the reader with the video.
   player cannot be found, the chip says so and the party is play and pause
   only.
 
+### Chat
+
+Click the chip to open the party's chat. It sits beside the player where the
+page has room, as YouTube's own column would, and otherwise over the player's
+right edge, which is also how it goes into fullscreen and the reader. It shows
+who is watching (a lit dot is in step and ready) and what has been said, with
+notes of its own in between: who joined or left, who stepped out to watch solo
+or came back, who hosts now, and who the room is waiting for.
+
+A line said while the chat is shut shows on the chip as "3 new in chat", and in
+the popup's room as a strip with **Open on page**, which brings the party's tab
+forward with the chat open. Someone who joins late, or whose tab reloads, gets
+the last fifty lines. Nothing is kept after the party ends, and what anyone
+types is shown as text, never as markup.
+
 ### What it costs when you are not in one
 
 Nothing. None of the party is in the manifest. Its page code is injected into
@@ -955,7 +970,8 @@ src/shared/     pure logic, used by every surface
   party-clock.js   the room clock: its offset from the lowest-latency ping, and when to ping
   party-state.js   the party's state vector, where it says the video is now, the conflict rule
   party-drift.js   how far out of step a member is, and whether to nudge the rate or seek
-  party-room.js    the party's authority: policy, holds, liveness, handover
+  party-room.js    the party's authority: policy, holds, liveness, handover, chat
+  party-chat.js    party chat: what a line may say and how often, a member's log, its notes
   party-code.js    invite and reply codes: a WebRTC description in ~150 characters, and back
   party-sites.js   YouTube and Netflix to the party: video ids, addresses, what each will take
 
@@ -1007,6 +1023,7 @@ src/content/    injected into every page
   Injected into a party's one tab by src/background/party-loader.js
   (CONTENT_FILES, PAGE_FILES, CSS_FILES), never listed in a manifest:
   party-chip.js    the status chip over the player, and the host's pause-request toast
+  party-chat-panel.js the chat, beside the player or over it; what was said, set as text
   party-media.js   the party on the player: our writes against the user's, drift, readiness
   netflix-page.js  MAIN world: Netflix's own player, for seeking without error M7375
 
@@ -1056,7 +1073,7 @@ src/page/       shared by popup.html and dashboard.html
 
 offscreen.html  the party session's script list; Firefox reads it into the background page
 party.css       the popup's party screens, for every skin
-party-page.css  the chip and toast on the page, inserted with them
+party-page.css  the chip, toast and chat on the page, inserted with them
 skins.css       the token layer for every skin — linked before popup/dashboard css
 skin-fonts.css  @font-face for the skin families
 fonts/          the woff2 subsets those faces load
@@ -1406,6 +1423,7 @@ Client → server:
 | `role {member, role}` | Host only: `cohost`, `guest`, or `host` to hand over |
 | `kick {member}` | Host only |
 | `solo {solo}` | Step out of the room's playback, or back in |
+| `chat {text}` | A line of chat; see Chat, below |
 | `bye` | Leaving |
 
 Server → client:
@@ -1418,6 +1436,7 @@ Server → client:
 | `members {list}` | everyone, when anyone arrives, leaves, or changes role, readiness, solo, away or lagging |
 | `policy {control, wait, locked}` | everyone, when the host changes it |
 | `request {from, op}` | the host and co-hosts |
+| `chat {id, from, name, at, text, past?}` | everyone, the sender included, for each line; and after every `welcome`, the room's recent lines to the one welcomed, with `past: true` |
 | `error {code}` | the one being refused or kicked, then close |
 
 A member entry is `{id, name, role, ready, why, solo, away, rtt, lagging}`.
@@ -1492,6 +1511,25 @@ A hold works like this:
 
 A lagging member catches up by seeking instead of stopping everyone.
 
+### Chat
+
+- **Cleaning.** Control characters other than whitespace (U+0000–U+0008,
+  U+000E–U+001F, U+007F–U+009F) and U+FEFF are removed, every run of Unicode
+  White_Space becomes one space, the ends are trimmed, and the line is cut to
+  **500** code points. A line with nothing left is dropped.
+- **Budget.** At most **5** lines per member in any **5 s**. Past that a line
+  is dropped without an answer. It is a budget of its own, apart from the
+  intents' five a second: chatting must never get a pause refused.
+- **A line** is broadcast as `chat {id, from, name, at, text}`: `id` minted
+  (unique, never a count — a new host carries old lines into a new room, and
+  a counter starting again would reuse ids members already hold), `from` the
+  sender, `name` their name when they said it, `at` the room time.
+- **History.** The server keeps the last **50** lines and sends them, oldest
+  first with `past: true`, right after every `welcome`, a resume included.
+  Not inside the welcome: fifty lines of five hundred characters is far past
+  the 8 KB frame. A client drops a line whose `id` it already has.
+- Nothing is kept once the room is discarded.
+
 ### Liveness
 
 The server runs its timeouts about once a second.
@@ -1520,6 +1558,9 @@ The server runs its timeouts about once a second.
 | anti-flap | 3 holds in 120 s → lagging 5 min |
 | timed-out straggler | lagging 2 min |
 | release lead | 250–1000 ms, max rtt / 2 + 150 |
+| chat line | 500 code points |
+| chat lines | 5 per member in any 5 s |
+| chat history | 50 lines |
 
 ## Tests
 
