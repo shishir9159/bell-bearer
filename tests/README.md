@@ -82,6 +82,7 @@ that code, not a replacement — it cannot press a key or play a video.
 | `party-media.test.js` | The watch party's media adapter on real (silent) media: our writes are not intents, the user's are, and a vector sent before an intent was answered is not played |
 | `party-session.test.js` | The whole media path with no network: a real `<video>`, the adapter a party tab gets, and the session with its loopback room, joined by a port |
 | `party-rtc.test.js` | Invite and reply codes against the browser's own WebRTC: a description rebuilt from a code is one Chrome will connect with |
+| `party-chat.test.js` | The party's chat on the page: what a member said is text and never markup, the box keeps to the room's budget and its keys to itself, the chip counts unread and opens it, and it sits beside the player or over it |
 | `party-only.html` | The party specs alone, with the modules the party loader injects |
 | `party-vectors.json` | Cases every party authority must pass, run by `node-check.js` against `party-room.js` and by `party-conformance.js` against a live server |
 | `party-dev-socket.js` | The party dev server's hand-written WebSocket (handshake, 8 KB text frames), and the lag, jitter and loss it can put on the wire |
