@@ -10,6 +10,7 @@
 
     const DOTS = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>';
     const LOCK = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>';
+    const BUBBLE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
     const ROLE = { host: 'Host', cohost: 'Co-host' };
 
     const me = (s) => (s.members || []).find((m) => m.id === s.you) || {};
@@ -54,6 +55,16 @@
         </div>`;
     }
 
+    /** Lines said while the chat on the page was shut, and the way to it; nothing when there are none. */
+    function chatStrip(p) {
+        const chat = p.status.chat;
+        if (!chat || !chat.unread) return '';
+        return `<div class="party-chat-strip">${BUBBLE}
+            <span class="party-chat-strip-text"><strong>${chat.unread} new</strong> in chat${chat.last ? ` · last from ${p.esc(chat.last)}` : ''}</span>
+            <button type="button" class="party-chat-open" data-act="chat">Open on page</button>
+        </div>`;
+    }
+
     function hostCard(p) {
         const policy = p.status.policy || {};
         const seg = (key, options) => `<div class="party-seg">${options.map(([value, label]) =>
@@ -75,9 +86,10 @@
             const host = members.find((m) => m.role === 'host');
             const extra = `${canInvite(s) ? '<button type="button" class="party-small" data-act="invite">Invite</button>' : ''}
                 <button type="button" class="party-small is-danger" data-act="leave">Leave</button>`;
-            p.roomSig = JSON.stringify([members, s.policy, s.up, s.drift, p.openMember, p.tab && p.tab.title]);
+            p.roomSig = JSON.stringify([members, s.policy, s.up, s.drift, p.openMember, p.tab && p.tab.title, s.chat]);
             return `${p.subhead({ title: host ? `${host.name || 'Someone'}'s party` : 'Watch party', note: syncLine(p), back: false, extra })}
                 <div class="party-scroll">
+                    ${chatStrip(p)}
                     <div class="party-card is-list">
                         <div class="party-label party-label-row">Watching<span>${members.length}</span></div>
                         ${members.map((m) => memberRow(p, m)).join('')}
@@ -87,12 +99,20 @@
         },
         tick(p) {
             const s = p.status;
-            const sig = JSON.stringify([s.members, s.policy, s.up, s.drift, p.openMember, p.tab && p.tab.title]);
+            const sig = JSON.stringify([s.members, s.policy, s.up, s.drift, p.openMember, p.tab && p.tab.title, s.chat]);
             if (sig !== p.roomSig) p.go('room');
         },
         async act(p, act, button) {
             const member = button.dataset.member;
             if (act === 'invite') return p.go('invite', { fresh: true });
+            // The party's tab comes forward with its chat open. The popup
+            // goes, as it does whenever another tab is brought up; when the
+            // party's tab is this one, it is closed so the chat can be seen.
+            if (act === 'chat') {
+                const answer = await p.send({ action: 'partyChat' });
+                if (answer.ok && typeof root.close === 'function') root.close();
+                return answer.ok ? undefined : p.refresh();
+            }
             if (act === 'leave') {
                 await p.send({ action: 'partyLeave' });
                 return p.go(null);

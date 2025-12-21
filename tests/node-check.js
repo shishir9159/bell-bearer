@@ -8517,7 +8517,8 @@ const dayRecord = (at = T0) =>
     });
 
     /** A party over fakes: the document, the loader and the alarm, each writing down what it was asked. */
-    function partyWith({ answer = { ok: true }, bound = null } = {}) {
+    /** `more` is the rest of chrome.* a case needs, laid over the fakes. */
+    function partyWith({ answer = { ok: true }, bound = null, more = {} } = {}) {
         const calls = [];
         const alarms = {};
         let open = false;
@@ -8536,6 +8537,7 @@ const dayRecord = (at = T0) =>
         const api = {
             alarms: { create: (name, info) => { alarms[name] = info; }, clear: async (name) => { delete alarms[name]; } },
             storage: { session: { set: async (items) => Object.assign(session, items) } },
+            ...more,
         };
         return { party: PartyWorker.createParty({ api, loader, host }), calls, alarms, session };
     }
@@ -8627,6 +8629,19 @@ const dayRecord = (at = T0) =>
         eq(await PartyWorker.handle({}, party, { action: 'partyControl', op: 'leave' }, {}), { ok: false, error: 'op' });
         eq(await PartyWorker.handle({}, party, { action: 'partyControl', op: 'start' }, {}), { ok: false, error: 'op' });
         eq(calls, ['ask policy']);
+    });
+    await checkAsync('"Open on page" brings the party\'s tab forward, then asks the session to open its chat', async () => {
+        const more = {
+            tabs: { update: async (id, info) => { calls.push(`tab ${id} ${info.active}`); return { id, windowId: 3 }; } },
+            windows: { update: async (id, info) => { calls.push(`window ${id} ${info.focused}`); } },
+        };
+        const none = partyWith({ more });
+        eq(await PartyWorker.handle({}, none.party, { action: 'partyChat' }, {}), { ok: false, error: 'tab' }, 'no party tab');
+        const { party, calls } = partyWith({ bound: { tabId: 9, site: 'youtube' }, more });
+        await party.start(9, partyVideo);
+        calls.length = 0;
+        eq(await PartyWorker.handle({}, party, { action: 'partyChat' }, {}), { ok: true });
+        eq(calls, ['tab 9 true', 'window 3 true', 'ask chat']);
     });
     await checkAsync('the session reports a kick, but not a start that failed or a leave', async () => {
         const ended = [];
@@ -8745,6 +8760,17 @@ const dayRecord = (at = T0) =>
         }
         const n = await StartView.probeTrackers('wss://up.one wss://bad.two  wss://slow.three https://no.four', { Socket, ms: 30 });
         eq([n, made.map((one) => one.url), made.every((one) => one.closed)], [1, ['wss://up.one', 'wss://bad.two', 'wss://slow.three'], true]);
+    });
+    check('the room shows chat said while the page\'s panel was shut, and who last said it, and nothing when all is read', () => {
+        const RoomView = require('../src/page/party-room-view.js');
+        const panel = (chat) => ({
+            status: { mode: 'loopback', you: 'm1', up: true, members: [{ id: 'm1', name: 'Nadia', role: 'host', ready: true }], policy: {}, chat },
+            esc: globalThis.BB.Dom.escapeHtml, subhead: () => '',
+        });
+        const strip = RoomView.render(panel({ unread: 3, last: '<b>Ana</b>' }));
+        assert(strip.includes('<strong>3 new</strong> in chat · last from &lt;b&gt;Ana&lt;/b&gt;'), strip);
+        assert(strip.includes('data-act="chat">Open on page</button>'), 'the way there');
+        for (const chat of [{ unread: 0, last: null }, undefined]) assert(!RoomView.render(panel(chat)).includes('party-chat-strip'));
     });
     check('every way a party ends that the session can report has words, and each way on is a view', () => {
         for (const code of ['host-left', 'expired', 'tracker', 'invite', 'no-host', 'kicked']) assert(JoinViews.ended.knows(code), code);

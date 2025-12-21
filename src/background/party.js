@@ -26,7 +26,7 @@
     const LINGER_MIN = 0.5;
     /** Firefox unloads an idle background page after thirty seconds. */
     const KEEPALIVE_MS = 20000;
-    const ACTIONS = Object.freeze(['partyStart', 'partyJoin', 'partyInvite', 'partyLeave', 'partyStatus', 'partyEnded', 'partyControl', 'partyPopup']);
+    const ACTIONS = Object.freeze(['partyStart', 'partyJoin', 'partyInvite', 'partyLeave', 'partyStatus', 'partyEnded', 'partyControl', 'partyPopup', 'partyChat']);
     /** PartySession's host controls and revoking an invite: all the popup's, passed on as they are. */
     const CONTROL_OPS = Object.freeze(['policy', 'role', 'kick', 'revoke']);
     /**
@@ -180,6 +180,19 @@
             return host.ask(msg);
         }
 
+        /** The popup's "Open on page": the party's tab brought forward, and its chat opened there. */
+        async function showChat() {
+            const bound = await loader.current();
+            if (!bound) return { ok: false, error: 'tab' };
+            try {
+                const tab = await api.tabs.update(bound.tabId, { active: true });
+                if (tab && api.windows) await api.windows.update(tab.windowId, { focused: true });
+            } catch (_) {
+                return { ok: false, error: 'tab' };
+            }
+            return ask({ op: 'chat' });
+        }
+
         /** The authority ended the party: keep why, for the popup, then tidy up as for a leave. */
         async function ended(code) {
             try { await api.storage.session.set({ [ENDED_KEY]: { code: String(code || ''), at: Date.now() } }); } catch (_) { /* the popup just will not say why */ }
@@ -187,7 +200,7 @@
         }
 
         return {
-            start, leave, status, ended,
+            start, leave, status, ended, showChat,
             invite: () => ask({ op: 'invite' }),
             accept: (code) => ask({ op: 'accept', code }),
             /** {op, …fields} for one of CONTROL_OPS. */
@@ -231,6 +244,7 @@
                 } catch (_) {
                     return { ok: false, error: 'popup' };
                 }
+            case 'partyChat': return party.showChat();
             case 'partyControl': {
                 if (!CONTROL_OPS.includes(message.op)) return { ok: false, error: 'op' };
                 const { action, ...msg } = message;
