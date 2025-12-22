@@ -11,6 +11,12 @@
  * corrects from where the mounted turns actually are. It gives up after a few
  * rounds rather than scrolling for ever.
  *
+ * Every round looks the scroller up afresh, so a walk still going when the
+ * page moves on to another chat would scroll that one instead. Each walk is
+ * given `alive`, and stops at its next wait once it says no. Without it, one
+ * spec's walk ran on into the next spec's thread and scrolled the turn that
+ * spec was about to click out of the document.
+ *
  * The arithmetic is pure and node-tested (estimateTop, pickNeighbour); the
  * rest needs a page.
  */
@@ -140,12 +146,13 @@
      * Bring `nodeId` into view and mark it. Resolves true once it is there,
      * false when it is not on the path shown or could not be found in time.
      */
-    async function reach(adapter, conv, nodeId, { heading = '', rounds = ROUNDS, wait = settle } = {}) {
+    async function reach(adapter, conv, nodeId, { heading = '', rounds = ROUNDS, wait = settle, alive = () => true } = {}) {
         const path = ChatTree.activePath(conv);
         const index = path.indexOf(nodeId);
         if (index < 0) return false;
 
         for (let round = 0; round <= rounds; round++) {
+            if (!alive()) return false;
             const element = mountedTurn(adapter, conv, nodeId);
             if (element) {
                 land(adapter, element, heading);
@@ -164,12 +171,12 @@
     }
 
     /** The prompt after (1) or before (-1) the one being read, reached. */
-    function step(adapter, conv, direction) {
+    function step(adapter, conv, direction, { alive } = {}) {
         const path = ChatTree.activePath(conv);
         const prompts = path.filter((id) => conv.nodes[id].role === 'user');
         const mounted = mountedTurns(adapter, conv, readingLine(adapter));
         const target = pickNeighbour({ prompts, path, mounted, direction });
-        return target ? reach(adapter, conv, target) : Promise.resolve(false);
+        return target ? reach(adapter, conv, target, { alive }) : Promise.resolve(false);
     }
 
     /**
@@ -226,7 +233,8 @@
      *
      * Resolves { ok: true } or { ok: false, stale?, reason }.
      */
-    async function switchTo(adapter, conv, target, { wait = settle } = {}) {
+    async function switchTo(adapter, conv, target, { wait = settle, alive = () => true } = {}) {
+        const gone = { ok: false, reason: 'The page moved on.' };
         const path = ChatTree.pathTo(conv, target);
         if (!path.length) return { ok: false, reason: 'That turn is not in this conversation.' };
         // Turns are told apart against the target's own path, not the one
@@ -242,13 +250,15 @@
 
             // The fork: bring its parent into view, and the child the page
             // shows under it comes with it.
+            if (!alive()) return gone;
             if (parent.role === 'root') {
                 const scroller = adapter.scroller();
                 if (scroller) scroller.scrollTo({ top: 0 });
                 await wait();
-            } else if (!(await reach(adapter, showing(conv, parent.id), parent.id, { wait }))) {
-                return { ok: false, reason: 'Could not bring that branch point into view.' };
+            } else if (!(await reach(adapter, showing(conv, parent.id), parent.id, { wait, alive }))) {
+                return alive() ? { ok: false, reason: 'Could not bring that branch point into view.' } : gone;
             }
+            if (!alive()) return gone;
 
             const find = () => {
                 const element = mountedAny(adapter, view, parent.children);
@@ -261,6 +271,7 @@
 
             const want = ChatTree.siblingIndex(conv, id).index;
             while (nav.index !== want) {
+                if (!alive()) return gone;
                 const from = nav.index;
                 (want < from ? nav.prev : nav.next).click();
                 nav = await until(() => {
@@ -271,8 +282,8 @@
             }
         }
 
-        await reach(adapter, showing(conv, target), target, { wait });
-        return { ok: true };
+        await reach(adapter, showing(conv, target), target, { wait, alive });
+        return alive() ? { ok: true } : gone;
     }
 
     /**

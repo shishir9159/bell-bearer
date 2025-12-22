@@ -73,6 +73,17 @@
         /** The chat this page is on, and what we know of it. */
         const chat = { id: null, conv: null, error: '', loading: false, token: 0 };
         let refetchTimer = 0;
+        /**
+         * Which stay on a chat this is: moves on when the page goes to
+         * another chat, or the UI is taken down. A walk to a turn (ChatNav)
+         * stops once it has moved. Not `chat.token`, which a refetch of the
+         * same chat moves too — halfway through a branch switch, on purpose.
+         */
+        let visit = 0;
+        const walk = () => {
+            const mine = visit;
+            return { alive: () => mine === visit };
+        };
         let wasStreaming = false;
         /** The unknown turns last refetched for, so a selector gone stale refetches once, not forever. */
         let lastUnknown = '';
@@ -190,12 +201,14 @@
         async function switchBranch(target) {
             if (switching || !chat.conv) return false;
             switching = true;
+            const here = walk();
             try {
-                let result = await ChatNav.switchTo(adapter, chat.conv, target);
+                let result = await ChatNav.switchTo(adapter, chat.conv, target, here);
                 if (!result.ok && result.stale) {
                     await load(chat.id);
-                    if (chat.conv && chat.conv.nodes[target]) result = await ChatNav.switchTo(adapter, chat.conv, target);
+                    if (chat.conv && chat.conv.nodes[target]) result = await ChatNav.switchTo(adapter, chat.conv, target, here);
                 }
+                if (!here.alive()) return false;
                 if (!result.ok) {
                     notify(result.reason, 'warning');
                     return false;
@@ -469,8 +482,9 @@
             // On another branch — a pin, a node in the tree: switch to it,
             // which lands on it as its last step.
             if (!path().includes(id)) return switchBranch(id);
-            const landed = await ChatNav.reach(adapter, chat.conv, id, { heading });
-            if (!landed) notify('Could not find that turn on the page — scroll to it and try again', 'warning');
+            const here = walk();
+            const landed = await ChatNav.reach(adapter, chat.conv, id, { heading, ...here });
+            if (!landed && here.alive()) notify('Could not find that turn on the page — scroll to it and try again', 'warning');
             return landed;
         }
 
@@ -848,7 +862,7 @@
         /** The next or previous prompt, from wherever the reader is. */
         function step(direction) {
             if (!chat.conv) return Promise.resolve(false);
-            return ChatNav.step(adapter, chat.conv, direction);
+            return ChatNav.step(adapter, chat.conv, direction, walk());
         }
 
         // ----------------------------------------------------------- toggle
@@ -959,6 +973,7 @@
             const strip = document.getElementById(STRIP_ID);
             if (strip) strip.remove();
             chat.token++;
+            visit++;
             if (panel.isOpen()) panel.close();
             const toggle = document.getElementById(TOGGLE_ID);
             if (toggle) toggle.remove();
@@ -975,6 +990,7 @@
                 chat.conv = null;
                 chat.error = '';
                 chat.token++;
+                visit++;
                 chat.loading = false;
                 lastUnknown = '';
                 if (id) load(id);
