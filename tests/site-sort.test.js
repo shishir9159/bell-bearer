@@ -62,6 +62,15 @@
         return [box.left + box.width / 2, box.top + box.height / 2];
     };
 
+    /**
+     * Every drag that ends swallows the next click on the page until a timer
+     * lets it go, and the runner goes from one spec to the next without a
+     * timer ever running in between. A spec that ends a drag and stops there
+     * handed the swallow on: the first click of the chat specs, which follow
+     * these in index.html, was eaten, and "the panel did not open".
+     */
+    const letGo = () => new Promise((done) => setTimeout(done, 10));
+
     suite('site cards — dragging into order', () => {
         test('a card dragged onto another takes its place, and the order is reported', async () => {
             const grid = stageGrid();
@@ -70,6 +79,7 @@
             await drag(grid.children[0], ...middleOf(grid.children[2]));
             assertDeepEqual(order(grid), ['chess', 'lichess', 'youtube', 'twitter']);
             assertDeepEqual(told, [['chess', 'lichess', 'youtube', 'twitter']]);
+            await letGo();
             detach();
             teardown();
         });
@@ -131,6 +141,7 @@
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
             assertDeepEqual(order(grid), ['youtube', 'chess', 'lichess', 'twitter']);
             assertDeepEqual(told, []);
+            await letGo();
             detach();
             teardown();
         });
