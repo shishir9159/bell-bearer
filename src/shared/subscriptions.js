@@ -80,7 +80,7 @@
         if (!trimmed) return null;
 
         let created = null;
-        await update((state) => {
+        const saved = await update((state) => {
             const existing = state.topics.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
             if (existing) {
                 created = existing;
@@ -89,7 +89,9 @@
             created = { id: newId('topic'), name: trimmed, createdAt: Date.now() };
             return { ...state, topics: [...state.topics, created] };
         });
-        return created ? created.id : null;
+        // `created` is set before the write, so it alone said yes to a topic
+        // a failed write never stored; what update() resolves to is what is.
+        return created && saved.topics.some((t) => t.id === created.id) ? created.id : null;
     }
 
     async function renameTopic(topicId, name) {

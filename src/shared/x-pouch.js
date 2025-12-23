@@ -132,7 +132,7 @@
 
         const key = stateKey(side, 'topics');
         let created = null;
-        await update((state) => {
+        const saved = await update((state) => {
             const existing = state[key].find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
             if (existing) {
                 created = existing;
@@ -141,7 +141,10 @@
             created = { id: newId(sideOf(side).id === 'people' ? 'xpt' : 'xst'), name: trimmed, createdAt: Date.now() };
             return { ...state, [key]: [...state[key], created] };
         });
-        return created ? created.id : null;
+        // Checked against what update() resolves to, not `created`: that is
+        // set before the write, and a post was filed under a topic a failed
+        // write had never stored.
+        return created && saved[key].some((t) => t.id === created.id) ? created.id : null;
     }
 
     async function renameTopic(side, topicId, name) {

@@ -5821,6 +5821,27 @@ const dayRecord = (at = T0) =>
         eq((await XPouch.load()).peopleTopics.length, 1);
     });
 
+    await checkAsync('a topic whose write failed is not handed back as made, on either pouch', async () => {
+        // The id used to be minted before the write and returned whatever
+        // the write did, so X filed a post under a topic that never existed.
+        await seedPouch();
+        const Subscriptions = require('../src/shared/subscriptions.js');
+        const realSet = global.chrome.storage.local.set;
+        global.chrome.storage.local.set = () => Promise.reject(new Error('QUOTA_BYTES quota exceeded'));
+        const quiet = console.error;
+        console.error = () => {};
+        try {
+            eq(await XPouch.createTopic('posts', 'Kernels'), null, 'X');
+            eq(await Subscriptions.createTopic('Kernels'), null, 'YouTube');
+        } finally {
+            global.chrome.storage.local.set = realSet;
+            console.error = quiet;
+        }
+        assert(await XPouch.createTopic('posts', 'Kernels'), 'and a write that lands still says yes');
+        const again = await Subscriptions.createTopic('Kernels');
+        eq(await Subscriptions.createTopic('kernels'), again, 'an existing name is still an answer');
+    });
+
     await checkAsync('a person belongs to exactly one topic, and re-filing moves them', async () => {
         const ids = await seedPouch();
         const second = await XPouch.createTopic('people', 'Diffusion');

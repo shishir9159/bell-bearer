@@ -675,7 +675,13 @@
 
                 form.querySelector('button').disabled = true;
                 const id = await Subscriptions.createTopic(name);
-                this.topics.push({ id, name });
+                if (!id) {
+                    form.querySelector('button').disabled = false;
+                    return this.notify('Could not create that topic', 'error');
+                }
+                // A name already taken answers with that topic's id, and
+                // pushing it again drew the topic twice.
+                if (!this.topics.some((topic) => topic.id === id)) this.topics.push({ id, name });
                 this.topicId = id;
                 this.render();
                 this.notify(`Topic "${name}" created`, 'success');
