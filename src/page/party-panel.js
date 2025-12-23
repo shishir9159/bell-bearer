@@ -168,7 +168,14 @@
             if (s.active) go(s.mode === 'codes' && !s.up && s.invite ? 'join' : s.mode === 'codes' && s.invites && s.invites.length ? 'invite' : 'room');
             else if (!asked && ended) go('ended', { code: ended.code });
             else go(asked || null);
-            panel.timer = setInterval(refresh, TICK_MS);
+            // The popup opens the panel again from Start and Join while it is
+            // already up, and every open used to add a timer of its own, the
+            // older ones asking the worker every second until the popup
+            // closed. Cleared here, after the awaits, so two opens in flight
+            // at once still leave one — and none when there was nothing to
+            // land on and go() closed the panel again.
+            clearInterval(panel.timer);
+            panel.timer = body.hidden ? null : setInterval(refresh, TICK_MS);
         };
 
         return panel;

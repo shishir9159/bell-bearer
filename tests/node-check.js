@@ -8738,6 +8738,34 @@ const dayRecord = (at = T0) =>
     check('a countdown is m:ss and never goes below nothing', () => {
         eq([PartyPanel.countdown(61400, 0), PartyPanel.countdown(9000, 0), PartyPanel.countdown(0, 5000)], ['1:01', '0:09', '0:00']);
     });
+    await checkAsync('opening the panel again keeps one status timer, and a panel with nothing to show keeps none', async () => {
+        // The popup opens it from resumeParty and again from Start and Join;
+        // each open used to leave its own one-second timer behind.
+        const live = new Set();
+        const [realSet, realClear, realChrome] = [globalThis.setInterval, globalThis.clearInterval, globalThis.chrome];
+        globalThis.setInterval = (fn) => { const id = realSet(fn, 1e9); live.add(id); return id; };
+        globalThis.clearInterval = (id) => { live.delete(id); realClear(id); };
+        globalThis.chrome = {
+            runtime: { sendMessage: (message, done) => done({ ok: true, status: { active: false } }) },
+            storage: { session: { get: async () => ({}) } },
+        };
+        globalThis.BB.PartyViews.probe = { render: () => '' };
+        try {
+            const body = { hidden: true, innerHTML: '', addEventListener() {}, querySelector: () => null };
+            const panel = PartyPanel.createPanel({ body, site: 'youtube', onClose() {} });
+            await Promise.all([panel.open('probe'), panel.open('probe')]);
+            await panel.open('probe');
+            eq(live.size, 1, 'timers running after three opens');
+            panel.close();
+            eq(live.size, 0, 'after close');
+            await panel.open(null);
+            eq([body.hidden, live.size], [true, 0], 'no party and nothing asked for');
+        } finally {
+            for (const id of live) realClear(id);
+            Object.assign(globalThis, { setInterval: realSet, clearInterval: realClear, chrome: realChrome });
+            delete globalThis.BB.PartyViews.probe;
+        }
+    });
     check('a pasted code is named before it is joined, with an invite\'s address and time left', () => {
         const { readCode } = JoinViews.join;
         const invite = PartyCode.inviteCode({ ...inviteFields(), expires: 1000000 + 9 * 60000 });
