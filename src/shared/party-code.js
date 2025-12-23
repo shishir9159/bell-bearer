@@ -169,7 +169,17 @@
         return bytes;
     }
 
-    const sameBytes = (a, b) => a.length === b.length && a.every((byte, i) => byte === b[i]);
+    /**
+     * Every byte is looked at whatever the first difference, so how long a
+     * MAC or a bind proof takes to refuse says nothing about how much of it
+     * was right. The early-exit every() did.
+     */
+    function sameBytes(a, b) {
+        if (!a || !b || a.length !== b.length) return false;
+        let diff = 0;
+        for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+        return diff === 0;
+    }
 
     function writer() {
         const out = [];

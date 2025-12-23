@@ -7992,6 +7992,12 @@ const dayRecord = (at = T0) =>
         bytes[12] ^= 1;
         assert(!(await PartyCode.verifyReply(PartyCode.readReply('bbp1r.' + PartyCode.toBase64Url(bytes)), secret)), 'tampered');
     });
+    check('bytes compare equal only when every one matches, and a missing side is a no', () => {
+        const same = PartyCode.sameBytes;
+        eq([same(Uint8Array.of(1, 2, 3), Uint8Array.of(1, 2, 3)), same(Uint8Array.of(1, 2, 3), Uint8Array.of(1, 2, 4)),
+            same(Uint8Array.of(9, 2, 3), Uint8Array.of(1, 2, 3)), same(Uint8Array.of(1, 2), Uint8Array.of(1, 2, 3)),
+            same(new Uint8Array(0), new Uint8Array(0)), same(undefined, Uint8Array.of(1))], [true, false, false, false, true, false]);
+    });
     check('a code says in words which addresses it gives away', () => {
         eq(PartyCode.describe({ candidates: [
             { type: 'host', address: '5b8d7825-a86d-4a3e-a5cb-aabdf9f47caf.local', port: 1 },
