@@ -33,7 +33,8 @@
         '[contenteditable="true"]', '[onclick]',
     ].join(',');
 
-    const esc = (text) => (Dom ? Dom.escapeHtml(text) : String(text == null ? '' : text));
+    // No raw-text fallback for a missing Dom; see skim.js.
+    const esc = (text) => Dom.escapeHtml(text);
 
     /**
      * @param {object} deps

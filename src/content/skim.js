@@ -34,7 +34,10 @@
     const HIGHLIGHT_ACTIVE = 'bb-skim-hit-active';
     const DEBOUNCE_MS = 120;
 
-    const esc = (text) => (Dom ? Dom.escapeHtml(text) : String(text == null ? '' : text));
+    // No fallback for a missing Dom: one that returned the text raw would put
+    // page titles and history into innerHTML unescaped. Failing at load is
+    // the better way to find out it was not loaded.
+    const esc = (text) => Dom.escapeHtml(text);
 
     const highlightsAvailable = () =>
         typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight === 'function';

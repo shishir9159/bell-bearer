@@ -764,6 +764,15 @@ check('the heat map levels fall on the steps the panel uses', () => {
     const steps = [2, 5, 10];
     eq([0, 1, 2, 3, 5, 6, 10, 11].map((n) => HeatMap.levelOf(n, steps)), [0, 1, 1, 2, 2, 3, 3, 4]);
 });
+check('the heat map escapes through Dom, quotes included', () => {
+    // Each had its own escaper, and none of them escaped a single quote.
+    require('../src/page/heat-map.js');
+    const map = globalThis.BB.HeatMap.render({
+        days: {}, end: L0, steps: [1, 2, 3], legend: ['<b>it\'s</b>'], describe: () => 'Jo\'s "day"',
+    });
+    assert(map.includes('&lt;b&gt;it&#39;s&lt;/b&gt;') && map.includes('Jo&#39;s &quot;day&quot;'), 'heat map');
+    assert(!/<b>|it's/.test(map), 'raw text got through');
+});
 check('a streak counts back from today and stops at the first gap', () => {
     let state = Leet.blank();
     for (const back of [0, 1, 2, 4]) {

@@ -28,7 +28,7 @@
     const ON = 'is-on';
     const OFF = 'is-off';
     const BAD = 'is-bad';
-    const esc = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+    const esc = (text) => ns.Dom.escapeHtml(text);
 
     /** The player on this page, which the chip and the chat hang off: it is what goes into fullscreen and the reader. */
     function hostOf(site, getVideo, doc = root.document) {

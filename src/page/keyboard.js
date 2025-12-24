@@ -31,7 +31,8 @@
     const SiteIcons = BB.SiteIcons || req('../shared/site-icons.js');
     const Dom = BB.Dom || req('../shared/dom.js');
 
-    const esc = (text) => (Dom ? Dom.escapeHtml(text) : String(text));
+    // No raw-text fallback for a missing Dom; see src/content/skim.js.
+    const esc = (text) => Dom.escapeHtml(text);
 
     /** Below this the side lanes have nowhere to go, so everything stacks. */
     const NARROW = 860;

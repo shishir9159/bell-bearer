@@ -27,8 +27,7 @@
     /** Whether `trackActivity` is on. Kept in step by install()'s watcher. */
     let tracking = false;
 
-    const esc = (value) => String(value == null ? '' : value)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const esc = (value) => BB.Dom.escapeHtml(value);
 
     const clock = (hour) => `${String(hour).padStart(2, '0')}:00`;
 

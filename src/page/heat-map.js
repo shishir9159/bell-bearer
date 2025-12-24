@@ -15,6 +15,8 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+    const Dom = BB.Dom || req('../shared/dom.js');
 
     const SIZE = 11;
     const GAP = 2;
@@ -25,7 +27,7 @@
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const WEEKDAYS = { 1: 'Mon', 3: 'Wed', 5: 'Fri' };
 
-    const esc = (text) => String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const esc = (text) => Dom.escapeHtml(text);
 
     function keyOf(date) {
         return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;

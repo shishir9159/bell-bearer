@@ -19,11 +19,13 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+    const Dom = BB.Dom || req('../shared/dom.js');
 
     /** Room for the value labels down the left, and for the line's own width. */
     const PAD = Object.freeze({ left: 34, right: 6, top: 8, bottom: 16 });
 
-    const esc = (text) => String(text).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const esc = (text) => Dom.escapeHtml(text);
 
     /** One decimal is under a tenth of a pixel; more is bytes nobody reads. */
     const n = (value) => Math.round(value * 10) / 10;
