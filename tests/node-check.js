@@ -3105,6 +3105,14 @@ check('the two manifests load exactly the same content scripts', () => {
     const firefox = JSON.parse(readRepo('manifest.firefox.json')).content_scripts;
     eq(firefox, chrome);
 });
+check('chrome is asked for unlimited storage, and firefox is not', () => {
+    // Without it Chrome caps storage.local at 10 MB, and Settings.set turns a
+    // full store into writes that quietly do nothing — checkpoints included.
+    // Chrome shows no warning for it; Firefox lists it at install, and has no
+    // such cap on storage.local to lift.
+    eq(JSON.parse(readRepo('manifest.json')).permissions.includes('unlimitedStorage'), true);
+    eq(JSON.parse(readRepo('manifest.firefox.json')).permissions.includes('unlimitedStorage'), false);
+});
 check('typeracer needs no page-world script, and has not grown one', () => {
     // chess.com and LeetCode each need one because the board object and
     // window.fetch only exist in the page's world. Keystrokes are DOM events,

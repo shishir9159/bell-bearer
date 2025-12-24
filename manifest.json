@@ -15,7 +15,8 @@
     "contextMenus",
     "clipboardWrite",
     "offscreen",
-    "tts"
+    "tts",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "<all_urls>"
