@@ -36,6 +36,9 @@
      */
     const ATTEMPT_CAP = 20;
 
+    /** The longest verdict status or runtime kept: "Time Limit Exceeded" is the longest LeetCode says. */
+    const VERDICT_MAX = 40;
+
     /** A year of heat map, plus enough slack to scroll to its left edge. */
     const KEEP_DAYS = 400;
 
@@ -168,6 +171,11 @@
         const when = count(at) || Date.now();
         const accepted = text(status) === 'Accepted';
         const spent = count(seconds);
+        // Both arrive from the page's own world, which anything on the page
+        // can dispatch into. LeetCode's are a few words; nothing longer is
+        // worth keeping twenty times over per problem.
+        const said = text(status).slice(0, VERDICT_MAX);
+        const took = text(runtime).slice(0, VERDICT_MAX);
 
         const problems = problemsOf(state);
         const before = problems[key] || cleanProblem({ slug: key, seenAt: when });
@@ -176,7 +184,7 @@
             seenAt: before.seenAt || when,
             solvedAt: accepted ? when : before.solvedAt,
             attempts: [
-                { at: when, status: text(status), seconds: spent, runtime: text(runtime) },
+                { at: when, status: said, seconds: spent, runtime: took },
                 ...before.attempts,
             ].slice(0, ATTEMPT_CAP),
         };

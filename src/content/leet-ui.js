@@ -251,7 +251,10 @@
         async function onVerdict(event) {
             let verdict;
             try { verdict = JSON.parse(event.detail); } catch (_) { return; }
-            if (!verdict || !verdict.slug) return;
+            // The slug becomes a key in storage, and anything on the page can
+            // dispatch this event: only the shape leet-page.js's slugOf reads
+            // out of a problem URL is taken.
+            if (!verdict || !/^[A-Za-z0-9-]{1,120}$/.test(String(verdict.slug || ''))) return;
 
             bankWallClock();
             // A verdict for a problem the clock is not on is still recorded —

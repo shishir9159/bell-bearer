@@ -606,6 +606,12 @@ check('an accept counts as solved and sets solvedAt', () => {
     eq(state.problems['two-sum'].solvedAt, L0 + 60000);
     eq(state.problems['two-sum'].attempts[0].runtime, '52 ms', 'newest first');
 });
+check('a verdict\'s status and runtime are kept to a few words, whatever the page sent', () => {
+    const state = Leet.addAttempt(Leet.blank(), { slug: 'two-sum', status: 'x'.repeat(5000), runtime: '9'.repeat(5000), at: L0 });
+    const [attempt] = state.problems['two-sum'].attempts;
+    eq([attempt.status.length, attempt.runtime.length], [40, 40]);
+    eq(Leet.addAttempt(Leet.blank(), { slug: 'a', status: 'Time Limit Exceeded', at: L0 }).problems.a.attempts[0].status, 'Time Limit Exceeded');
+});
 check('a submission either side of midnight lands on its own square', () => {
     const lastNight = new Date(L0).setHours(23, 50, 0, 0);
     let state = Leet.addAttempt(Leet.blank(), { slug: 'a', status: 'Accepted', seconds: 60, at: lastNight });
