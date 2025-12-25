@@ -361,8 +361,11 @@
         // once, to seed this list for anyone who already had a limit set.
         limitSites: 'bbLimitSites',
 
-        // chess.com monthly game archives, normalized. shared/chess.js.
+        // chess.com monthly game archives, normalized: an index of whose they
+        // are and when each month was read, and one key per month under the
+        // prefix beside it — a prefix, not a key. shared/chess.js.
         chessCache: 'bbChessArchiveCache',
+        chessMonths: 'bbChessArchive:',
 
         // Lichess games, normalized, and how far the export was read. shared/lichess.js.
         lichessCache: 'bbLichessGameCache',

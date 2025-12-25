@@ -138,6 +138,16 @@
                     listeners.storageChanged.forEach((f) => f(changes, 'local'));
                     soon(cb);
                 }),
+                remove: dual((keys, cb) => {
+                    const changes = {};
+                    [].concat(keys).forEach((k) => {
+                        if (!Object.prototype.hasOwnProperty.call(state.localStore, k)) return;
+                        changes[k] = { oldValue: state.localStore[k] };
+                        delete state.localStore[k];
+                    });
+                    if (Object.keys(changes).length) listeners.storageChanged.forEach((f) => f(changes, 'local'));
+                    soon(cb);
+                }),
             },
             session: {
                 get: dual((k, cb) => soon(() => cb(pick(k, state.sessionStore)))),

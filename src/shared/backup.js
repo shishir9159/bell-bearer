@@ -23,10 +23,15 @@
         'bb_activity_last',
     ]);
 
+    /** Caches kept as a key per entry, left out by the prefix they share. */
+    const EXCLUDED_PREFIXES = Object.freeze([Settings.DATA.chessMonths]);
+
+    const excluded = (key) => EXCLUDED.has(key) || EXCLUDED_PREFIXES.some((prefix) => key.startsWith(prefix));
+
     function build(store, now = Date.now()) {
         const data = {};
         for (const [key, value] of Object.entries(store || {})) {
-            if (!EXCLUDED.has(key)) data[key] = value;
+            if (!excluded(key)) data[key] = value;
         }
         return { type: TYPE, version: 1, exportedAt: new Date(now).toISOString(), data };
     }
@@ -50,7 +55,7 @@
         return Object.keys(data).length;
     }
 
-    const Backup = { TYPE, EXCLUDED, build, validate, entries, exportAll, importAll };
+    const Backup = { TYPE, EXCLUDED, EXCLUDED_PREFIXES, build, validate, entries, exportAll, importAll };
 
     root.BB = root.BB || {};
     root.BB.Backup = Backup;

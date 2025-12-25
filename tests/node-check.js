@@ -4045,6 +4045,11 @@ global.chrome = {
                 if (cb) return void cb();
                 return Promise.resolve();
             },
+            remove: (keys, cb) => {
+                (Array.isArray(keys) ? keys : [keys]).forEach((k) => { delete store[k]; });
+                if (cb) return void cb();
+                return Promise.resolve();
+            },
         },
     },
 };
@@ -4600,6 +4605,7 @@ const dayRecord = (at = T0) =>
             bbCookieSites: { 'a.com': { decision: 'accept' } },
             bbFeedCache: { huge: true },
             bbChessArchiveCache: { huge: true },
+            'bbChessArchive:2026/09': { huge: true },
         }, 0);
         eq(Object.keys(file.data).sort(), ['bbCookieSites', 'shortcuts', 'skin']);
         eq(Backup.validate(file), true);
@@ -4721,6 +4727,8 @@ const dayRecord = (at = T0) =>
         ...overrides,
     });
 
+    const chessMonthKeys = () => Object.keys(store).filter((key) => key.startsWith('bbChessArchive:')).sort();
+
     check('time controls parse, daily games included', () => {
         eq(Chess.parseTimeControl('180+2'), { base: 180, increment: 2, daily: false });
         eq(Chess.parseTimeControl('600'), { base: 600, increment: 0, daily: false });
@@ -4832,9 +4840,81 @@ const dayRecord = (at = T0) =>
         const now = Date.UTC(2026, 8, 13, 12);
         const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ games: [] }) });
         await Chess.fetchGames('me', { now, days: Chess.HISTORY_DAYS, fetchImpl });
-        eq(Object.keys(store.bbChessArchiveCache.archives).length, 13);
+        eq(chessMonthKeys().length, 13);
         await Chess.fetchGames('me', { now: now + 10 * 60 * 1000, fetchImpl });
-        eq(Object.keys(store.bbChessArchiveCache.archives).length, 13, 'popup-sized read must keep the year');
+        eq(chessMonthKeys().length, 13, 'popup-sized read must keep the year');
+    });
+
+    /** The keys each storage write touched, while `fn` runs. */
+    async function chessWrites(fn) {
+        const writes = [];
+        const realSet = global.chrome.storage.local.set;
+        global.chrome.storage.local.set = (values, cb) => {
+            writes.push(Object.keys(values).sort());
+            return realSet(values, cb);
+        };
+        try { await fn(); } finally { global.chrome.storage.local.set = realSet; }
+        return writes;
+    }
+
+    await checkAsync('the live month read again with nothing new in it writes the index alone', async () => {
+        // The worker's alarm reads the live month every three minutes while a
+        // limit is on, and each read used to write the whole year back.
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        let games = [game({ end_time: Math.floor((now - 3600000) / 1000) })];
+        const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ games }) });
+        await Chess.fetchGames('me', { now, days: 2, fetchImpl });
+
+        eq(await chessWrites(() => Chess.fetchGames('me', { now: now + 4 * 60000, days: 2, fetchImpl })),
+            [['bbChessArchiveCache']], 'nothing new');
+        assert(!JSON.stringify(store.bbChessArchiveCache).includes('chess.com/game'), 'the index carries no games');
+        games = [...games, game({ end_time: Math.floor(now / 1000), url: 'https://www.chess.com/game/live/2' })];
+        eq(await chessWrites(() => Chess.fetchGames('me', { now: now + 8 * 60000, days: 2, fetchImpl })),
+            [['bbChessArchive:2026/09', 'bbChessArchiveCache']], 'a game finished');
+        eq(await chessWrites(() => Chess.fetchGames('me', { now: now + 9 * 60000, days: 2, fetchImpl })), [], 'fresh: nothing read, nothing written');
+    });
+
+    await checkAsync('a month read again after it ended is closed for good, without its games written again', async () => {
+        clearStore();
+        const lastDay = Date.UTC(2026, 8, 30, 20);
+        const calls = [];
+        const fetchImpl = async (url) => {
+            calls.push(url.slice(-7));
+            return { ok: true, status: 200, json: async () => ({ games: url.endsWith('2026/09') ? [game({ end_time: Math.floor(lastDay / 1000) })] : [] }) };
+        };
+        await Chess.fetchGames('me', { now: lastDay, days: 2, fetchImpl });
+        const twoDaysOn = Date.UTC(2026, 9, 2, 1);
+        eq(await chessWrites(() => Chess.fetchGames('me', { now: twoDaysOn, days: 3, fetchImpl })),
+            [['bbChessArchive:2026/10', 'bbChessArchiveCache']], 'September is unchanged; October is new');
+        await Chess.fetchGames('me', { now: twoDaysOn + 10 * 60000, days: 3, fetchImpl });
+        eq(calls, ['2026/09', '2026/09', '2026/10', '2026/10'], 'September not read a third time');
+    });
+
+    await checkAsync('the one-value cache of before is split into months rather than read again', async () => {
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const august = Chess.normalize(game({ end_time: Math.floor(Date.UTC(2026, 7, 20) / 1000) }), 'me');
+        const september = Chess.normalize(game({ end_time: Math.floor(Date.UTC(2026, 8, 12) / 1000), url: 'https://www.chess.com/game/live/2' }), 'me');
+        store.bbChessArchiveCache = { user: 'me', archives: {
+            '2026/08': { fetchedAt: Date.UTC(2026, 8, 5), games: [august] },
+            '2026/09': { fetchedAt: now - 60000, games: [september] },
+        } };
+        let calls = 0;
+        const games = await Chess.fetchGames('me', { now, fetchImpl: async () => { calls++; return { ok: false, status: 500 }; } });
+        eq([calls, games.length], [0, 2]);
+        eq([store.bbChessArchiveCache.version, Object.keys(store.bbChessArchiveCache.fetched)], [2, ['2026/08', '2026/09']]);
+        eq(chessMonthKeys(), ['bbChessArchive:2026/08', 'bbChessArchive:2026/09']);
+    });
+
+    await checkAsync('another player\'s months go when the username changes', async () => {
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ games: [] }) });
+        await Chess.fetchGames('me', { now, days: Chess.HISTORY_DAYS, fetchImpl });
+        await Chess.fetchGames('you', { now: now + 1000, fetchImpl });
+        eq(chessMonthKeys(), ['bbChessArchive:2026/08', 'bbChessArchive:2026/09']);
+        eq([store['bbChessArchive:2026/09'].user, store.bbChessArchiveCache.user], ['you', 'you']);
     });
 
     check('flagging counts only the last 20 games of each time control', () => {

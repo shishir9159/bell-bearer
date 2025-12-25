@@ -298,13 +298,48 @@
         return fetchedAt >= Date.UTC(y, m, 1) + DAY_MS;
     }
 
-    async function readCache() {
+    /**
+     * The cache is a small index — whose games, and when each month was last
+     * read — under DATA.chessCache, and each month's games under a key of its
+     * own. It was one value holding the year, rewritten whole at the end of
+     * every read: the worker's alarm reads the live month every three minutes
+     * while a limit is on, so a year of games went to storage, and out to
+     * every open tab's onChanged, every three minutes, to record a timestamp.
+     * Now a read writes the index, and a month only when its games changed.
+     */
+    const INDEX_VERSION = 2;
+    const monthKey = (month) => Settings.DATA.chessMonths + month;
+
+    async function readStored(keys) {
         try {
-            const stored = await chrome.storage.local.get([Settings.DATA.chessCache]);
-            return stored[Settings.DATA.chessCache] || null;
+            return await chrome.storage.local.get(keys);
         } catch (_) {
-            return null;
+            return {};
         }
+    }
+
+    /** The first shape, `{ user, archives: { month: { fetchedAt, games } } }`, split into the second, once. */
+    async function migrate(old) {
+        const index = { version: INDEX_VERSION, user: old.user, fetched: {} };
+        const values = {};
+        for (const [month, entry] of Object.entries(old.archives || {})) {
+            if (!entry || !Array.isArray(entry.games)) continue;
+            index.fetched[month] = Number(entry.fetchedAt) || 0;
+            values[monthKey(month)] = { user: old.user, games: entry.games };
+        }
+        await Settings.set({ ...values, [Settings.DATA.chessCache]: index });
+        return index;
+    }
+
+    async function readIndex() {
+        const index = (await readStored([Settings.DATA.chessCache]))[Settings.DATA.chessCache];
+        if (index && index.archives) return migrate(index);
+        return index && index.version === INDEX_VERSION ? index : null;
+    }
+
+    /** Whether a month read again is what was already stored. Games in an archive do not change once finished. */
+    function sameGames(stored, read) {
+        return !!stored && stored.length === read.length && JSON.stringify(stored) === JSON.stringify(read);
     }
 
     class ChessApiError extends Error {
@@ -323,14 +358,24 @@
         if (!user) throw new ChessApiError('no-user', 'No chess.com username set');
         const doFetch = fetchImpl || ((url) => fetch(url));
 
-        const cached = await readCache();
-        const archives = cached && cached.user === user ? { ...cached.archives } : {};
+        const index = await readIndex();
+        const sameUser = !!index && index.user === user;
+        const fetched = sameUser ? { ...index.fetched } : {};
         const months = archiveMonths(now, days);
+        const stored = await readStored(months.map(monthKey));
 
+        const archives = {};
+        const writes = {};
+        let read = false;
         for (const month of months) {
-            const entry = archives[month];
-            const fresh = entry && !force && (isClosed(month, entry.fetchedAt) || now - entry.fetchedAt < LIVE_TTL_MS);
-            if (fresh) continue;
+            const had = stored[monthKey(month)];
+            const games = had && had.user === user && Array.isArray(had.games) ? had.games : null;
+            const at = fetched[month];
+            const fresh = games && at && !force && (isClosed(month, at) || now - at < LIVE_TTL_MS);
+            if (fresh) {
+                archives[month] = games;
+                continue;
+            }
 
             let response;
             try {
@@ -342,23 +387,32 @@
             if (!response.ok) throw new ChessApiError('network', `chess.com answered ${response.status}`);
 
             const body = await response.json();
-            archives[month] = {
-                fetchedAt: now,
-                games: (body.games || []).map((game) => normalize(game, user)).filter(Boolean),
-            };
+            archives[month] = (body.games || []).map((game) => normalize(game, user)).filter(Boolean);
+            // The time goes in the index either way: it is what says a month
+            // that has since ended is closed, and never to be read again.
+            fetched[month] = now;
+            read = true;
+            if (!sameGames(games, archives[month])) writes[monthKey(month)] = { user, games: archives[month] };
         }
 
         // Only the months still in the history window are worth their storage —
         // wider than `days`, so a 30-day read never drops the dashboard's year.
-        const kept = {};
-        archiveMonths(now, Math.max(days, HISTORY_DAYS)).forEach((month) => {
-            if (archives[month]) kept[month] = archives[month];
-        });
-        await Settings.set({ [Settings.DATA.chessCache]: { user, archives: kept } });
+        // Another player's months go whatever their age.
+        const keep = new Set(archiveMonths(now, Math.max(days, HISTORY_DAYS)));
+        const gone = Object.keys(fetched).filter((month) => !keep.has(month));
+        gone.forEach((month) => { delete fetched[month]; });
+        if (index && !sameUser) gone.push(...Object.keys(index.fetched || {}).filter((month) => !(monthKey(month) in writes)));
+
+        if (read || gone.length) {
+            await Settings.set({ ...writes, [Settings.DATA.chessCache]: { version: INDEX_VERSION, user, fetched } });
+        }
+        if (gone.length) {
+            try { await chrome.storage.local.remove(gone.map(monthKey)); } catch (_) { /* a stale month is only bytes */ }
+        }
 
         const since = now - days * DAY_MS;
         return months
-            .flatMap((month) => kept[month].games)
+            .flatMap((month) => archives[month])
             .filter((game) => game.end >= since)
             .sort((a, b) => b.end - a.end);
     }
