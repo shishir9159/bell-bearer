@@ -5911,6 +5911,55 @@ const dayRecord = (at = T0) =>
         }
     });
 
+    // ------------------------------------------------------- watched marks
+
+    console.log('\n# watched marks');
+
+    /** A fresh copy of the module, as a second tab would have. */
+    const watchedInTab = () => {
+        delete require.cache[require.resolve('../src/shared/watched.js')];
+        return require('../src/shared/watched.js');
+    };
+
+    await checkAsync('two tabs marking videos watched both keep their marks', async () => {
+        // Each tab cached the map it read at load and wrote that back with its
+        // own mark added, so whichever wrote last erased the other's.
+        clearStore();
+        const [one, two] = [watchedInTab(), watchedInTab()];
+        await one.load();
+        await two.load();
+        await one.mark('a');
+        await two.mark('b');
+        eq(Object.keys(store.bbWatchedVideos).sort(), ['a', 'b']);
+        eq(Object.keys(await two.mark('c')).sort(), ['a', 'b', 'c'], 'and resolves to what was written');
+    });
+
+    await checkAsync('a mark the pouch sheet set in what load() handed it is still written', async () => {
+        clearStore();
+        const Watched = watchedInTab();
+        const seen = await Watched.load();
+        seen.v1 = Date.now(); // what the sheet does before it calls mark()
+        await Watched.mark('v1');
+        eq(Object.keys(store.bbWatchedVideos || {}), ['v1']);
+    });
+
+    await checkAsync('a read that failed is not taken for an empty map and written over the marks', async () => {
+        clearStore();
+        store.bbWatchedVideos = { old: 1 };
+        const Watched = watchedInTab();
+        const realGet = global.chrome.storage.local.get;
+        global.chrome.storage.local.get = () => Promise.reject(new Error('Extension context invalidated.'));
+        const quiet = console.error;
+        console.error = () => {};
+        try {
+            await Watched.mark('new');
+        } finally {
+            global.chrome.storage.local.get = realGet;
+            console.error = quiet;
+        }
+        eq(store.bbWatchedVideos, { old: 1 });
+    });
+
     // ------------------------------------------------------------ X pouch
 
     console.log('\n# the X pouch — two independent lists');
