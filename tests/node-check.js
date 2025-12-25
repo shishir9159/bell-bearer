@@ -5016,9 +5016,34 @@ const dayRecord = (at = T0) =>
         eq(again.length, 2, 'kept games survive an empty resume');
 
         await Lichess.fetchGames('me', { now: now + 11 * 60000, days: Chess.HISTORY_DAYS, fetchImpl });
-        eq(urls.length, 3, 'the year needs only the older games: the newer were just read');
-        eq([urls[2].searchParams.get('sort'), urls[2].searchParams.get('until')],
-            ['dateDesc', String(now - 30 * 86400000 - 1)], 'the year continues back from where 30 days stopped');
+        // The empty resume above wrote nothing, its time included, so this
+        // one resumes again — one small empty request — before going back.
+        eq(urls.slice(2).map((url) => url.searchParams.get('sort')), ['dateAsc', 'dateDesc']);
+        eq(urls[3].searchParams.get('until'), String(now - 30 * 86400000 - 1), 'the year continues back from where 30 days stopped');
+    });
+
+    await checkAsync('a Lichess resume that found nothing writes nothing', async () => {
+        // The alarm resumes every three minutes while a limit is on, and each
+        // resume used to write the whole year back to record when it ran.
+        clearStore();
+        const now = Date.UTC(2026, 8, 13, 12);
+        const created = now - 86400000;
+        let body = [lichessGame({ id: 'g1', createdAt: created, lastMoveAt: created + 60000 })];
+        const fetchImpl = async () => ({ ok: true, status: 200, text: async () => body.map((g) => JSON.stringify(g)).join('\n') });
+        await Lichess.fetchGames('me', { now, days: 2, fetchImpl });
+        body = [];
+        let writes = 0;
+        const realSet = global.chrome.storage.local.set;
+        global.chrome.storage.local.set = (values, cb) => { writes++; return realSet(values, cb); };
+        try {
+            eq((await Lichess.fetchGames('me', { now: now + 4 * 60000, days: 2, fetchImpl })).length, 1);
+            eq(writes, 0, 'nothing new');
+            body = [lichessGame({ id: 'g2', createdAt: now, lastMoveAt: now + 60000 })];
+            eq((await Lichess.fetchGames('me', { now: now + 8 * 60000, days: 2, fetchImpl })).length, 2);
+            eq(writes, 1, 'a game arrived');
+        } finally {
+            global.chrome.storage.local.set = realSet;
+        }
     });
 
     await checkAsync('an interrupted Lichess read keeps what arrived and resumes from it', async () => {

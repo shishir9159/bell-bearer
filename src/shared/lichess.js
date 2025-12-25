@@ -153,7 +153,8 @@
         const keepFrom = now - Math.max(days, Chess.HISTORY_DAYS) * Chess.DAY_MS;
         const wantFrom = now - days * Chess.DAY_MS;
         const cached = await readCache();
-        const state = cached && cached.user === user && cached.version === CACHE_VERSION
+        const reused = !!cached && cached.user === user && cached.version === CACHE_VERSION;
+        const state = reused
             ? { ...cached, games: (cached.games || []).filter((game) => game.start >= keepFrom) }
             : { version: CACHE_VERSION, user, from: now + 1, through: 0, fetchedAt: 0, games: [] };
         state.from = Math.max(state.from, keepFrom);
@@ -167,6 +168,7 @@
         if (!force && recent && state.from <= wantFrom) return wanted();
 
         const known = new Set(state.games.map((game) => game.url));
+        const edges = `${state.from}/${state.through}/${state.games.length}`;
 
         /** One export request; `onGame` moves the edge of the stretch it reads. */
         async function read(query, onGame) {
@@ -225,7 +227,12 @@
         }
 
         state.fetchedAt = now;
-        await save();
+        // The worker's alarm resumes the read every three minutes while a
+        // limit is on, and nearly every time nothing has been played since.
+        // Saving then wrote the whole year back — and out to every open tab —
+        // to record fetchedAt, which only spares the next read one small,
+        // empty request. So the year is written when it has changed.
+        if (!reused || `${state.from}/${state.through}/${state.games.length}` !== edges) await save();
         return wanted();
     }
 
