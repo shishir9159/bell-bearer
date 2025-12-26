@@ -48,13 +48,13 @@ suite('bookmarks: adding checkpoints', () => {
 suite('bookmarks: removing', () => {
     test('drops the video entry when its last checkpoint goes', () => {
         const { videos } = B.addBookmarks([], VIDEO, [{ time: 10 }]);
-        assertDeepEqual(B.removeBookmark(videos, 'vid1', 0), []);
+        assertDeepEqual(B.removeBookmarkById(videos, 'vid1', B.bookmarkKey(videos[0].bookmarks[0])), []);
     });
 
-    test('an out-of-range index is a no-op', () => {
+    test('an unknown key or video is a no-op', () => {
         const { videos } = B.addBookmarks([], VIDEO, [{ time: 10 }]);
-        assertEqual(B.removeBookmark(videos, 'vid1', 7).length, 1);
-        assertEqual(B.removeBookmark(videos, 'nope', 0).length, 1);
+        assertEqual(B.removeBookmarkById(videos, 'vid1', 'cp_nothing')[0].bookmarks.length, 1);
+        assertEqual(B.removeBookmarkById(videos, 'nope', B.bookmarkKey(videos[0].bookmarks[0])).length, 1);
     });
 });
 

@@ -60,9 +60,12 @@
             await chrome.storage.local.set({ [KEY]: next });
             return next;
         };
+        // A failed write answers with what is stored rather than an empty
+        // list: the popup and the dashboard draw what this resolves to, and
+        // [] drew every checkpoint as gone when none had been touched.
         writeChain = writeChain.then(run, run).catch((error) => {
             console.error('Bell Bearer: could not update bookmarks', error);
-            return [];
+            return load();
         });
         return writeChain;
     }
@@ -171,21 +174,11 @@
         return { videos: next, added };
     }
 
-    /** Remove one checkpoint, and the video entry when it was the last one. */
-    function removeBookmark(videos, videoId, bookmarkIndex) {
-        const index = videos.findIndex((v) => v.id === videoId);
-        if (index === -1) return videos;
-
-        const video = videos[index];
-        if (bookmarkIndex < 0 || bookmarkIndex >= video.bookmarks.length) return videos;
-
-        return withBookmarks(videos, index, video.bookmarks.filter((_, i) => i !== bookmarkIndex));
-    }
-
     /**
-     * Remove one checkpoint by its bookmarkKey. The reader re-sorts and
-     * re-renders its list under the user, so an index into it is not a
-     * stable handle the way it is in the popup's fixed list.
+     * Remove one checkpoint by its bookmarkKey, and the video entry when it
+     * was the last one. There is no by-index version any more: the popup and
+     * the dashboard had one, and an index into a list loaded a minute ago is
+     * not a handle on anything once another tab has saved a checkpoint.
      */
     function removeBookmarkById(videos, videoId, key) {
         const index = videos.findIndex((v) => v.id === videoId);
@@ -362,7 +355,7 @@
     const Bookmarks = {
         KEY, EXPORT_VERSION,
         load, save, update,
-        normalizeVideos, bookmarkTime, addBookmarks, removeBookmark,
+        normalizeVideos, bookmarkTime, addBookmarks,
         newId, sameCheckpoint, bookmarkKey, removeBookmarkById, editBookmark,
         lastSaved, sortVideos, SORTS,
         buildExport, validateImport, mergeImported, parseTimestampLinks,

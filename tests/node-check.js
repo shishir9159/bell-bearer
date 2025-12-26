@@ -214,8 +214,18 @@ check('ids are unique across a tight loop', () => {
     eq(ids.size, 1000);
 });
 check('removing the last checkpoint drops the video entry', () => {
-    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [{ time: 5 }] }];
-    eq(Bookmarks.removeBookmark(videos, 'v', 0).length, 0);
+    const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [{ id: 'a', time: 5 }] }];
+    eq(Bookmarks.removeBookmarkById(videos, 'v', 'a').length, 0);
+});
+check('the popup and the dashboard edit checkpoints by key, through update, never by index', () => {
+    // Both used to change the list they had loaded, by index, and save the
+    // whole of it back — erasing a checkpoint a YouTube tab saved meanwhile.
+    for (const file of ['popup.js', 'dashboard.js']) {
+        const source = require('fs').readFileSync(`${__dirname}/../${file}`, 'utf8');
+        assert(!/bookmarkIndex|data-bookmark-index/.test(source), `${file} still addresses a checkpoint by index`);
+        assert(/Bookmarks\.update\(\(videos\) => Bookmarks\.removeBookmarkById\(/.test(source), `${file} deletes around update`);
+        eq((source.match(/Bookmarks\.save\(/g) || []).length, file === 'dashboard.js' ? 1 : 0, `${file}: save is for clearing all only`);
+    }
 });
 check('timestamp links parse out of pasted text, one per line', () => {
     const found = Bookmarks.parseTimestampLinks(
@@ -5958,6 +5968,25 @@ const dayRecord = (at = T0) =>
             console.error = quiet;
         }
         eq(store.bbWatchedVideos, { old: 1 });
+    });
+
+    await checkAsync('a checkpoint edit whose write failed answers with what is stored, not an empty list', async () => {
+        // The popup and the dashboard draw what update() resolves to.
+        clearStore();
+        const video = { id: 'v', title: 'V', url: 'u', bookmarks: [{ id: 'a', time: 5 }, { id: 'b', time: 9 }] };
+        store[Bookmarks.KEY] = [video];
+        const realSet = global.chrome.storage.local.set;
+        global.chrome.storage.local.set = () => Promise.reject(new Error('QUOTA_BYTES quota exceeded'));
+        const quiet = console.error;
+        console.error = () => {};
+        let drawn;
+        try {
+            drawn = await Bookmarks.update((videos) => Bookmarks.removeBookmarkById(videos, 'v', 'a'));
+        } finally {
+            global.chrome.storage.local.set = realSet;
+            console.error = quiet;
+        }
+        eq(drawn[0].bookmarks.map((b) => b.id), ['a', 'b']);
     });
 
     // ------------------------------------------------------------ X pouch

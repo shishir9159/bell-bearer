@@ -107,7 +107,7 @@
                 if (button.classList.contains('seek-btn')) {
                     this.seek(item.dataset.videoId, Number(button.dataset.time));
                 } else if (button.classList.contains('delete-btn')) {
-                    this.deleteBookmark(item.dataset.videoId, Number(item.dataset.bookmarkIndex));
+                    this.deleteBookmark(item.dataset.videoId, item.dataset.key);
                 }
             });
 
@@ -356,12 +356,17 @@
             });
         }
 
-        async deleteBookmark(videoId, bookmarkIndex) {
-            this.videos = Bookmarks.removeBookmark(this.videos, videoId, bookmarkIndex);
+        /**
+         * By key, against what is stored now. It used to drop an index from
+         * the list the popup loaded and save that whole list back, which
+         * erased a checkpoint saved from a YouTube tab in the meantime — and
+         * the index could by then point at a different checkpoint.
+         */
+        async deleteBookmark(videoId, key) {
+            this.videos = await Bookmarks.update((videos) => Bookmarks.removeBookmarkById(videos, videoId, key));
             if (!this.videos.some((video) => video.id === this.selectedVideoId)) {
                 this.selectedVideoId = null;
             }
-            await Bookmarks.save(this.videos);
             this.render();
         }
 
@@ -439,7 +444,7 @@
                     <span class="bd-count">${count}</span>
                 </div>
                 <div class="checkpoint-timeline">
-                    ${video.bookmarks.map((bookmark, index) => renderBookmark(video, bookmark, index)).join('')}
+                    ${video.bookmarks.map((bookmark) => renderBookmark(video, bookmark)).join('')}
                 </div>`;
         }
     }
@@ -484,7 +489,7 @@
         window.close();
     }
 
-    function renderBookmark(video, bookmark, index) {
+    function renderBookmark(video, bookmark) {
         const isSpan = typeof bookmark.start === 'number' && typeof bookmark.end === 'number';
         const time = Bookmarks.bookmarkTime(bookmark);
         const label = isSpan
@@ -492,7 +497,7 @@
             : Time.formatTime(time);
 
         return `
-            <div class="bookmark-item" data-bookmark-index="${index}" data-video-id="${Dom.escapeAttr(video.id)}">
+            <div class="bookmark-item" data-key="${Dom.escapeAttr(Bookmarks.bookmarkKey(bookmark))}" data-video-id="${Dom.escapeAttr(video.id)}">
                 <div class="bookmark-time">${label}</div>
                 ${bookmark.title ? `<div class="bookmark-name">${Dom.escapeHtml(bookmark.title)}</div>` : ''}
                 ${bookmark.note ? `<div class="bookmark-note">${Dom.escapeHtml(bookmark.note)}</div>` : ''}

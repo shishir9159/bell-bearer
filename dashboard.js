@@ -393,12 +393,12 @@
                 const card = button.closest('.video-card');
                 const item = button.closest('.bookmark-item');
                 const videoId = card && card.dataset.videoId;
-                const index = item ? Number(item.dataset.bookmarkIndex) : -1;
+                const key = item ? item.dataset.key : '';
 
                 if (button.classList.contains('pin-btn')) this.togglePin(videoId);
                 else if (button.classList.contains('seek-btn')) this.seek(videoId, Number(button.dataset.time));
-                else if (button.classList.contains('delete-btn')) this.deleteBookmark(videoId, index);
-                else if (button.classList.contains('copy-bookmark-subtitle')) this.copyOne(videoId, index);
+                else if (button.classList.contains('delete-btn')) this.deleteBookmark(videoId, key);
+                else if (button.classList.contains('copy-bookmark-subtitle')) this.copyOne(videoId, key);
                 else if (button.classList.contains('copy-subtitles-with-time')) this.copyAll(videoId, true);
                 else if (button.classList.contains('copy-subtitles-no-time')) this.copyAll(videoId, false);
             });
@@ -408,7 +408,7 @@
                 if (!input) return;
                 const item = input.closest('.bookmark-item');
                 const card = input.closest('.video-card');
-                this.saveBookmarkTitle(card.dataset.videoId, Number(item.dataset.bookmarkIndex), input.value.trim());
+                this.saveBookmarkTitle(card.dataset.videoId, item.dataset.key, input.value.trim());
             });
 
             container.addEventListener('keydown', (event) => {
@@ -505,7 +505,7 @@
                     </div>
                     <div class="video-bookmarks">
                         ${count > 0
-                            ? video.bookmarks.map((bookmark, index) => renderBookmarkRow(bookmark, index)).join('')
+                            ? video.bookmarks.map((bookmark) => renderBookmarkRow(bookmark)).join('')
                             : '<p class="no-bookmarks">No checkpoints for this video</p>'}
                     </div>
                 </div>`;
@@ -602,17 +602,19 @@
             await chrome.tabs.create({ url: YouTube.watchUrl(videoId, time) });
         }
 
-        async deleteBookmark(videoId, index) {
-            this.videos = Bookmarks.removeBookmark(this.videos, videoId, index);
-            await Bookmarks.save(this.videos);
+        /**
+         * Both by key, against what is stored now. They used to change the
+         * list this page loaded, by index, and save all of it back: a
+         * checkpoint saved from a YouTube tab since was erased, and the index
+         * could by then name a different checkpoint.
+         */
+        async deleteBookmark(videoId, key) {
+            this.videos = await Bookmarks.update((videos) => Bookmarks.removeBookmarkById(videos, videoId, key));
             this.renderBookmarks();
         }
 
-        async saveBookmarkTitle(videoId, index, title) {
-            const video = this.videos.find((v) => v.id === videoId);
-            if (!video || !video.bookmarks[index]) return;
-            video.bookmarks[index].title = title;
-            await Bookmarks.save(this.videos);
+        async saveBookmarkTitle(videoId, key, title) {
+            this.videos = await Bookmarks.update((videos) => Bookmarks.editBookmark(videos, videoId, key, { title }));
         }
 
         async clearAll() {
@@ -632,9 +634,9 @@
 
         // ------------------------------------------------------ subtitles
 
-        async copyOne(videoId, index) {
+        async copyOne(videoId, key) {
             const video = this.videos.find((v) => v.id === videoId);
-            const bookmark = video && video.bookmarks[index];
+            const bookmark = video && video.bookmarks.find((one) => Bookmarks.bookmarkKey(one) === key);
             if (!bookmark || !bookmark.subtitle) {
                 Ui.toast('That checkpoint has no subtitle text', 'warning');
                 return;
@@ -796,7 +798,7 @@
             </button>`;
     }
 
-    function renderBookmarkRow(bookmark, index) {
+    function renderBookmarkRow(bookmark) {
         const isSpan = typeof bookmark.start === 'number' && typeof bookmark.end === 'number';
         const time = Bookmarks.bookmarkTime(bookmark);
         const label = isSpan
@@ -807,7 +809,7 @@
         const subtitle = bookmark.subtitle && bookmark.subtitle !== 'null' ? bookmark.subtitle : '';
 
         return `
-            <div class="bookmark-item" data-bookmark-index="${index}">
+            <div class="bookmark-item" data-key="${Dom.escapeAttr(Bookmarks.bookmarkKey(bookmark))}">
                 <div class="bookmark-time-row">
                     <div class="bookmark-time">${label}</div>
                     <input type="text" class="bookmark-title-input" placeholder="Add title…"
