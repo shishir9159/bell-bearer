@@ -89,6 +89,7 @@ that code, not a replacement — it cannot press a key or play a video.
 | `party-dev-server.js` | A party server to try the extension against before the real one exists: `party-room.js` behind that socket. `node tests/party-dev-server.js --lag 200 --jitter 150 --loss 5`. A fixture, not the product |
 | `party-conformance.js` | Replays `party-vectors.json` against a live party server in real time: `node tests/party-conformance.js ws://localhost:7070`. Run it against a server without jitter or loss |
 | `node-check.js` | The Node gate — pure logic only, no DOM, no timers |
+| `load-order.js` | Every list that loads the classic scripts (both manifests, the worker, each page, the party's lists, these test pages), and a check that each file comes after what it takes off `BB` as it loads. Run by `node-check.js`; `node tests/load-order.js` prints what is out of order |
 
 ## How it works
 

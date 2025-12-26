@@ -3142,30 +3142,37 @@ check('every typeracer source the manifest loads is in the browser suite too', (
     }
     assert(suite.includes('typeracer.test.js'), 'the spec itself is not loaded');
 });
-check('a module is loaded after everything it destructures off BB', () => {
+const LoadOrder = require('./load-order.js');
+
+check('every load list has each module after what it takes off BB as it loads', () => {
     // Load order is manual — there is no bundler — and getting it wrong fails
-    // in that one surface, at load.
-    const suite = readRepo('tests/index.html');
-    const at = (src) => suite.indexOf(`<script src="../${src}">`);
-    for (const [first, second] of [
-        ['src/shared/typeracer.js', 'src/content/typeracer-read.js'],
-        ['src/content/typeracer-read.js', 'src/content/typeracer-ui.js'],
-        ['src/shared/sfx.js', 'src/content/typeracer-ui.js'],
-        ['src/shared/typeracer.js', 'src/page/typeracer-stats.js'],
-        ['src/page/spark.js', 'src/page/typeracer-stats.js'],
-    ]) {
-        assert(at(first) !== -1 && at(second) !== -1, `${first} or ${second} is missing from the suite`);
-        assert(at(first) < at(second), `${second} is loaded before ${first}`);
-    }
+    // in that one surface, at load. This used to be a hand-kept list of pairs
+    // for one feature; tests/load-order.js reads what each file needs instead,
+    // over every list in CLAUDE.md's table.
+    const problems = LoadOrder.lintAll();
+    assert(!problems.length, `\n        ${problems.join('\n        ')}`);
 });
-check('the manifest loads them in that order as well', () => {
+check('the load-order check reads what a file takes at load, and not what it reads later', () => {
+    const main = LoadOrder.needs(readRepo('src/content/main.js'));
+    assert(['Settings', 'TyperUi', 'ChatUi', 'Watched'].every((name) => main.has(name)), 'main.js destructures all of these');
+    assert(LoadOrder.needs(readRepo('src/content/typeracer-ui.js')).has('Sfx'));
+    assert(LoadOrder.needs(readRepo('src/content/chess.js')).has('Sfx'), '(root.BB && root.BB.Sfx) || req(…)');
+    assert(LoadOrder.needs(readRepo('src/background/skim.js')).has('Skim'), 'globalThis.BB && globalThis.BB.Skim');
+    // chat-sites.js reaches PromptQueue through an arrow, when it is called.
+    assert(!LoadOrder.needs(readRepo('src/shared/chat-sites.js')).has('PromptQueue'));
+    // chess-stats reads BB.HeatMap when it draws, and the popup never loads the heat map.
+    assert(!LoadOrder.needs(readRepo('src/page/chess-stats.js')).has('HeatMap'));
+    eq([...LoadOrder.provides(readRepo('src/shared/sfx.js'))], ['Sfx']);
+});
+check('and it does catch a list put the wrong way round', () => {
     const js = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
-    const at = (src) => js.indexOf(src);
-    assert(at('src/shared/sfx.js') < at('src/content/typeracer-ui.js'));
-    assert(at('src/shared/typeracer.js') < at('src/content/typeracer-read.js'));
-    assert(at('src/content/typeracer-read.js') < at('src/content/typeracer-ui.js'));
-    // main.js is the bootstrap and destructures all of them.
-    assert(at('src/content/typeracer-ui.js') < at('src/content/main.js'));
+    const flipped = [...js].reverse();
+    const problems = LoadOrder.lint(flipped);
+    assert(problems.some((one) => one.startsWith('src/content/main.js takes Settings')), problems[0]);
+    const sources = { 'src/a.js': "    const { B } = root.BB;\n    root.BB.A = 1;", 'src/b.js': '    root.BB.B = 1;' };
+    eq(LoadOrder.lint(['src/a.js', 'src/b.js'], sources), ['src/a.js takes B as it loads, but src/b.js is loaded after it']);
+    eq(LoadOrder.lint(['src/b.js', 'src/a.js'], sources), []);
+    eq(LoadOrder.lint(['src/a.js'], sources), ['src/a.js takes B as it loads, and nothing before it provides one']);
 });
 
 console.log('\n# the chess low-clock tone, on the sound module');
@@ -3198,14 +3205,6 @@ check('chess.js no longer keeps an audio context of its own', () => {
         'the old context is still in there beside the shared one');
     assert(/Sfx\.play\('low'/.test(source), 'the tone is not played through the module');
     assert(/Sfx\.unlock\(\)/.test(source), 'the context is opened somewhere other than a gesture');
-});
-check('the sound module is loaded before the file that now plays through it', () => {
-    // Load order is manual. chess.js sits well before the TypeRacer cluster,
-    // so moving this one line is the whole of the migration's risk.
-    const js = JSON.parse(require('fs').readFileSync(`${__dirname}/../manifest.json`, 'utf8'))
-        .content_scripts[0].js;
-    assert(js.indexOf('src/shared/sfx.js') < js.indexOf('src/content/chess.js'),
-        'chess.js would get undefined for Sfx at load');
 });
 
 console.log('\n# typeracer — the caret hotkey');
