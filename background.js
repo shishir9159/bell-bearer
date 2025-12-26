@@ -10,6 +10,7 @@
  * Keep this list in step with manifest.firefox.json and tests/index.html.
  */
 importScripts(
+    'src/shared/time.js',
     'src/shared/settings.js',
     'src/shared/chat-sites.js',
     'src/shared/prompt-queue.js',

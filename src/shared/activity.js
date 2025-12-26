@@ -26,6 +26,8 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+    const Time = BB.Time || req('./time.js');
 
     const KEY = 'bb_activity';
     const LAST_KEY = 'bb_activity_last';
@@ -42,8 +44,6 @@
     const TOP_KEEP_DAYS = 7;
     const IDLE_GAP_MS = 90 * 1000;
 
-    const DAY_MS = 864e5;
-
     /**
      * The previous reading, `{ at, host, title }`, or null for "nothing was
      * focused". `undefined` means it has not been read back yet in this
@@ -59,7 +59,13 @@
      */
     let cached;
 
-    const dayKey = (date) => new Date(date).toISOString().slice(0, 10);
+    /**
+     * The local day. It was the UTC one, while the hour buckets inside a day
+     * were local: east of Greenwich an evening was filed under tomorrow, with
+     * its hours at the top of that day's chart, and "today" turned over at the
+     * wrong hour. Days recorded under UTC keys are left to age out.
+     */
+    const dayKey = (ms, back = 0) => Time.dayKey(ms, back);
     const blankDay = () => ({ total: 0, hours: new Array(24).fill(0), hosts: {}, top: null });
 
     function hostOf(url) {
@@ -125,10 +131,10 @@
     }
 
     /** The oldest day still allowed to name a page, today counting as one. */
-    const topCutoff = (now = Date.now()) => dayKey(now - (TOP_KEEP_DAYS - 1) * DAY_MS);
+    const topCutoff = (now = Date.now()) => dayKey(now, TOP_KEEP_DAYS - 1);
 
     function prune(data, now = Date.now()) {
-        const cutoff = dayKey(now - KEEP_DAYS * DAY_MS);
+        const cutoff = dayKey(now, KEEP_DAYS);
         const keepTop = topCutoff(now);
         Object.keys(data).forEach((day) => {
             if (day < cutoff) { delete data[day]; return; }
@@ -192,7 +198,7 @@
      */
     function summarize(data, days, offset = 0) {
         const keys = [];
-        for (let i = 0; i < days; i++) keys.push(dayKey(Date.now() - (offset + i) * DAY_MS));
+        for (let i = 0; i < days; i++) keys.push(dayKey(Date.now(), offset + i));
         const keepTop = topCutoff();
 
         const hosts = {};

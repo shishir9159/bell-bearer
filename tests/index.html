@@ -29,6 +29,7 @@
         background.js itself is only an importScripts() shim for the service
         worker, so the parts are listed here the same way manifest.firefox.json
         lists them. Keep the three lists in step. -->
+<script src="../src/shared/time.js"></script>
 <script src="../src/shared/settings.js"></script>
 <script src="../src/shared/chat-sites.js"></script>
 <script src="../src/shared/prompt-queue.js"></script>
@@ -41,8 +42,8 @@
 <script src="../src/background/prompt-queue.js"></script>
 <script src="../transcript.js"></script>
 
-<!-- Shared modules, loaded in dependency order (as the manifest loads them). -->
-<script src="../src/shared/time.js"></script>
+<!-- Shared modules, loaded in dependency order (as the manifest loads them).
+     time.js is with the worker's, above. -->
 <script src="../src/shared/dom.js"></script>
 <script src="../src/shared/speed.js"></script>
 <script src="../src/shared/youtube.js"></script>

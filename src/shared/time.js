@@ -99,7 +99,23 @@
         return 'now';
     }
 
-    const Time = { formatTime, parseTimestamp, relativeTime, shortAge };
+    /**
+     * 'YYYY-MM-DD' for the **local** day `ms` falls on, or the day `back` days
+     * before it. Every daily feature buckets by the day the user was sitting
+     * at the keyboard on: `toISOString().slice(0, 10)` is UTC, which files an
+     * evening east of Greenwich under tomorrow.
+     *
+     * `back` walks the calendar rather than subtracting 24 hours, which on a
+     * daylight-saving day lands an hour off and can name the same day twice.
+     */
+    function dayKey(ms = Date.now(), back = 0) {
+        const at = new Date(ms);
+        const day = back ? new Date(at.getFullYear(), at.getMonth(), at.getDate() - back, 12) : at;
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+    }
+
+    const Time = { formatTime, parseTimestamp, relativeTime, shortAge, dayKey };
 
     root.BB = root.BB || {};
     root.BB.Time = Time;

@@ -4084,7 +4084,7 @@ function reset({ on = true } = {}) {
 }
 
 const dayRecord = (at = T0) =>
-    (store[Activity.KEY] || {})[new Date(at).toISOString().slice(0, 10)] || null;
+    (store[Activity.KEY] || {})[Time.dayKey(at)] || null;
 
 (async () => {
     console.log('\n# activity — recording');
@@ -4187,7 +4187,25 @@ const dayRecord = (at = T0) =>
         await Activity.tick(tabAt('https://a.test/x', 'X'), beforeMidnight);
         await Activity.tick(tabAt('https://a.test/x', 'X'), beforeMidnight + secs(40));
         eq(Object.keys(store[Activity.KEY]),
-            [new Date(beforeMidnight).toISOString().slice(0, 10)]);
+            [Time.dayKey(beforeMidnight)]);
+    });
+
+    await checkAsync('a day is the local one at both ends of it, and its hours agree', async () => {
+        // The key was UTC and the hours local: east of Greenwich the first
+        // hours of a day were filed under yesterday, west of it the last
+        // hours under tomorrow. Either way round fails somewhere off UTC.
+        for (const at of [new Date(2026, 6, 15, 0, 10).getTime(), new Date(2026, 6, 15, 23, 50).getTime()]) {
+            reset();
+            await Activity.tick(tabAt('https://a.test/x', 'X'), at);
+            await Activity.tick(tabAt('https://a.test/x', 'X'), at + secs(20));
+            eq(Object.keys(store[Activity.KEY]), ['2026-07-15'], new Date(at).toString());
+            eq(store[Activity.KEY]['2026-07-15'].hours[new Date(at).getHours()], 20);
+        }
+    });
+    check('Time.dayKey names the local day, and walks back by the calendar', () => {
+        const justAfterMidnight = new Date(2026, 0, 1, 0, 5).getTime();
+        eq([Time.dayKey(justAfterMidnight), Time.dayKey(justAfterMidnight, 1), Time.dayKey(justAfterMidnight, 366)],
+            ['2026-01-01', '2025-12-31', '2024-12-31']);
     });
 
     console.log('\n# activity — hosts');
@@ -4205,7 +4223,7 @@ const dayRecord = (at = T0) =>
     console.log('\n# activity — summary');
 
     function seed(data, offsetDays, record) {
-        const key = new Date(Date.now() - offsetDays * 864e5).toISOString().slice(0, 10);
+        const key = Time.dayKey(Date.now(), offsetDays);
         data[key] = Object.assign(
             { total: 0, hours: new Array(24).fill(0), hosts: {}, top: null }, record);
         return data;

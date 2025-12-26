@@ -29,12 +29,12 @@ const tabAt = (url, title) => ({ url, title });
 
 /** The stored record for the day `at` falls on, or null. */
 function dayRecord(at = T0) {
-    const key = new Date(at).toISOString().slice(0, 10);
+    const key = window.BB.Time.dayKey(at);
     return (MockChrome.state.localStore[Activity().KEY] || {})[key] || null;
 }
 
 /** Local-date key, matching the one `dayRecord` derives from a timestamp. */
-const keyFor = (at) => new Date(at).toISOString().slice(0, 10);
+const keyFor = (at) => window.BB.Time.dayKey(at);
 
 suite('activity — recording', () => {
 

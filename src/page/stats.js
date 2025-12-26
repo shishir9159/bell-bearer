@@ -33,8 +33,8 @@
 
     function dayName(key) {
         const date = new Date(`${key}T12:00:00`);
-        const today = new Date().toISOString().slice(0, 10);
-        if (key === today) return 'Today';
+        // Local, like the store's own keys since they stopped being UTC.
+        if (key === BB.Time.dayKey()) return 'Today';
         return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
     }
 
@@ -48,9 +48,7 @@
      */
     function lastSevenDays() {
         const out = [];
-        for (let back = 0; back < 7; back++) {
-            out.push(new Date(Date.now() - back * 864e5).toISOString().slice(0, 10));
-        }
+        for (let back = 0; back < 7; back++) out.push(BB.Time.dayKey(Date.now(), back));
         return out;
     }
 
