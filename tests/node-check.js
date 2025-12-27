@@ -5993,6 +5993,42 @@ const storedDays = () => Object.keys(store)
         }
     });
 
+    // ---------------------------------------------------------- DomWatch
+
+    console.log('\n# the shared DOM watcher');
+
+    await checkAsync('a task that asks for an interval runs at most that often, and is owed the pass it skipped', async () => {
+        // On X and the chat sites the page mutates on nearly every frame, and
+        // every task ran on each of them. The owed pass is the half that is
+        // easy to get wrong: without it, a mutation that landed inside the
+        // interval would wait for the next mutation, or for the 3s poll.
+        const DomWatch = require('../src/content/dom-watch.js');
+        const saved = ['requestAnimationFrame', 'cancelAnimationFrame', 'MutationObserver', 'document'].map((name) => [name, globalThis[name]]);
+        let mutate = null;
+        globalThis.requestAnimationFrame = (fn) => setTimeout(fn, 1);
+        globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+        globalThis.MutationObserver = class { constructor(fn) { mutate = fn; } observe() {} disconnect() {} };
+        globalThis.document = { body: {} };
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const watcher = DomWatch.createWatcher();
+        try {
+            const runs = { slow: [], fast: 0 };
+            const t0 = Date.now();
+            watcher.add('slow', () => { runs.slow.push(Date.now() - t0); return false; }, { every: 150 });
+            watcher.add('fast', () => { runs.fast++; return false; });
+            await wait(20);
+            for (let i = 0; i < 5; i++) { mutate(); await wait(10); }
+            eq(runs.slow.length, 1, 'mutations inside the interval ran it again');
+            assert(runs.fast >= 5, `the untimed task ran ${runs.fast} times for 5 mutations`);
+            await wait(250);
+            eq(runs.slow.length, 2, 'the skipped mutations were owed one pass, with nothing else to trigger it');
+            assert(runs.slow[1] >= 140, `the owed pass came ${runs.slow[1]}ms after the first`);
+        } finally {
+            watcher.stop();
+            for (const [name, value] of saved) globalThis[name] = value;
+        }
+    });
+
     // ------------------------------------------------------- watched marks
 
     console.log('\n# watched marks');

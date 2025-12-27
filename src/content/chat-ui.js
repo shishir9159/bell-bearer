@@ -919,15 +919,22 @@
 
         function install() {
             watcher.add('chat-toggle', injectToggle);
-            watcher.add('chat-sync', sync);
-            watcher.add('chat-pin-marks', markPinned);
+            // These walk every mounted turn, and a streaming answer mutates
+            // the page on every frame: on a long Claude thread that was each
+            // row's text fingerprinted several times a frame. A mark or a
+            // refetch a fifth of a second late is not seen to be.
+            watcher.add('chat-sync', sync, { every: 200 });
+            watcher.add('chat-pin-marks', markPinned, { every: 150 });
             // A pin made in another tab, or taken off in the dashboard, is
             // drawn here as it happens.
             unwatchPins = Settings.watch([ChatPins.KEY], reloadPins);
             reloadPins();
             runner.start();
-            watcher.add('chat-queue-strip', drawStrip);
-            watcher.add('chat-limit', watchLimit);
+            // Redrawn directly whenever the queue or the limit changes; the
+            // watcher only puts them back when the site rebuilds the area
+            // round its composer, and reads the site's notice.
+            watcher.add('chat-queue-strip', drawStrip, { every: 250 });
+            watcher.add('chat-limit', watchLimit, { every: 500 });
             watcher.add('chat-composer-tools', injectTools);
             unwatchQueue = Settings.watch([PromptQueue.KEY], reloadQueue);
             reloadQueue();
