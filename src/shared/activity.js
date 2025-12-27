@@ -6,15 +6,14 @@
  * machine; no network, no history API, no per-URL log beyond the single
  * longest page of each day.
  *
- * Shape:
- *   bb_activity = {
- *     "2026-08-30": {
- *       total: 15120,                        // seconds of focused time
- *       hours: [0,0,…],                      // 24 buckets, seconds
- *       hosts: { "github.com": 6480, … },    // seconds per site
- *       top:   { title, host, seconds }      // longest single page that day
- *     }, …
+ * Shape, one key per local day:
+ *   bb_activity:2026-08-30 = {
+ *     total: 15120,                        // seconds of focused time
+ *     hours: [0,0,…],                      // 24 buckets, seconds
+ *     hosts: { "github.com": 6480, … },    // seconds per site
+ *     top:   { title, host, seconds }      // longest single page that day
  *   }
+ *   bb_activity_days = ["2026-08-29", "2026-08-30", …]
  *
  * `top` is dropped after seven days; the rest of a day survives for sixty.
  *
@@ -29,7 +28,21 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const Time = BB.Time || req('./time.js');
 
+    /**
+     * One key per day, and a list of which days there are.
+     *
+     * The store was one value holding every day, and a tick every thirty
+     * seconds read all sixty days and wrote all sixty back — out to every open
+     * tab's storage.onChanged each time — to add a few seconds to one of them.
+     * Now a tick writes the day it is adding to, and the list only when a new
+     * day starts, which is also when the old days are pruned.
+     *
+     * KEY is the old single value. It is only read to be split, which is also
+     * how a backup exported before the split comes back in.
+     */
     const KEY = 'bb_activity';
+    const DAY_PREFIX = 'bb_activity:';
+    const DAYS_KEY = 'bb_activity_days';
     const LAST_KEY = 'bb_activity_last';
     const SETTING = 'trackActivity';
     const KEEP_DAYS = 60;
@@ -77,8 +90,43 @@
         }
     }
 
-    const read = () => new Promise((done) => chrome.storage.local.get([KEY], (o) => done(o[KEY] || {})));
-    const write = (data) => new Promise((done) => chrome.storage.local.set({ [KEY]: data }, done));
+    const dayStore = (day) => DAY_PREFIX + day;
+    const isDay = (day) => /^\d{4}-\d{2}-\d{2}$/.test(day);
+
+    const get = (keys) => new Promise((done) => chrome.storage.local.get(keys, (o) => done(o || {})));
+    const set = (values) => new Promise((done) => chrome.storage.local.set(values, done));
+    const remove = (keys) => new Promise((done) => chrome.storage.local.remove(keys, done));
+
+    /** The old single value split into days. A day already stored on its own is newer, and kept. */
+    async function split(old, days) {
+        const had = await get(Object.keys(old).filter(isDay).map(dayStore));
+        const writes = {};
+        for (const [day, record] of Object.entries(old)) {
+            if (isDay(day) && record && !had[dayStore(day)]) writes[dayStore(day)] = record;
+        }
+        const index = [...new Set([...days, ...Object.keys(old).filter(isDay)])].sort();
+        await set({ ...writes, [DAYS_KEY]: index });
+        await remove([KEY]);
+        return index;
+    }
+
+    /** Which days are stored, oldest first. */
+    async function index() {
+        const stored = await get([KEY, DAYS_KEY]);
+        const days = Array.isArray(stored[DAYS_KEY]) ? stored[DAYS_KEY].filter(isDay) : [];
+        const old = stored[KEY];
+        return old && typeof old === 'object' && !Array.isArray(old) ? split(old, days) : days;
+    }
+
+    /** Every stored day, as the one map summarize() folds: `{ "2026-08-30": { … } }`. */
+    async function read() {
+        const days = await index();
+        if (!days.length) return {};
+        const stored = await get(days.map(dayStore));
+        const out = {};
+        for (const day of days) if (stored[dayStore(day)]) out[day] = stored[dayStore(day)];
+        return out;
+    }
 
     /**
      * Where the marker lives: storage.session where it exists, because it is
@@ -133,14 +181,25 @@
     /** The oldest day still allowed to name a page, today counting as one. */
     const topCutoff = (now = Date.now()) => dayKey(now, TOP_KEEP_DAYS - 1);
 
-    function prune(data, now = Date.now()) {
+    /**
+     * What a new day's first tick writes besides the day itself, and which
+     * days it removes: the ones past KEEP_DAYS go, and a day past the week
+     * loses the page it named. Once a day rather than on every tick — nothing
+     * ages between two ticks of the same day.
+     */
+    async function prune(days, today, now = Date.now()) {
         const cutoff = dayKey(now, KEEP_DAYS);
         const keepTop = topCutoff(now);
-        Object.keys(data).forEach((day) => {
-            if (day < cutoff) { delete data[day]; return; }
-            if (day < keepTop && data[day].top) data[day].top = null;
-        });
-        return data;
+        const kept = days.filter((day) => day >= cutoff);
+        const writes = { [DAYS_KEY]: [...new Set([...kept, today])].sort() };
+
+        const titled = kept.filter((day) => day < keepTop);
+        const stored = titled.length ? await get(titled.map(dayStore)) : {};
+        for (const day of titled) {
+            const record = stored[dayStore(day)];
+            if (record && record.top) writes[dayStore(day)] = { ...record, top: null };
+        }
+        return { writes, gone: days.filter((day) => day < cutoff).map(dayStore) };
     }
 
     /**
@@ -163,9 +222,9 @@
         const seconds = Math.round((now - previous.at) / 1000);
         if (seconds <= 0 || now - previous.at > IDLE_GAP_MS) return;
 
-        const data = prune(await read(), now);
         const key = dayKey(previous.at);
-        const day = (data[key] = data[key] || blankDay());
+        const days = await index();
+        const day = (await get([dayStore(key)]))[dayStore(key)] || blankDay();
 
         day.total += seconds;
         day.hours[new Date(previous.at).getHours()] += seconds;
@@ -176,7 +235,9 @@
             day.top = { title: previous.title, host: previous.host, seconds: running };
         }
 
-        await write(data);
+        const { writes, gone } = days.includes(key) ? { writes: {}, gone: [] } : await prune(days, key, now);
+        await set({ ...writes, [dayStore(key)]: day });
+        if (gone.length) await remove(gone);
     }
 
     /**
@@ -187,7 +248,8 @@
     function blur() { return writeLast(null); }
 
     async function clear() {
-        await write({});
+        const days = await index();
+        await remove([KEY, DAYS_KEY, ...days.map(dayStore)]);
         await writeLast(null);
     }
 
@@ -271,8 +333,8 @@
     }
 
     const Activity = {
-        KEY, LAST_KEY, SETTING, KEEP_DAYS, TOP_KEEP_DAYS,
-        tick, blur, clear, summary, report, summarize, human, hostOf,
+        KEY, DAY_PREFIX, DAYS_KEY, LAST_KEY, SETTING, KEEP_DAYS, TOP_KEEP_DAYS,
+        tick, blur, clear, read, summary, report, summarize, human, hostOf, dayStore,
     };
 
     BB.Activity = Activity;

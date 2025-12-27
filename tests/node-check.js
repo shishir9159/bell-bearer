@@ -4083,8 +4083,11 @@ function reset({ on = true } = {}) {
     Activity.blur();
 }
 
-const dayRecord = (at = T0) =>
-    (store[Activity.KEY] || {})[Time.dayKey(at)] || null;
+const dayRecord = (at = T0) => store[Activity.dayStore(Time.dayKey(at))] || null;
+
+/** The days stored one key each, oldest first. */
+const storedDays = () => Object.keys(store)
+    .filter((key) => key.startsWith(Activity.DAY_PREFIX)).map((key) => key.slice(Activity.DAY_PREFIX.length)).sort();
 
 (async () => {
     console.log('\n# activity — recording');
@@ -4093,7 +4096,7 @@ const dayRecord = (at = T0) =>
         reset({ on: false });
         await Activity.tick(tabAt('https://github.com/a', 'A'), T0);
         await Activity.tick(tabAt('https://github.com/a', 'A'), T0 + secs(60));
-        eq(store[Activity.KEY], undefined);
+        eq(storedDays(), []);
     });
 
     await checkAsync('the first tick records nothing', async () => {
@@ -4186,8 +4189,7 @@ const dayRecord = (at = T0) =>
         const beforeMidnight = new Date(2026, 6, 15, 23, 59, 40).getTime();
         await Activity.tick(tabAt('https://a.test/x', 'X'), beforeMidnight);
         await Activity.tick(tabAt('https://a.test/x', 'X'), beforeMidnight + secs(40));
-        eq(Object.keys(store[Activity.KEY]),
-            [Time.dayKey(beforeMidnight)]);
+        eq(storedDays(), [Time.dayKey(beforeMidnight)]);
     });
 
     await checkAsync('a day is the local one at both ends of it, and its hours agree', async () => {
@@ -4198,8 +4200,8 @@ const dayRecord = (at = T0) =>
             reset();
             await Activity.tick(tabAt('https://a.test/x', 'X'), at);
             await Activity.tick(tabAt('https://a.test/x', 'X'), at + secs(20));
-            eq(Object.keys(store[Activity.KEY]), ['2026-07-15'], new Date(at).toString());
-            eq(store[Activity.KEY]['2026-07-15'].hours[new Date(at).getHours()], 20);
+            eq(storedDays(), ['2026-07-15'], new Date(at).toString());
+            eq(store[Activity.dayStore('2026-07-15')].hours[new Date(at).getHours()], 20);
         }
     });
     check('Time.dayKey names the local day, and walks back by the calendar', () => {
@@ -4303,8 +4305,61 @@ const dayRecord = (at = T0) =>
         await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
         await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(30));
 
-        eq(store[Activity.KEY][old].top, null, 'the title is gone from storage, not just from the view');
-        eq(store[Activity.KEY][old].total, 900, 'the day itself is inside the 60-day window and stays');
+        eq(store[Activity.dayStore(old)].top, null, 'the title is gone from storage, not just from the view');
+        eq(store[Activity.dayStore(old)].total, 900, 'the day itself is inside the 60-day window and stays');
+    });
+
+    await checkAsync('a tick writes the one day it adds to, and the list of days only when a day starts', async () => {
+        // Every tick used to write all sixty days back, and every open tab
+        // was handed the lot through storage.onChanged.
+        const data = {};
+        for (const back of [1, 2, 3]) seed(data, back, { total: 60, hosts: { 'b.test': 60 } });
+        reset();
+        store[Activity.KEY] = data;
+        await Activity.summary(7); // the old single value is split on the way
+
+        const writes = [];
+        const realSet = global.chrome.storage.local.set;
+        global.chrome.storage.local.set = (values, cb) => { writes.push(Object.keys(values).sort()); return realSet(values, cb); };
+        try {
+            await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+            writes.length = 0;
+            await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(30));
+            await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(60));
+        } finally {
+            global.chrome.storage.local.set = realSet;
+        }
+        const today = Activity.dayStore(Time.dayKey(T0));
+        eq(writes.filter((keys) => keys.some((key) => key.startsWith('bb_activity') && key !== Activity.LAST_KEY)),
+            [[today, Activity.DAYS_KEY], [today]], 'the day starts, then only the day');
+        eq(dayRecord().total, 60);
+    });
+
+    await checkAsync('the one-value store of before is split into days, and a day already split is kept', async () => {
+        reset();
+        const [older, newer] = [Time.dayKey(Date.now(), 3), Time.dayKey(Date.now(), 1)];
+        store[Activity.KEY] = {
+            [older]: { total: 10, hours: new Array(24).fill(0), hosts: { 'a.test': 10 }, top: null },
+            [newer]: { total: 20, hours: new Array(24).fill(0), hosts: { 'a.test': 20 }, top: null },
+        };
+        store[Activity.dayStore(newer)] = { total: 99, hours: new Array(24).fill(0), hosts: { 'a.test': 99 }, top: null };
+        store[Activity.DAYS_KEY] = [newer];
+        eq((await Activity.summary(7)).total, 109);
+        eq([store[Activity.KEY], storedDays(), store[Activity.DAYS_KEY]], [undefined, [older, newer], [older, newer]]);
+    });
+
+    await checkAsync('a new day removes the days that are past keeping', async () => {
+        reset();
+        const data = {};
+        seed(data, Activity.KEEP_DAYS + 5, { total: 5 });
+        seed(data, 10, { total: 7 });
+        store[Activity.KEY] = data;
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(30));
+        eq(storedDays(), [Time.dayKey(Date.now(), 10), Time.dayKey(T0)]);
+        eq(store[Activity.DAYS_KEY], storedDays());
+        await Activity.clear();
+        eq([storedDays(), store[Activity.DAYS_KEY]], [[], undefined]);
     });
 
     await checkAsync('an empty store summarises to zeroes', async () => {

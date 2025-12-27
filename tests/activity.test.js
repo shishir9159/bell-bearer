@@ -29,8 +29,14 @@ const tabAt = (url, title) => ({ url, title });
 
 /** The stored record for the day `at` falls on, or null. */
 function dayRecord(at = T0) {
-    const key = window.BB.Time.dayKey(at);
-    return (MockChrome.state.localStore[Activity().KEY] || {})[key] || null;
+    return MockChrome.state.localStore[Activity().dayStore(window.BB.Time.dayKey(at))] || null;
+}
+
+/** The days stored one key each, oldest first. */
+function storedDays() {
+    const prefix = Activity().DAY_PREFIX;
+    return Object.keys(MockChrome.state.localStore)
+        .filter((key) => key.startsWith(prefix)).map((key) => key.slice(prefix.length)).sort();
 }
 
 /** Local-date key, matching the one `dayRecord` derives from a timestamp. */
@@ -44,8 +50,8 @@ suite('activity — recording', () => {
         await Activity().tick(tabAt('https://github.com/a', 'A'), T0);
         await Activity().tick(tabAt('https://github.com/a', 'A'), T0 + secs(60));
 
-        assertEqual(MockChrome.state.localStore[Activity().KEY], undefined,
-            'the store must not even be created while the setting is off');
+        assertDeepEqual(storedDays(), [], 'the store must not even be created while the setting is off');
+        assertEqual(MockChrome.state.localStore[Activity().DAYS_KEY], undefined);
     });
 
     test('the first tick records nothing — there is no elapsed time yet', async () => {
@@ -178,8 +184,7 @@ suite('activity — recording', () => {
         await Activity().tick(tabAt('https://a.test/x', 'X'), beforeMidnight);
         await Activity().tick(tabAt('https://a.test/x', 'X'), beforeMidnight + secs(40));
 
-        const store = MockChrome.state.localStore[Activity().KEY];
-        assertDeepEqual(Object.keys(store), [keyFor(beforeMidnight)],
+        assertDeepEqual(storedDays(), [keyFor(beforeMidnight)],
             'the whole stretch belongs to the day it began on');
     });
 
@@ -190,7 +195,7 @@ suite('activity — recording', () => {
         assert(dayRecord(), 'something was recorded');
 
         await Activity().clear();
-        assertDeepEqual(MockChrome.state.localStore[Activity().KEY], {});
+        assertDeepEqual(storedDays(), []);
     });
 });
 
