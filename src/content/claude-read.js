@@ -81,13 +81,39 @@
     /** Letters and digits only, lower case: what survives both Markdown and its rendering. */
     const fingerprint = (text) => String(text || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
-    /** A node's words as the page would render them: links to their text, no footnotes, no fences. */
+    /**
+     * A node's words as the page would render them: links to their text, no
+     * footnotes, no fences.
+     *
+     * Kept per node. Every row asks for the node at its place on every pass,
+     * three passes a frame at one time, and it is four regular expressions
+     * over an answer's whole text each time. A node is never changed once
+     * fetched — a refetch hands over new ones — so the memo goes stale with
+     * nothing.
+     */
+    const wordsOf = new WeakMap();
     function nodeWords(node) {
+        let words = wordsOf.get(node);
+        if (words !== undefined) return words;
         const text = (node.blocks.length ? node.blocks.filter((b) => b.kind === 'text').map((b) => b.text).join('\n') : node.text)
             .replace(/\[\^\d+\]/g, '')
             .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
             .replace(/^ {0,3}(`{3,}|~{3,}).*$/gm, '');
-        return fingerprint(text);
+        words = fingerprint(text);
+        wordsOf.set(node, words);
+        return words;
+    }
+
+    /**
+     * The first 600 fingerprinted characters of a row, which is all
+     * matchTurn compares — read off the row's start rather than the whole of
+     * a long answer, unless the start is so bare of letters that it runs out.
+     */
+    const ROW_PRINT = 600;
+    function rowPrint(text) {
+        const whole = String(text || '');
+        const head = fingerprint(whole.slice(0, ROW_PRINT * 8)).slice(0, ROW_PRINT);
+        return head.length < ROW_PRINT && whole.length > ROW_PRINT * 8 ? fingerprint(whole).slice(0, ROW_PRINT) : head;
     }
 
     /**
@@ -99,7 +125,7 @@
         const path = ChatTree.activePath(conv);
         const expected = path[index];
         if (!expected) return [];
-        const row = fingerprint(text).slice(0, 600);
+        const row = rowPrint(text);
         const matches = (id) => {
             const want = nodeWords(conv.nodes[id]).slice(0, 24);
             return want.length >= 4 && row.includes(want);

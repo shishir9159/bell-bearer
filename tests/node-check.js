@@ -7591,6 +7591,24 @@ const storedDays = () => Object.keys(store)
         eq(ClaudeRead.matchTurn(conv, 3, 'Link the math library. 1'), ['a2']);
         eq(ClaudeRead.matchTurn(conv, 2, 'An edited question'), ['h2b']);
     });
+    check('a node\'s words are worked out once, however many rows and passes ask', () => {
+        // Every row asked for them on every pass, several passes a frame
+        // while an answer streamed — four regexes over the whole answer each.
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        let reads = 0;
+        const node = conv.nodes.a1;
+        const blocks = node.blocks;
+        Object.defineProperty(node, 'blocks', { get: () => { reads++; return blocks; } });
+        eq(ClaudeRead.matchTurn(conv, 1, 'Thought for 3s It is the linker.'), ['a1']);
+        const once = reads;
+        for (let pass = 0; pass < 4; pass++) eq(ClaudeRead.matchTurn(conv, 1, 'Thought for 3s It is the linker.'), ['a1']);
+        eq(reads, once, 'four more passes read the node again');
+    });
+    check('a long row is matched off its start, and a start bare of letters still reaches its words', () => {
+        const conv = ClaudeFormat.normalize(claudeRaw());
+        eq(ClaudeRead.matchTurn(conv, 1, `It is the linker. ${'word '.repeat(20000)}`), ['a1']);
+        eq(ClaudeRead.matchTurn(conv, 1, `${'-'.repeat(6000)} It is the linker.`), ['a1'], 'past a ruler of dashes');
+    });
     check('nothing is drawn under /code, or anywhere that is not a chat', () => {
         assert(ClaudeRead.onChatPage('/new') && ClaudeRead.onChatPage('/chat/9a978684-1ba6-4d23-af91-b09ad7ae3f9c'));
         for (const path of ['/code', '/code/session_1', '/settings/profile', '/recents', '/projects', '/artifacts']) {
