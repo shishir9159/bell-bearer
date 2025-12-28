@@ -309,10 +309,46 @@
             assert(sheet().includes('--bb-x-icon-color: rgb(113, 118, 123)'), sheet());
             assert(sheet().includes('--bb-x-icon-size: 18.75px'), sheet());
 
+            // X marks a theme on the page's own background, inline, and that
+            // is what the look is re-read on between buttons being placed.
             reply.querySelector('svg').style.color = 'rgb(83, 100, 113)'; // Default after Lights out
-            ui.injectPostButtons();
+            const was = document.body.style.backgroundColor;
+            document.body.style.backgroundColor = 'rgb(255, 255, 255)';
+            try {
+                ui.injectPostButtons();
+            } finally {
+                document.body.style.backgroundColor = was;
+            }
             assert(sheet().includes('--bb-x-icon-color: rgb(83, 100, 113)'), 'the switch was not followed');
             document.getElementById(TwitterUi().ICON_LOOK_ID).remove();
+            teardown();
+        });
+
+        test('a post already fitted costs no query and no style read on the next pass', () => {
+            // The injector runs on every frame X mutates in, which while
+            // scrolling is all of them.
+            const host = timeline();
+            const ui = makeUi();
+            ui.injectPostButtons();
+            const article = host.querySelector('article');
+            const realQuery = article.querySelector;
+            const realStyle = window.getComputedStyle;
+            let queries = 0;
+            let styles = 0;
+            article.querySelector = function (...args) { queries++; return realQuery.apply(this, args); };
+            window.getComputedStyle = function (...args) { styles++; return realStyle.apply(this, args); };
+            try {
+                ui.injectPostButtons();
+                ui.injectPostButtons();
+            } finally {
+                delete article.querySelector;
+                window.getComputedStyle = realStyle;
+            }
+            assertEqual(queries, 0, 'the post was queried again');
+            assertEqual(styles, 0, 'the icon look was read again');
+            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-post-btn').length, 1);
+            const icon = document.getElementById(TwitterUi().ICON_LOOK_ID);
+            if (icon) icon.remove();
             teardown();
         });
 

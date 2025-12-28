@@ -586,23 +586,45 @@
          * un-replaced for the life of the page. The only marker kept is for
          * a post that cannot be filed at all, so those are not re-read on
          * every frame forever.
+         *
+         * This runs on every frame X mutates in, which while scrolling is all
+         * of them, so a post already done has to cost next to nothing. Each
+         * remembers the button and the hidden slot it was given, and a pass
+         * only checks those are still in it: a query per post per frame, and
+         * the icon look read with getComputedStyle — a forced layout — on
+         * every frame, was the cost of scrolling the timeline.
          */
+        const placedIn = new WeakMap();
+        const hiddenIn = new WeakMap();
+        const stillIn = (element, article) => !!element && element.isConnected && article.contains(element);
+
+        function hasButton(article) {
+            if (stillIn(placedIn.get(article), article)) return true;
+            const found = article.querySelector('.bb-x-post-btn');
+            if (found) placedIn.set(article, found);
+            return !!found;
+        }
+
         function injectPostButtons() {
             const wanted = on('twitterPouchPosts');
             const hide = on('twitterHideBookmark');
             if (!wanted && !hide) return false;
 
-            let first = true;
-            for (const article of TwitterPage.findAll('post')) {
-                if (wanted && first) {
-                    first = false;
-                    wearIconLook(TwitterPage.find('actions', article));
+            const posts = TwitterPage.findAll('post');
+            const bare = wanted ? posts.filter((article) => !article.hasAttribute('data-bb-unfilable') && !hasButton(article)) : [];
+            if (wanted && posts.length) lookAgain(posts[0], bare.length > 0);
+            for (const article of bare) {
+                const button = addPostButton(article);
+                if (button) placedIn.set(article, button);
+                else article.setAttribute('data-bb-unfilable', '1');
+            }
+            if (hide) {
+                for (const article of posts) {
+                    const slot = hiddenIn.get(article);
+                    if (stillIn(slot, article) && slot.classList.contains('bb-x-hidden')) continue;
+                    const hidden = setBookmarkHidden(article, true);
+                    if (hidden) hiddenIn.set(article, hidden);
                 }
-                if (wanted && !article.querySelector('.bb-x-post-btn') &&
-                    !article.hasAttribute('data-bb-unfilable')) {
-                    if (!addPostButton(article)) article.setAttribute('data-bb-unfilable', '1');
-                }
-                if (hide) setBookmarkHidden(article, true);
             }
             return false;
         }
@@ -620,7 +642,26 @@
          *
          * Reply's glyph is the one read: Like and Repost change colour once
          * pressed, Reply never does.
+         *
+         * Read when buttons are being placed, when X's own theme marks move —
+         * it sets the page's background and root font size inline, which
+         * costs nothing to read — and otherwise at most once a second, as a
+         * backstop for a switch that moves neither.
          */
+        const LOOK_EVERY_MS = 1000;
+        let lookedAt = 0;
+        let lookedFor = '';
+        const themeMarks = () => `${document.body ? document.body.style.backgroundColor : ''}|${document.documentElement.style.fontSize}`;
+
+        function lookAgain(article, placing) {
+            const marks = themeMarks();
+            const now = Date.now();
+            if (!placing && marks === lookedFor && now - lookedAt < LOOK_EVERY_MS) return;
+            lookedFor = marks;
+            lookedAt = now;
+            wearIconLook(TwitterPage.find('actions', article));
+        }
+
         let iconLook = '';
         function wearIconLook(actions) {
             const glyph = actions && actions.querySelector('[data-testid="reply"] svg');
@@ -650,19 +691,21 @@
          */
         function setBookmarkHidden(scope, hidden) {
             const marks = scope.querySelectorAll('[data-testid="bookmark"], [data-testid="removeBookmark"]');
+            let slot = null;
             for (const mark of marks) {
-                const slot = mark.closest('[role="group"] > *') || mark;
+                slot = mark.closest('[role="group"] > *') || mark;
                 slot.classList.toggle('bb-x-hidden', hidden);
             }
+            return slot;
         }
 
-        /** True when a button went in; false when this post cannot carry one. */
+        /** The button that went in, or null when this post cannot carry one. */
         function addPostButton(article) {
             const actions = TwitterPage.find('actions', article);
-            if (!actions) return false;
+            if (!actions) return null;
 
             const post = TwitterPage.readPost(article);
-            if (!post) return false;
+            if (!post) return null;
 
             const button = PouchButton.create({
                 className: 'bb-x-post-btn',
@@ -685,7 +728,7 @@
             stretchRow(actions);
 
             markPost(button, post.statusId);
-            return true;
+            return button;
         }
 
         async function markPost(button, statusId) {
