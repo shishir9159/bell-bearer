@@ -381,6 +381,33 @@ checkAsync('a transcript asked for by language is its own fetch, and tracks are 
         delete globalThis.YouTubeTranscriptApi;
     }
 });
+checkAsync('the transcript api key is read off the page it runs in, not fetched in a second copy of it', async () => {
+    // Every YouTube tab fetched a whole watch page — about a megabyte — to
+    // read one string its own document already carried.
+    const { YouTubeTranscriptApi } = require('../transcript.js');
+    const api = new YouTubeTranscriptApi();
+    const page = { scripts: [
+        { src: 'https://www.youtube.com/s/player/base.js', textContent: '' },
+        { src: '', textContent: 'var ytInitialData = {}' },
+        { src: '', textContent: 'ytcfg.set({"CLIENT_CANARY_STATE":"none","INNERTUBE_API_KEY":"AIzaTest_-1"});' },
+    ] };
+    eq([api._keyFromPage(page), api._keyFromPage({ scripts: [] }), api._keyFromPage(null)], ['AIzaTest_-1', null, null]);
+
+    const saved = { document: globalThis.document, fetch: globalThis.fetch, key: YouTubeTranscriptApi._apiKey };
+    let fetched = 0;
+    globalThis.fetch = async () => { fetched++; return { ok: true, text: async () => '"INNERTUBE_API_KEY":"AIzaFetched"' }; };
+    try {
+        globalThis.document = page;
+        YouTubeTranscriptApi._apiKey = null;
+        eq([await api._getInnertubeApiKey('v'), fetched], ['AIzaTest_-1', 0]);
+        globalThis.document = { scripts: [] };
+        YouTubeTranscriptApi._apiKey = null;
+        eq([await api._getInnertubeApiKey('v'), fetched], ['AIzaFetched', 1], 'anywhere else it is still fetched');
+    } finally {
+        Object.assign(globalThis, { document: saved.document, fetch: saved.fetch });
+        YouTubeTranscriptApi._apiKey = saved.key;
+    }
+});
 check('checkpoints copy out as a timestamped markdown list', () => {
     globalThis.BB.YouTube = globalThis.BB.YouTube || require('../src/shared/youtube.js');
     const Markdown = require('../src/content/markdown.js');

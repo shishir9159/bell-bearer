@@ -327,7 +327,7 @@ class YouTubeTranscriptApi {
         // Build URL with optional translation
         let url = track.baseUrl;
         if (translateTo && track.isTranslatable) {
-            url += `&tlang=${translateTo}`;
+            url += `&tlang=${encodeURIComponent(translateTo)}`;
         }
 
         // Fetch and parse transcript XML
@@ -384,6 +384,15 @@ class YouTubeTranscriptApi {
         if (YouTubeTranscriptApi._apiKey) return YouTubeTranscriptApi._apiKey;
         if (YouTubeTranscriptApi._apiKeyRequest) return YouTubeTranscriptApi._apiKeyRequest;
 
+        // On youtube.com the page this runs in already carries the key, in
+        // the inline ytcfg.set({...}) script, and an isolated world can read
+        // a script's text. The fetch below is for anywhere else.
+        const onPage = this._keyFromPage();
+        if (onPage) {
+            YouTubeTranscriptApi._apiKey = onPage;
+            return onPage;
+        }
+
         YouTubeTranscriptApi._apiKeyRequest = this._fetchInnertubeApiKey(videoId)
             .then((key) => {
                 YouTubeTranscriptApi._apiKey = key;
@@ -392,6 +401,19 @@ class YouTubeTranscriptApi {
             .finally(() => { YouTubeTranscriptApi._apiKeyRequest = null; });
 
         return YouTubeTranscriptApi._apiKeyRequest;
+    }
+
+    /** The key out of this document's inline scripts, or null where there is none. */
+    _keyFromPage(doc = typeof document !== 'undefined' ? document : null) {
+        if (!doc || !doc.scripts) return null;
+        for (const script of doc.scripts) {
+            if (script.src) continue;
+            const text = script.textContent || '';
+            if (!text.includes('INNERTUBE_API_KEY')) continue;
+            const match = text.match(/"INNERTUBE_API_KEY":\s*"([a-zA-Z0-9_-]+)"/);
+            if (match) return match[1];
+        }
+        return null;
     }
 
     async _fetchInnertubeApiKey(videoId) {
@@ -501,7 +523,9 @@ class YouTubeTranscriptApi {
     _decodeHTML(text) {
         // Check if we're in a browser environment
         if (typeof document !== 'undefined') {
-            const textarea = document.createElement('textarea');
+            // One element for every snippet, not one each: a transcript is
+            // thousands of them, and each was a textarea made and dropped.
+            const textarea = this._decoder || (this._decoder = document.createElement('textarea'));
             textarea.innerHTML = text;
             return textarea.value;
         } else {
@@ -516,20 +540,6 @@ class YouTubeTranscriptApi {
                 .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
                 .replace(/&#x([a-fA-F0-9]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
         }
-    }
-
-    /**
-     * Format seconds to MM:SS or HH:MM:SS
-     */
-    _formatTime(seconds) {
-        const h = Math.floor(seconds / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        const s = Math.floor(seconds % 60);
-
-        if (h > 0) {
-            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        }
-        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 }
 
