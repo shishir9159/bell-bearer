@@ -103,7 +103,12 @@
         return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? b : a;
     }
 
-    function createCookieBanner({ CookieSites, notify, showAccept, showReject, hostname = location.hostname }) {
+    /**
+     * `chipsOn` answers, from storage, whether either chip is switched on:
+     * `showAccept` and `showReject` read the page's settings mirror, which is
+     * still the schema's defaults when install() runs.
+     */
+    function createCookieBanner({ CookieSites, notify, showAccept, showReject, chipsOn = async () => true, hostname = location.hostname }) {
         let observer = null;
         let stopTimer = 0;
         let scheduled = false;
@@ -111,10 +116,15 @@
 
         const host = CookieSites.normalizeHost(hostname);
 
+        let scanTimer = 0;
+
         function stop() {
             if (observer) observer.disconnect();
             observer = null;
             clearTimeout(stopTimer);
+            // A scan already queued would otherwise still run once after it.
+            clearTimeout(scanTimer);
+            scheduled = false;
         }
 
         function chip(label, decision, target) {
@@ -189,11 +199,21 @@
             if (scheduled) return;
             scheduled = true;
             const settled = startedAt && Date.now() - startedAt > EAGER_FOR_MS;
-            setTimeout(scan, settled ? RELAXED_MS : EAGER_MS);
+            scanTimer = setTimeout(scan, settled ? RELAXED_MS : EAGER_MS);
         }
 
-        function install() {
+        /**
+         * Watch the page for its banner — unless there is nothing to do with
+         * one. With both chips switched off and no answer remembered for this
+         * site, a banner would only be found to be left alone; the observer
+         * used to go up on every page regardless, for twenty seconds of
+         * subtree mutations, because it was installed before the settings
+         * mirror had been read. So it asks storage itself, once.
+         */
+        async function install() {
             if (!document.documentElement) return;
+            const [sites, chips] = await Promise.all([CookieSites.load(), chipsOn()]);
+            if (!chips && !CookieSites.match(sites, hostname)) return;
             startedAt = Date.now();
             schedule();
             observer = new MutationObserver(schedule);

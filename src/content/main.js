@@ -568,6 +568,10 @@
         notify,
         showAccept: () => settings.cookieAcceptButton,
         showReject: () => settings.cookieRejectButton,
+        chipsOn: async () => {
+            const chips = await Settings.get(['cookieAcceptButton', 'cookieRejectButton']);
+            return !!(chips.cookieAcceptButton || chips.cookieRejectButton);
+        },
     }).install();
 
     // --------------------------------------------------------- settings

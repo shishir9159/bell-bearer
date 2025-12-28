@@ -4695,6 +4695,37 @@ const storedDays = () => Object.keys(store)
         eq(await CookieSites.load(), {});
     });
 
+    await checkAsync('a page with no answer remembered and both chips off is not watched at all', async () => {
+        // The observer used to go up on every page for twenty seconds,
+        // because install ran before the settings mirror had been read.
+        const CookieBanner = require('../src/content/cookie-banner.js');
+        const saved = { document: globalThis.document, MutationObserver: globalThis.MutationObserver };
+        let watched = 0;
+        globalThis.document = { documentElement: {}, querySelectorAll: () => [] };
+        globalThis.MutationObserver = class { observe() { watched++; } disconnect() {} };
+        const banners = [];
+        const make = (chips, hostname) => {
+            const banner = CookieBanner.createCookieBanner({
+                CookieSites, notify() {}, showAccept: () => chips, showReject: () => chips, chipsOn: async () => chips, hostname,
+            });
+            banners.push(banner);
+            return banner.install();
+        };
+        try {
+            clearStore();
+            await make(false, 'plain.example');
+            eq(watched, 0, 'nothing to press and nothing to offer');
+            await CookieSites.remember('remembered.example', 'decline', 1);
+            await make(false, 'www.remembered.example');
+            eq(watched, 1, 'a remembered answer still gets pressed');
+            await make(true, 'plain.example');
+            eq(watched, 2, 'a chip to offer');
+        } finally {
+            banners.forEach((banner) => banner.stop());
+            Object.assign(globalThis, saved);
+        }
+    });
+
     await checkAsync('a site remembered as rejected keeps that answer', async () => {
         clearStore();
         await CookieSites.remember('example.com', 'decline', 7);
