@@ -84,6 +84,7 @@ that code, not a replacement — it cannot press a key or play a video.
 | `party-rtc.test.js` | Invite and reply codes against the browser's own WebRTC: a description rebuilt from a code is one Chrome will connect with |
 | `party-chat.test.js` | The party's chat on the page: what a member said is text and never markup, the box keeps to the room's budget and its keys to itself, the chip counts unread and opens it, and it sits beside the player or over it |
 | `party-only.html` | The party specs alone, with the modules the party loader injects |
+| `entries.test.js` | Each manifest entry, and only its files, booted in a frame of its own as the site it is for: a site's code reaching for another site's module fails here, not only on that site. Needs http (`serve.js`) to read the manifest |
 | `party-vectors.json` | Cases every party authority must pass, run by `node-check.js` against `party-room.js` and by `party-conformance.js` against a live server |
 | `party-dev-socket.js` | The party dev server's hand-written WebSocket (handshake, 8 KB text frames), and the lag, jitter and loss it can put on the wire |
 | `party-dev-server.js` | A party server to try the extension against before the real one exists: `party-room.js` behind that socket. `node tests/party-dev-server.js --lag 200 --jitter 150 --loss 5`. A fixture, not the product |

@@ -28,11 +28,12 @@
     if (root.__bellBearerInstalled) return;
     root.__bellBearerInstalled = true;
 
-    const { Settings, Speed, Site, Notify, Player, Shortcuts, Checkpoints, Transcripts, Markdown,
-        PageInfo, DomWatch, Theme, YouTubeUi, Feed, Subscriptions, Watched,
-        CookieSites, CookieBanner, ChessContent, ChessSites, ChessLimits, ChessLimitsContent,
-        Keybindings, SkimContent, LinkHints, TimeLimitContent, TwitterUi, TwitterAds,
-        RosterContent, LeetUi, TyperUi, Reader, ChatUi, ChatSites, ChatgptRead, ClaudeRead } = BB;
+    // What every page loads. A site's own modules are loaded on that site
+    // alone — the manifest has one entry per site, each the core list plus
+    // its own files and then this one — so they are taken off BB inside that
+    // site's block below, and are simply not there anywhere else.
+    const { Settings, Speed, Site, Notify, Player, Shortcuts, Markdown, PageInfo, DomWatch, Theme,
+        CookieSites, CookieBanner, Keybindings, SkimContent, LinkHints, TimeLimitContent } = BB;
 
     const site = Site.detectSite();
     const getVideoElement = Site.createPlayerLocator(site);
@@ -47,10 +48,9 @@
         shouldRemember: () => settings.rememberPlaybackSpeed,
     });
 
-    const transcripts = Transcripts.createTranscripts({
-        getPreferredLanguage: () => settings.preferredSubtitleLanguage,
-        notify,
-    });
+    /** YouTube's, built in its block below: no other page has a video to take a checkpoint of. */
+    let transcripts = null;
+    let recorder = null;
 
     /**
      * The video the user is on right now, read live from the URL rather than
@@ -68,8 +68,6 @@
             url: BB.YouTube.watchUrl(id, 0),
         };
     }
-
-    const recorder = Checkpoints.createRecorder({ player, notify, getVideo, transcripts });
 
     const markdown = Markdown.createMarkdown({ site, pageInfo: PageInfo });
 
@@ -119,9 +117,9 @@
         slower: () => player.slower(),
         resetSpeed: () => player.resetSpeed(),
         boostSpeed: (seconds) => player.boostSpeed(seconds),
-        startRecording: () => recorder.startRecording(),
-        stopRecording: () => recorder.stopRecording(),
-        toggleSegment: () => recorder.toggleSegment(),
+        startRecording: () => recorder && recorder.startRecording(),
+        stopRecording: () => recorder && recorder.stopRecording(),
+        toggleSegment: () => recorder && recorder.toggleSegment(),
         toggleReader: () => reader && reader.toggle(),
         onShorts: () => site === 'youtube' && Site.isShortsPath(),
         shortsSkip: (direction) => skipShort(direction),
@@ -237,7 +235,14 @@
     }
 
     if (site === 'youtube') {
+        const { YouTubeUi, Reader, Checkpoints, Transcripts } = BB;
         const watcher = DomWatch.createWatcher();
+
+        transcripts = Transcripts.createTranscripts({
+            getPreferredLanguage: () => settings.preferredSubtitleLanguage,
+            notify,
+        });
+        recorder = Checkpoints.createRecorder({ player, notify, getVideo, transcripts });
 
         youtubeUi = YouTubeUi.createYouTubeUi({
             watcher,
@@ -286,6 +291,7 @@
     // ------------------------------------------------------------ X extras
 
     if (site === 'twitter') {
+        const { TwitterUi, TwitterAds } = BB;
         const watcher = DomWatch.createWatcher();
 
         twitterUi = TwitterUi.createTwitterUi({ watcher, notify, getSettings: () => settings });
@@ -321,7 +327,7 @@
     if (site === 'leetcode') {
         const watcher = DomWatch.createWatcher();
 
-        leetUi = LeetUi.createLeetUi({ watcher, notify, getSettings: () => settings });
+        leetUi = BB.LeetUi.createLeetUi({ watcher, notify, getSettings: () => settings });
         leetUi.install();
 
         // Same treatment as X, and for the same reasons: LeetCode is a
@@ -346,7 +352,7 @@
     if (site === 'typeracer') {
         const watcher = DomWatch.createWatcher();
 
-        typerUi = TyperUi.createTyperUi({ watcher, notify, getSettings: () => settings });
+        typerUi = BB.TyperUi.createTyperUi({ watcher, notify, getSettings: () => settings });
         typerUi.install();
 
         // The same treatment as X and LeetCode: a single-page app with no
@@ -371,12 +377,12 @@
      * The chat core never names a site, so a second chat site is one line
      * here and one entry in src/shared/chat-sites.js.
      */
-    const CHAT_ADAPTERS = { chatgpt: () => ChatgptRead.adapter, claude: () => ClaudeRead.adapter };
+    const CHAT_ADAPTERS = { chatgpt: () => BB.ChatgptRead.adapter, claude: () => BB.ClaudeRead.adapter };
 
-    if (ChatSites.get(site) && CHAT_ADAPTERS[site]) {
+    if (BB.ChatSites && BB.ChatSites.get(site) && CHAT_ADAPTERS[site]) {
         const watcher = DomWatch.createWatcher();
 
-        chatUi = ChatUi.createChatUi({
+        chatUi = BB.ChatUi.createChatUi({
             adapter: CHAT_ADAPTERS[site](), watcher, notify, getSettings: () => settings,
             copyText: (text) => markdown.copy(text),
         });
@@ -442,7 +448,7 @@
             if (video !== getVideoElement()) return;
 
             marked = id;
-            Watched.mark(id);
+            BB.Watched.mark(id);
         }, { capture: true, passive: true });
     }
 
@@ -457,8 +463,8 @@
     function warmPouchInBackground() {
         const warm = async () => {
             try {
-                const { channels } = await Subscriptions.load();
-                if (channels.length) await Feed.warm(channels);
+                const { channels } = await BB.Subscriptions.load();
+                if (channels.length) await BB.Feed.warm(channels);
             } catch (_) { /* nothing is on screen to report this to */ }
         };
 
@@ -471,8 +477,8 @@
     let chess = null;
     let chessLimits = null;
 
-    if (ChessSites.get(site)) {
-        chess = ChessContent.createChess({
+    if (BB.ChessSites && BB.ChessSites.get(site)) {
+        chess = BB.ChessContent.createChess({
             site,
             Keybindings,
             Shortcuts,
@@ -497,6 +503,7 @@
      * or lets one through that is not.
      */
     function installChessLimits() {
+        const { ChessLimits, ChessLimitsContent } = BB;
         let limitState = ChessLimits.blank();
 
         chessLimits = ChessLimitsContent.createChessLimits({
@@ -528,8 +535,8 @@
 
     /**
      * Every page builds one of these, because any host can be in the limit
-     * list now. It reads that list itself and does nothing at all — no timer,
-     * no storage — for a host with no row in it, which is nearly every host.
+     * list now. For a host with no row in it, which is nearly every host, it
+     * costs two reads at load and a storage watch — no timer, no writes.
      *
      * The reference is kept. It used to be dropped on the floor here, and the
      * limit was never enforced on a page that was loaded with one already set:
@@ -558,7 +565,7 @@
      * storage for this site, so on an ordinary visit this is one storage read.
      */
     if (site === 'twitter' || site === 'reddit') {
-        RosterContent.createRoster({ site, notify }).install();
+        BB.RosterContent.createRoster({ site, notify }).install();
     }
 
     // ------------------------------------------------------ cookie banners
@@ -594,10 +601,10 @@
      * chat site — and 'shortcuts', since the chat hotkeys are resolved per
      * keystroke but a rebind should still reach an open page.
      */
-    const CHAT_SURFACES = [
-        ...ChatSites.list().flatMap((one) => ['composerTools', 'limitSuggest'].map((kind) => ChatSites.siteKey(one.id, kind))),
+    const CHAT_SURFACES = chatUi ? [
+        ...BB.ChatSites.list().flatMap((one) => ['composerTools', 'limitSuggest'].map((kind) => BB.ChatSites.siteKey(one.id, kind))),
         'shortcuts',
-    ];
+    ] : [];
 
     /** And what an open YouTube reader has to follow without being closed. */
     const READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'readerHideChrome', 'skin'];
@@ -643,6 +650,8 @@
     Settings.get().then(applySettings);
     Settings.watch(null, applySettings);
 
-    // Exposed for debugging from the page console; nothing depends on it.
+    // The watch party takes the player off this (party-media.js boot()), and
+    // it is handy from the page console. recorder and transcripts are null
+    // anywhere but YouTube.
     root.__bellBearer = { player, recorder, transcripts, settings, Speed };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

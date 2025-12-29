@@ -3181,7 +3181,9 @@ check('every load list has each module after what it takes off BB as it loads', 
 });
 check('the load-order check reads what a file takes at load, and not what it reads later', () => {
     const main = LoadOrder.needs(readRepo('src/content/main.js'));
-    assert(['Settings', 'TyperUi', 'ChatUi', 'Watched'].every((name) => main.has(name)), 'main.js destructures all of these');
+    assert(['Settings', 'Shortcuts', 'CookieBanner', 'TimeLimitContent'].every((name) => main.has(name)), 'main.js destructures all of these');
+    // A site's modules are taken inside that site's block: they are not on every page.
+    assert(!['TyperUi', 'ChatUi', 'Watched', 'YouTubeUi'].some((name) => main.has(name)), 'main.js takes a site module as it loads');
     assert(LoadOrder.needs(readRepo('src/content/typeracer-ui.js')).has('Sfx'));
     assert(LoadOrder.needs(readRepo('src/content/chess.js')).has('Sfx'), '(root.BB && root.BB.Sfx) || req(…)');
     assert(LoadOrder.needs(readRepo('src/background/skim.js')).has('Skim'), 'globalThis.BB && globalThis.BB.Skim');
@@ -6430,9 +6432,8 @@ const storedDays = () => Object.keys(store)
     check('a chat site is wired through its adapter, and shift+p opens its panel', () => {
         const main = readRepo('src/content/main.js');
         assert(/CHAT_ADAPTERS = \{ chatgpt: /.test(main), 'chatgpt has no adapter in main.js');
-        assert(/claude: \(\) => ClaudeRead\.adapter/.test(main), 'claude has no adapter in main.js');
-        assert(/ChatgptRead, ClaudeRead \} = BB;/.test(main), 'main.js does not take ClaudeRead off BB');
-        const js = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+        assert(/claude: \(\) => BB\.ClaudeRead\.adapter/.test(main), 'claude has no adapter in main.js');
+        const js = JSON.parse(readRepo('manifest.json')).content_scripts.find((entry) => entry.js.includes('src/content/claude-read.js')).js;
         assert(js.indexOf('src/content/claude-read.js') > -1 && js.indexOf('src/content/claude-read.js') < js.indexOf('src/content/main.js'),
             'main.js would get undefined for ClaudeRead at load');
         assert(/return youtubeUi \|\| twitterUi \|\| leetUi \|\| chatUi;/.test(main), 'Shift+P would not reach the chat panel');
@@ -7384,7 +7385,7 @@ const storedDays = () => Object.keys(store)
     });
     check('a chat setting that changes the page reaches the page that is open', () => {
         const main = readRepo('src/content/main.js');
-        assert(/const CHAT_SURFACES = \[[\s\S]*?'composerTools', 'limitSuggest'[\s\S]*?\];/.test(main), 'the chat surfaces are not listed');
+        assert(/const CHAT_SURFACES = chatUi \? \[[\s\S]*?'composerTools', 'limitSuggest'[\s\S]*?\] : \[\];/.test(main), 'the chat surfaces are not listed');
         assert(/chatSurfacesChanged && chatUi\) chatUi\.refreshSurfaces\(\)/.test(main), 'nothing repaints them');
     });
     check('the worker loads the same scripts in Chrome and Firefox, the queue among them', () => {
