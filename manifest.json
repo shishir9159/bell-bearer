@@ -33,7 +33,10 @@
       "exclude_matches": [
         "*://*.youtube.com/*",
         "*://*.youtube-nocookie.com/*",
-        "*://youtu.be/*"
+        "*://youtu.be/*",
+        "*://*.x.com/*",
+        "*://*.twitter.com/*",
+        "*://*.reddit.com/*"
       ],
       "js": [
         "src/shared/time.js",
@@ -42,12 +45,10 @@
         "src/shared/settings.js",
         "src/shared/keybindings.js",
         "src/shared/skim.js",
-        "src/shared/roster.js",
         "src/shared/limit-sites.js",
         "src/shared/time-limits.js",
         "src/shared/youtube.js",
         "src/shared/cookie-sites.js",
-        "src/shared/x-pouch.js",
         "src/shared/pouch-button.js",
         "src/content/site.js",
         "src/content/notify.js",
@@ -61,12 +62,7 @@
         "src/content/skim.js",
         "src/content/link-hints.js",
         "src/content/time-limit.js",
-        "src/content/roster.js",
         "src/content/markdown.js",
-        "src/content/twitter-page.js",
-        "src/content/twitter-panel.js",
-        "src/content/twitter-ui.js",
-        "src/content/twitter-ads.js",
         "src/content/cookie-banner.js",
         "src/shared/sfx.js",
         "src/shared/chess-sites.js",
@@ -157,6 +153,89 @@
         "src/content/youtube-ui.js",
         "src/content/reader-transcript.js",
         "src/content/reader.js",
+        "src/content/main.js"
+      ],
+      "css": [
+        "skin-fonts.css",
+        "content.css"
+      ]
+    },
+    {
+      "matches": [
+        "*://*.x.com/*",
+        "*://*.twitter.com/*"
+      ],
+      "js": [
+        "src/shared/time.js",
+        "src/shared/dom.js",
+        "src/shared/speed.js",
+        "src/shared/settings.js",
+        "src/shared/keybindings.js",
+        "src/shared/skim.js",
+        "src/shared/limit-sites.js",
+        "src/shared/time-limits.js",
+        "src/shared/youtube.js",
+        "src/shared/cookie-sites.js",
+        "src/content/site.js",
+        "src/content/notify.js",
+        "src/content/overlay.js",
+        "src/content/dom-watch.js",
+        "src/content/theme.js",
+        "src/content/page-info.js",
+        "src/content/player.js",
+        "src/content/shortcuts.js",
+        "src/content/scroll-to.js",
+        "src/content/skim.js",
+        "src/content/link-hints.js",
+        "src/content/time-limit.js",
+        "src/content/markdown.js",
+        "src/content/cookie-banner.js",
+        "src/shared/roster.js",
+        "src/shared/x-pouch.js",
+        "src/shared/pouch-button.js",
+        "src/content/roster.js",
+        "src/content/twitter-page.js",
+        "src/content/twitter-panel.js",
+        "src/content/twitter-ui.js",
+        "src/content/twitter-ads.js",
+        "src/content/main.js"
+      ],
+      "css": [
+        "skin-fonts.css",
+        "content.css"
+      ]
+    },
+    {
+      "matches": [
+        "*://*.reddit.com/*"
+      ],
+      "js": [
+        "src/shared/time.js",
+        "src/shared/dom.js",
+        "src/shared/speed.js",
+        "src/shared/settings.js",
+        "src/shared/keybindings.js",
+        "src/shared/skim.js",
+        "src/shared/limit-sites.js",
+        "src/shared/time-limits.js",
+        "src/shared/youtube.js",
+        "src/shared/cookie-sites.js",
+        "src/content/site.js",
+        "src/content/notify.js",
+        "src/content/overlay.js",
+        "src/content/dom-watch.js",
+        "src/content/theme.js",
+        "src/content/page-info.js",
+        "src/content/player.js",
+        "src/content/shortcuts.js",
+        "src/content/scroll-to.js",
+        "src/content/skim.js",
+        "src/content/link-hints.js",
+        "src/content/time-limit.js",
+        "src/content/markdown.js",
+        "src/content/cookie-banner.js",
+        "src/shared/roster.js",
+        "src/content/roster.js",
         "src/content/main.js"
       ],
       "css": [
