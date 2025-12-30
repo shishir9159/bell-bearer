@@ -6896,7 +6896,7 @@ const storedDays = () => Object.keys(store)
         eq(ChatPanel.fitsBeside(1600, null), true, 'nothing to measure on a wide one');
     });
     check('what the panel draws is painted by the skins, never by a colour of its own', () => {
-        const css = readRepo('content.css');
+        const css = readRepo('content-chat.css');
         const block = css.slice(css.indexOf('Chat sites — ChatGPT and Claude'));
         const hard = block.match(/:\s*#[0-9a-f]{3,8}\b/gi) || [];
         eq(hard, [], `a colour was baked into the chat rules: ${hard.join(', ')}`);
