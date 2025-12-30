@@ -975,7 +975,10 @@ src/shared/     pure logic, used by every surface
   party-code.js    invite and reply codes: a WebRTC description in ~150 characters, and back
   party-sites.js   YouTube and Netflix to the party: video ids, addresses, what each will take
 
-src/content/    injected into every page
+src/content/    injected into pages: a core on every page (main.js, player, shortcuts,
+                skim, link hints, the time limit, the cookie banner, markdown), and
+                each site's own files on that site alone — manifest.json has one
+                entry per site, each the core list, its own files, then main.js
   main.js          bootstrap — decides what runs where
   player.js        speed, skipping, seeking, the temporary boost
   shortcuts.js     the keybinding table

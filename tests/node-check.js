@@ -3142,6 +3142,71 @@ check('the two manifests load exactly the same content scripts', () => {
     const firefox = JSON.parse(readRepo('manifest.firefox.json')).content_scripts;
     eq(firefox, chrome);
 });
+/** Whether a manifest match pattern takes `url`: as much of the grammar as the manifests use. */
+function patternTakes(pattern, url) {
+    const at = new URL(url);
+    if (pattern === '<all_urls>') return /^(https?|file|ftp|wss?):$/.test(at.protocol);
+    const [, scheme, host, path] = /^(\*|https?):\/\/([^/]*)(\/.*)$/.exec(pattern) || [];
+    if (!scheme || (scheme === '*' ? !/^https?:$/.test(at.protocol) : at.protocol !== `${scheme}:`)) return false;
+    const bare = host.replace(/^\*\./, '');
+    const hostOk = host.startsWith('*.') ? at.hostname === bare || at.hostname.endsWith(`.${bare}`) : at.hostname === host;
+    const glob = new RegExp(`^${path.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`);
+    return hostOk && glob.test(at.pathname + at.search);
+}
+const entryTakes = (entry, url) => entry.matches.some((one) => patternTakes(one, url)) &&
+    !(entry.exclude_matches || []).some((one) => patternTakes(one, url));
+const isolatedEntries = () => JSON.parse(readRepo('manifest.json')).content_scripts.filter((entry) => entry.world !== 'MAIN');
+
+check('every page gets exactly one isolated-world entry, and it is the one for its site', () => {
+    // Each entry repeats the core list, so a page that matched two would run
+    // every core module twice. And a site that matched the generic entry
+    // would get no site features at all.
+    const Site = require('../src/content/site.js');
+    const marks = {
+        youtube: 'src/content/youtube-ui.js', twitter: 'src/content/twitter-ui.js', reddit: 'src/content/roster.js',
+        chess: 'src/content/chess.js', lichess: 'src/content/chess.js', leetcode: 'src/content/leet-ui.js',
+        typeracer: 'src/content/typeracer-ui.js', chatgpt: 'src/content/chat-ui.js', claude: 'src/content/chat-ui.js',
+    };
+    const entries = isolatedEntries();
+    for (const url of [
+        'https://www.youtube.com/watch?v=x', 'https://m.youtube.com/', 'https://www.youtube-nocookie.com/embed/x', 'https://youtu.be/x',
+        'https://x.com/home', 'https://twitter.com/a', 'https://old.reddit.com/r/x', 'https://www.reddit.com/',
+        'https://www.chess.com/play', 'https://lichess.org/abc', 'https://leetcode.com/problems/two-sum/',
+        'https://play.typeracer.com/', 'https://data.typeracer.com/pit/profile', 'https://chatgpt.com/c/1',
+        'https://chat.openai.com/', 'https://claude.ai/chat/1', 'https://www.netflix.com/watch/1', 'https://example.com/',
+    ]) {
+        const taking = entries.filter((entry) => entryTakes(entry, url));
+        eq(taking.length, 1, url);
+        const mark = marks[Site.detectSite(new URL(url).hostname)];
+        if (mark) assert(taking[0].js.includes(mark), `${url} does not get ${mark}`);
+        else eq(taking[0].matches, ['<all_urls>'], `${url} is not a site of ours`);
+    }
+});
+check('each site entry is the core list, then its own files, then main.js', () => {
+    const [generic, ...sites] = isolatedEntries();
+    const core = generic.js.slice(0, -1);
+    eq(generic.js[generic.js.length - 1], 'src/content/main.js');
+    for (const entry of sites) {
+        eq(entry.js.slice(0, core.length), core, entry.matches[0]);
+        eq(entry.js[entry.js.length - 1], 'src/content/main.js', entry.matches[0]);
+        const own = entry.js.slice(core.length, -1);
+        assert(own.length && own.every((file) => !core.includes(file)), `${entry.matches[0]} lists a core file twice`);
+        // The same stylesheets, then at most the site's own, after them.
+        eq(entry.css.slice(0, generic.css.length), generic.css, entry.matches[0]);
+        assert(entry.css.slice(generic.css.length).every((file) => /^content-[a-z]+\.css$/.test(file)), entry.matches[0]);
+    }
+    for (const file of isolatedEntries().flatMap((entry) => entry.css)) {
+        assert(require('fs').existsSync(`${__dirname}/../${file}`), `${file} is listed but not on disk`);
+    }
+    eq([...generic.exclude_matches].sort(), sites.flatMap((entry) => entry.matches).sort(),
+        'the generic entry steps aside for exactly the sites that have one');
+});
+check('the page every other entry is built on carries no site\'s own module', () => {
+    const [generic] = isolatedEntries();
+    for (const file of generic.js) {
+        assert(!/youtube-ui|pouch-sheet|reader|twitter|chess|leet|typeracer|chat|roster|checkpoints|transcript/.test(file), file);
+    }
+});
 check('chrome is asked for unlimited storage, and firefox is not', () => {
     // Without it Chrome caps storage.local at 10 MB, and Settings.set turns a
     // full store into writes that quietly do nothing — checkpoints included.
