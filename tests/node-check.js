@@ -3162,7 +3162,7 @@ check('typeracer needs no page-world script, and has not grown one', () => {
     }
 });
 check('every typeracer source the manifest loads is in the browser suite too', () => {
-    const manifest = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+    const manifest = JSON.parse(readRepo('manifest.json')).content_scripts.flatMap((entry) => entry.js);
     const suite = readRepo('tests/index.html');
     for (const src of manifest.filter((one) => /typeracer|sfx/.test(one))) {
         assert(suite.includes(`../${src}`), `${src} is shipped but never loaded by the suite`);
