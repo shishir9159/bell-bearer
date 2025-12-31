@@ -129,7 +129,8 @@
       ],
       "css": [
         "skin-fonts.css",
-        "content.css"
+        "content.css",
+        "content-youtube.css"
       ]
     },
     {

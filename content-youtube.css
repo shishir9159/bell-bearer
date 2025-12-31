@@ -1,0 +1,639 @@
+/*
+ * the YouTube reader.
+ *
+ * Loaded after content.css, and only by this site's manifest entry: the
+ * rules were the tail of content.css, every one of them scoped to this
+ * site's own classes, so they keep their place in the cascade and are no
+ * longer parsed on every other page. The palette and the skins they draw
+ * on are content.css's.
+ */
+
+/* =====================================================================
+   The YouTube reader
+   ===================================================================== */
+
+/* The page underneath stops scrolling while the reader is up. It is still
+   all there — nothing of YouTube's is removed — it just cannot move behind
+   a view that covers it. */
+html.bb-reader-open,
+html.bb-reader-open body { overflow: hidden !important; }
+
+/* Over YouTube's masthead and drawers (they top out in the low thousands),
+   and under our own toast at 999999, so a speed change made with the reader
+   up is still announced. */
+.bb-reader {
+    position: fixed;
+    inset: 0;
+    z-index: 999990;
+    display: flex;
+    flex-direction: column;
+    background: var(--bb-surface);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    font-size: 14px;
+}
+
+/* Under YouTube's header rather than over it. The top is set in script to
+   where the masthead ends; the layer drops beneath the masthead's own 2020
+   so the search suggestions it opens can fall over the reader rather than
+   behind it. */
+.bb-reader.is-under-masthead { z-index: 2019; }
+
+.bb-reader-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--bb-border);
+    flex: none;
+}
+
+.bb-reader-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font: 600 15px/1.3 var(--bb-font-head);
+    text-transform: var(--bb-head-case);
+    letter-spacing: var(--bb-head-track);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bb-reader-tools { display: flex; align-items: center; gap: 8px; }
+
+.bb-reader-close {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-chip);
+    color: var(--bb-text);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+
+.bb-reader-lang {
+    max-width: 180px;
+    padding: 5px 8px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-input-bg);
+    color: var(--bb-text);
+    font: inherit;
+    font-size: 12px;
+}
+
+.bb-reader-lang[hidden] { display: none; }
+
+.bb-reader-layouts {
+    display: flex;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    overflow: hidden;
+}
+
+.bb-reader-layout {
+    padding: 5px 10px;
+    border: 0;
+    border-left: 1px solid var(--bb-border);
+    background: transparent;
+    color: var(--bb-sub);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.bb-reader-layout:first-child { border-left: 0; }
+.bb-reader-layout:hover { color: var(--bb-text); background: var(--bb-chip); }
+.bb-reader-layout[aria-checked="true"] { background: var(--bb-accent-soft); color: var(--bb-accent); font-weight: 600; }
+
+/* ---- The four layouts. One grid each, chosen by data-layout, and nothing
+   worked out in script. --bb-reader-share is the one number each layout
+   lets you drag: the video's width in split, its height in stacked, the
+   drawer's width in theatre and the corner player's width in focus — a
+   percentage every time, so a window resized between sessions can never
+   put the video off the edge. */
+
+.bb-reader-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, calc(var(--bb-reader-share, 62) * 1%)) minmax(0, 1fr);
+}
+
+/* Stacked: the video centred on top, transcript and notes in one column
+   under it. Best on a laptop, and for wide video. */
+.bb-reader[data-layout="stacked"] .bb-reader-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, calc(var(--bb-reader-share, 55) * 1%)) minmax(0, 1fr);
+}
+
+.bb-reader[data-layout="stacked"] .bb-reader-side {
+    border-left: 0;
+    border-top: 1px solid var(--bb-border);
+}
+
+/* Theatre: the video takes the whole body and the transcript is a drawer
+   over it from the right. A sliver of the drawer stays on screen as the
+   thing to reach for, and it slides out while it is hovered or holds focus
+   — so it stays out while you select in it, and hides itself after. */
+.bb-reader[data-layout="theatre"] .bb-reader-body { grid-template-columns: minmax(0, 1fr); }
+
+.bb-reader[data-layout="theatre"] .bb-reader-side {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: calc(var(--bb-reader-share, 34) * 1%);
+    background: var(--bb-panel-solid);
+    box-shadow: var(--bb-shadow);
+    transform: translateX(calc(100% - 14px));
+    transition: transform .22s ease;
+    z-index: 2;
+}
+
+.bb-reader[data-layout="theatre"] .bb-reader-side::before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 50%;
+    width: 4px;
+    height: 48px;
+    margin-top: -24px;
+    border-radius: 2px;
+    background: var(--bb-border-strong);
+}
+
+.bb-reader[data-layout="theatre"] .bb-reader-side:hover,
+.bb-reader[data-layout="theatre"] .bb-reader-side:focus-within { transform: none; }
+
+/* Focus: the transcript leads, set for reading, and the video is pinned in
+   the corner. 30% of the viewport by default — deliberately bigger than a
+   thumbnail, because a corner player you cannot see is the complaint that
+   started this feature. */
+.bb-reader[data-layout="focus"] .bb-reader-body { grid-template-columns: minmax(0, 1fr); }
+
+.bb-reader[data-layout="focus"] .bb-reader-side { border-left: 0; }
+
+.bb-reader[data-layout="focus"] .bb-reader-stage {
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
+    width: calc(var(--bb-reader-share, 30) * 1%);
+    aspect-ratio: 16 / 9;
+    padding: 0;
+    border-radius: var(--bb-r);
+    overflow: hidden;
+    box-shadow: var(--bb-shadow);
+    z-index: 2;
+}
+
+/* The notes would sit under the corner player, so in focus they stop short
+   of it. */
+.bb-reader[data-layout="focus"] .bb-reader-notes {
+    margin-right: calc(var(--bb-reader-share, 30) * 1% + 20px);
+}
+
+/* ---- Resizing. The divider sits on the edge each layout lets you drag,
+   placed off the same --bb-reader-share the grid is sized from, so the two
+   cannot disagree. Wider than it looks, because an edge you have to hunt
+   for with the pointer is one nobody drags. */
+.bb-reader-divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--bb-reader-share, 62) * 1%);
+    width: 12px;
+    margin-left: -6px;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 3;
+}
+
+.bb-reader-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 4px;
+    width: 4px;
+    height: 44px;
+    margin-top: -22px;
+    border-radius: 2px;
+    background: var(--bb-border-strong);
+    opacity: .55;
+    transition: opacity .12s;
+}
+
+.bb-reader-divider:hover::after,
+.bb-reader-divider:focus-visible::after,
+.bb-reader.is-resizing .bb-reader-divider::after { opacity: 1; background: var(--bb-accent); }
+
+.bb-reader-divider:focus-visible { outline: none; }
+
+.bb-reader[data-layout="stacked"] .bb-reader-divider {
+    top: calc(var(--bb-reader-share, 55) * 1%);
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 12px;
+    margin: -6px 0 0;
+    cursor: row-resize;
+}
+
+.bb-reader[data-layout="stacked"] .bb-reader-divider::after {
+    top: 4px;
+    left: 50%;
+    width: 44px;
+    height: 4px;
+    margin: 0 0 0 -22px;
+}
+
+/* In theatre the handle is the drawer's left edge, so it is only there
+   while the drawer is out — and holding it keeps the drawer out. */
+.bb-reader[data-layout="theatre"] .bb-reader-divider {
+    left: auto;
+    right: calc(var(--bb-reader-share, 34) * 1%);
+    margin: 0 -6px 0 0;
+    display: none;
+}
+
+.bb-reader[data-layout="theatre"] .bb-reader-body:has(.bb-reader-side:hover, .bb-reader-side:focus-within, .bb-reader-divider:hover) .bb-reader-divider,
+.bb-reader[data-layout="theatre"].is-resizing .bb-reader-divider { display: block; }
+
+.bb-reader[data-layout="theatre"] .bb-reader-body:has(.bb-reader-divider:hover) .bb-reader-side,
+.bb-reader[data-layout="theatre"].is-resizing .bb-reader-side { transform: none; }
+
+/* In focus the divider gives way to a grip on the corner player itself. */
+.bb-reader[data-layout="focus"] .bb-reader-divider { display: none; }
+
+.bb-reader-grip { display: none; }
+
+.bb-reader[data-layout="focus"] .bb-reader-grip {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 22px;
+    height: 22px;
+    cursor: nwse-resize;
+    touch-action: none;
+    z-index: 3;
+    background: linear-gradient(135deg, var(--bb-accent) 0 30%, transparent 30%);
+    opacity: .7;
+}
+
+.bb-reader[data-layout="focus"] .bb-reader-grip:hover { opacity: 1; }
+
+/* While dragging, nothing animates and nothing gets selected, and the page
+   under the pointer — the video included — cannot take the drag away. */
+.bb-reader.is-resizing,
+.bb-reader.is-resizing * { user-select: none; transition: none !important; }
+.bb-reader.is-resizing .bb-reader-screen { pointer-events: none; }
+
+/* ---- The skins. Everything above is tokens, so the palette and the type
+   already follow the skin; what is left is the shape and the one colour
+   that is not a token — the checkpoint wash, which is highlighter yellow on
+   the default skin and has to be something else wherever yellow would clash
+   or vanish. Each light rule is paired with its night state, the way the X
+   panel's are. */
+
+/* Night on the default skin: the same yellow reads muddy over a dark page,
+   so it is lighter and thinner. */
+.bb-reader.bb-themed[data-bb-theme="dark"] { --bb-reader-mark-1: rgba(255, 214, 90, .10); --bb-reader-mark-2: rgba(255, 214, 90, .17); --bb-reader-mark-3: rgba(255, 214, 90, .24); }
+
+/* Riso prints in its two inks, so the wash is the pink and the playing line
+   the blue. */
+.bb-reader.bb-themed[data-bb-skin="riso"] { --bb-reader-mark-1: rgba(255, 72, 176, .12); --bb-reader-mark-2: rgba(255, 72, 176, .20); --bb-reader-mark-3: rgba(255, 72, 176, .30); }
+.bb-reader.bb-themed[data-bb-skin="riso"][data-bb-theme="dark"] { --bb-reader-mark-1: rgba(255, 92, 187, .14); --bb-reader-mark-2: rgba(255, 92, 187, .22); --bb-reader-mark-3: rgba(255, 92, 187, .32); }
+.bb-reader.bb-themed[data-bb-skin="riso"] .bb-rt-row.is-active { background-color: rgba(31, 95, 208, .12); }
+.bb-reader.bb-themed[data-bb-skin="riso"][data-bb-theme="dark"] .bb-rt-row.is-active { background-color: rgba(96, 150, 255, .18); }
+
+/* Medieval rubricates: the wash is the red ink, faint, on the parchment. */
+.bb-reader.bb-themed[data-bb-skin="medieval"] { --bb-reader-mark-1: rgba(156, 43, 22, .08); --bb-reader-mark-2: rgba(156, 43, 22, .14); --bb-reader-mark-3: rgba(156, 43, 22, .21); }
+.bb-reader.bb-themed[data-bb-skin="medieval"][data-bb-theme="dark"] { --bb-reader-mark-1: rgba(216, 102, 63, .12); --bb-reader-mark-2: rgba(216, 102, 63, .19); --bb-reader-mark-3: rgba(216, 102, 63, .27); }
+
+/* Deco is gilt: the wash is the gold. */
+.bb-reader.bb-themed[data-bb-skin="deco"] { --bb-reader-mark-1: rgba(185, 148, 71, .14); --bb-reader-mark-2: rgba(185, 148, 71, .23); --bb-reader-mark-3: rgba(185, 148, 71, .33); }
+.bb-reader.bb-themed[data-bb-skin="deco"][data-bb-theme="dark"] { --bb-reader-mark-1: rgba(214, 178, 98, .12); --bb-reader-mark-2: rgba(214, 178, 98, .20); --bb-reader-mark-3: rgba(214, 178, 98, .28); }
+
+/* Medieval sets the transcript as a manuscript would: the serif, and a
+   touch more leading than the setting asks for, which Cardo needs. */
+.bb-reader.bb-themed[data-bb-skin="medieval"] .bb-rt-rows { line-height: calc(var(--bb-reader-leading, 1.6) + .1); }
+
+/* The two square-cornered skins square these off too, the way they do
+   every other surface we inject. */
+.bb-reader.bb-themed[data-bb-skin="riso"] :is(.bb-reader-close, .bb-reader-layouts, .bb-reader-lang, .bb-rt-row,
+    .bb-reader-toast, .bb-reader-toast-act, .bb-rn-copy, .bb-rn-time, .bb-rn-delete, .bb-rn-note),
+.bb-reader.bb-themed[data-bb-skin="deco"] :is(.bb-reader-close, .bb-reader-layouts, .bb-reader-lang, .bb-rt-row,
+    .bb-reader-toast, .bb-reader-toast-act, .bb-rn-copy, .bb-rn-time, .bb-rn-delete, .bb-rn-note),
+.bb-reader.bb-themed[data-bb-skin="riso"][data-layout="focus"] .bb-reader-stage,
+.bb-reader.bb-themed[data-bb-skin="deco"][data-layout="focus"] .bb-reader-stage { border-radius: 0; }
+
+.bb-reader.bb-themed[data-bb-skin="medieval"] :is(.bb-reader-close, .bb-reader-layouts, .bb-reader-lang, .bb-rt-row,
+    .bb-reader-toast, .bb-reader-toast-act, .bb-rn-copy, .bb-rn-time, .bb-rn-delete, .bb-rn-note),
+.bb-reader.bb-themed[data-bb-skin="medieval"][data-layout="focus"] .bb-reader-stage { border-radius: 3px; }
+
+/* Riso draws its borders as hard ink rather than as a tint, and the toast
+   is the one surface here that floats, so it gets the heavier one. */
+.bb-reader.bb-themed[data-bb-skin="riso"] .bb-reader-toast { border: 2px solid var(--bb-border-strong); }
+
+@media (prefers-reduced-motion: reduce) {
+    .bb-reader[data-layout="theatre"] .bb-reader-side { transition: none; }
+    .bb-reader-toast { animation: none; }
+}
+
+/* The stage gets a soft vignette rather than a flat black slab, so the
+   player sits in the page instead of being punched through it. */
+.bb-reader-stage {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, .5) 0%, rgba(0, 0, 0, .82) 100%);
+    /* So the screen can be sized off whichever of the stage's two sides
+       runs out first — see below. */
+    container-type: size;
+}
+
+/* As large as the stage allows at 16:9, whichever side limits it. A plain
+   width of 100% with a max-height broke the ratio on a short stage, and the
+   control bar ran wider than the picture. */
+.bb-reader-screen {
+    position: relative;
+    width: min(100cqw, 100cqh * 16 / 9);
+    aspect-ratio: 16 / 9;
+}
+
+
+/* YouTube writes the player's size, and the video box's, as inline styles
+   worked out for wherever it last laid itself out. The screen is the size
+   now, so both are told to fill it; the resize event reader.js sends lets
+   YouTube catch its control bar up. */
+.bb-reader-screen #movie_player {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* The video's own box fills the player too. YouTube positions it now, so it
+   is the video's containing block — and it holds nothing but the absolutely
+   placed video, so it had no height of its own, the video's 100% came to 0,
+   and the reader played sound over a black screen. */
+.bb-reader-screen #movie_player .html5-video-container {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.bb-reader-screen #movie_player video.html5-main-video {
+    width: 100% !important;
+    height: 100% !important;
+    left: 0 !important;
+    top: 0 !important;
+    object-fit: contain;
+}
+
+/* The slot left where the player was: nothing, and it takes up nothing. */
+#bb-reader-slot { display: none; }
+
+.bb-reader-side {
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--bb-border);
+}
+
+/* Positioned so it is every row's offsetParent: follow-along scrolls this
+   column by a row's offsetTop, and against any other ancestor the number
+   would be off by everything above the column. */
+.bb-reader-transcript {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Real measure and leading rather than a wall of 13px text. The three are
+   custom properties so the typography settings can move them without a
+   redraw. */
+.bb-rt-rows {
+    max-width: var(--bb-reader-measure, 44em);
+    margin: 0 auto;
+    padding: 20px 24px 40vh;
+    font-size: var(--bb-reader-size, 16px);
+    line-height: var(--bb-reader-leading, 1.6);
+}
+
+.bb-rt-row {
+    position: relative;
+    margin: 0;
+    padding: 2px 8px 2px 4.2em;
+    border-radius: var(--bb-r-sm);
+    cursor: pointer;
+}
+
+.bb-rt-row:hover { background: var(--bb-chip); }
+
+/* The time hangs in the margin so the text reads as prose, and it is not
+   selectable, so highlighting a passage never drags "1:02" in with it. */
+.bb-rt-time {
+    position: absolute;
+    left: 8px;
+    top: 2px;
+    width: 3.4em;
+    color: var(--bb-faint);
+    font-size: .75em;
+    line-height: calc(var(--bb-reader-leading, 1.6) * 1em / .75);
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+}
+
+.bb-rt-row.is-active { background: var(--bb-accent-soft); }
+
+/* A line inside a checkpoint: a rule in the margin and a wash that deepens
+   with each checkpoint over it, up to three, rather than one colour for any
+   number. The wash sits under the playing line's, so the two read together. */
+.bb-reader {
+    --bb-reader-mark-1: rgba(255, 196, 0, .16);
+    --bb-reader-mark-2: rgba(255, 196, 0, .26);
+    --bb-reader-mark-3: rgba(255, 196, 0, .36);
+}
+
+.bb-rt-row[data-bb-marks] {
+    --bb-reader-mark: var(--bb-reader-mark-1);
+    box-shadow: inset 3px 0 0 var(--bb-accent);
+    background-image: linear-gradient(var(--bb-reader-mark), var(--bb-reader-mark));
+}
+
+.bb-rt-row[data-bb-marks="2"] { --bb-reader-mark: var(--bb-reader-mark-2); }
+.bb-rt-row[data-bb-marks="3"] { --bb-reader-mark: var(--bb-reader-mark-3); }
+
+/* The notes pane: docked under the transcript, never more than two fifths
+   of the column, and scrolling on its own so a long list does not push the
+   transcript off the screen. */
+.bb-reader-notes {
+    flex: 0 1 auto;
+    max-height: 40%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--bb-border);
+    background: var(--bb-card);
+}
+
+.bb-rn-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px 6px;
+}
+
+.bb-rn-title {
+    margin: 0;
+    font: 600 13px/1.3 var(--bb-font-head);
+    text-transform: var(--bb-head-case);
+    letter-spacing: var(--bb-head-track);
+}
+
+.bb-rn-count { color: var(--bb-faint); font-weight: 400; }
+
+.bb-rn-copy,
+.bb-rn-time,
+.bb-rn-delete {
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-chip);
+    color: var(--bb-text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.bb-rn-copy { padding: 4px 10px; font-size: 12px; }
+.bb-rn-copy:hover,
+.bb-rn-time:hover { border-color: var(--bb-border-strong); }
+
+.bb-rn-list {
+    margin: 0;
+    padding: 0 16px 12px;
+    list-style: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.bb-rn-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--bb-border);
+}
+
+.bb-rn-item:last-child { border-bottom: 0; }
+
+.bb-rn-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.bb-rn-time {
+    padding: 2px 8px;
+    color: var(--bb-accent);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.bb-rn-delete {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
+    color: var(--bb-faint);
+    font-size: 16px;
+    line-height: 1;
+}
+
+.bb-rn-delete:hover { color: var(--bb-danger); border-color: var(--bb-danger-border); background: var(--bb-danger-bg); }
+
+.bb-rn-quote {
+    margin: 6px 0;
+    padding-left: 10px;
+    border-left: 2px solid var(--bb-border-strong);
+    color: var(--bb-sub);
+    font-style: italic;
+}
+
+.bb-rn-note {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2.6em;
+    padding: 6px 8px;
+    border: 1px dashed var(--bb-border);
+    border-radius: var(--bb-r-sm);
+    background: transparent;
+    color: var(--bb-text);
+    font: inherit;
+    resize: vertical;
+}
+
+.bb-rn-note:focus {
+    outline: none;
+    border-style: solid;
+    border-color: var(--bb-accent);
+    background: var(--bb-input-bg);
+}
+
+.bb-rn-empty { padding: 8px 0; color: var(--bb-sub); }
+
+/* Inside the reader rather than our page-wide toast, because it carries a
+   button: Undo has to be where the selection was just made. */
+.bb-reader-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: min(560px, calc(100% - 32px));
+    padding: 10px 12px 10px 16px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r);
+    background: var(--bb-panel-solid);
+    box-shadow: var(--bb-shadow);
+    animation: bb-fade .16s ease-out;
+}
+
+.bb-reader-toast[hidden] { display: none; }
+
+.bb-reader-toast-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bb-reader-toast-act {
+    flex: none;
+    padding: 6px 12px;
+    border: 0;
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-btn-fill);
+    color: var(--bb-btn-text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bb-reader-toast-act:hover { background: var(--bb-btn-fill-hover); }
+.bb-reader-toast-act[hidden] { display: none; }
+.bb-rt-row.is-active .bb-rt-time { color: var(--bb-accent); }
+
+.bb-reader-empty { margin: 24px; color: var(--bb-sub); }

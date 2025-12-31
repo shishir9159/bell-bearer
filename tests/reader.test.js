@@ -94,21 +94,25 @@
     const settle = () => new Promise((done) => setTimeout(done, 0));
 
     /**
-     * content.css, for the specs that need the reader laid out — a column
-     * with no height has nothing to scroll. Loaded here rather than for the
-     * whole suite, where it would restyle every other spec's fixtures.
+     * content.css, and the reader's own rules after it the way YouTube's
+     * manifest entry loads them, for the specs that need the reader laid
+     * out — a column with no height has nothing to scroll. Loaded here
+     * rather than for the whole suite, where they would restyle every other
+     * spec's fixtures.
      */
     let styles = null;
     function loadStyles() {
         if (styles) return styles;
-        styles = new Promise((done) => {
+        const sheet = (href, id) => new Promise((done) => {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
-            link.href = '../content.css';
-            link.id = 'bb-reader-test-styles';
+            link.href = href;
+            link.id = id;
             link.onload = link.onerror = () => done();
             document.head.appendChild(link);
         });
+        styles = sheet('../content.css', 'bb-reader-test-styles')
+            .then(() => sheet('../content-youtube.css', 'bb-reader-test-styles-youtube'));
         return styles;
     }
 
