@@ -2231,7 +2231,7 @@ check('the caret cycles through every shape and back to the site’s own', () =>
 check('the caret shapes and the setting cannot drift apart', () => {
     // The settings <select> is built from this list, and a shape the panel
     // can offer but the page cannot draw would fail silently.
-    const html = require('fs').readFileSync(`${__dirname}/../content.css`, 'utf8');
+    const html = require('fs').readFileSync(`${__dirname}/../content-typeracer.css`, 'utf8');
     for (const shape of TyperUi.SHAPES) {
         if (shape === 'site') continue;
         assert(html.includes(`[data-bb-caret="${shape}"]`), `${shape} has no rule to draw it`);
@@ -2240,7 +2240,7 @@ check('the caret shapes and the setting cannot drift apart', () => {
 check('the caret is drawn from the skin’s tokens rather than a colour', () => {
     // So it follows a skin or a day/night change without being redrawn, the
     // rule every surface this extension injects follows.
-    const css = require('fs').readFileSync(`${__dirname}/../content.css`, 'utf8');
+    const css = require('fs').readFileSync(`${__dirname}/../content-typeracer.css`, 'utf8');
     const block = css.slice(css.indexOf('.bb-typer-caret {'));
     const hard = block.match(/:\s*#[0-9a-f]{3,8}\b/gi) || [];
     eq(hard, [], `a colour was baked into the caret: ${hard.join(', ')}`);

@@ -1,0 +1,120 @@
+/*
+ * TypeRacer: the typing caret.
+ *
+ * Loaded after content.css, and only by this site's manifest entry: the
+ * rules were the tail of content.css, every one of them scoped to this
+ * site's own classes, so they keep their place in the cascade and are no
+ * longer parsed on every other page. The palette and the skins they draw
+ * on are content.css's.
+ */
+
+/* =====================================================================
+   TypeRacer
+   ===================================================================== */
+
+/* The typing caret — the marker showing where you are in the quote, not the
+   mouse pointer.
+
+   One absolutely-placed span over the quote panel, moved by a transform that
+   src/content/typeracer-ui.js writes once per committed character inside a
+   requestAnimationFrame. Fixed rather than absolute because the rect it is
+   given is in viewport coordinates, so there is nothing to convert and no
+   scroll listener to run through somebody's typing. */
+.bb-typer-caret {
+    position: fixed;
+    top: 0;
+    left: 0;
+    /* Over the quote, under nothing the user can press. */
+    z-index: 2147483000;
+    pointer-events: none;
+    box-sizing: border-box;
+    /* The element is moved and nothing else, so the compositor can be told
+       that up front instead of working it out again every keystroke. */
+    will-change: transform;
+}
+
+/* Each shape is drawn out of the same box, which is the glyph the caret is
+   sitting on. A bar takes the left edge of it, an underline the bottom. */
+.bb-typer-caret[data-bb-caret="bar"] {
+    border-left: 2px solid var(--bb-accent);
+}
+
+.bb-typer-caret[data-bb-caret="underline"] {
+    border-bottom: 2px solid var(--bb-accent);
+}
+
+.bb-typer-caret[data-bb-caret="outline"] {
+    border: 1.5px solid var(--bb-accent);
+    border-radius: 2px;
+}
+
+/* A tint rather than a fill: a solid block would cover the character it is
+   meant to point at, and the next character is the one you are reading. */
+.bb-typer-caret[data-bb-caret="block"] {
+    background: var(--bb-accent);
+    opacity: .26;
+    border-radius: 2px;
+}
+
+/* The whole of the "smooth caret" setting: one transition, no animation loop.
+   70ms is under the gap between two keystrokes at 120 words a minute, so the
+   caret has always arrived before the next letter does. */
+.bb-typer-caret.is-smooth {
+    transition: transform 70ms ease-out;
+}
+
+.bb-typer-caret.is-blink {
+    animation: bb-typer-blink 1.06s steps(1, end) infinite;
+}
+
+@keyframes bb-typer-blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+
+/* The block shape is already a tint, so blinking it to nothing and back reads
+   as a flash rather than as a caret. It blinks between its two tints. */
+.bb-typer-caret[data-bb-caret="block"].is-blink {
+    animation-name: bb-typer-blink-block;
+}
+
+@keyframes bb-typer-blink-block {
+    0%, 49% { opacity: .26; }
+    50%, 100% { opacity: .06; }
+}
+
+/* Standing TypeRacer's own marking down while ours is up.
+
+   The class is on <html> and the mark is on the element holding the next
+   character — the bb-leet-mock treatment, and for the same reason: leaving
+   the mode is one class removal rather than a reconstruction of somebody
+   else's markup, and a mark left behind on an element does nothing at all
+   once the class is gone. The properties are neutralised rather than the
+   element hidden, because that element is the text you are about to type. */
+html.bb-typer-caret-on [data-bb-typer-anchor] {
+    background: transparent !important;
+    border-color: transparent !important;
+    text-decoration: none !important;
+    box-shadow: none !important;
+}
+
+/* The two square-cornered skins square the caret off too, the way they do
+   every other surface we inject. */
+.bb-typer-caret.bb-themed[data-bb-skin="riso"],
+.bb-typer-caret.bb-themed[data-bb-skin="deco"] { border-radius: 0; }
+
+.bb-typer-caret.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }
+
+/* Riso and Deco print their accent flat, so a 26% tint of it over the quote
+   is nearly invisible against the paper. Both skins get a heavier block and a
+   thicker bar, and both of their night states get the tint back down again —
+   the same pairing the X panel keeps. */
+.bb-typer-caret.bb-themed[data-bb-skin="riso"][data-bb-caret="block"],
+.bb-typer-caret.bb-themed[data-bb-skin="deco"][data-bb-caret="block"] { opacity: .36; }
+
+.bb-typer-caret.bb-themed[data-bb-skin="riso"][data-bb-theme="dark"][data-bb-caret="block"],
+.bb-typer-caret.bb-themed[data-bb-skin="deco"][data-bb-theme="dark"][data-bb-caret="block"] { opacity: .24; }
+
+.bb-typer-caret.bb-themed[data-bb-skin="medieval"][data-bb-caret="bar"] { border-left-width: 3px; }
+
+.bb-typer-caret.bb-themed[data-bb-skin="medieval"][data-bb-theme="dark"][data-bb-caret="block"] { opacity: .30; }
