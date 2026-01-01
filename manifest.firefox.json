@@ -175,7 +175,8 @@
       ],
       "css": [
         "skin-fonts.css",
-        "content.css"
+        "content.css",
+        "content-x.css"
       ]
     },
     {
