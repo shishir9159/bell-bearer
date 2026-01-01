@@ -247,8 +247,11 @@ UnifrakturMaguntia, Josefin Sans, Poiret One and Space Grotesk subsets the
 design export was served, unpacked out of it so a skin looks here as it does
 there. All are SIL OFL. Only the latin and latin-ext cuts are kept, and
 anything outside them falls back to the stack named in `skins.css`. The same
-faces reach the injected UI, which is why `skin-fonts.css` is a content-script
-stylesheet and `fonts/*.woff2` is in `web_accessible_resources`.
+faces reach the injected UI: `src/content/theme.js` adds them to the page at
+the extension's own address the first time it draws a skinned surface, which
+is why `fonts/*.woff2` is in `web_accessible_resources`. `skin-fonts.css` is
+for the popup and the dashboard only — listed as a content-script stylesheet,
+its relative URLs resolved against the page, and the faces never loaded.
 
 ## The X pouch
 

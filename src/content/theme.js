@@ -98,12 +98,64 @@
     }
 
     /**
+     * The skins' faces, for the injected UI.
+     *
+     * skin-fonts.css declared them, as a content-script stylesheet, with
+     * `url('fonts/…')`. Chrome inserts a content script's stylesheet into the
+     * page, so those URLs resolved against the page: a skinned surface asked
+     * https://<site>/fonts/Cardo-Regular.woff2 for a face it never got and
+     * fell back to the system stack, and every page could read our families
+     * out of document.fonts. They are added from here instead, at the
+     * extension's own address, by the first skinned surface a page draws —
+     * and a face is only fetched once something is set in it.
+     *
+     * skin-fonts.css is still what the popup and the dashboard load, where
+     * the relative URLs are the extension's; node-check keeps this table and
+     * that file in step.
+     */
+    const LATIN = 'U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD';
+    const LATIN_EXT = 'U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF';
+    const FACES = Object.freeze([
+        ['Cardo', 'Cardo-Regular.woff2', '400', LATIN],
+        ['Cardo', 'Cardo-Regular-ext.woff2', '400', LATIN_EXT],
+        ['Cardo', 'Cardo-Bold.woff2', '700', LATIN],
+        ['Cardo', 'Cardo-Bold-ext.woff2', '700', LATIN_EXT],
+        ['Grenze', 'Grenze.woff2', '400 600', LATIN],
+        ['Grenze', 'Grenze-ext.woff2', '400 600', LATIN_EXT],
+        ['UnifrakturMaguntia', 'UnifrakturMaguntia-Regular.woff2', '400', LATIN],
+        ['Josefin Sans', 'JosefinSans.woff2', '400 600', LATIN],
+        ['Josefin Sans', 'JosefinSans-ext.woff2', '400 600', LATIN_EXT],
+        ['Poiret One', 'PoiretOne-Regular.woff2', '400', LATIN],
+        ['Poiret One', 'PoiretOne-Regular-ext.woff2', '400', LATIN_EXT],
+        ['Space Grotesk', 'SpaceGrotesk.woff2', '400 700', LATIN],
+        ['Space Grotesk', 'SpaceGrotesk-ext.woff2', '400 700', LATIN_EXT],
+    ].map(([family, file, weight, unicodeRange]) => Object.freeze({ family, file, weight, unicodeRange })));
+
+    let facesAdded = false;
+    function wearFonts(skin, doc = root.document) {
+        if (facesAdded || !skin || skin === 'default' || !doc || !doc.fonts || typeof FontFace !== 'function') return;
+        facesAdded = true;
+        try {
+            for (const { family, file, weight, unicodeRange } of FACES) {
+                const src = `url("${chrome.runtime.getURL(`fonts/${file}`)}") format("woff2")`;
+                doc.fonts.add(new FontFace(family, src, { weight, style: 'normal', unicodeRange, display: 'swap' }));
+            }
+        } catch (_) {
+            // The extension reloaded under this page: the system stack it is.
+        }
+    }
+
+    /**
      * What to dress the next surface in: the skin the user picked, and the
      * light/dark of the page it will sit on. Only the skin is a setting —
      * see pageTheme above for why the theme is not.
+     *
+     * Every surface asks this before it draws — the ones that set the two
+     * attributes by hand included — so the skin's faces are added here.
      */
     async function appearance() {
         const { skin } = await Settings.get(['skin']);
+        wearFonts(skin);
         return { theme: pageTheme(), skin: skin || 'default' };
     }
 
@@ -112,12 +164,13 @@
      * the two attributes are always set together and cannot drift apart.
      */
     function dress(element, { theme, skin }) {
+        wearFonts(skin);
         element.classList.add('bb-themed');
         element.dataset.bbTheme = theme;
         element.dataset.bbSkin = skin;
     }
 
-    const Theme = { pageTheme, isYouTubeDark, isPageDark, installYouTubeSync, appearance, dress };
+    const Theme = { pageTheme, isYouTubeDark, isPageDark, installYouTubeSync, appearance, dress, FACES };
 
     root.BB = root.BB || {};
     root.BB.Theme = Theme;

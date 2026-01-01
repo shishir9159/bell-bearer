@@ -75,7 +75,6 @@
         "src/content/main.js"
       ],
       "css": [
-        "skin-fonts.css",
         "content.css"
       ]
     },
@@ -128,7 +127,6 @@
         "src/content/main.js"
       ],
       "css": [
-        "skin-fonts.css",
         "content.css",
         "content-youtube.css"
       ]
@@ -174,7 +172,6 @@
         "src/content/main.js"
       ],
       "css": [
-        "skin-fonts.css",
         "content.css",
         "content-x.css"
       ]
@@ -213,7 +210,6 @@
         "src/content/main.js"
       ],
       "css": [
-        "skin-fonts.css",
         "content.css"
       ]
     },
@@ -255,7 +251,6 @@
         "src/content/main.js"
       ],
       "css": [
-        "skin-fonts.css",
         "content.css"
       ]
     },
@@ -298,7 +293,6 @@
         "src/content/main.js"
       ],
       "css": [
-        "skin-fonts.css",
         "content.css",
         "content-leetcode.css"
       ]
@@ -339,7 +333,6 @@
         "src/content/main.js"
       ],
       "css": [
-        "skin-fonts.css",
         "content.css",
         "content-typeracer.css"
       ]
@@ -400,7 +393,6 @@
         "src/content/main.js"
       ],
       "css": [
-        "skin-fonts.css",
         "content.css",
         "content-chat.css"
       ]

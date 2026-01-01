@@ -746,9 +746,11 @@
    the palette and the type, `data-bb-theme` still follows the host page's
    own light/dark, so the overlay never fights the site it sits on.
 
-   The faces themselves are declared in skin-fonts.css, which the manifest
-   loads alongside this file on every page, and fonts/*.woff2 is in
-   web_accessible_resources so the page is allowed to fetch them. A family
+   The faces themselves are added by src/content/theme.js (FACES), at the
+   extension's own address, once a page draws its first skinned surface —
+   fonts/*.woff2 is in web_accessible_resources so the page may fetch them.
+   skin-fonts.css cannot be listed beside this file: its relative URLs
+   would resolve against the page. A family
    that ever went missing would fall back to the stacks below and nothing
    would break.
    ============================================================ */

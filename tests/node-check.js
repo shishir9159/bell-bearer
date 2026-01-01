@@ -3207,6 +3207,21 @@ check('the page every other entry is built on carries no site\'s own module', ()
         assert(!/youtube-ui|pouch-sheet|reader|twitter|chess|leet|typeracer|chat|roster|checkpoints|transcript/.test(file), file);
     }
 });
+check('the skins\' faces are not a content-script stylesheet, and the injected UI adds the same ones', () => {
+    // Listed beside content.css, skin-fonts.css's url('fonts/…') resolved
+    // against the page: https://x.com/fonts/Cardo-Regular.woff2, a network
+    // error, and the system stack on every skinned surface.
+    for (const entry of JSON.parse(readRepo('manifest.json')).content_scripts) {
+        assert(!(entry.css || []).includes('skin-fonts.css'), (entry.matches || [])[0]);
+    }
+    const declared = [...readRepo('skin-fonts.css').matchAll(/@font-face\s*\{([^}]*)\}/g)].map(([, body]) => ({
+        family: /font-family:\s*'([^']+)'/.exec(body)[1],
+        file: /url\('fonts\/([^']+)'\)/.exec(body)[1],
+        weight: /font-weight:\s*([^;]+);/.exec(body)[1].trim(),
+        unicodeRange: /unicode-range:\s*([^;]+);/.exec(body)[1].trim(),
+    }));
+    eq(require('../src/content/theme.js').FACES.map((face) => ({ ...face })), declared);
+});
 check('chrome is asked for unlimited storage, and firefox is not', () => {
     // Without it Chrome caps storage.local at 10 MB, and Settings.set turns a
     // full store into writes that quietly do nothing — checkpoints included.
@@ -6115,6 +6130,34 @@ const storedDays = () => Object.keys(store)
         const worker = require('fs').readFileSync(`${__dirname}/../src/background/skim.js`, 'utf8');
         for (const action of Skim.ACTIONS) {
             eq(worker.includes(`'${action.id}'`), true, `${action.id} has no branch in the worker`);
+        }
+    });
+
+    // ------------------------------------------------------ the skin faces
+
+    await checkAsync('the faces are added once, at the extension\'s own address, and only for a skin that has them', async () => {
+        const Theme = require('../src/content/theme.js');
+        const saved = { document: globalThis.document, FontFace: globalThis.FontFace, chrome: globalThis.chrome, getComputedStyle: globalThis.getComputedStyle };
+        const added = [];
+        let skin = 'default';
+        globalThis.document = { fonts: { add: (face) => added.push(face) }, documentElement: { hasAttribute: () => false } };
+        globalThis.getComputedStyle = () => ({ colorScheme: 'light', getPropertyValue: () => '' });
+        globalThis.FontFace = class { constructor(family, src, descriptors) { Object.assign(this, { family, src, descriptors }); } };
+        globalThis.chrome = {
+            runtime: { getURL: (path) => `chrome-extension://abc/${path}` },
+            storage: { local: { get: async () => ({ skin }) } },
+        };
+        try {
+            await Theme.appearance();
+            eq(added.length, 0, 'the default skin uses the system stack');
+            skin = 'medieval';
+            await Theme.appearance();
+            Theme.dress({ classList: { add() {} }, dataset: {} }, { theme: 'dark', skin: 'deco' });
+            eq(added.length, Theme.FACES.length, 'every face, once');
+            eq(added[0].src, 'url("chrome-extension://abc/fonts/Cardo-Regular.woff2") format("woff2")');
+            eq(added[0].descriptors.display, 'swap');
+        } finally {
+            Object.assign(globalThis, saved);
         }
     });
 
