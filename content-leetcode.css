@@ -1,0 +1,596 @@
+/*
+ * LeetCode: the grade card, the nav row, the note pill, the panel, templates, mock mode.
+ *
+ * Loaded after content.css, and only by this site's manifest entry: the
+ * rules were the tail of content.css, every one of them scoped to this
+ * site's own classes, so they keep their place in the cascade and are no
+ * longer parsed on every other page. The palette and the skins they draw
+ * on are content.css's.
+ */
+
+/* =====================================================================
+   LeetCode
+   ===================================================================== */
+
+/* The grade card, after an accepted submission.
+
+   Bottom right rather than centred, and without a scrim: it is a question
+   about something you have just finished, not a modal standing between you
+   and the page. Leaving it alone is a valid answer, so it must not be in
+   the way of reading the result LeetCode is showing behind it. */
+.bb-leet-card {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 2147483000;
+    width: 320px;
+    max-width: calc(100vw - 32px);
+    padding: 14px 15px 12px;
+    box-sizing: border-box;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r);
+    background: var(--bb-panel-solid);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    box-shadow: var(--bb-shadow);
+}
+
+.bb-leet-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.bb-leet-card-title {
+    font-family: var(--bb-font-head);
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: var(--bb-head-case);
+    letter-spacing: var(--bb-head-track);
+}
+
+.bb-leet-card-x {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--bb-faint);
+    cursor: pointer;
+}
+
+.bb-leet-card-x:hover { background: var(--bb-chip); color: var(--bb-text); }
+.bb-leet-card-x svg { width: 13px; height: 13px; }
+
+.bb-leet-card-sub {
+    margin: 4px 0 11px;
+    font-size: 12px;
+    color: var(--bb-sub);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Four across. They are one question with four answers, so they read as one
+   control rather than as four buttons that happen to be adjacent. */
+.bb-leet-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+
+.bb-leet-grade {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px;
+    border: 1px solid var(--bb-border-strong);
+    border-radius: var(--bb-r-sm);
+    background: var(--bb-surface);
+    color: var(--bb-text);
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.bb-leet-grade:hover { border-color: var(--bb-accent); }
+
+/* The suggestion, which is a pre-selection and not a decision — an outline
+   in the accent rather than a fill, so it reads as "this one, unless you
+   say otherwise" rather than as an answer already given. */
+.bb-leet-grade.is-suggested {
+    border-color: var(--bb-accent);
+    background: var(--bb-accent-soft);
+}
+
+.bb-leet-grade-name { font-size: 12.5px; font-weight: 600; }
+.bb-leet-grade-when { font-size: 10.5px; color: var(--bb-faint); text-align: center; line-height: 1.25; }
+.bb-leet-grade.is-suggested .bb-leet-grade-when { color: var(--bb-sub); }
+
+.bb-leet-card-foot { margin: 10px 0 0; font-size: 10.5px; color: var(--bb-faint); line-height: 1.35; }
+
+/* ------------------------------------------------- the pouch row in the nav */
+
+/* Not styled by copying LeetCode's classes: it is a Tailwind build, so the
+   classes on that bar are utilities that change with the markup around them.
+   The row is ours, and it takes the bar's own colour through `inherit` so it
+   follows LeetCode's light/dark switch the instant it happens rather than
+   wearing a value read once. */
+.bb-leet-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 4px;
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    opacity: .85;
+}
+
+.bb-leet-nav:hover { opacity: 1; background: rgba(128, 128, 128, .14); }
+.bb-leet-nav .bb-pouch-glyph { width: 16px; height: 16px; fill: currentColor; }
+.bb-leet-nav-text { white-space: nowrap; }
+
+/* --------------------------------------------------------- the note pill */
+
+/* It carries the note rather than an icon, so landing on a problem answers
+   "have I worked this out before" without a click. Capped at a line, since a
+   note that pushed LeetCode's heading onto three rows would be the extension
+   rearranging somebody else's page. */
+.bb-leet-pill {
+    display: inline-block;
+    vertical-align: middle;
+    max-width: 22em;
+    margin-left: 10px;
+    padding: 2px 9px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.6;
+    opacity: .6;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bb-leet-pill:hover { opacity: 1; }
+/* A pill standing for a note that exists reads as filled-in rather than as
+   an invitation, so the two states are told apart at a glance. */
+.bb-leet-pill.has-note { opacity: .85; font-style: italic; }
+
+/* ------------------------------------------------------------- the panel */
+
+.bb-leet-overlay { padding: 40px; align-items: stretch; }
+
+.bb-leet-sheet {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bb-panel);
+    -webkit-backdrop-filter: blur(26px) saturate(1.5);
+    backdrop-filter: blur(26px) saturate(1.5);
+    border: 1px solid var(--bb-border);
+    border-radius: 18px;
+    box-shadow: var(--bb-shadow);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    overflow: hidden;
+    animation: bb-rise .22s cubic-bezier(.2, .8, .2, 1);
+}
+
+.bb-leet-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 15px 18px 13px;
+    border-bottom: 1px solid var(--bb-border);
+}
+
+.bb-leet-title {
+    margin: 0;
+    font-family: var(--bb-font-head);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: var(--bb-head-track);
+    text-transform: var(--bb-head-case);
+}
+
+/* min-width so the summary line under the title can ellipsize rather than
+   pushing the close button off the end of the header. */
+.bb-leet-heading { min-width: 0; }
+.bb-leet-sub { margin: 3px 0 0; font-size: 12px; color: var(--bb-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bb-leet-close {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--bb-faint);
+    cursor: pointer;
+}
+
+.bb-leet-close:hover { background: var(--bb-chip); color: var(--bb-text); }
+.bb-leet-close svg { width: 15px; height: 15px; }
+
+.bb-leet-body { flex: 1; display: flex; min-height: 0; }
+
+.bb-leet-rail {
+    width: 196px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--bb-border);
+    padding: 12px 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.bb-leet-rail-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--bb-faint);
+    padding: 4px 10px 8px;
+}
+
+.bb-leet-rail-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: var(--bb-r-sm);
+    background: transparent;
+    color: var(--bb-text);
+    font-family: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.bb-leet-rail-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-leet-rail-row:hover { background: var(--bb-chip); }
+.bb-leet-rail-row.is-on { background: var(--bb-accent-soft); color: var(--bb-accent); font-weight: 600; }
+.bb-leet-rail-n { font-size: 11.5px; color: var(--bb-faint); font-variant-numeric: tabular-nums; }
+.bb-leet-rail-row.is-on .bb-leet-rail-n { color: var(--bb-accent); }
+
+.bb-leet-pane { flex: 1; min-width: 0; overflow-y: auto; padding: 14px 18px 20px; }
+
+.bb-leet-empty { padding: 48px 12px; text-align: center; color: var(--bb-sub); font-size: 13px; }
+
+.bb-leet-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+
+.bb-leet-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 11px 13px;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r);
+    background: var(--bb-card);
+}
+
+.bb-leet-row-main { min-width: 0; flex: 1; }
+
+.bb-leet-name {
+    display: block;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--bb-text);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bb-leet-name:hover { color: var(--bb-accent); text-decoration: underline; }
+
+.bb-leet-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; font-size: 11.5px; color: var(--bb-faint); }
+
+/* LeetCode's own three colours, so the pill reads the way it does on the
+   page it was copied off. They are the site's, not the skin's, which is why
+   they are literals here rather than accent tokens. */
+.bb-leet-diff { font-weight: 600; }
+.bb-leet-diff.is-easy { color: #1cbaba; }
+.bb-leet-diff.is-medium { color: #ffb800; }
+.bb-leet-diff.is-hard { color: #f63737; }
+
+.bb-leet-when { color: var(--bb-sub); }
+
+/* The attempt count is the least of the three and is the first thing to go
+   when the row is narrow — the name and the due date are what the rail is
+   read for. */
+.bb-leet-tries { color: var(--bb-faint); white-space: nowrap; }
+
+@media (max-width: 1100px) {
+    .bb-leet-tries { display: none; }
+}
+
+.bb-leet-note {
+    flex: 0 1 44%;
+    min-width: 0;
+    padding: 6px 9px;
+    border: 1px dashed var(--bb-border-strong);
+    border-radius: var(--bb-r-sm);
+    background: transparent;
+    color: var(--bb-sub);
+    font-family: inherit;
+    font-size: 11.5px;
+    line-height: 1.4;
+    text-align: left;
+    cursor: pointer;
+}
+
+.bb-leet-note:hover { border-color: var(--bb-accent); color: var(--bb-text); }
+.bb-leet-note.is-empty { color: var(--bb-faint); font-style: italic; flex: 0 0 auto; }
+
+.bb-leet-note-form { flex: 0 1 44%; min-width: 0; }
+.bb-leet-note-input { font-size: 12px; resize: vertical; }
+.bb-leet-note-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
+.bb-leet-note-actions .bb-btn { padding: 5px 12px; font-size: 12px; }
+
+@media (max-width: 900px) {
+    .bb-leet-overlay { padding: 16px; }
+    .bb-leet-rail { width: 148px; }
+    .bb-leet-row { flex-direction: column; gap: 8px; }
+    .bb-leet-note, .bb-leet-note-form { flex: 1 1 auto; width: 100%; }
+}
+
+/* --------------------------------------------------------- templates */
+
+/* The list and the editor side by side. The list is narrow because a
+   template's name is three words; the editor takes the rest, because what
+   you are editing is code and wrapping it would make it unreadable. */
+.bb-leet-tpl { display: flex; gap: 16px; align-items: flex-start; min-height: 0; }
+.bb-leet-tpl-list { flex: 0 0 210px; min-width: 0; }
+
+.bb-leet-tpl-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--bb-faint);
+}
+
+.bb-leet-tpl-head .bb-btn { padding: 4px 10px; font-size: 11.5px; letter-spacing: 0; text-transform: none; }
+
+.bb-leet-tpl-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.bb-leet-tpl-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--bb-r-sm);
+    background: transparent;
+    color: var(--bb-text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.bb-leet-tpl-row:hover { background: var(--bb-chip); }
+.bb-leet-tpl-row.is-on { background: var(--bb-accent-soft); border-color: var(--bb-accent); }
+.bb-leet-tpl-name { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-leet-tpl-lang { font-size: 10.5px; color: var(--bb-faint); }
+.bb-leet-tpl-none { margin: 0; font-size: 12px; color: var(--bb-sub); line-height: 1.5; }
+
+.bb-leet-tpl-editor { flex: 1; min-width: 0; }
+.bb-leet-tpl-editor.is-empty { padding: 40px 0; color: var(--bb-faint); font-size: 12.5px; text-align: center; }
+.bb-leet-tpl-editor.is-empty p { margin: 0; }
+
+.bb-leet-tpl-fields { display: flex; gap: 8px; margin-bottom: 8px; }
+.bb-leet-tpl-title { flex: 1; min-width: 0; }
+.bb-leet-tpl-select { flex: 0 0 auto; width: auto; }
+
+/* Monospace, because it is code, and nowrap+scroll rather than wrap so the
+   indentation that is part of a template stays readable. */
+.bb-leet-tpl-body {
+    font-family: Consolas, 'SF Mono', ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+    resize: vertical;
+}
+
+.bb-leet-tpl-actions { display: flex; gap: 8px; margin-top: 9px; }
+.bb-leet-tpl-del { margin-left: auto; color: var(--bb-danger); }
+.bb-leet-tpl-actions .bb-btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* ------------------------------------------------------- the suggester */
+
+/* Centred near the top rather than anchored to the caret. Monaco does not
+   expose a caret rectangle to the isolated world, and a list that guessed
+   at one would sit over the code you were about to paste into as often as
+   not. Near the top, where a command palette lives, is both predictable and
+   out of the way of the line you are on. */
+.bb-leet-suggest {
+    position: fixed;
+    top: 14vh;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2147483000;
+    width: 420px;
+    max-width: calc(100vw - 32px);
+    padding: 10px;
+    box-sizing: border-box;
+    border: 1px solid var(--bb-border);
+    border-radius: var(--bb-r);
+    background: var(--bb-panel-solid);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    box-shadow: var(--bb-shadow);
+    animation: bb-rise .16s cubic-bezier(.2, .8, .2, 1);
+}
+
+.bb-leet-suggest-q { font-size: 13px; }
+.bb-leet-suggest-list { max-height: 44vh; overflow-y: auto; margin-top: 8px; }
+
+.bb-leet-suggest-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: var(--bb-r-sm);
+    background: transparent;
+    color: var(--bb-text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+/* The keyboard's selection, not the mouse's — this list is driven with the
+   arrows, so the marked row has to be the one Enter will take. */
+.bb-leet-suggest-row.is-on { background: var(--bb-accent-soft); color: var(--bb-accent); }
+.bb-leet-suggest-row.is-save { font-style: italic; }
+.bb-leet-suggest-row .bb-leet-suggest-name { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bb-leet-suggest-lang { flex: 0 0 auto; font-size: 10.5px; color: var(--bb-faint); }
+.bb-leet-suggest-row.is-on .bb-leet-suggest-lang { color: var(--bb-accent); }
+.bb-leet-suggest-none { margin: 10px; font-size: 12px; color: var(--bb-sub); line-height: 1.5; }
+
+.bb-leet-suggest-foot {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--bb-border);
+    font-size: 10.5px;
+    color: var(--bb-faint);
+}
+
+@media (max-width: 900px) {
+    .bb-leet-tpl { flex-direction: column; }
+    .bb-leet-tpl-list { flex: 1 1 auto; width: 100%; }
+}
+
+/* ------------------------------------------------- mock interview mode */
+
+/* The class is on <html> and the marks are on the elements, and it takes
+   both. That is what makes leaving the mode one class removal rather than a
+   reconstruction of LeetCode's markup: a mark left behind on an element does
+   nothing at all once the class is gone.
+
+   Hidden rather than removed, because LeetCode re-renders these panes on its
+   own schedule and a node deleted now is back in a moment — the same reason
+   the promoted-post rule above hides instead of deleting. */
+html.bb-leet-mock [data-bb-leet-hidden] { display: none !important; }
+
+/* The countdown. Bottom left, opposite the grade card, so the two can never
+   collide — and the grade card is suppressed during a mock run anyway. */
+.bb-leet-chip {
+    position: fixed;
+    left: 22px;
+    bottom: 22px;
+    z-index: 2147483000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--bb-border);
+    border-radius: 999px;
+    background: var(--bb-panel-solid);
+    color: var(--bb-text);
+    font-family: var(--bb-font);
+    box-shadow: var(--bb-shadow);
+}
+
+.bb-leet-chip-time {
+    font-size: 15px;
+    font-weight: 700;
+    /* Tabular, or the whole chip twitches once a second as the digits change. */
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .02em;
+}
+
+/* The last two minutes. Colour alone would not carry this for everyone, so
+   the weight goes up with it. */
+.bb-leet-chip.is-low .bb-leet-chip-time { color: var(--bb-danger); }
+
+.bb-leet-chip-x {
+    padding: 3px 10px;
+    border: 1px solid var(--bb-border-strong);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--bb-sub);
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bb-leet-chip-x:hover { color: var(--bb-text); border-color: var(--bb-accent); }
+
+/* ----------------------------------------------------------- the skins */
+
+/* Almost everything above is already in --bb-r / --bb-r-sm, which each skin
+   sets for itself, so a skin change needs no redraw and nothing here. What
+   is left is the handful of places a literal radius was unavoidable: the
+   sheet's shell, which is deliberately rounder than the cards inside it, and
+   the two pill-shaped buttons. Both skins that square their corners have to
+   square these too, or the panel is round where every other surface we
+   inject is not. Same block, same reason, as the X panel above. */
+.bb-themed[data-bb-skin="riso"] .bb-leet-sheet,
+.bb-themed[data-bb-skin="deco"] .bb-leet-sheet,
+.bb-themed[data-bb-skin="riso"] .bb-leet-close,
+.bb-themed[data-bb-skin="deco"] .bb-leet-close,
+.bb-themed[data-bb-skin="riso"] .bb-leet-card-x,
+.bb-themed[data-bb-skin="deco"] .bb-leet-card-x,
+.bb-themed[data-bb-skin="riso"] .bb-leet-row,
+.bb-themed[data-bb-skin="deco"] .bb-leet-row,
+.bb-leet-card.bb-themed[data-bb-skin="riso"],
+.bb-leet-card.bb-themed[data-bb-skin="deco"],
+.bb-leet-suggest.bb-themed[data-bb-skin="riso"],
+.bb-leet-suggest.bb-themed[data-bb-skin="deco"],
+.bb-leet-chip.bb-themed[data-bb-skin="riso"],
+.bb-leet-chip.bb-themed[data-bb-skin="deco"],
+.bb-themed[data-bb-skin="riso"] .bb-leet-chip-x,
+.bb-themed[data-bb-skin="deco"] .bb-leet-chip-x { border-radius: 0; }
+
+.bb-themed[data-bb-skin="medieval"] .bb-leet-sheet,
+.bb-themed[data-bb-skin="medieval"] .bb-leet-row,
+.bb-leet-card.bb-themed[data-bb-skin="medieval"],
+.bb-leet-suggest.bb-themed[data-bb-skin="medieval"] { border-radius: 3px; }
+
+/* Riso draws its borders as hard ink rather than as a tint, so the dashed
+   note field reads as a deliberate dotted rule there instead of the faint
+   grey it is on the default skin. */
+.bb-themed[data-bb-skin="riso"] .bb-leet-note,
+.bb-themed[data-bb-skin="deco"] .bb-leet-note { border-style: dotted; }
+
+/* The difficulty pills keep LeetCode's own three colours on every skin —
+   they are the site's vocabulary, not ours, and a Medium that is pink on one
+   skin and amber on another stops being readable at a glance. What they do
+   need is to stay legible: the light-skin values are tuned for a pale panel
+   and Easy in particular goes muddy on a dark one. */
+.bb-themed[data-bb-theme="dark"] .bb-leet-diff.is-easy { color: #2ccccc; }
+.bb-themed[data-bb-theme="dark"] .bb-leet-diff.is-medium { color: #ffc733; }
+.bb-themed[data-bb-theme="dark"] .bb-leet-diff.is-hard { color: #ff5c5c; }
