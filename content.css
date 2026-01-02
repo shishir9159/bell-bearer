@@ -558,6 +558,9 @@
     gap: 16px 14px;
 }
 
+/* The rest of a long grid, on request — see CARDS_STEP in pouch-sheet.js. */
+.bb-videos .bb-more { display: block; margin: 18px auto 4px; }
+
 .bb-video-card {
     text-decoration: none;
     color: var(--bb-text);

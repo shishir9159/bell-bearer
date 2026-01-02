@@ -90,6 +90,15 @@
     /** Redraws while feeds are streaming in are coalesced onto this interval. */
     const REDRAW_MS = 220;
 
+    /**
+     * How many cards the grid draws before it offers the rest. With
+     * Subscriptions on, All can run to thousands of cards — a few hundred
+     * channels at three videos each — and every redraw while the feeds came
+     * in rebuilt all of them, images and all, four times a second. A
+     * screenful is a few dozen.
+     */
+    const CARDS_STEP = 120;
+
     const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
     function createPouchSheet({ notify, dress, appearance, iconUrl }) {
@@ -181,6 +190,10 @@
             this.playlistLatest = [];
             this.playlistsRead = true;
             this.redrawTimer = null;
+            /** How many cards the grid shows; back to CARDS_STEP whenever what it shows changes. */
+            this.shown = CARDS_STEP;
+            /** The grid's markup as last drawn, so a redraw that would change nothing is skipped. */
+            this.drawnGrid = null;
 
             const $ = (selector) => dialog.element.querySelector(selector);
             this.el = {
@@ -533,14 +546,26 @@
             return topicRow(PLAYLISTS_VIEW, 'Subscribed Playlist', count, this.topicId === PLAYLISTS_VIEW);
         }
 
+        /**
+         * Put `html` in the grid unless it is already there. Most redraws while
+         * the feeds stream in change nothing on screen — the new videos are
+         * past the cards drawn, or outside the range — and rebuilding the grid
+         * anyway reloaded every thumbnail in it.
+         */
+        drawGrid(html) {
+            if (html === this.drawnGrid) return;
+            this.drawnGrid = html;
+            this.el.grid.innerHTML = html;
+        }
+
         renderGrid() {
             if (!this.hydrated) {
-                this.el.grid.innerHTML = '<p class="bb-muted">Loading your pouch…</p>';
+                this.drawGrid('<p class="bb-muted">Loading your pouch…</p>');
                 return;
             }
 
             if (this.topicId === PLAYLISTS_VIEW) {
-                this.el.grid.innerHTML = this.playlistLatestHtml();
+                this.drawGrid(this.playlistLatestHtml());
                 return;
             }
 
@@ -552,7 +577,7 @@
             } else {
                 const list = this.visible();
                 if (list.length) {
-                    parts.push(`<div class="bb-video-grid">${list.map(videoCard).join('')}</div>`);
+                    parts.push(cardsHtml(list, this.shown));
                 } else if (this.loading || this.loadingSubs) {
                     parts.push('<p class="bb-muted">Loading the latest from your channels…</p>');
                 } else {
@@ -560,7 +585,7 @@
                 }
             }
 
-            this.el.grid.innerHTML = parts.join('');
+            this.drawGrid(parts.join(''));
         }
 
         /**
@@ -598,10 +623,15 @@
                 const button = event.target.closest('.bb-topic');
                 if (!button) return;
                 this.topicId = button.dataset.topicId;
+                this.shown = CARDS_STEP;
                 this.render();
             });
 
             this.el.grid.addEventListener('click', (event) => {
+                if (event.target.closest('[data-bb-more]')) {
+                    this.shown += CARDS_STEP;
+                    return this.renderGrid();
+                }
                 // Opening a card is the plainest signal there is that the video
                 // has been watched; the link itself is left alone.
                 const card = event.target.closest('[data-video-id]');
@@ -612,6 +642,7 @@
                 const option = event.target.closest('.bb-seg-opt');
                 if (!option) return;
                 this.range = option.dataset.range;
+                this.shown = CARDS_STEP;
                 overlay.querySelectorAll('.bb-seg-opt').forEach((other) => {
                     other.setAttribute('aria-pressed', String(other === option));
                 });
@@ -620,6 +651,7 @@
 
             overlay.querySelector('.bb-select').addEventListener('change', (event) => {
                 this.sort = event.target.value;
+                this.shown = CARDS_STEP;
                 this.renderGrid();
             });
         }
@@ -630,6 +662,7 @@
 
             // Widening the scope only means anything from "All".
             if (this.allSubscribed) this.topicId = ALL_TOPICS;
+            this.shown = CARDS_STEP;
             this.render();
 
             if (this.allSubscribed) await this.loadSubscribed();
@@ -683,6 +716,7 @@
                 // pushing it again drew the topic twice.
                 if (!this.topics.some((topic) => topic.id === id)) this.topics.push({ id, name });
                 this.topicId = id;
+                this.shown = CARDS_STEP;
                 this.render();
                 this.notify(`Topic "${name}" created`, 'success');
             });
@@ -728,6 +762,15 @@
             </button>`;
     }
 
+    /** The grid for `list`: its first `shown` cards, and a row offering the rest. */
+    function cardsHtml(list, shown, card = videoCard) {
+        const more = list.length - shown;
+        const offer = more > 0
+            ? `<button class="bb-btn bb-more" type="button" data-bb-more="1">Show ${Math.min(CARDS_STEP, more)} more of ${more}</button>`
+            : '';
+        return `<div class="bb-video-grid">${list.slice(0, shown).map(card).join('')}</div>${offer}`;
+    }
+
     function videoCard(video) {
         // An entry with no published date gets no age label at all, rather
         // than a placeholder dash the eye has to skip over.
@@ -761,7 +804,7 @@
     }
 
     const PouchSheet = {
-        createPouchSheet, ALL_TOPICS, RANGES, SORTS, PER_CHANNEL, PER_SUBSCRIBED_CHANNEL,
+        createPouchSheet, ALL_TOPICS, RANGES, SORTS, PER_CHANNEL, PER_SUBSCRIBED_CHANNEL, CARDS_STEP, cardsHtml,
     };
 
     root.BB = root.BB || {};

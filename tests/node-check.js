@@ -6166,6 +6166,25 @@ const storedDays = () => Object.keys(store)
         }
     });
 
+    // ----------------------------------------------------- the pouch grid
+
+    check('the pouch grid draws a screenful of cards and offers the rest', () => {
+        // With Subscriptions on, All can be thousands of cards, and each was
+        // rebuilt on every redraw while the feeds came in.
+        const PouchSheet = require('../src/content/pouch-sheet.js');
+        const step = PouchSheet.CARDS_STEP;
+        const list = Array.from({ length: step * 2 + 7 }, (_, i) => ({ id: `v${i}` }));
+        const card = (video) => `<a data-video-id="${video.id}"></a>`;
+        const cards = (html) => (html.match(/data-video-id/g) || []).length;
+
+        const first = PouchSheet.cardsHtml(list, step, card);
+        eq(cards(first), step);
+        assert(first.includes(`Show ${step} more of ${step + 7}`), first.slice(-120));
+        const last = PouchSheet.cardsHtml(list, step * 3, card);
+        eq([cards(last), last.includes('data-bb-more')], [list.length, false], 'all of it, and nothing more to offer');
+        assert(PouchSheet.cardsHtml(list, step * 2, card).includes('Show 7 more of 7'));
+    });
+
     // ------------------------------------------------------ the skin faces
 
     await checkAsync('the faces are added once, at the extension\'s own address, and only for a skin that has them', async () => {
