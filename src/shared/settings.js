@@ -447,6 +447,20 @@
         promptQueue: 'bbPromptQueue',
     });
 
+    /**
+     * What a backup leaves out of DATA, said beside the keys rather than in a
+     * list of backup's own, which drifted: caches are rebuilt from the network
+     * and would only make a file large and stale, and transient state means
+     * something on this machine, right now, and nowhere a file is restored —
+     * a roster job carried over would resume, half done, somewhere else.
+     */
+    const CACHES = Object.freeze([
+        DATA.channelIdCache, DATA.feedCache, DATA.subscribed,
+        DATA.chessCache, DATA.lichessCache, DATA.leetCalendar,
+    ]);
+    const CACHE_PREFIXES = Object.freeze([DATA.chessMonths]);
+    const TRANSIENT = Object.freeze([DATA.rosterJob, DATA.chatPanel]);
+
     function withDefaults(stored, keys) {
         const wanted = keys && keys.length ? keys : KEYS;
         const out = {};
@@ -509,7 +523,7 @@
         };
     }
 
-    const Settings = { DEFAULTS, KEYS, DATA, withDefaults, get, set, watch };
+    const Settings = { DEFAULTS, KEYS, DATA, CACHES, CACHE_PREFIXES, TRANSIENT, withDefaults, get, set, watch };
 
     root.BB = root.BB || {};
     root.BB.Settings = Settings;

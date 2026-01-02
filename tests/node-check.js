@@ -4834,6 +4834,31 @@ const storedDays = () => Object.keys(store)
         eq(Backup.validate({ type: 'bell-bearer-checkpoints', data: {} }), false);
     });
 
+    check('an export leaves out every cache and what is only true here and now, and keeps activity', () => {
+        // The list was backup.js's own and had missed the subscriptions and
+        // LeetCode caches, and exported a roster job in flight.
+        const Settings = require('../src/shared/settings.js');
+        const store = { skin: 'deco', bb_activity_last: { at: 1 }, 'bb_activity:2026-07-15': { total: 5 }, bb_activity_days: ['2026-07-15'] };
+        for (const key of [...Settings.CACHES, ...Settings.TRANSIENT]) store[key] = { gone: true };
+        eq(Object.keys(Backup.build(store, 0).data).sort(), ['bb_activity:2026-07-15', 'bb_activity_days', 'skin']);
+        for (const key of [Settings.DATA.subscribed, Settings.DATA.leetCalendar, Settings.DATA.rosterJob, Settings.DATA.chatPanel]) {
+            assert(Backup.EXCLUDED.has(key), key);
+        }
+    });
+    await checkAsync('an import restores only keys Bell Bearer writes', async () => {
+        clearStore();
+        const count = await Backup.importAll({ type: Backup.TYPE, data: {
+            skin: 'riso', youtubeBookmarks: [], bb_activity: { '2026-07-15': { total: 1 } }, 'bb_activity:2026-07-16': { total: 2 },
+            somethingElse: 'x', __proto__junk: 1, bbPartyTab: { tabId: 1 },
+        } });
+        eq(count, 4);
+        eq(Object.keys(store).sort(), ['bb_activity', 'bb_activity:2026-07-16', 'skin', 'youtubeBookmarks']);
+    });
+    check('the backup\'s names for the activity store are the store\'s own', () => {
+        eq([Backup.ACTIVITY.legacy, Backup.ACTIVITY.days, Backup.ACTIVITY.dayPrefix, Backup.ACTIVITY.last],
+            [Activity.KEY, Activity.DAYS_KEY, Activity.DAY_PREFIX, Activity.LAST_KEY]);
+    });
+
     await checkAsync('importing writes the file back, still without caches', async () => {
         clearStore();
         store.skin = 'default';
