@@ -423,6 +423,14 @@ check('checkpoints copy out as a timestamped markdown list', () => {
         '- [1:30](https://www.youtube.com/watch?v=abcdefghijk&t=90s) “later”',
     ], 'the generated "Checkpoint 1:30" note only repeats the time beside it');
 });
+check('a link\'s address cannot end the link early, and a balanced pair is left as it is', () => {
+    const Markdown = require('../src/content/markdown.js');
+    eq(Markdown.escapeUrl('https://en.wikipedia.org/wiki/Foo_(bar)'), 'https://en.wikipedia.org/wiki/Foo_(bar)');
+    eq(Markdown.escapeUrl('https://example.com/a)b'), 'https://example.com/a%29b');
+    eq(Markdown.escapeUrl('https://example.com/(a'), 'https://example.com/%28a');
+    eq(Markdown.escapeUrl('https://example.com/)('), 'https://example.com/%29%28', 'closed before it opened');
+    eq(Markdown.escapeUrl('file:///C:/my notes.txt'), 'file:///C:/my%20notes.txt');
+});
 check('a text node is walked up to its row', () => {
     const row = { nodeType: 1, classList: { contains: (c) => c === ReaderTranscript.ROW_CLASS }, dataset: { i: '4' } };
     const span = { nodeType: 1, classList: { contains: () => false }, parentNode: row };

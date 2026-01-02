@@ -19,8 +19,25 @@
         return String(text || '').replace(/([\\[\]])/g, '\\$1').replace(/\s+/g, ' ').trim();
     }
 
+    /**
+     * A URL as the inside of `(…)`. Whitespace or a parenthesis without its
+     * pair ends the link early, so those are percent-encoded — and only
+     * those: a balanced pair is legal Markdown, and encoding it would turn
+     * every https://en.wikipedia.org/wiki/Foo_(bar) into Foo_%28bar%29.
+     */
+    function escapeUrl(url) {
+        const text = String(url || '').replace(/\s/g, (ch) => encodeURIComponent(ch));
+        let depth = 0;
+        let balanced = true;
+        for (const ch of text) {
+            if (ch === '(') depth++;
+            else if (ch === ')' && --depth < 0) balanced = false;
+        }
+        return balanced && depth === 0 ? text : text.replace(/\(/g, '%28').replace(/\)/g, '%29');
+    }
+
     function link(label, url) {
-        return `[${escapeLabel(label)}](${url})`;
+        return `[${escapeLabel(label)}](${escapeUrl(url)})`;
     }
 
     /**
@@ -141,7 +158,7 @@
         return { trackContextLinks, buildPageMarkdown, buildLinkMarkdown, copy };
     }
 
-    const Markdown = { createMarkdown, escapeLabel, checkpointList };
+    const Markdown = { createMarkdown, escapeLabel, escapeUrl, checkpointList };
 
     root.BB = root.BB || {};
     root.BB.Markdown = Markdown;
