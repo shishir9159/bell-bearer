@@ -21,15 +21,13 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Time = ns.Time || req('./time.js');
     const ChessSites = ns.ChessSites || req('./chess-sites.js');
 
     const CLASSES = ChessSites.CLASSES;
 
     /** 'YYYY-MM-DD' in local time — the day a limit runs to midnight of. */
-    function dayKey(ms = Date.now()) {
-        const date = new Date(ms);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    }
+    const dayKey = (ms = Date.now()) => Time.dayKey(ms);
 
     function zeroes() {
         const out = {};

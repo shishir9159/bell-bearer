@@ -34,6 +34,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Time = ns.Time || req('./time.js');
     const LimitSites = ns.LimitSites || req('./limit-sites.js');
 
     const KEY = Settings.DATA.timeLimits;
@@ -61,10 +62,7 @@
     const ids = () => SITES.map((site) => site.id);
 
     /** 'YYYY-MM-DD' in local time — a limit runs to local midnight. */
-    function dayKey(ms = Date.now()) {
-        const date = new Date(ms);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    }
+    const dayKey = (ms = Date.now()) => Time.dayKey(ms);
 
     const blank = (now = Date.now()) => ({ day: dayKey(now), seconds: {}, snoozed: {} });
 

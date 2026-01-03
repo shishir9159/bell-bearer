@@ -24,6 +24,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Time = ns.Time || req('./time.js');
     const Fsrs = ns.Fsrs || req('./fsrs.js');
 
     const { leetProblems: PROBLEMS_KEY, leetDays: DAYS_KEY } = Settings.DATA;
@@ -54,16 +55,12 @@
     ]);
 
     /**
-     * 'YYYY-MM-DD' in **local** time. Pointedly not activity.js's
-     * `toISOString().slice(0, 10)`, which is UTC: east of Greenwich that files
-     * an evening's practice under tomorrow, and west of it files a morning's
-     * under yesterday, so the square that lights up is not the one the user
-     * was sitting at the keyboard on. Same three lines as time-limits.js.
+     * 'YYYY-MM-DD' in **local** time, the one every daily store shares — see
+     * Time.dayKey. A UTC day files an evening's practice east of Greenwich
+     * under tomorrow, so the square that lights up is not the one the user
+     * was sitting at the keyboard on.
      */
-    function dayKey(ms = Date.now()) {
-        const date = new Date(ms);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    }
+    const dayKey = (ms = Date.now()) => Time.dayKey(ms);
 
     const blank = () => ({ problems: {}, days: {} });
 

@@ -17,6 +17,7 @@
     const BB = (root.BB = root.BB || {});
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const Dom = BB.Dom || req('../shared/dom.js');
+    const Time = BB.Time || req('../shared/time.js');
 
     const SIZE = 11;
     const GAP = 2;
@@ -29,9 +30,7 @@
 
     const esc = (text) => Dom.escapeHtml(text);
 
-    function keyOf(date) {
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    }
+    const keyOf = (date) => Time.dayKey(date);
 
     /** 0 for nothing, then 1-4 by the upper bounds in `steps`. */
     function levelOf(value, steps) {

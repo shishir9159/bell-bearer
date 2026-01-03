@@ -30,6 +30,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Time = ns.Time || req('./time.js');
 
     const { typerRaces: RACES_KEY, typerGrams: GRAMS_KEY, typerDays: DAYS_KEY } = Settings.DATA;
 
@@ -66,14 +67,11 @@
     const DAY_MS = 864e5;
 
     /**
-     * 'YYYY-MM-DD' in **local** time — the three lines from time-limits.js,
-     * pointedly not activity.js's UTC `toISOString().slice(0, 10)`. An evening
-     * race east of Greenwich would otherwise land on tomorrow's square.
+     * 'YYYY-MM-DD' in **local** time, the one every daily store shares — see
+     * Time.dayKey. An evening race east of Greenwich would otherwise land on
+     * tomorrow's square.
      */
-    function dayKey(ms = Date.now()) {
-        const date = new Date(ms);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    }
+    const dayKey = (ms = Date.now()) => Time.dayKey(ms);
 
     const asObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
     const asArray = (value) => (Array.isArray(value) ? value : []);

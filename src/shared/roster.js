@@ -38,6 +38,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Time = ns.Time || req('./time.js');
 
     const ROSTERS_KEY = Settings.DATA.rosters;
     const JOB_KEY = Settings.DATA.rosterJob;
@@ -172,17 +173,14 @@
     /** A filename that sorts by date and says what it holds. */
     function fileName(site, now = Date.now()) {
         const rules = siteOf(site);
-        const day = new Date(now).toISOString().slice(0, 10);
+        const day = Time.dayKey(now);
         return `bell-bearer-${rules ? rules.host.replace(/\./g, '-') : 'roster'}-${day}.txt`;
     }
 
     // --------------------------------------------------------------- jobs
 
     /** 'YYYY-MM-DD' local, so a day's cap runs to local midnight. */
-    function dayKey(ms = Date.now()) {
-        const date = new Date(ms);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    }
+    const dayKey = (ms = Date.now()) => Time.dayKey(ms);
 
     /**
      * A job as it starts. `at` is how far down `names` it has got, and is the
