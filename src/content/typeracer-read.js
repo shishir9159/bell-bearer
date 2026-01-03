@@ -27,6 +27,10 @@
 (function (root) {
     'use strict';
 
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+    const ns = root.BB || {};
+    const Selectors = ns.Selectors || req('../shared/selectors.js');
+
     /**
      * Short of this many characters it is not a quote — it is a chat bubble, a
      * placeholder, or the word "Loading". Same idea as validating a chess move
@@ -89,25 +93,7 @@
         ],
     });
 
-    /** The first element matching any spelling, in order. */
-    function find(names, scope = document) {
-        for (const selector of SELECTORS[names] || []) {
-            let found = null;
-            try { found = scope.querySelector(selector); } catch (_) { continue; }
-            if (found) return found;
-        }
-        return null;
-    }
-
-    /** Every element matching any spelling — the first spelling that hits wins. */
-    function findAll(names, scope = document) {
-        for (const selector of SELECTORS[names] || []) {
-            let found = null;
-            try { found = scope.querySelectorAll(selector); } catch (_) { continue; }
-            if (found && found.length) return Array.from(found);
-        }
-        return [];
-    }
+    const { find, findAll } = Selectors.table(SELECTORS);
 
     const clean = (text) => String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
 

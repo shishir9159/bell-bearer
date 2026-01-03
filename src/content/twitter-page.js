@@ -15,6 +15,10 @@
 (function (root) {
     'use strict';
 
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+    const ns = root.BB || {};
+    const Selectors = ns.Selectors || req('../shared/selectors.js');
+
     const SELECTORS = Object.freeze({
         /** One post, anywhere it appears: timeline, thread, profile, search. */
         post: ['article[data-testid="tweet"]', 'article[role="article"]'],
@@ -90,32 +94,7 @@
         ],
     });
 
-    /** The first element matching any spelling, in order. */
-    function find(names, scope = document) {
-        for (const selector of SELECTORS[names] || []) {
-            const found = scope.querySelector(selector);
-            if (found) return found;
-        }
-        return null;
-    }
-
-    /** Every element matching any spelling — the first spelling that hits wins. */
-    function findAll(names, scope = document) {
-        for (const selector of SELECTORS[names] || []) {
-            const found = scope.querySelectorAll(selector);
-            if (found.length) return Array.from(found);
-        }
-        return [];
-    }
-
-    /** Does `element` match, or sit inside something matching, `names`? */
-    function closest(names, element) {
-        for (const selector of SELECTORS[names] || []) {
-            const hit = element.closest && element.closest(selector);
-            if (hit) return hit;
-        }
-        return null;
-    }
+    const { find, findAll, closest } = Selectors.table(SELECTORS);
 
     /**
      * The biggest version of an avatar that is still cheap.

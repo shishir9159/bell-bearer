@@ -33,6 +33,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Roster = ns.Roster || req('../shared/roster.js');
+    const Selectors = ns.Selectors || req('../shared/selectors.js');
 
     /** This page, for the job's lease. A fresh one per load, which is right. */
     const PAGE_ID = Math.random().toString(36).slice(2, 10);
@@ -93,21 +94,9 @@
         }),
     });
 
-    const first = (site, names, scope = document) => {
-        for (const selector of (SELECTORS[site] || {})[names] || []) {
-            const found = scope.querySelector(selector);
-            if (found) return found;
-        }
-        return null;
-    };
-
-    const all = (site, names, scope = document) => {
-        for (const selector of (SELECTORS[site] || {})[names] || []) {
-            const found = scope.querySelectorAll(selector);
-            if (found.length) return Array.from(found);
-        }
-        return [];
-    };
+    const TABLES = Object.fromEntries(Object.entries(SELECTORS).map(([site, table]) => [site, Selectors.table(table)]));
+    const first = (site, names, scope = document) => (TABLES[site] ? TABLES[site].find(names, scope) : null);
+    const all = (site, names, scope = document) => (TABLES[site] ? TABLES[site].findAll(names, scope) : []);
 
     /**
      * Where on the page a Follow or Join button may be looked for.

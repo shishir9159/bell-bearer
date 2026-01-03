@@ -27,6 +27,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Leet = ns.Leet || req('../shared/leetcode.js');
+    const Selectors = ns.Selectors || req('../shared/selectors.js');
 
     const SELECTORS = Object.freeze({
         /** The problem's title, on the description pane. */
@@ -130,25 +131,7 @@
         ],
     });
 
-    /** The first element matching any spelling, in order. */
-    function find(names, scope = document) {
-        for (const selector of SELECTORS[names] || []) {
-            let found = null;
-            try { found = scope.querySelector(selector); } catch (_) { continue; }
-            if (found) return found;
-        }
-        return null;
-    }
-
-    /** Every element matching any spelling — the first spelling that hits wins. */
-    function findAll(names, scope = document) {
-        for (const selector of SELECTORS[names] || []) {
-            let found = null;
-            try { found = scope.querySelectorAll(selector); } catch (_) { continue; }
-            if (found && found.length) return Array.from(found);
-        }
-        return [];
-    }
+    const { find, findAll } = Selectors.table(SELECTORS);
 
     /**
      * The problem slug from a path, or null anywhere else on the site.

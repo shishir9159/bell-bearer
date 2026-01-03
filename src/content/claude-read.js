@@ -26,6 +26,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const ChatSites = ns.ChatSites || req('../shared/chat-sites.js');
+    const Selectors = ns.Selectors || req('../shared/selectors.js');
     const ChatTree = ns.ChatTree || req('../shared/chat-tree.js');
     const ClaudeFormat = ns.ClaudeFormat || req('../shared/claude-format.js');
 
@@ -56,25 +57,8 @@
         signIn: ['a[href="/login"]', '[data-testid="login-form"]'],
     });
 
-    const shown = (element) => !!element && (typeof element.getClientRects !== 'function' || element.getClientRects().length > 0);
-
-    function find(name, scope = document, { visible = false } = {}) {
-        for (const selector of SELECTORS[name] || []) {
-            let found = [];
-            try { found = scope.querySelectorAll(selector); } catch (_) { continue; }
-            for (const element of found) if (!visible || shown(element)) return element;
-        }
-        return null;
-    }
-
-    function findAll(name, scope = document) {
-        for (const selector of SELECTORS[name] || []) {
-            let found = null;
-            try { found = scope.querySelectorAll(selector); } catch (_) { continue; }
-            if (found && found.length) return Array.from(found);
-        }
-        return [];
-    }
+    const shown = Selectors.shown;
+    const { find, findAll } = Selectors.table(SELECTORS);
 
     // ------------------------------------------------------------ reading
 

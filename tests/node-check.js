@@ -4321,7 +4321,29 @@ const storedDays = () => Object.keys(store)
             eq(store[Activity.dayStore('2026-07-15')].hours[new Date(at).getHours()], 20);
         }
     });
-    check('one duration, in the three shapes the views draw', () => {
+    check('a selector table takes the first spelling that matches, and steps over one the browser refuses', () => {
+    // Six files kept their own copy of these three; some threw on a spelling
+    // the browser would not parse, and only two could ask for one drawn.
+    const Selectors = require('../src/shared/selectors.js');
+    const hidden = { id: 'hidden', getClientRects: () => [] };
+    const drawn = { id: 'drawn', getClientRects: () => [{}] };
+    const page = {
+        '.new': [], ':bad(': null, '.old': [hidden, drawn], '.older': [drawn],
+    };
+    const ask = (selector) => {
+        if (page[selector] === null) throw new SyntaxError(`'${selector}' is not a valid selector`);
+        return page[selector] || [];
+    };
+    const scope = { querySelector: (s) => ask(s)[0] || null, querySelectorAll: (s) => ask(s) };
+    const { find, findAll, closest } = Selectors.table({ row: ['.new', ':bad(', '.old', '.older'] });
+    eq(find('row', scope).id, 'hidden', 'the first spelling with any match, first match');
+    eq(find('row', scope, { visible: true }).id, 'drawn');
+    eq(findAll('row', scope).map((one) => one.id), ['hidden', 'drawn'], 'only the first spelling that hits');
+    eq([find('nothing', scope), findAll('nothing', scope)], [null, []]);
+    const element = { closest: (s) => (s === '.older' ? drawn : ask(s) && null) };
+    eq(closest('row', element).id, 'drawn');
+});
+check('one duration, in the three shapes the views draw', () => {
     const at = (style) => [42, 125, 720, 3725, 3570, 7170].map((s) => Time.duration(s, style));
     eq(at('clock'), ['42s', '2m 05s', '12m 00s', '1h 02m', '59m 30s', '1h 59m']);
     eq(at('short'), ['42s', '2m', '12m', '1h 02m', '59m', '1h 59m']);
