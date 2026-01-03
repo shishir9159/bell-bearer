@@ -42,6 +42,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ChessSites = (root.BB && root.BB.ChessSites) || req('../shared/chess-sites.js');
     const Sfx = (root.BB && root.BB.Sfx) || req('../shared/sfx.js');
+    const Time = (root.BB && root.BB.Time) || req('../shared/time.js');
 
     const EVENT = 'bb:chess';
 
@@ -64,10 +65,7 @@
         return whole + (fraction ? Number(`0.${fraction}`) : 0);
     }
 
-    function human(seconds) {
-        const s = Math.round(seconds);
-        return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
-    }
+    const human = (seconds) => Time.duration(seconds, 'clock');
 
     const PIECES = { K: 'King', Q: 'Queen', R: 'Rook', B: 'Bishop', N: 'Knight' };
     const FIGURINES = { '♔': 'K', '♚': 'K', '♕': 'Q', '♛': 'Q', '♖': 'R', '♜': 'R', '♗': 'B', '♝': 'B', '♘': 'N', '♞': 'N', '♙': '', '♟': '' };

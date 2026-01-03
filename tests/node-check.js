@@ -4321,7 +4321,14 @@ const storedDays = () => Object.keys(store)
             eq(store[Activity.dayStore('2026-07-15')].hours[new Date(at).getHours()], 20);
         }
     });
-    check('Time.dayKey names the local day, and walks back by the calendar', () => {
+    check('one duration, in the three shapes the views draw', () => {
+    const at = (style) => [42, 125, 720, 3725, 3570, 7170].map((s) => Time.duration(s, style));
+    eq(at('clock'), ['42s', '2m 05s', '12m 00s', '1h 02m', '59m 30s', '1h 59m']);
+    eq(at('short'), ['42s', '2m', '12m', '1h 02m', '59m', '1h 59m']);
+    eq(at('loose'), ['42s', '2m', '12m', '1h 2m', '1h', '2h'], 'a rounded-up minute carries into the hour');
+    eq([Activity.human(0), Activity.human(3720)], ['0m', '1h 2m'], 'activity keeps its "0m"');
+});
+check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const justAfterMidnight = new Date(2026, 0, 1, 0, 5).getTime();
         eq([Time.dayKey(justAfterMidnight), Time.dayKey(justAfterMidnight, 1), Time.dayKey(justAfterMidnight, 366)],
             ['2026-01-01', '2025-12-31', '2024-12-31']);

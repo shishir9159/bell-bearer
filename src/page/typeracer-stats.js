@@ -49,14 +49,8 @@
         return range.days ? now - range.days * DAY_MS : 0;
     };
 
-    /** "1h 05m" / "12m" / "45s" — the shape every view in this repo writes. */
-    function human(seconds) {
-        const s = Math.max(0, Math.round(seconds || 0));
-        if (s < 60) return `${s}s`;
-        const m = Math.floor(s / 60);
-        if (m < 60) return `${m}m`;
-        return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
-    }
+    /** "1h 05m" / "12m" / "45s". */
+    const human = (seconds) => BB.Time.duration(seconds, 'short');
 
     const dayLabel = (ms) => new Date(ms).toLocaleDateString(undefined,
         { day: 'numeric', month: 'short', year: 'numeric' });

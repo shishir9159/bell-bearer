@@ -31,6 +31,7 @@
     const ns = root.BB || {};
     const Settings = ns.Settings || req('../shared/settings.js');
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Time = ns.Time || req('../shared/time.js');
     const Fsrs = ns.Fsrs || req('../shared/fsrs.js');
     const Leet = ns.Leet || req('../shared/leetcode.js');
     const Keybindings = ns.Keybindings || req('../shared/keybindings.js');
@@ -432,13 +433,7 @@
         }
 
         /** "6m 30s" — the same shape src/shared/chess.js writes. */
-        function human(seconds) {
-            const s = Math.max(0, Math.round(seconds));
-            if (s < 60) return `${s}s`;
-            const m = Math.floor(s / 60);
-            if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
-            return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
-        }
+        const human = (seconds) => Time.duration(seconds, 'clock');
 
         // --------------------------------------------------------- the page
 

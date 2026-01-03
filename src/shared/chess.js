@@ -250,12 +250,7 @@
         return days;
     }
 
-    function human(seconds) {
-        const s = Math.max(0, Math.round(Number(seconds) || 0));
-        if (s < 60) return `${s}s`;
-        if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
-        return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`;
-    }
+    const human = (seconds) => Time.duration(seconds, 'clock');
 
     function formatControl(value) {
         const control = parseTimeControl(value);

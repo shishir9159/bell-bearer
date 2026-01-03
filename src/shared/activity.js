@@ -322,15 +322,8 @@
         };
     }
 
-    /** 3720 → "1h 2m". Minutes only under an hour; seconds only under a minute. */
-    function human(seconds) {
-        if (!seconds) return '0m';
-        if (seconds < 60) return `${seconds}s`;
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.round((seconds % 3600) / 60);
-        if (!hours) return `${minutes}m`;
-        return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
-    }
+    /** 3720 → "1h 2m" — Time.duration's loose shape, and "0m" for nothing at all. */
+    const human = (seconds) => (seconds ? Time.duration(seconds, 'loose') : '0m');
 
     const Activity = {
         KEY, DAY_PREFIX, DAYS_KEY, LAST_KEY, SETTING, KEEP_DAYS, TOP_KEEP_DAYS,

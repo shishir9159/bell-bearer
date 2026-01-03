@@ -115,7 +115,36 @@
         return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
     }
 
-    const Time = { formatTime, parseTimestamp, relativeTime, shortAge, dayKey };
+    /**
+     * Seconds as a length of time, in one of the three shapes the views draw:
+     *
+     *   'clock'  "42s"  "2m 05s"  "1h 02m"   a clock: chess, a LeetCode attempt
+     *   'short'  "42s"  "12m"     "1h 05m"   a stats line, where seconds past
+     *                                         the first minute are noise
+     *   'loose'  "42s"  "12m"     "1h 2m"    time spent on a site, rounded to
+     *                                         the minute, "1h" when it is even
+     *
+     * There were seven of these, in three shapes, and the rounding copies said
+     * "60m" for 3570 seconds and "1h 60m" for 7170: a rounded-up minute is
+     * carried into the hour now.
+     */
+    function duration(seconds, style = 'clock') {
+        const s = Math.max(0, Math.round(Number(seconds) || 0));
+        if (s < 60) return `${s}s`;
+        const pad = (n) => String(n).padStart(2, '0');
+        if (style === 'loose') {
+            const total = Math.round(s / 60);
+            const hours = Math.floor(total / 60);
+            const minutes = total % 60;
+            if (!hours) return `${minutes}m`;
+            return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+        }
+        const m = Math.floor(s / 60);
+        if (m < 60) return style === 'short' ? `${m}m` : `${m}m ${pad(s % 60)}s`;
+        return `${Math.floor(m / 60)}h ${pad(m % 60)}m`;
+    }
+
+    const Time = { formatTime, parseTimestamp, relativeTime, shortAge, dayKey, duration };
 
     root.BB = root.BB || {};
     root.BB.Time = Time;

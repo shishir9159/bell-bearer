@@ -202,15 +202,8 @@
         };
     }
 
-    /** 3720 → "1h 2m". Minutes under an hour; seconds under a minute. */
-    function human(seconds) {
-        const total = Math.max(0, Math.round(seconds) || 0);
-        if (total < 60) return `${total}s`;
-        const hours = Math.floor(total / 3600);
-        const minutes = Math.round((total % 3600) / 60);
-        if (!hours) return `${minutes}m`;
-        return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
-    }
+    /** 3720 → "1h 2m". */
+    const human = (seconds) => Time.duration(seconds, 'loose');
 
     // ----------------------------------------------------------- storage
 
