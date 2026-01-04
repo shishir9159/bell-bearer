@@ -20,6 +20,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Ids = ns.Ids || req('./ids.js');
     const YouTube = ns.YouTube || req('./youtube.js');
 
     const KEY = Settings.DATA.bookmarks;
@@ -96,17 +97,8 @@
         return bookmarkTime(a) - bookmarkTime(b);
     }
 
-    let idCounter = 0;
-
-    /**
-     * A fresh checkpoint id — the same shape x-pouch.js mints. The counter
-     * is what keeps two made in the same millisecond apart, which a
-     * highlight made and then extended genuinely can be.
-     */
-    function newId() {
-        idCounter = (idCounter + 1) % 1296;
-        return `cp_${Date.now().toString(36)}${idCounter.toString(36).padStart(2, '0')}`;
-    }
+    /** A fresh checkpoint id — see shared/ids.js. */
+    const newId = () => Ids.next('cp');
 
     /**
      * Whether two records are the same checkpoint.

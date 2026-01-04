@@ -12,22 +12,14 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Ids = ns.Ids || req('./ids.js');
     const YouTube = ns.YouTube || req('./youtube.js');
 
     const { topics: TOPICS_KEY, channels: CHANNELS_KEY, newVideos: NEW_VIDEOS_KEY } = Settings.DATA;
 
     let writeChain = Promise.resolve();
-    let idCounter = 0;
 
-    /**
-     * Ids were `Date.now().toString()`, so two topics created in the same
-     * millisecond collided and the second overwrote the first. The counter
-     * makes that impossible while keeping ids sortable by creation time.
-     */
-    function newId(prefix) {
-        idCounter = (idCounter + 1) % 1000;
-        return `${prefix}_${Date.now().toString(36)}${idCounter.toString(36)}`;
-    }
+    const newId = (prefix) => Ids.next(prefix);
 
     async function load() {
         try {

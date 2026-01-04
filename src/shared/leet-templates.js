@@ -25,6 +25,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Ids = ns.Ids || req('./ids.js');
 
     const KEY = Settings.DATA.leetTemplates;
 
@@ -90,17 +91,8 @@
     const list = () => Object.keys(LANGS).map((id) => ({ id, label: LANGS[id] }));
 
     let writeChain = Promise.resolve();
-    let idCounter = 0;
 
-    /**
-     * Same counter trick as shared/x-pouch.js, for the same reason: two
-     * templates saved in the same millisecond off a bare Date.now() collide
-     * and the second overwrites the first.
-     */
-    function newId() {
-        idCounter = (idCounter + 1) % 1000;
-        return `lt_${Date.now().toString(36)}${idCounter.toString(36)}`;
-    }
+    const newId = () => Ids.next('lt');
 
     const asArray = (value) => (Array.isArray(value) ? value : []);
     const text = (value) => String(value == null ? '' : value).trim();

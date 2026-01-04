@@ -31,6 +31,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Ids = ns.Ids || req('./ids.js');
 
     const KEY = Settings.DATA.promptQueue;
     /** How long a page may hold a chat's queue before another may take it over. */
@@ -48,11 +49,7 @@
     const STATUSES = Object.freeze(['waiting', 'sending', 'sent', 'held', 'failed']);
 
     let writeChain = Promise.resolve();
-    let idCounter = 0;
-    const newId = (prefix) => {
-        idCounter = (idCounter + 1) % 1000;
-        return `${prefix}_${Date.now().toString(36)}${idCounter.toString(36)}`;
-    };
+    const newId = (prefix) => Ids.next(prefix);
 
     const blank = () => ({ items: [], holds: {}, leases: {}, paused: {} });
     const num = (value) => Math.max(0, Number(value) || 0);

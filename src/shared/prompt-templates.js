@@ -25,6 +25,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Ids = ns.Ids || req('./ids.js');
     const ChatSites = ns.ChatSites || req('./chat-sites.js');
 
     const KEY = Settings.DATA.promptTemplates;
@@ -47,13 +48,8 @@
     ].map(([slug, name, body]) => Object.freeze({ id: `pt_starter_${slug}`, name, body })));
 
     let writeChain = Promise.resolve();
-    let idCounter = 0;
 
-    /** leet-templates.js's counter trick: two made in one millisecond must not collide. */
-    function newId() {
-        idCounter = (idCounter + 1) % 1000;
-        return `pt_${Date.now().toString(36)}${idCounter.toString(36)}`;
-    }
+    const newId = () => Ids.next('pt');
 
     const text = (value) => String(value == null ? '' : value).trim();
     const count = (value) => Math.max(0, Math.round(Number(value)) || 0);

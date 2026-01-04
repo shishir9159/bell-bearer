@@ -32,6 +32,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Ids = ns.Ids || req('./ids.js');
 
     const {
         xPeopleTopics: PEOPLE_TOPICS_KEY,
@@ -49,17 +50,8 @@
     const sideOf = (side) => SIDES[side] || SIDES.people;
 
     let writeChain = Promise.resolve();
-    let idCounter = 0;
 
-    /**
-     * Same counter trick as shared/subscriptions.js, for the same reason: two
-     * topics created in the same millisecond off a bare Date.now() collide and
-     * the second overwrites the first.
-     */
-    function newId(prefix) {
-        idCounter = (idCounter + 1) % 1000;
-        return `${prefix}_${Date.now().toString(36)}${idCounter.toString(36)}`;
-    }
+    const newId = (prefix) => Ids.next(prefix);
 
     const asArray = (value) => (Array.isArray(value) ? value : []);
 

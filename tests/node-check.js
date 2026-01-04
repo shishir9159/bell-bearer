@@ -208,6 +208,13 @@ check('a record from before ids can still be edited and removed', () => {
     eq(Bookmarks.bookmarkKey(edited[0].bookmarks[0]), key, 'editing the note moved the handle');
     eq(Bookmarks.removeBookmarkById(edited, 'v', key)[0].bookmarks.map((b) => b.id), ['x']);
 });
+check('every store mints its ids in one shape: kind, time, a two-digit counter', () => {
+    // Five of the six copies wrote the counter unpadded, so where the time
+    // ended and the counter began was a guess.
+    const Ids = require('../src/shared/ids.js');
+    assert(/^xp_[0-9a-z]{8,}[0-9a-z]{2}$/.test(Ids.next('xp')), Ids.next('xp'));
+    assert(/^cp_[0-9a-z]{10,}$/.test(Bookmarks.newId()), 'checkpoints keep their prefix');
+});
 check('ids are unique across a tight loop', () => {
     const ids = new Set();
     for (let i = 0; i < 1000; i++) ids.add(Bookmarks.newId());
