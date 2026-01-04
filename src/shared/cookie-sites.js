@@ -12,26 +12,14 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Hosts = ns.Hosts || req('./hosts.js');
 
     const KEY = Settings.DATA.cookieSites;
 
-    function normalizeHost(hostname) {
-        return String(hostname || '').trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
-    }
+    const normalizeHost = Hosts.normalize;
 
     /** The remembered entry covering `hostname` — itself or a parent domain. */
-    function match(sites, hostname) {
-        const host = normalizeHost(hostname);
-        if (!host || !sites) return null;
-        for (let at = host; at; ) {
-            if (Object.prototype.hasOwnProperty.call(sites, at)) return { host: at, ...sites[at] };
-            const dot = at.indexOf('.');
-            if (dot < 0) break;
-            at = at.slice(dot + 1);
-            if (at.indexOf('.') < 0) break; // never match a bare TLD
-        }
-        return null;
-    }
+    const match = (sites, hostname) => Hosts.lookup(sites, hostname);
 
     async function load() {
         try {

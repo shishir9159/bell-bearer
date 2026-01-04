@@ -12,6 +12,7 @@
 importScripts(
     'src/shared/time.js',
     'src/shared/settings.js',
+    'src/shared/hosts.js',
     'src/shared/chat-sites.js',
     'src/shared/prompt-queue.js',
     'src/shared/activity.js',

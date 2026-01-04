@@ -71,13 +71,7 @@
         });
     }
 
-    function hostOf(url) {
-        try {
-            return new URL(url).hostname.replace(/^www\./, '');
-        } catch (_) {
-            return '';
-        }
-    }
+    const hostOf = (url) => globalThis.BB.Hosts.of(url);
 
     const reload = (tab, bypassCache) => chrome.tabs.reload(tab.id, { bypassCache });
 

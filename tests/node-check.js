@@ -4321,7 +4321,18 @@ const storedDays = () => Object.keys(store)
             eq(store[Activity.dayStore('2026-07-15')].hours[new Date(at).getHours()], 20);
         }
     });
-    check('a selector table takes the first spelling that matches, and steps over one the browser refuses', () => {
+    check('hosts: one normalizer, one walk up the domain, one host of a URL', () => {
+    // The cookie list and the limit list each had their own of the first
+    // two, and the worker three of the last.
+    const Hosts = require('../src/shared/hosts.js');
+    eq(['WWW.Example.com.', 'https://www.example.com/a?b', 'example.com'].map(Hosts.normalize), ['example.com', 'example.com', 'example.com']);
+    const map = { 'example.com': { v: 1 }, com: { v: 2 } };
+    eq([Hosts.lookup(map, 'docs.example.com'), Hosts.lookup(map, 'other.com')], [{ host: 'example.com', v: 1 }, null], 'never a bare TLD');
+    eq(['https://www.x.com/home', 'chrome://newtab/', '', undefined].map(Hosts.of), ['x.com', 'newtab', '', '']);
+    const [Cookies, Limits] = [require('../src/shared/cookie-sites.js'), require('../src/shared/limit-sites.js')];
+    eq([Cookies.normalizeHost === Hosts.normalize, Limits.normalizeHost === Hosts.normalize], [true, true]);
+});
+check('a selector table takes the first spelling that matches, and steps over one the browser refuses', () => {
     // Six files kept their own copy of these three; some threw on a spelling
     // the browser would not parse, and only two could ask for one drawn.
     const Selectors = require('../src/shared/selectors.js');

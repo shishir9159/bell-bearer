@@ -23,6 +23,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Hosts = ns.Hosts || req('./hosts.js');
 
     /** How many groups run at once. A fourth one parks one of these. */
     const SLOT_LIMIT = 3;
@@ -39,13 +40,7 @@
     // ------------------------------------------------------- tab identity
 
     /** The host, without the www, or '' for anything that is not a real URL. */
-    function domainOf(url) {
-        try {
-            return new URL(String(url)).hostname.replace(/^www\./, '');
-        } catch (_) {
-            return '';
-        }
-    }
+    const domainOf = (url) => Hosts.of(url);
 
     /**
      * The one letter that stands for a tab in the strip. Taken from the

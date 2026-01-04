@@ -31,6 +31,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Hosts = ns.Hosts || req('./hosts.js');
 
     const KEY = Settings.DATA.limitSites;
 
@@ -42,17 +43,7 @@
 
     const MAX_MINUTES = 1440;
 
-    function normalizeHost(hostname) {
-        return String(hostname || '')
-            .trim()
-            .toLowerCase()
-            // Pasting the address bar in is the obvious way to name a site,
-            // so a whole URL is accepted and reduced rather than rejected.
-            .replace(/^[a-z+]+:\/\//, '')
-            .replace(/[/?#].*$/, '')
-            .replace(/^www\./, '')
-            .replace(/\.$/, '');
-    }
+    const normalizeHost = Hosts.normalize;
 
     /** A host worth storing: two labels at least, and nothing exotic in them. */
     const isHost = (host) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host);
@@ -161,24 +152,8 @@
         }
     }
 
-    /**
-     * The row covering `hostname` — itself or a parent domain.
-     *
-     * Same walk up the domain as the cookie list, and stopping short of a bare
-     * TLD for the same reason: a row for "com" would answer for the web.
-     */
-    function entryFor(sites, hostname) {
-        const host = normalizeHost(hostname);
-        if (!host || !sites) return null;
-        for (let at = host; at;) {
-            if (Object.prototype.hasOwnProperty.call(sites, at)) return { host: at, ...sites[at] };
-            const dot = at.indexOf('.');
-            if (dot < 0) break;
-            at = at.slice(dot + 1);
-            if (at.indexOf('.') < 0) break;
-        }
-        return null;
-    }
+    /** The row covering `hostname` — itself or a parent domain; the cookie list's walk. */
+    const entryFor = (sites, hostname) => Hosts.lookup(sites, hostname);
 
     /**
      * A row from what the panel's fields hold, or null when they do not
