@@ -110,19 +110,11 @@
     }
 
     /** Day buckets older than KEEP_DAYS are gone, not archived. */
-    function prune(days, now = Date.now()) {
-        const oldest = dayKey(now - (KEEP_DAYS - 1) * DAY_MS);
-        const out = {};
-        for (const [key, bucket] of Object.entries(asObject(days))) {
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key < oldest) continue;
-            out[key] = {
-                submitted: count(bucket && bucket.submitted),
-                solved: count(bucket && bucket.solved),
-                seconds: count(bucket && bucket.seconds),
-            };
-        }
-        return out;
-    }
+    const prune = (days, now = Date.now()) => Time.keepDays(days, KEEP_DAYS, (bucket) => ({
+        submitted: count(bucket.submitted),
+        solved: count(bucket.solved),
+        seconds: count(bucket.seconds),
+    }), now);
 
     // --------------------------------------------------------- pure edits
 
@@ -266,22 +258,9 @@
         return out;
     }
 
-    /** Days practised, longest run ending today, and the run's own length. */
-    function streak(state, now = Date.now()) {
-        const days = prune(state && state.days, now);
-        let current = 0;
-        for (let i = 0; ; i++) {
-            const bucket = days[dayKey(now - i * DAY_MS)];
-            // Today not being practised yet does not break a streak — it is
-            // only the afternoon. Yesterday not being practised does.
-            if (!bucket || !bucket.submitted) {
-                if (i === 0) continue;
-                break;
-            }
-            current++;
-        }
-        return current;
-    }
+    /** Days practised in a row, ending today or yesterday. */
+    const streak = (state, now = Date.now()) =>
+        Time.runOfDays(prune(state && state.days, now), (bucket) => bucket.submitted, now);
 
     // ------------------------------------------------------------ storage
 

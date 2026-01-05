@@ -144,7 +144,42 @@
         return `${Math.floor(m / 60)}h ${pad(m % 60)}m`;
     }
 
-    const Time = { formatTime, parseTimestamp, relativeTime, shortAge, dayKey, duration };
+    const isDayKey = (key) => /^\d{4}-\d{2}-\d{2}$/.test(key);
+
+    /**
+     * The day buckets of a daily store — `{ "2026-07-15": { … } }` — younger
+     * than `keep` days, today counting as one, each passed through `clean`.
+     * Gone rather than archived. The LeetCode and TypeRacer stores each had
+     * this and runOfDays below, walking back by subtracting a day's worth of
+     * milliseconds, which on a daylight-saving day named one date twice.
+     */
+    function keepDays(days, keep, clean, now = Date.now()) {
+        const oldest = dayKey(now, keep - 1);
+        const out = {};
+        const source = days && typeof days === 'object' && !Array.isArray(days) ? days : {};
+        for (const [key, bucket] of Object.entries(source)) {
+            if (isDayKey(key) && key >= oldest) out[key] = clean(bucket || {});
+        }
+        return out;
+    }
+
+    /**
+     * How many days in a row `counts(bucket)` held, ending today or, while
+     * today has nothing yet, yesterday — it is only the afternoon.
+     */
+    function runOfDays(days, counts, now = Date.now()) {
+        let run = 0;
+        for (let back = 0; ; back++) {
+            const bucket = days[dayKey(now, back)];
+            if (!bucket || !counts(bucket)) {
+                if (back === 0) continue;
+                return run;
+            }
+            run++;
+        }
+    }
+
+    const Time = { formatTime, parseTimestamp, relativeTime, shortAge, dayKey, duration, keepDays, runOfDays };
 
     root.BB = root.BB || {};
     root.BB.Time = Time;

@@ -365,19 +365,11 @@
     }
 
     /** Day buckets older than KEEP_DAYS are gone, not archived. */
-    function prune(days, now = Date.now()) {
-        const oldest = dayKey(now - (KEEP_DAYS - 1) * DAY_MS);
-        const out = {};
-        for (const [key, bucket] of Object.entries(asObject(days))) {
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key < oldest) continue;
-            out[key] = {
-                races: count(bucket && bucket.races),
-                seconds: count(bucket && bucket.seconds),
-                best: Math.max(0, Math.round(num(bucket && bucket.best))),
-            };
-        }
-        return out;
-    }
+    const prune = (days, now = Date.now()) => Time.keepDays(days, KEEP_DAYS, (bucket) => ({
+        races: count(bucket.races),
+        seconds: count(bucket.seconds),
+        best: Math.max(0, Math.round(num(bucket.best))),
+    }), now);
 
     /**
      * One finished race, in the shape the store keeps.
@@ -507,21 +499,8 @@
     }
 
     /** Days raced in a row, ending today or yesterday. */
-    function streak(state, now = Date.now()) {
-        const days = prune(asObject(state).days, now);
-        let current = 0;
-        for (let i = 0; ; i++) {
-            const bucket = days[dayKey(now - i * DAY_MS)];
-            // Today not having a race in it yet does not break a streak — it
-            // is only the afternoon. Yesterday not having one does.
-            if (!bucket || !bucket.races) {
-                if (i === 0) continue;
-                break;
-            }
-            current++;
-        }
-        return current;
-    }
+    const streak = (state, now = Date.now()) =>
+        Time.runOfDays(prune(asObject(state).days, now), (bucket) => bucket.races, now);
 
     // ----------------------------------------------------- the weak spots
 

@@ -4361,6 +4361,23 @@ check('a selector table takes the first spelling that matches, and steps over on
     const element = { closest: (s) => (s === '.older' ? drawn : ask(s) && null) };
     eq(closest('row', element).id, 'drawn');
 });
+check('a streak across the night the clocks go forward is not broken by it', () => {
+    // The two practice stores walked back a day by subtracting 24 hours,
+    // and the day the clocks change is 23: the morning after, "yesterday"
+    // came out as the day before it, and a streak ended for nothing.
+    // Put back by name: deleting TZ again does not take Node back to the
+    // machine's own zone, and every later test reads local dates.
+    const zone = process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    process.env.TZ = 'America/New_York';
+    try {
+        const after = new Date(2026, 2, 9, 0, 30).getTime(); // the night after 8 March, which had 23 hours
+        const days = { '2026-03-09': { n: 1 }, '2026-03-08': { n: 1 }, '2026-03-07': { n: 1 } };
+        eq(Time.runOfDays(days, (bucket) => bucket.n, after), 3);
+        eq(Object.keys(Time.keepDays(days, 2, (bucket) => bucket, after)), ['2026-03-09', '2026-03-08'], 'today and one day more');
+    } finally {
+        process.env.TZ = zone;
+    }
+});
 check('one duration, in the three shapes the views draw', () => {
     const at = (style) => [42, 125, 720, 3725, 3570, 7170].map((s) => Time.duration(s, style));
     eq(at('clock'), ['42s', '2m 05s', '12m 00s', '1h 02m', '59m 30s', '1h 59m']);
