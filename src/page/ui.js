@@ -125,25 +125,7 @@
 
     // ---------------------------------------------------------- clipboard
 
-    async function copyText(text) {
-        try {
-            await navigator.clipboard.writeText(text);
-            return true;
-        } catch (_) {
-            try {
-                const field = document.createElement('textarea');
-                field.value = text;
-                field.style.cssText = 'position:fixed;top:-9999px;opacity:0;';
-                document.body.appendChild(field);
-                field.select();
-                const ok = document.execCommand('copy');
-                field.remove();
-                return ok;
-            } catch (__) {
-                return false;
-            }
-        }
-    }
+    const copyText = (text) => Dom.copyText(text);
 
     // --------------------------------------------------------------- files
 

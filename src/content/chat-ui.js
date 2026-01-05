@@ -55,14 +55,7 @@
     const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
     /** The clipboard, when main.js has not handed over the Markdown module's. */
-    async function defaultCopy(text) {
-        try {
-            await navigator.clipboard.writeText(text);
-            return true;
-        } catch (_) {
-            return false;
-        }
-    }
+    const defaultCopy = (text) => Dom.copyText(text);
 
     /**
      * `getSettings` reads the content script's settings mirror, and defaults

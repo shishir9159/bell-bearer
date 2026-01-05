@@ -95,7 +95,38 @@
         setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    const Dom = { escapeHtml, escapeAttr, safeUrl, safeUrlAttr, holdFocus, download };
+    /**
+     * Write `text` to the clipboard; resolves to whether it took.
+     *
+     * The async API first, because it does not disturb the page's own
+     * selection; the legacy textarea path when it rejects, which it does
+     * whenever the document is not focused. The Markdown copier, the
+     * extension pages' Ui.copyText and the chat panel each had a copy of
+     * this, and the chat panel's had no fallback at all.
+     */
+    async function copyText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (_) { /* not focused, or blocked — the legacy path */ }
+        }
+        try {
+            const field = document.createElement('textarea');
+            field.value = text;
+            field.setAttribute('readonly', '');
+            field.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+            document.body.appendChild(field);
+            field.select();
+            const ok = document.execCommand('copy');
+            field.remove();
+            return ok;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    const Dom = { escapeHtml, escapeAttr, safeUrl, safeUrlAttr, holdFocus, download, copyText };
 
     root.BB = root.BB || {};
     root.BB.Dom = Dom;

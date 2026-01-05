@@ -13,6 +13,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const YouTube = ns.YouTube || req('../shared/youtube.js');
+    const Dom = ns.Dom || req('../shared/dom.js');
 
     /** Characters that would otherwise break out of a [label](url) pair. */
     function escapeLabel(text) {
@@ -124,38 +125,7 @@
             return link(label, linkUrl);
         }
 
-        /**
-         * Write to the clipboard, preferring the async API because it does not
-         * disturb the page's own selection. Falls back to the legacy path when
-         * the document is not focused, which rejects the async call.
-         */
-        async function copy(text) {
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                try {
-                    await navigator.clipboard.writeText(text);
-                    return true;
-                } catch (_) { /* not focused / blocked — try the legacy path */ }
-            }
-            return copyLegacy(text);
-        }
-
-        function copyLegacy(text) {
-            try {
-                const field = document.createElement('textarea');
-                field.value = text;
-                field.setAttribute('readonly', '');
-                field.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
-                document.body.appendChild(field);
-                field.select();
-                const ok = document.execCommand('copy');
-                field.remove();
-                return ok;
-            } catch (_) {
-                return false;
-            }
-        }
-
-        return { trackContextLinks, buildPageMarkdown, buildLinkMarkdown, copy };
+        return { trackContextLinks, buildPageMarkdown, buildLinkMarkdown, copy: (text) => Dom.copyText(text) };
     }
 
     const Markdown = { createMarkdown, escapeLabel, escapeUrl, checkpointList };
