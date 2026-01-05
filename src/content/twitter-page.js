@@ -18,6 +18,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Selectors = ns.Selectors || req('../shared/selectors.js');
+    const Roster = ns.Roster || req('../shared/roster.js');
 
     const SELECTORS = Object.freeze({
         /** One post, anywhere it appears: timeline, thread, profile, search. */
@@ -113,15 +114,10 @@
     }
 
     /** '@handle' from any x.com profile link, or '' if it is not one. */
+    /** '@handle' for a link to an account, '' for one of X's own pages. */
     function handleFromHref(href) {
-        const path = String(href || '').replace(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com/i, '');
-        const match = /^\/([A-Za-z0-9_]{1,15})(?:[/?#]|$)/.exec(path);
-        if (!match) return '';
-        // These are x.com's own pages, not accounts, and several of them sit
-        // at a one-segment path that looks exactly like a handle.
-        const reserved = new Set(['home', 'explore', 'notifications', 'messages', 'i',
-            'search', 'settings', 'compose', 'bookmarks', 'jobs', 'lists', 'topics']);
-        return reserved.has(match[1].toLowerCase()) ? '' : `@${match[1]}`;
+        const handle = Roster.handleFromHref(href);
+        return handle ? `@${handle}` : '';
     }
 
     /**

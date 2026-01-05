@@ -21,6 +21,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const YouTube = ns.YouTube || req('./youtube.js');
 
     const KEY = Settings.DATA.playlists;
 
@@ -122,9 +123,7 @@
         for (const [playlistId, ids] of byPlaylist) await markSeen(playlistId, ids);
     }
 
-    function playlistUrl(playlistId) {
-        return 'https://www.youtube.com/playlist?list=' + encodeURIComponent(playlistId);
-    }
+    const playlistUrl = (playlistId) => YouTube.playlistUrl(playlistId);
 
     /**
      * Entries added to `playlists` since they were last looked at, newest first.

@@ -143,14 +143,7 @@
     }
 
     /** '@handle' → 'handle' from an x.com profile href. */
-    function handleFromHref(href) {
-        const match = /^\/([A-Za-z0-9_]{1,15})(?:[/?#]|$)/.exec(
-            String(href || '').replace(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com/i, ''));
-        if (!match) return '';
-        const reserved = new Set(['home', 'explore', 'notifications', 'messages', 'i',
-            'search', 'settings', 'compose', 'bookmarks', 'jobs', 'lists', 'topics']);
-        return reserved.has(match[1].toLowerCase()) ? '' : match[1];
-    }
+    const handleFromHref = (href) => Roster.handleFromHref(href);
 
     /** 'name' from a /r/name/ href. */
     function subFromHref(href) {

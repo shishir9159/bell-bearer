@@ -353,9 +353,28 @@
         return next;
     }
 
+    /**
+     * x.com's own pages, not accounts — several of them sit at a one-segment
+     * path that looks exactly like a handle.
+     */
+    const X_PAGES = new Set(['home', 'explore', 'notifications', 'messages', 'i',
+        'search', 'settings', 'compose', 'bookmarks', 'jobs', 'lists', 'topics']);
+
+    /**
+     * The handle a link on x.com points at, without its @, or '' for one of
+     * X's own pages. The roster reader and the X pouch each kept a copy, and
+     * with it a copy of the list above to drift.
+     */
+    function handleFromHref(href) {
+        const path = String(href || '').replace(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com/i, '');
+        const match = /^\/([A-Za-z0-9_]{1,15})(?:[/?#]|$)/.exec(path);
+        if (!match) return '';
+        return X_PAGES.has(match[1].toLowerCase()) ? '' : match[1];
+    }
+
     const Roster = {
         SITES, ROSTERS_KEY, JOB_KEY, MAX_NAMES,
-        siteOf, ids, parseName, parseList, toText, fileName,
+        siteOf, ids, parseName, parseList, toText, fileName, handleFromHref,
         dayKey, newJob, isRunning, forDay, atCap, currentName, nextDelay, plan, progress,
         LEASE_MS, canClaim, claim, release,
         loadRosters, saveRoster, loadJob, saveJob, clearJob, updateJob,

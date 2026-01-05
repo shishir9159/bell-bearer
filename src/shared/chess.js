@@ -19,9 +19,12 @@
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
     const Time = ns.Time || req('./time.js');
+    const ChessSites = ns.ChessSites || req('./chess-sites.js');
 
     const API = 'https://api.chess.com/pub/player';
-    const CLASSES = Object.freeze(['bullet', 'blitz', 'rapid']);
+    // Both the registry's, which owns them for every chess site; this file
+    // kept copies of its own.
+    const { CLASSES, cleanUsername } = ChessSites;
     const CLASS_LABEL = Object.freeze({
         bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', daily: 'Daily',
         // Lichess's own speeds, for its games table.
@@ -276,10 +279,6 @@
             if (m === 12) { m = 0; y++; }
         }
         return out;
-    }
-
-    function cleanUsername(value) {
-        return String(value || '').trim().replace(/^@/, '').toLowerCase();
     }
 
     /** A month whose archive can still grow is re-read after this long. */
