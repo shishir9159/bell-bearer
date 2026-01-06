@@ -27,9 +27,13 @@
     const PartyCode = ns.PartyCode || req('../shared/party-code.js');
     const PartyLoopback = ns.PartyLoopback || req('./party-loopback.js');
     const PartyRtc = ns.PartyRtc || req('./party-rtc.js');
+    const Settings = ns.Settings || req('../shared/settings.js');
 
-    /** For a start that names none; the worker passes the settings'. Two providers, so one being down is not the party's problem. */
-    const DEFAULT_ICE = Object.freeze([{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }]);
+    /**
+     * For a start that names none; the worker passes the settings'. The
+     * setting's own default, read rather than written out again here.
+     */
+    const DEFAULT_ICE = Object.freeze(PartyRtc.iceServers({ stun: Settings.DEFAULTS.partyIceServers }));
 
     /** `state` and `chat` carry on a room that another host had: see PartyRoom.createRoom. */
     function createHost({

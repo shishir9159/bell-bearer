@@ -32,12 +32,13 @@
     const PartyWs = ns.PartyWs || req('./party-ws.js');
     const PartyRtc = ns.PartyRtc || req('./party-rtc.js');
     const PartyHost = ns.PartyHost || req('./party-host.js');
+    const Settings = ns.Settings || req('../shared/settings.js');
 
     const PREFIX = 'bbp1t.';
     const SECRET_BYTES = 16;
     const HASH_BYTES = 20;
     const OFFERS = 5;
-    const DEFAULT_TRACKERS = Object.freeze(['wss://tracker.openwebtorrent.com', 'wss://tracker.webtorrent.dev']);
+    const DEFAULT_TRACKERS = Object.freeze(String(Settings.DEFAULTS.partyTrackers).split(/\s+/).filter(Boolean));
     /** How often the host re-announces, whatever a tracker asks for. */
     const INTERVAL_MIN_S = 30;
     const INTERVAL_MAX_S = 120;
@@ -50,8 +51,8 @@
     const DISCONNECT_MS = 5000;
     /** How long a restart waits for the host's answer before meeting it again from scratch. */
     const RESTART_MS = 15000;
-    /** What a guest keeps while its way to the host is down, latest of each (PartyWs.HELD). */
-    const HELD = Object.freeze(['ready', 'solo', 'intent']);
+    /** What a guest keeps while its way to the host is down, latest of each: the WebSocket transport's list. */
+    const HELD = PartyWs.HELD;
     const LABELS = Object.freeze({ topic: 'bb-party/topic', seal: 'bb-party/seal' });
 
     const binary = (bytes) => String.fromCharCode(...bytes);
@@ -392,8 +393,7 @@
         let up = false;
         let closed = false;
         const seen = { you: null, owner: null, resume: null, members: [], state: null, policy: null, chat: [] };
-        const held = new Map();
-        let lines = [];
+        const holding = PartyWs.createHoldBuffer();
 
         function hear(msg) {
             switch (msg.t) {
@@ -404,10 +404,7 @@
                     seen.owner = msg.room.members.length ? msg.room.members[0].id : null;
                     up = true;
                     deliver(msg);
-                    for (const t of HELD) if (held.has(t)) link.send(held.get(t));
-                    for (const line of lines) link.send(line);
-                    held.clear();
-                    lines = [];
+                    holding.flush((one) => link.send(one));
                     return;
                 case 'members': seen.members = msg.list; break;
                 // The room's last lines, for the room this member may have to
@@ -545,10 +542,8 @@
                             });
                         } else if (up && link) {
                             link.send(msg);
-                        } else if (HELD.includes(msg.t)) {
-                            held.set(msg.t, msg);
-                        } else if (msg.t === 'chat') {
-                            lines = PartyWs.holdLine(lines, msg);
+                        } else {
+                            holding.hold(msg);
                         }
                     },
                     close,

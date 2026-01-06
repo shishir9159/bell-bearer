@@ -9146,7 +9146,9 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const files = [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => one[1]);
         for (const file of files) assert(fs.existsSync(`${__dirname}/../${file}`), `${file} is missing`);
         const at = (name) => files.findIndex((file) => file.endsWith(`/${name}.js`));
-        const order = ['party-clock', 'party-state', 'party-chat', 'party-room', 'party-loopback', 'party-ws', 'party-code', 'party-rtc', 'party-host', 'party-tracker', 'party-session'];
+        // party-code before party-ws, which reads text through its base64url,
+        // and settings first, for the transports' defaults.
+        const order = ['settings', 'party-clock', 'party-state', 'party-chat', 'party-room', 'party-loopback', 'party-code', 'party-ws', 'party-rtc', 'party-host', 'party-tracker', 'party-session'];
         eq(order.map(at), order.map((_, i) => i));
     });
     check('the worker and the session agree on how the worker addresses it', () => {
@@ -9325,7 +9327,9 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     await checkAsync('firefox loads offscreen.html\'s scripts into its page, in order, once, and asks the tab to keep it', async () => {
         const html = fs.readFileSync(`${__dirname}/../offscreen.html`, 'utf8');
         const appended = [];
+        // The background page already ran settings.js, from manifest.firefox.json.
         const doc = {
+            scripts: [{ src: 'moz-extension://x/src/shared/settings.js' }],
             createElement: () => ({}),
             head: { appendChild: (script) => { appended.push(script.src); setTimeout(script.onload); } },
         };
@@ -9339,7 +9343,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const host = PartyWorker.pageHost(api, { doc, fetchText: async () => html });
         try {
             await Promise.all([host.open(), host.open()]);
-            eq(appended, [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => `moz-extension://x/${one[1]}`));
+            eq(appended, [...html.matchAll(/<script src="([^"]+)"/g)].map((one) => `moz-extension://x/${one[1]}`)
+                .filter((url) => !url.endsWith('/settings.js')), 'what the page has already is not run twice');
             assert(!(await host.exists()), 'loaded, but no party yet');
             eq((await host.ask({ op: 'start', name: 'Ana' })).ok, true, 'called directly, not by message');
             assert(await host.exists());

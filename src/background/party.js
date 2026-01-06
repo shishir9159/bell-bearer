@@ -97,7 +97,12 @@
 
         async function load() {
             const html = await fetchText(api.runtime.getURL(DOC));
+            // The background page has loaded some of the list already —
+            // settings.js, which the session reads its defaults from — and
+            // each is run once.
+            const present = new Set(Array.from(doc.scripts || [], (one) => one.src));
             for (const [, src] of html.matchAll(/<script src="([^"]+)"/g)) {
+                if (present.has(api.runtime.getURL(src))) continue;
                 await new Promise((resolve, reject) => {
                     const script = doc.createElement('script');
                     script.src = api.runtime.getURL(src);

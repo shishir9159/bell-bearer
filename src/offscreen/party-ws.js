@@ -36,6 +36,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const PartyChat = ns.PartyChat || req('../shared/party-chat.js');
+    const PartyCode = ns.PartyCode || req('../shared/party-code.js');
 
     /** Invite codes for a server party: this, then base64url of {url, room, secret}. */
     const PREFIX = 'bbp1s.';
@@ -57,16 +58,37 @@
      */
     const holdLine = (lines, msg) => [...lines, msg].slice(-PartyChat.BURST);
 
-    function toBase64Url(text) {
-        const bytes = new TextEncoder().encode(text);
-        let binary = '';
-        for (const b of bytes) binary += String.fromCharCode(b);
-        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    /**
+     * What a transport keeps while its way to the room is down: the latest of
+     * each HELD kind, and the last few chat lines. `flush(send)` sends them in
+     * that order and forgets them. The tracker transport had its own copy.
+     */
+    function createHoldBuffer() {
+        const held = new Map();
+        let lines = [];
+        return {
+            /** Keep `msg` if it is worth keeping across a drop; anything else is let go. */
+            hold(msg) {
+                if (HELD.includes(msg.t)) held.set(msg.t, msg);
+                else if (msg.t === 'chat') lines = holdLine(lines, msg);
+            },
+            flush(send) {
+                for (const t of HELD) if (held.has(t)) send(held.get(t));
+                for (const line of lines) send(line);
+                held.clear();
+                lines = [];
+            },
+        };
     }
 
+    // A text through the codes' own base64url, rather than a second copy of
+    // the alphabet here.
+    const toBase64Url = (text) => PartyCode.toBase64Url(new TextEncoder().encode(text));
+
     function fromBase64Url(text) {
-        const binary = atob(text.replace(/-/g, '+').replace(/_/g, '/'));
-        return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)));
+        const bytes = PartyCode.fromBase64Url(text);
+        if (!bytes) throw new Error('not base64url');
+        return new TextDecoder().decode(bytes);
     }
 
     /** A ws:// or wss:// address, normalised, or null. */
@@ -118,8 +140,7 @@
         let attempt = 0;
         let retryTimer = null;
         let quietTimer = null;
-        const held = new Map();
-        let lines = [];
+        const holding = createHoldBuffer();
 
         function transmit(msg) {
             const text = JSON.stringify(msg);
@@ -200,10 +221,7 @@
                     up = true;
                     attempt = 0;
                     deliver(msg);
-                    for (const t of HELD) if (held.has(t)) transmit(held.get(t));
-                    for (const line of lines) transmit(line);
-                    held.clear();
-                    lines = [];
+                    holding.flush(transmit);
                     return;
                 case 'error':
                     if (msg.code === 'expired' && resume && secret) {
@@ -241,10 +259,8 @@
                             connect();
                         } else if (up) {
                             transmit(msg);
-                        } else if (HELD.includes(msg.t)) {
-                            held.set(msg.t, msg);
-                        } else if (msg.t === 'chat') {
-                            lines = holdLine(lines, msg);
+                        } else {
+                            holding.hold(msg);
                         }
                     },
                     close,
@@ -256,7 +272,7 @@
 
     const PartyWs = {
         PREFIX, VERSION, MAX_FRAME, BACKOFF_MIN_MS, BACKOFF_MAX_MS, CONNECT_MS, SILENT_MS, HELD,
-        serverUrl, inviteCode, readInvite, holdLine, createTransport,
+        serverUrl, inviteCode, readInvite, holdLine, createHoldBuffer, createTransport,
     };
 
     root.BB = root.BB || {};
