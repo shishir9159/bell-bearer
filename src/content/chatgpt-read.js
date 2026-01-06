@@ -24,7 +24,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const ChatSites = ns.ChatSites || req('../shared/chat-sites.js');
-    const Selectors = ns.Selectors || req('../shared/selectors.js');
+    const ChatDom = ns.ChatDom || req('./chat-dom.js');
     const ChatTree = ns.ChatTree || req('../shared/chat-tree.js');
     const ChatgptFormat = ns.ChatgptFormat || req('../shared/chatgpt-format.js');
 
@@ -79,19 +79,11 @@
         limitNotice: ['[data-testid*="limit" i]', '[role="alert"]', '[role="status"]', '#thread-bottom-container div', '#thread-bottom div'],
     });
 
-    const shown = Selectors.shown;
-    const { find, findAll } = Selectors.table(SELECTORS);
+    const { readCount } = ChatDom;
+    const { find, findAll, siblingNav, composer, sendButton, stopButton, headerBottom, limitNotice } =
+        ChatDom.create(SELECTORS, { site: 'chatgpt', noticeMin: 20 });
 
     // ------------------------------------------------------------ reading
-
-    /** `2/3` → { index: 2, count: 3 }, and anything else is not a count. */
-    function readCount(text) {
-        const match = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(String(text || ''));
-        if (!match) return null;
-        const index = Number(match[1]);
-        const count = Number(match[2]);
-        return index >= 1 && count >= 2 && index <= count ? { index, count } : null;
-    }
 
     const turnElements = () => findAll('turn');
 
@@ -118,28 +110,6 @@
         return out;
     }
 
-    /** The turn's `< k/n >`, or null when it has no siblings to switch between. */
-    function siblingNav(element) {
-        const prev = find('siblingPrev', element);
-        const next = find('siblingNext', element);
-        if (!prev || !next) return null;
-        // The count sits between the two buttons. Searched from their shared
-        // parent rather than the whole turn, so a "1/2" inside the answer's
-        // own text can never be read as the control.
-        let scope = prev.parentElement;
-        while (scope && !scope.contains(next)) scope = scope.parentElement;
-        for (const candidate of scope ? findAll('siblingCount', scope) : []) {
-            if (candidate.children.length) continue;
-            const count = readCount(candidate.textContent);
-            if (count) return { ...count, prev, next };
-        }
-        return null;
-    }
-
-    const composer = () => find('composer', document, { visible: true });
-    const sendButton = () => find('send', document, { visible: true });
-    const stopButton = () => find('stop', document, { visible: true });
-
     function headerSlot() {
         const action = find('headerActions');
         if (action) return action.id === 'conversation-header-actions' ? action : action.parentElement;
@@ -156,32 +126,6 @@
             .map((element) => element.getBoundingClientRect().right)
             .filter((right) => right > 0);
         return edges.length ? Math.max(...edges) : null;
-    }
-
-    /** Where the chat's own header ends, so the panel starts below it. */
-    function headerBottom() {
-        const header = find('header');
-        return header ? Math.max(0, header.getBoundingClientRect().bottom) : 56;
-    }
-
-    /**
-     * The limit notice's text, or null. The selectors only say where to
-     * look; what is believed is text that ChatSites.readLimit reads as a
-     * limit. Anything holding the composer is passed over, so a prompt being
-     * typed about rate limits is never mistaken for one.
-     */
-    function limitNotice() {
-        const box = composer();
-        for (const selector of SELECTORS.limitNotice) {
-            let found = [];
-            try { found = document.querySelectorAll(selector); } catch (_) { continue; }
-            for (const element of found) {
-                if (box && element.contains(box)) continue;
-                const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
-                if (text.length > 20 && text.length < 400 && ChatSites.readLimit('chatgpt', text)) return text;
-            }
-        }
-        return null;
     }
 
     /** The composer's own frame, which the queue strip sits just above. */

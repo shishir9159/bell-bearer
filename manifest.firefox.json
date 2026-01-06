@@ -400,6 +400,7 @@
         "src/shared/prompt-templates.js",
         "src/content/composer.js",
         "src/shared/prompt-queue.js",
+        "src/content/chat-dom.js",
         "src/content/chatgpt-read.js",
         "src/content/claude-read.js",
         "src/content/chat-nav.js",

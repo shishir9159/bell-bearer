@@ -26,7 +26,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const ChatSites = ns.ChatSites || req('../shared/chat-sites.js');
-    const Selectors = ns.Selectors || req('../shared/selectors.js');
+    const ChatDom = ns.ChatDom || req('./chat-dom.js');
     const ChatTree = ns.ChatTree || req('../shared/chat-tree.js');
     const ClaudeFormat = ns.ClaudeFormat || req('../shared/claude-format.js');
 
@@ -57,8 +57,9 @@
         signIn: ['a[href="/login"]', '[data-testid="login-form"]'],
     });
 
-    const shown = Selectors.shown;
-    const { find, findAll } = Selectors.table(SELECTORS);
+    const { readCount } = ChatDom;
+    const { find, findAll, siblingNav, composer, sendButton, stopButton, headerBottom, limitNotice } =
+        ChatDom.create(SELECTORS, { site: 'claude', noticeMin: 15 });
 
     // ------------------------------------------------------------ reading
 
@@ -137,29 +138,6 @@
         return matchTurn(conv, index, messageOf(row).textContent);
     }
 
-    /** `2 / 3` → { index, count }, and nothing else is a count. */
-    function readCount(text) {
-        const match = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(String(text || ''));
-        if (!match) return null;
-        const index = Number(match[1]);
-        const count = Number(match[2]);
-        return index >= 1 && count >= 2 && index <= count ? { index, count } : null;
-    }
-
-    function siblingNav(row) {
-        const prev = find('siblingPrev', row);
-        const next = find('siblingNext', row);
-        if (!prev || !next) return null;
-        let scope = prev.parentElement;
-        while (scope && !scope.contains(next)) scope = scope.parentElement;
-        for (const candidate of scope ? findAll('siblingCount', scope) : []) {
-            if (candidate.children.length) continue;
-            const count = readCount(candidate.textContent);
-            if (count) return { ...count, prev, next };
-        }
-        return null;
-    }
-
     /**
      * The arrows may only be drawn while the pointer is over a turn. A hover
      * is announced to the page, which draws them; clicking them needs no more.
@@ -169,10 +147,6 @@
             row.dispatchEvent(new MouseEvent(type, { bubbles: type.endsWith('over'), cancelable: true }));
         }
     }
-
-    const composer = () => find('composer', document, { visible: true });
-    const sendButton = () => find('send', document, { visible: true });
-    const stopButton = () => find('stop', document, { visible: true });
 
     // --------------------------------------------------------- the bridge
 
@@ -239,30 +213,10 @@
         return find('headerActions') || find('header');
     }
 
-    function headerBottom() {
-        const header = find('header');
-        return header ? Math.max(0, header.getBoundingClientRect().bottom) : 56;
-    }
-
     function threadRight() {
         const edges = [...findAll('userTurn'), ...findAll('assistantTurn'), composer()].filter(Boolean)
             .map((element) => element.getBoundingClientRect().right).filter((right) => right > 0);
         return edges.length ? Math.max(...edges) : null;
-    }
-
-    /** The limit notice's text, believed only when ChatSites.readLimit reads it as one. */
-    function limitNotice() {
-        const box = composer();
-        for (const selector of SELECTORS.limitNotice) {
-            let found = [];
-            try { found = document.querySelectorAll(selector); } catch (_) { continue; }
-            for (const element of found) {
-                if (box && element.contains(box)) continue;
-                const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
-                if (text.length > 15 && text.length < 400 && ChatSites.readLimit('claude', text)) return text;
-            }
-        }
-        return null;
     }
 
     /** Where a chat is: a conversation, or the page a new one starts on. Nothing under /code. */
