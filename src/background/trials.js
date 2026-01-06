@@ -22,7 +22,7 @@
 (function (root) {
     'use strict';
 
-    const { Trials } = root.BB;
+    const { Trials, Router } = root.BB;
 
     const HAS_GROUPS = typeof chrome !== 'undefined' && !!chrome.tabGroups;
     const NONE = -1; // chrome.tabGroups.TAB_GROUP_ID_NONE
@@ -257,18 +257,9 @@
         trialDiscardGroup: (m) => discardGroup(m.groupId),
     };
 
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        const handler = message && HANDLERS[message.action];
-        if (!handler) return false;
-        if (!HAS_GROUPS) {
-            sendResponse({ ok: false, unsupported: true });
-            return false;
-        }
-        handler(message)
-            .then((result) => sendResponse(result))
-            .catch((error) => sendResponse({ ok: false, error: String((error && error.message) || error) }));
-        return true; // every handler is async
-    });
+    for (const [action, handler] of Object.entries(HANDLERS)) {
+        Router.on(action, (message) => (HAS_GROUPS ? handler(message) : { ok: false, unsupported: true }));
+    }
 
     root.BB.TrialsWorker = {
         snapshot, moveTab, newGroupFrom, openGroup,

@@ -23,6 +23,7 @@ importScripts(
     'src/shared/chess-limits.js',
     'src/shared/trials.js',
     'src/shared/skim.js',
+    'src/background/router.js',
     'src/background/proto.js',
     'src/background/sowon.js',
     'src/background/context-menus.js',

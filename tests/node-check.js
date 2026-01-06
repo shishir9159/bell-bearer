@@ -6587,7 +6587,44 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     console.log('\n# opening the dashboard at a site');
 
-    check('only a hash of our own shape survives into the URL', () => {
+    await checkAsync('the worker hears each kind of event once, and hands it to whoever registered for it', async () => {
+        // Six parts each added a runtime.onMessage listener, in three
+        // conventions, and four an onAlarm listener filtering by name.
+        const added = { message: [], alarm: [], start: 0 };
+        const saved = { chrome: global.chrome, Router: globalThis.BB.Router };
+        global.chrome = {
+            runtime: {
+                onMessage: { addListener: (f) => added.message.push(f) },
+                onStartup: { addListener: () => { added.start++; } },
+                onInstalled: { addListener: () => { added.start++; } },
+            },
+            alarms: { onAlarm: { addListener: (f) => added.alarm.push(f) } },
+        };
+        try {
+            delete require.cache[require.resolve('../src/background/router.js')];
+            const Router = require('../src/background/router.js');
+            eq([added.message.length, added.alarm.length, added.start], [1, 1, 2]);
+            const fired = [];
+            Router.on('echo', (message) => ({ ok: true, said: message.text }));
+            Router.on('boom', () => { throw new Error('no'); });
+            Router.alarm('tick', (alarm) => fired.push(alarm.name));
+            const ask = (message) => new Promise((done) => {
+                const open = added.message[0](message, {}, done);
+                if (!open) done('not ours');
+            });
+            eq(await ask({ action: 'echo', text: 'hi' }), { ok: true, said: 'hi' });
+            eq(await ask({ action: 'boom' }), { ok: false, error: 'no' });
+            eq(await ask({ action: 'someone-else' }), 'not ours', 'an action nobody registered is left for another listener');
+            added.alarm[0]({ name: 'tick' });
+            added.alarm[0]({ name: 'tock' });
+            eq(fired, ['tick']);
+        } finally {
+            global.chrome = saved.chrome;
+            globalThis.BB.Router = saved.Router;
+        }
+    });
+
+    await checkAsync('only a hash of our own shape survives into the URL', async () => {
         // The worker's openDashboard branch, driven directly. The hash it
         // appends arrives from a content script — that is, from a page we do
         // not own — so the guard matters: without it, x.com could ask the
@@ -6612,17 +6649,20 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             tts: { speak() {} },
         };
 
-        delete require.cache[require.resolve('../src/background/commands.js')];
-        require('../src/background/commands.js');
-
-        const send = (hash) => onMessage({ action: 'openDashboard', hash }, {}, () => {});
-        send('#site/twitter');
-        send('#settings/chess');
-        send('javascript:alert(1)');
-        send('#../../evil');
-        send(undefined);
-
-        global.chrome = saved;
+        // A router of its own over this chrome: the worker's one listener,
+        // which commands.js registers its actions with.
+        const savedRouter = globalThis.BB.Router;
+        try {
+            for (const file of ['../src/background/router.js', '../src/background/commands.js']) {
+                delete require.cache[require.resolve(file)];
+                require(file);
+            }
+            const send = (hash) => new Promise((done) => onMessage({ action: 'openDashboard', hash }, {}, done));
+            for (const hash of ['#site/twitter', '#settings/chess', 'javascript:alert(1)', '#../../evil', undefined]) await send(hash);
+        } finally {
+            global.chrome = saved;
+            globalThis.BB.Router = savedRouter;
+        }
 
         eq(opened, [
             'x/dashboard.html#site/twitter',

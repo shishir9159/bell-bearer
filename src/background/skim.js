@@ -19,13 +19,10 @@
     'use strict';
 
     const Skim = globalThis.BB && globalThis.BB.Skim;
+    const { Router } = globalThis.BB;
 
     /** How many of each kind a query comes back with. */
     const LIMIT = 12;
-
-    const sender = (respond) => (value) => {
-        try { respond(value); } catch (_) { /* the page went away mid-flight */ }
-    };
 
     /** The tab the launcher is drawn in — every action below acts on it. */
     function activeTab() {
@@ -144,44 +141,33 @@
         }
     }
 
-    chrome.runtime.onMessage.addListener((message, from, respond) => {
-        const reply = sender(respond);
-        switch (message && message.action) {
-            case 'skimSearch':
-                Promise.all([openTabs(message.query), history(message.query)])
-                    .then(([tabs, pages]) => reply({ tabs, history: pages }))
-                    .catch(() => reply({ tabs: [], history: [] }));
-                return true;
+    Router.on('skimSearch', (message) => Promise.all([openTabs(message.query), history(message.query)])
+        .then(([tabs, pages]) => ({ tabs, history: pages }))
+        .catch(() => ({ tabs: [], history: [] })));
 
-            case 'skimFocusTab':
-                chrome.tabs.update(message.tabId, { active: true }, (tab) => {
-                    void chrome.runtime.lastError;
-                    if (tab) chrome.windows.update(tab.windowId, { focused: true });
-                    reply({ ok: !!tab });
-                });
-                return true;
+    Router.on('skimFocusTab', (message) => new Promise((done) => {
+        chrome.tabs.update(message.tabId, { active: true }, (tab) => {
+            void chrome.runtime.lastError;
+            if (tab) chrome.windows.update(tab.windowId, { focused: true });
+            done({ ok: !!tab });
+        });
+    }));
 
-            case 'skimRun':
-                run(message.id).then(reply).catch(() => reply({ ok: false, note: 'that did not work' }));
-                return true;
+    Router.on('skimRun', (message) => run(message.id).catch(() => ({ ok: false, note: 'that did not work' })));
 
-            // A link hint opens beside the page it was picked on rather than
-            // at the end of the strip, so the two stay next to each other.
-            case 'skimOpenLink':
-                activeTab().then((tab) => {
-                    chrome.tabs.create({
-                        url: message.url,
-                        index: tab ? tab.index + 1 : undefined,
-                        active: message.focus !== false,
-                    }, () => {
-                        void chrome.runtime.lastError;
-                        reply({ ok: true });
-                    });
-                });
-                return true;
-
-            default:
-                return false;
-        }
+    // A link hint opens beside the page it was picked on rather than at the
+    // end of the strip, so the two stay next to each other.
+    Router.on('skimOpenLink', async (message) => {
+        const tab = await activeTab();
+        return new Promise((done) => {
+            chrome.tabs.create({
+                url: message.url,
+                index: tab ? tab.index + 1 : undefined,
+                active: message.focus !== false,
+            }, () => {
+                void chrome.runtime.lastError;
+                done({ ok: true });
+            });
+        });
     });
 })();
