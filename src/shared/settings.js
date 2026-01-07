@@ -445,6 +445,16 @@
         // In storage because the tab that queued a prompt may be long gone by
         // the time it is due. src/shared/prompt-queue.js owns the shape.
         promptQueue: 'bbPromptQueue',
+
+        // Activity, by local day: one key per day under this prefix — a
+        // prefix, not a key — the list of days there are, the single value
+        // the store was kept in before it was split (read only to be split),
+        // and the last reading, which has to outlive the worker.
+        // shared/activity.js owns the shapes.
+        activityDay: 'bb_activity:',
+        activityDays: 'bb_activity_days',
+        activityLegacy: 'bb_activity',
+        activityLast: 'bb_activity_last',
     });
 
     /**
@@ -459,7 +469,7 @@
         DATA.chessCache, DATA.lichessCache, DATA.leetCalendar,
     ]);
     const CACHE_PREFIXES = Object.freeze([DATA.chessMonths]);
-    const TRANSIENT = Object.freeze([DATA.rosterJob, DATA.chatPanel]);
+    const TRANSIENT = Object.freeze([DATA.rosterJob, DATA.chatPanel, DATA.activityLast]);
 
     function withDefaults(stored, keys) {
         const wanted = keys && keys.length ? keys : KEYS;

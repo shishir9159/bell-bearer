@@ -27,6 +27,7 @@
     const BB = (root.BB = root.BB || {});
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const Time = BB.Time || req('./time.js');
+    const Settings = BB.Settings || req('./settings.js');
 
     /**
      * One key per day, and a list of which days there are.
@@ -40,10 +41,9 @@
      * KEY is the old single value. It is only read to be split, which is also
      * how a backup exported before the split comes back in.
      */
-    const KEY = 'bb_activity';
-    const DAY_PREFIX = 'bb_activity:';
-    const DAYS_KEY = 'bb_activity_days';
-    const LAST_KEY = 'bb_activity_last';
+    const {
+        activityLegacy: KEY, activityDay: DAY_PREFIX, activityDays: DAYS_KEY, activityLast: LAST_KEY,
+    } = Settings.DATA;
     const SETTING = 'trackActivity';
     const KEEP_DAYS = 60;
     /**
@@ -173,10 +173,7 @@
         });
     }
 
-    async function enabled() {
-        if (BB.Settings && BB.Settings.get) return !!(await BB.Settings.get([SETTING]))[SETTING];
-        return new Promise((done) => chrome.storage.local.get([SETTING], (o) => done(!!o[SETTING])));
-    }
+    const enabled = async () => !!(await Settings.get([SETTING]))[SETTING];
 
     /** The oldest day still allowed to name a page, today counting as one. */
     const topCutoff = (now = Date.now()) => dayKey(now, TOP_KEEP_DAYS - 1);

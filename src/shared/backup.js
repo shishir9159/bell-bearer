@@ -16,19 +16,10 @@
 
     const TYPE = 'bell-bearer-backup';
 
-    /**
-     * The activity store's keys. They are activity.js's, which is not loaded
-     * where a backup is made; node-check holds the two to the same names.
-     * `legacy` is the single value activity was kept in before it was split
-     * by day — an older file still carries it, and activity splits it on read.
-     */
-    const ACTIVITY = Object.freeze({ legacy: 'bb_activity', days: 'bb_activity_days', dayPrefix: 'bb_activity:', last: 'bb_activity_last' });
-
     const EXCLUDED = new Set([
         ...Settings.CACHES,
         ...Settings.TRANSIENT,
         'bbChannelIdCache', // the first id cache, abandoned rather than migrated — see Settings.DATA
-        ACTIVITY.last,
     ]);
     const EXCLUDED_PREFIXES = Object.freeze([...Settings.CACHE_PREFIXES]);
 
@@ -38,8 +29,8 @@
      * Whether a key is one Bell Bearer writes. Only those are restored: a file
      * is just JSON, and it used to be able to put anything at all in storage.
      */
-    const KNOWN = new Set([...Settings.KEYS, ...Object.values(Settings.DATA), ACTIVITY.legacy, ACTIVITY.days]);
-    const known = (key) => KNOWN.has(key) || key.startsWith(ACTIVITY.dayPrefix);
+    const KNOWN = new Set([...Settings.KEYS, ...Object.values(Settings.DATA)]);
+    const known = (key) => KNOWN.has(key) || key.startsWith(Settings.DATA.activityDay);
 
     function build(store, now = Date.now()) {
         const data = {};
@@ -70,7 +61,7 @@
         return Object.keys(data).length;
     }
 
-    const Backup = { TYPE, ACTIVITY, EXCLUDED, EXCLUDED_PREFIXES, build, validate, entries, exportAll, importAll, known };
+    const Backup = { TYPE, EXCLUDED, EXCLUDED_PREFIXES, build, validate, entries, exportAll, importAll, known };
 
     root.BB = root.BB || {};
     root.BB.Backup = Backup;

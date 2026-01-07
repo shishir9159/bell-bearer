@@ -4926,9 +4926,14 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(count, 4);
         eq(Object.keys(store).sort(), ['bb_activity', 'bb_activity:2026-07-16', 'skin', 'youtubeBookmarks']);
     });
-    check('the backup\'s names for the activity store are the store\'s own', () => {
-        eq([Backup.ACTIVITY.legacy, Backup.ACTIVITY.days, Backup.ACTIVITY.dayPrefix, Backup.ACTIVITY.last],
-            [Activity.KEY, Activity.DAYS_KEY, Activity.DAY_PREFIX, Activity.LAST_KEY]);
+    check('the activity store\'s keys are named in the schema, like every other store\'s', () => {
+        // They were the only data keys kept outside Settings.DATA, so the
+        // backup had to keep its own copy of the names.
+        const { DATA, TRANSIENT } = require('../src/shared/settings.js');
+        eq([Activity.KEY, Activity.DAYS_KEY, Activity.DAY_PREFIX, Activity.LAST_KEY],
+            [DATA.activityLegacy, DATA.activityDays, DATA.activityDay, DATA.activityLast]);
+        assert(TRANSIENT.includes(DATA.activityLast), 'the last reading is this machine\'s, now');
+        assert(Backup.known('bb_activity:2026-07-15') && Backup.known(DATA.activityDays));
     });
 
     await checkAsync('importing writes the file back, still without caches', async () => {
