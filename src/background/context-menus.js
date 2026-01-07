@@ -13,6 +13,8 @@
 (function () {
     'use strict';
 
+    const { Router, Settings } = globalThis.BB;
+
     const MENU_LINK = 'bb-copy-link-markdown';
     const MENU_PAGE = 'bb-copy-page-markdown';
 
@@ -29,7 +31,7 @@
 
         chrome.contextMenus.removeAll(() => {
             void chrome.runtime.lastError;
-            chrome.storage.local.get(['markdownContextMenu'], (settings) => {
+            Settings.get(['markdownContextMenu']).then((settings) => {
                 // Enabled unless explicitly turned off.
                 if (settings.markdownContextMenu === false) return;
 
@@ -51,11 +53,8 @@
     if (available) {
         // Menus are per-profile and persist, but must be (re)created when the
         // extension installs or updates and when the browser starts a session.
-        chrome.runtime.onInstalled.addListener(refresh);
-        if (chrome.runtime.onStartup) chrome.runtime.onStartup.addListener(refresh);
-        chrome.storage.onChanged.addListener((changes, area) => {
-            if (area === 'local' && changes.markdownContextMenu) refresh();
-        });
+        Router.started(refresh);
+        Settings.watch(['markdownContextMenu'], () => refresh());
 
         chrome.contextMenus.onClicked.addListener((info, tab) => {
             if (!tab || tab.id == null) return;
@@ -72,5 +71,5 @@
         });
     }
 
-    globalThis.refreshContextMenus = refresh;
+    globalThis.BB.ContextMenus = { refresh };
 })();

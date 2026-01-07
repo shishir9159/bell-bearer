@@ -19,7 +19,7 @@
 (function (root) {
     'use strict';
 
-    const { Settings, ChatSites, PromptQueue } = root.BB;
+    const { Settings, ChatSites, PromptQueue, Router } = root.BB;
 
     const ALARM = 'bb-prompt-queue';
 
@@ -59,12 +59,9 @@
         return sync(now);
     }
 
-    chrome.alarms.onAlarm.addListener((alarm) => {
-        if (alarm.name === ALARM) wake();
-    });
+    Router.alarm(ALARM, () => { wake(); });
     Settings.watch([PromptQueue.KEY], () => { sync(); });
-    chrome.runtime.onStartup.addListener(() => { sync(); });
-    chrome.runtime.onInstalled.addListener(() => { sync(); });
+    Router.started(() => { sync(); });
     sync();
 
     root.BB.PromptQueueWorker = { ALARM, sync, wake, shows };

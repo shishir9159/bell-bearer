@@ -23,6 +23,7 @@
     }
 
     const Settings = root.BB && root.BB.Settings;
+    const Router = root.BB && root.BB.Router;
     const ALARM = 'bb-activity';
 
     /**
@@ -66,8 +67,7 @@
         }
     }
 
-    chrome.alarms.onAlarm.addListener(async (alarm) => {
-        if (alarm.name !== ALARM) return;
+    Router.alarm(ALARM, async () => {
         try {
             const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
             await Activity.tick(tab);

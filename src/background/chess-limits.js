@@ -19,7 +19,7 @@
 (function (root) {
     'use strict';
 
-    const { Settings, ChessSites, ChessLimits } = root.BB;
+    const { Settings, ChessSites, ChessLimits, Router } = root.BB;
 
     const ALARM = 'bb-chess-limits';
     const PERIOD_MINUTES = 3;
@@ -88,9 +88,7 @@
         }
     }
 
-    chrome.alarms.onAlarm.addListener((alarm) => {
-        if (alarm.name === ALARM) refreshOnce();
-    });
+    Router.alarm(ALARM, () => { refreshOnce(); });
 
     // A limit turned on, or the player renamed: re-read rather than leave the
     // old counts standing against the new rule.
@@ -98,16 +96,11 @@
         syncAlarm().then(() => refreshOnce());
     });
 
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-        if (!message || message.action !== 'chessLimitsRefresh') return false;
-        refreshIfStale()
-            .then((read) => sendResponse({ ok: true, read }))
-            .catch(() => sendResponse({ ok: false }));
-        return true; // the read is async
-    });
+    Router.on('chessLimitsRefresh', () => refreshIfStale()
+        .then((read) => ({ ok: true, read }))
+        .catch(() => ({ ok: false })));
 
-    chrome.runtime.onStartup.addListener(() => { syncAlarm(); });
-    chrome.runtime.onInstalled.addListener(() => { syncAlarm(); });
+    Router.started(() => { syncAlarm(); });
     syncAlarm();
 
     root.BB.ChessLimitsWorker = { refresh, refreshOnce, refreshIfStale, syncAlarm, ALARM };

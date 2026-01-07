@@ -17,7 +17,7 @@
 (function (root) {
     'use strict';
 
-    const { Settings, PartyLoader } = root.BB;
+    const { Settings, PartyLoader, Router } = root.BB;
 
     const DOC = 'offscreen.html';
     /** PartySession.TARGET, which the worker does not load; the test suite holds them together. */
@@ -270,12 +270,8 @@
             : root.document ? pageHost(api, { onEnd: (code) => party.ended(code) }) : null;
         const party = createParty({ api, loader: PartyLoader.loader, host });
         PartyLoader.loader.onClosed(party.onTabClosed);
-        api.alarms.onAlarm.addListener(party.onAlarm);
-        api.runtime.onMessage.addListener((message, sender, respond) => {
-            if (!message || !ACTIONS.includes(message.action)) return false;
-            handle(api, party, message, sender).then(respond, () => respond({ ok: false }));
-            return true;
-        });
+        Router.alarm(LINGER_ALARM, party.onAlarm);
+        for (const action of ACTIONS) Router.on(action, (message, sender) => handle(api, party, message, sender));
         PartyWorker.party = party;
     }
 
