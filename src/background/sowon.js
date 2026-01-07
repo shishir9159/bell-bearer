@@ -17,6 +17,8 @@
 (function () {
     'use strict';
 
+    const { Settings } = globalThis.BB;
+
     const FOCUS_URL = 'http://127.0.0.1:41414/bellbearer.FocusService/ReportFocus';
 
     /** Collapse a burst of focus events into one report per window. */
@@ -56,16 +58,21 @@
     /** chrome:// pages and the like have no domain, and answer ''. */
     const domainOf = (tab) => globalThis.BB.Hosts.of(tab.url || tab.pendingUrl || '');
 
+    /**
+     * Whether sowon is wanted, read once and again only after it changes:
+     * this runs on every tab switch, title change and window focus, and it
+     * used to go to storage for the answer each time.
+     */
+    let wanted = null;
+    Settings.watch(['connectToSowon'], () => { wanted = null; });
+    async function enabled() {
+        if (wanted === null) wanted = (await Settings.get(['connectToSowon'])).connectToSowon === true;
+        return wanted;
+    }
+
     async function send() {
         if (failures >= MAX_FAILURES && Date.now() < nextAttempt) return;
-
-        let enabled = false;
-        try {
-            enabled = (await chrome.storage.local.get(['connectToSowon'])).connectToSowon === true;
-        } catch (_) {
-            return;
-        }
-        if (!enabled) return;
+        if (!(await enabled())) return;
 
         const tab = await activeTab();
         if (!tab || !tab.title) return;
@@ -127,7 +134,5 @@
         chrome.tabGroups.onUpdated.addListener(reportFocus);
     }
 
-    // Exposed for the test page.
-    globalThis.reportFocusToSowon = reportFocus;
-    globalThis.SOWON_FOCUS_URL = FOCUS_URL;
+    globalThis.BB.Sowon = { report: reportFocus, FOCUS_URL };
 })();
