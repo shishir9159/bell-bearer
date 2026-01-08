@@ -11,7 +11,7 @@
     'use strict';
 
     const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, TabActions, SettingsForm, SiteIcons,
-        CookieSitesPanel, ShortcutList, Plate, ChessStats, ChessSettings, BackupButtons, Skin } = window.BB;
+        CookieSitesPanel, ShortcutList, Plate, ChessSettings, BackupButtons, Skin } = window.BB;
 
     /** The emoji the popup used for "nothing saved"; every empty list here wears it too. */
     const EMPTY_ICON = '🔖';
@@ -79,6 +79,63 @@
     };
 
     /**
+     * The scripts behind each view of a site's workspace, in load order,
+     * loaded the first time a site that shows the view is opened. Most of the
+     * page's scripts used to be one site's views, every one of them read and
+     * mounted — each mount a trip to storage — on a page that usually shows
+     * one site, or none.
+     *
+     * What draws a settings control stays in the page (ChessSettings,
+     * ChatSettings, TyperStats' voice list): SettingsForm binds controls by
+     * id once, on load, and a control drawn later would never be bound. Every
+     * list here loads after dashboard.html's own; tests/load-order.js checks.
+     */
+    const VIEW_FILES = {
+        ChessStats: ['src/shared/lichess.js', 'src/page/chess-stats.js'],
+        XPouchView: ['src/shared/x-pouch.js', 'src/page/x-pouch-view.js'],
+        TimeLimitView: ['src/shared/time-limits.js', 'src/page/time-limit-view.js'],
+        RosterView: ['src/shared/roster.js', 'src/page/roster-view.js'],
+        LeetStats: ['src/shared/fsrs.js', 'src/shared/leetcode.js', 'src/shared/leet-api.js', 'src/page/leet-stats.js'],
+        LeetTemplatesView: ['src/shared/leet-templates.js', 'src/page/leet-templates-view.js'],
+        ChatViews: ['src/shared/chat-pins.js', 'src/shared/prompt-templates.js', 'src/shared/prompt-queue.js', 'src/page/chat-views.js'],
+        // In the page already, for its voice list; only its panels wait.
+        TyperStats: [],
+    };
+
+    /** The views each site's workspace shows. */
+    const SITE_VIEWS = {
+        chess: ['ChessStats'],
+        lichess: ['ChessStats'],
+        twitter: ['XPouchView', 'TimeLimitView', 'RosterView'],
+        reddit: ['TimeLimitView', 'RosterView'],
+        leetcode: ['LeetStats', 'LeetTemplatesView'],
+        typeracer: ['TyperStats'],
+        chatgpt: ['ChatViews'],
+        claude: ['ChatViews'],
+    };
+
+    /** And the views a site's settings panel shows: today's time, beside its limit. */
+    const SETTINGS_VIEWS = {
+        twitter: ['TimeLimitView'],
+        reddit: ['TimeLimitView'],
+    };
+
+    /** Each script once, however many views ask for it. */
+    const scripts = new Map();
+    function loadScript(src) {
+        if (!scripts.has(src)) {
+            scripts.set(src, new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = () => reject(new Error(`${src} did not load`));
+                document.body.appendChild(script);
+            }));
+        }
+        return scripts.get(src);
+    }
+
+    /**
      * A pin, as a glyph. An emoji pin renders as a different object on every
      * platform and is coloured by the font rather than the skin; this one takes
      * currentColor and so follows the accent of whichever skin is on.
@@ -110,6 +167,8 @@
             this.settingsSite = null;
             // One games view per chess site, keyed by site id.
             this.chessViews = {};
+            // The views mounted so far, in the workspace and in settings.
+            this.mounted = { workspace: new Set(), settings: new Set() };
         }
 
         async init() {
@@ -148,20 +207,6 @@
             if (window.BB.LimitSitesPanel) {
                 window.BB.LimitSitesPanel.mount(document.getElementById('limitSitesPanel'));
             }
-            if (window.BB.TimeLimitView) window.BB.TimeLimitView.mountAll();
-            if (window.BB.XPouchView) window.BB.XPouchView.mountAll();
-            if (window.BB.LeetStats) window.BB.LeetStats.mountAll();
-            if (window.BB.LeetTemplatesView) window.BB.LeetTemplatesView.mountAll();
-            if (window.BB.TyperStats) window.BB.TyperStats.mountAll();
-            if (window.BB.RosterView) window.BB.RosterView.mountAll();
-            if (window.BB.ChatViews) window.BB.ChatViews.mountAll();
-            document.querySelectorAll('[data-chess-games]').forEach((panel) => {
-                const site = panel.dataset.chessGames;
-                this.chessViews[site] = ChessStats.mountPanel(panel, {
-                    site,
-                    onSetUsername: () => this.openSiteSettings(site),
-                });
-            });
 
             await this.reload();
             this.followHash();
@@ -317,6 +362,40 @@
             subtabs.hidden = tabs.length < 2;
 
             this.switchSiteTab(this.siteTabs[siteId] || (tabs[0] && tabs[0].id));
+            this.mountViews(SITE_VIEWS[siteId] || [], 'workspace').then(() => this.render());
+        }
+
+        /**
+         * Load and mount `names` over the workspace or the settings, each
+         * once. A view whose scripts fail to load is said so and tried again
+         * on the next open, and does not hold up the others.
+         */
+        async mountViews(names, where) {
+            const scope = document.getElementById(where === 'settings' ? 'siteSettingsWorkspace' : 'siteWorkspace');
+            const mounted = this.mounted[where];
+            for (const name of names) {
+                if (mounted.has(name)) continue;
+                mounted.add(name);
+                try {
+                    for (const src of VIEW_FILES[name]) await loadScript(src);
+                } catch (_) {
+                    mounted.delete(name);
+                    Ui.toast('Could not load these views', 'error');
+                    continue;
+                }
+                if (name === 'ChessStats') this.mountChess(scope);
+                else window.BB[name].mountAll(scope);
+            }
+        }
+
+        mountChess(scope) {
+            scope.querySelectorAll('[data-chess-games]').forEach((panel) => {
+                const site = panel.dataset.chessGames;
+                this.chessViews[site] = window.BB.ChessStats.mountPanel(panel, {
+                    site,
+                    onSetUsername: () => this.openSiteSettings(site),
+                });
+            });
         }
 
         closeSite() {
@@ -357,6 +436,7 @@
             document.querySelectorAll('[data-site-settings]').forEach((panel) => {
                 panel.hidden = panel.dataset.siteSettings !== siteId;
             });
+            this.mountViews(SETTINGS_VIEWS[siteId] || [], 'settings');
         }
 
         /** Settings → that site's panel, from anywhere on the page. */

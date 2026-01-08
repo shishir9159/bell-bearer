@@ -3288,6 +3288,17 @@ check('the load-order check reads what a file takes at load, and not what it rea
     assert(!LoadOrder.needs(readRepo('src/page/chess-stats.js')).has('HeatMap'));
     eq([...LoadOrder.provides(readRepo('src/shared/sfx.js'))], ['Sfx']);
 });
+check('every view the dashboard opens a site with has its scripts listed, and only there', () => {
+    const source = readRepo('dashboard.js');
+    const table = (name) => Function(`return ${new RegExp(`const ${name} = (\\{[\\s\\S]*?\\n    \\});`).exec(source)[1]}`)();
+    const files = table('VIEW_FILES');
+    for (const name of [...Object.values(table('SITE_VIEWS')), ...Object.values(table('SETTINGS_VIEWS'))].flat()) {
+        assert(name in files, `${name} is opened but has no scripts listed`);
+    }
+    const html = readRepo('dashboard.html');
+    for (const src of Object.values(files).flat()) assert(!html.includes(`"${src}"`), `${src} loads with the page as well`);
+    assert(Object.keys(LoadOrder.lists()).includes('dashboard.html, then dashboard.js#VIEW_FILES.LeetStats'), 'the lists are not linted');
+});
 check('and it does catch a list put the wrong way round', () => {
     const js = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
     const flipped = [...js].reverse();
@@ -7623,7 +7634,9 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         for (const [, id] of tabs.matchAll(/panel: '([^']+)'/g)) {
             assert(html.includes(`id="${id}"`), `${id} is opened by a tab but is not in the page`);
         }
-        assert(html.indexOf('src/page/chat-views.js') < html.indexOf('dashboard.js"'), 'the views load after the page that mounts them');
+        // Its views load when the site is first opened, and not with the page.
+        assert(/chatgpt: \['ChatViews'\]/.test(dashboard), 'opening the site does not load its views');
+        assert(!html.includes('"src/page/chat-views.js"'), 'the views load with the page as well');
     });
     check('the chatgpt settings panel binds a control to every setting the site has', () => {
         require('../src/page/chat-settings.js');

@@ -99,6 +99,12 @@ function lists() {
     out['popup.html'] = popup;
     out['popup.html, then popup.js#PARTY_FILES'] = [...popup, ...party];
     out['dashboard.html'] = scriptsIn(read('dashboard.html'));
+    // A site's views load when it is first opened, in whatever order the
+    // sites are: each list has to stand on the page's own alone.
+    const views = /const VIEW_FILES = \{([\s\S]*?)\n    \};/.exec(read('dashboard.js'))[1];
+    for (const [, name, files] of views.matchAll(/(\w+): \[([^\]]*)\]/g)) {
+        out[`dashboard.html, then dashboard.js#VIEW_FILES.${name}`] = [...out['dashboard.html'], ...[...files.matchAll(/'([^']+)'/g)].map((m) => m[1])];
+    }
     out['offscreen.html'] = scriptsIn(read('offscreen.html'));
     // Firefox has no offscreen documents: the party's session is read into
     // the background page, after everything already there.
