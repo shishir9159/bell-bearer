@@ -13,15 +13,24 @@ suite('background: sowon focus reporting', () => {
         }];
     }
 
+    /**
+     * Turned on or off the way the popup does it, with a write. The worker
+     * keeps the setting once read and lets go of it only when a write says it
+     * changed, so a store swapped in by reset() would go unseen.
+     */
+    const integration = (on) => chrome.storage.local.set({ connectToSowon: on });
+
     test('does not contact sowon unless the integration is enabled', async () => {
         M.reset({ tabs: chromeTabs(), localStore: {} });
+        await integration(false);
         M.fire.activated(1, 100);
         await M.settle();
         assertEqual(M.state.fetchCalls.length, 0);
     });
 
     test('posts a gRPC-Web framed FocusUpdate to the right method path', async () => {
-        M.reset({ tabs: chromeTabs(), localStore: { connectToSowon: true } });
+        M.reset({ tabs: chromeTabs(), localStore: {} });
+        await integration(true);
         M.fire.activated(1, 100);
         await M.settle();
 
@@ -43,8 +52,9 @@ suite('background: sowon focus reporting', () => {
                 id: 1, index: 0, windowId: 100, active: true,
                 url: 'https://www.youtube.com/watch?v=abc', title: 'Vid', pinned: false,
             }],
-            localStore: { connectToSowon: true },
+            localStore: {},
         });
+        await integration(true);
         M.fire.activated(1, 100);
         await M.settle();
 
@@ -57,9 +67,10 @@ suite('background: sowon focus reporting', () => {
     test('backs off after repeated failures when sowon is not running', async () => {
         M.reset({
             tabs: chromeTabs(),
-            localStore: { connectToSowon: true },
+            localStore: {},
             failFetch: true,
         });
+        await integration(true);
 
         // Many focus changes while sowon is down.
         for (let i = 0; i < 12; i++) {
