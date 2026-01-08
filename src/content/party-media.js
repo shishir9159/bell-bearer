@@ -29,6 +29,7 @@
     const PartyDrift = ns.PartyDrift || req('../shared/party-drift.js');
     const PartySites = ns.PartySites || req('../shared/party-sites.js');
     const Speed = ns.Speed || req('../shared/speed.js');
+    const Bridge = ns.Bridge || req('./bridge.js');
 
     /** How long a write of ours may take to come back as its event. */
     const EXPECT_MS = 1500;
@@ -99,19 +100,7 @@
      * One synchronous round trip to src/content/netflix-page.js, in the page's
      * world. Null when nothing answered: the bridge is not in this page.
      */
-    function askPage(message) {
-        let answer = null;
-        const take = (event) => {
-            try { answer = JSON.parse(event.detail); } catch (_) { answer = null; }
-        };
-        document.addEventListener('bb:party:ok', take);
-        try {
-            document.dispatchEvent(new CustomEvent('bb:party', { detail: JSON.stringify(message) }));
-        } finally {
-            document.removeEventListener('bb:party:ok', take);
-        }
-        return answer;
-    }
+    const askPage = (message) => Bridge.ask('bb:party', message, 'bb:party:ok');
 
     /**
      * Netflix: its own player API, falling back to the <video> for play and

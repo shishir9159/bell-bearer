@@ -40,6 +40,7 @@
     const LeetTemplates = ns.LeetTemplates || req('../shared/leet-templates.js');
     const PouchButton = ns.PouchButton || req('../shared/pouch-button.js');
     const Theme = ns.Theme || req('./theme.js');
+    const Bridge = ns.Bridge || req('./bridge.js');
 
     const VERDICT = 'bb:leet:verdict';
     const REQUEST = 'bb:leet';
@@ -50,39 +51,17 @@
     const SUGGEST_ID = 'bb-leet-suggest';
 
     /**
-     * Ask the page world what the editor is showing.
-     *
-     * Synchronous, which looks wrong and is not: DOM dispatch runs the other
-     * world's listener inline, and both worlds share this document, so the
-     * answer has already been dispatched back by the time our own
-     * dispatchEvent returns. chess-page.js leans on exactly this. The
-     * fallback shape is returned when leet-page.js is not there at all —
-     * which is every page outside leetcode.com, and leetcode.com itself for
-     * the moment between the two content scripts loading.
+     * Ask the page world what the editor is showing — synchronously, which
+     * src/content/bridge.js explains. The fallback shape is returned when
+     * leet-page.js is not there at all: every page outside leetcode.com, and
+     * leetcode.com itself for the moment between the two scripts loading.
      */
     function askPage() {
-        let answer = { lang: '', selection: '', value: '' };
-        const onCode = (event) => {
-            try { answer = JSON.parse(event.detail) || answer; } catch (_) { /* keep the fallback */ }
-        };
-        document.addEventListener(CODE, onCode);
-        try {
-            document.dispatchEvent(new CustomEvent(REQUEST, { detail: JSON.stringify({ type: 'read' }) }));
-        } catch (_) { /* nothing is listening */ } finally {
-            document.removeEventListener(CODE, onCode);
-        }
-        return answer;
+        return Bridge.ask(REQUEST, { type: 'read' }, CODE) || { lang: '', selection: '', value: '' };
     }
 
     /** Put text in at the cursor, over in the page's world. */
-    function tellPage(message) {
-        try {
-            document.dispatchEvent(new CustomEvent(REQUEST, { detail: JSON.stringify(message) }));
-            return true;
-        } catch (_) {
-            return false;
-        }
-    }
+    const tellPage = (message) => Bridge.tell(REQUEST, message);
 
     /**
      * A reading this far below the last one is a reset rather than a wobble.
@@ -249,9 +228,7 @@
          * `solvedAt` is what says which of the failures on record belong to
          * this session. See Leet.failuresSince.
          */
-        async function onVerdict(event) {
-            let verdict;
-            try { verdict = JSON.parse(event.detail); } catch (_) { return; }
+        async function onVerdict(verdict) {
             // The slug becomes a key in storage, and anything on the page can
             // dispatch this event: only the shape leet-page.js's slugOf reads
             // out of a problem URL is taken.
@@ -887,8 +864,10 @@
 
         // ---------------------------------------------------------- wiring
 
+        let unlistenVerdict = null;
+
         function install() {
-            document.addEventListener(VERDICT, onVerdict);
+            unlistenVerdict = Bridge.listen(VERDICT, onVerdict);
             document.addEventListener('visibilitychange', onVisibility);
             window.addEventListener('focus', onVisibility);
             window.addEventListener('blur', onVisibility);
@@ -918,7 +897,8 @@
          * being answered by the first test's UI as well as its own.
          */
         function uninstall() {
-            document.removeEventListener(VERDICT, onVerdict);
+            if (unlistenVerdict) unlistenVerdict();
+            unlistenVerdict = null;
             document.removeEventListener('visibilitychange', onVisibility);
             document.removeEventListener('keydown', onHotkey, true);
             window.removeEventListener('focus', onVisibility);

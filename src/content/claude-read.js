@@ -29,6 +29,7 @@
     const ChatDom = ns.ChatDom || req('./chat-dom.js');
     const ChatTree = ns.ChatTree || req('../shared/chat-tree.js');
     const ClaudeFormat = ns.ClaudeFormat || req('../shared/claude-format.js');
+    const Bridge = ns.Bridge || req('./bridge.js');
 
     const SITE = ChatSites.get('claude');
 
@@ -156,15 +157,14 @@
      * be loaded, or the page may have taken its own `fetch` before it was.
      */
     const bridge = { heard: false, streaming: false, endedAt: 0, limit: null };
-    const detailOf = (event) => { try { return JSON.parse(event.detail) || {}; } catch (_) { return {}; } };
     if (typeof document !== 'undefined' && document.addEventListener) {
-        document.addEventListener('bb:claude:stream', (event) => {
-            const detail = detailOf(event);
+        Bridge.listen('bb:claude:stream', (detail) => {
+            const phase = detail && detail.phase;
             bridge.heard = true;
-            bridge.streaming = detail.phase === 'start';
-            if (detail.phase === 'end') bridge.endedAt = Date.now();
+            bridge.streaming = phase === 'start';
+            if (phase === 'end') bridge.endedAt = Date.now();
         });
-        document.addEventListener('bb:claude:limit', (event) => { bridge.limit = detailOf(event); });
+        Bridge.listen('bb:claude:limit', (detail) => { bridge.limit = detail || {}; });
     }
 
     /**

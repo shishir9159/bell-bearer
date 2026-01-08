@@ -23,6 +23,7 @@
 
     /** Injected into the party's tab, in this order, isolated world. */
     const CONTENT_FILES = Object.freeze([
+        'src/content/bridge.js',
         'src/shared/party-clock.js',
         'src/shared/party-state.js',
         'src/shared/party-drift.js',

@@ -6,8 +6,7 @@
  * The chess.com board itself is only reachable from the page's world, which is
  * src/content/chess-page.js. This half owns what that one cannot touch — the
  * user's shortcut settings and the typing guard — and passes the request
- * across as a `bb:chess` DOM event whose detail is JSON (an object detail does
- * not survive the trip between worlds in every browser).
+ * across as a `bb:chess` DOM event, through src/content/bridge.js.
  *
  * The clocks and the move list are plain text in both sites' pages, so the
  * warning and the speech need no bridge: one poll reads them twice a second,
@@ -43,6 +42,7 @@
     const ChessSites = (root.BB && root.BB.ChessSites) || req('../shared/chess-sites.js');
     const Sfx = (root.BB && root.BB.Sfx) || req('../shared/sfx.js');
     const Time = (root.BB && root.BB.Time) || req('../shared/time.js');
+    const Bridge = (root.BB && root.BB.Bridge) || req('./bridge.js');
 
     const EVENT = 'bb:chess';
 
@@ -243,24 +243,12 @@
      * for anyone who plays that way. The board still has them; it just lives
      * in the page's own world, so the question goes over a DOM event.
      *
-     * The dispatch is synchronous and the page world answers during it, so the
-     * reply is already in hand when dispatchEvent returns. Whatever comes back
-     * is filtered to things that actually read as notation before use.
+     * Whatever comes back is filtered to things that actually read as
+     * notation before use.
      */
-    let boardReply = null;
-
-    function onBoardMoves(event) {
-        try { boardReply = JSON.parse(event.detail); } catch (_) { boardReply = null; }
-    }
-
     function readBoardMoves() {
-        boardReply = null;
-        try {
-            document.dispatchEvent(new CustomEvent(EVENT, { detail: JSON.stringify({ type: 'moves' }) }));
-        } catch (_) {
-            return [];
-        }
-        return Array.isArray(boardReply) ? boardReply.filter(isMoveText) : [];
+        const reply = Bridge.ask(EVENT, { type: 'moves' }, 'bb:chess:moves');
+        return Array.isArray(reply) ? reply.filter(isMoveText) : [];
     }
 
     /**
@@ -346,7 +334,7 @@
 
             event.preventDefault();
             event.stopImmediatePropagation();
-            document.dispatchEvent(new CustomEvent(EVENT, { detail: JSON.stringify({ type: 'clear-arrows' }) }));
+            Bridge.tell(EVENT, { type: 'clear-arrows' });
             notify('Arrows cleared', 'info');
         }
 
@@ -485,7 +473,6 @@
         function install() {
             if (site === 'chess') {
                 document.addEventListener('keydown', onKeyDown, true);
-                document.addEventListener('bb:chess:moves', onBoardMoves);
             }
             document.addEventListener('pointerdown', onGesture, { capture: true, passive: true });
             document.addEventListener('keydown', onGesture, { capture: true, passive: true });

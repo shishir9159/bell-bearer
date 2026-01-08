@@ -4152,7 +4152,9 @@ check('an expectation that never came back stops matching', () => {
 });
 check('the browser suite loads the party the way the loader injects it', () => {
     const html = require('fs').readFileSync(`${__dirname}/index.html`, 'utf8');
-    const files = require('../src/background/party-loader.js').CONTENT_FILES;
+    // The party's own files. One it shares, the page bridge, is loaded
+    // earlier for other specs, and load-order.js holds it before its user.
+    const files = require('../src/background/party-loader.js').CONTENT_FILES.filter((file) => file.includes('party'));
     const loaded = [...html.matchAll(/src="\.\.\/(src\/[^"]*party[^"]*)"/g)].map((one) => one[1]);
     // What offscreen.html loads comes after these, for its own specs: it is not the tab's.
     eq(loaded.slice(0, files.length), [...files]);

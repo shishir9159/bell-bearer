@@ -256,6 +256,7 @@
         "src/shared/sfx.js",
         "src/shared/chess-sites.js",
         "src/shared/chess-limits.js",
+        "src/content/bridge.js",
         "src/content/chess.js",
         "src/content/chess-limits.js",
         "src/content/main.js"
@@ -302,6 +303,7 @@
         "src/shared/pouch-button.js",
         "src/content/leet-read.js",
         "src/content/leet-panel.js",
+        "src/content/bridge.js",
         "src/content/leet-ui.js",
         "src/content/main.js"
       ],
@@ -399,6 +401,7 @@
         "src/content/composer.js",
         "src/shared/prompt-queue.js",
         "src/content/chat-dom.js",
+        "src/content/bridge.js",
         "src/content/chatgpt-read.js",
         "src/content/claude-read.js",
         "src/content/chat-nav.js",
