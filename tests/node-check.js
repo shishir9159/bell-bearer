@@ -4670,6 +4670,53 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(await Pins.toggle('x'), ['y']);
     });
 
+    console.log('\n# store');
+    const Store = require('../src/shared/store.js');
+    const pair = () => Store.create({
+        keys: ['sa', 'sb'],
+        read: (stored) => ({ a: stored.sa || [], b: stored.sb || [] }),
+        write: (state) => ({ sa: state.a, sb: state.b }),
+        blank: () => ({ a: [], b: [] }),
+        name: 'the pair',
+    });
+    await checkAsync('steps run one at a time, each reading what the last wrote', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        const one = pair();
+        const slow = (n) => (state) => new Promise((resolve) => setTimeout(() => resolve({ ...state, a: [...state.a, n] }), 5));
+        await Promise.all([one.update(slow(1)), one.update(slow(2)), one.update(slow(3))]);
+        eq(store.sa, [1, 2, 3]);
+    });
+    await checkAsync('a step writes the keys it changed and leaves the others to whoever moved them', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        store.sa = ['mine'];
+        store.sb = ['theirs'];
+        const one = pair();
+        // Another tab writes sb while this step is between its read and its write.
+        await one.update((state) => {
+            store.sb = ['theirs', 'since'];
+            return { ...state, a: ['mine', 'more'] };
+        });
+        eq([store.sa, store.sb], [['mine', 'more'], ['theirs', 'since']]);
+    });
+    await checkAsync('a state changed in place is still written', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        const one = pair();
+        await one.update((state) => { state.a.push('x'); });
+        eq(store.sa, ['x']);
+    });
+    await checkAsync('a failed step answers with the fallback, and the next one still runs', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        const one = pair();
+        const error = console.error;
+        console.error = () => {};
+        try {
+            eq(await one.update(() => { throw new Error('no'); }), { a: [], b: [] });
+        } finally {
+            console.error = error;
+        }
+        eq(await one.update((state) => ({ ...state, b: [1] })), { a: [], b: [1] });
+    });
+
     console.log('\n# playlist ids');
     check('a real playlist is picked out of either URL form', () => {
         eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=abc&list=PLabc123'), 'PLabc123');

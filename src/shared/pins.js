@@ -17,45 +17,24 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
 
     const KEY = Settings.DATA.pinned;
 
-    /** Writes are chained for the same reason the bookmark store chains its own. */
-    let writeChain = Promise.resolve();
+    const store = Store.create({
+        keys: [KEY],
+        read: (stored) => (Array.isArray(stored[KEY]) ? stored[KEY].filter((id) => typeof id === 'string') : []),
+        blank: () => [],
+        name: 'pins',
+    });
 
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([KEY]);
-            const list = stored[KEY];
-            return Array.isArray(list) ? list.filter((id) => typeof id === 'string') : [];
-        } catch (_) {
-            return [];
-        }
-    }
-
-    async function save(ids) {
-        const write = () => chrome.storage.local.set({ [KEY]: ids });
-        writeChain = writeChain.then(write, write).catch((error) => {
-            console.error('Bell Bearer: could not save pins', error);
-        });
-        return writeChain;
-    }
+    const { load, save } = store;
 
     /** Pin if unpinned, unpin if pinned. Resolves to the new list. */
-    async function toggle(videoId) {
-        const run = async () => {
-            const ids = await load();
-            const next = ids.includes(videoId)
-                ? ids.filter((id) => id !== videoId)
-                : [videoId, ...ids];
-            await chrome.storage.local.set({ [KEY]: next });
-            return next;
-        };
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update pins', error);
-            return [];
-        });
-        return writeChain;
+    function toggle(videoId) {
+        return store.update((ids) => (ids.includes(videoId)
+            ? ids.filter((id) => id !== videoId)
+            : [videoId, ...ids]));
     }
 
     /**
