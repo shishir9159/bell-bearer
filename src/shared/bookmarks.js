@@ -20,56 +20,25 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
     const Ids = ns.Ids || req('./ids.js');
     const YouTube = ns.YouTube || req('./youtube.js');
 
     const KEY = Settings.DATA.bookmarks;
     const EXPORT_VERSION = '1.0';
 
-    /**
-     * Writes are serialized through this chain.
-     *
-     * Every writer used to do read-modify-write against chrome.storage with no
-     * coordination, so a checkpoint saved while the dashboard was also saving
-     * lost whichever write finished first. Chaining onto the previous write
-     * keeps read-modify-write pairs atomic with respect to each other.
-     */
-    let writeChain = Promise.resolve();
-
-    async function load() {
-        try {
-            const result = await chrome.storage.local.get([KEY]);
-            return normalizeVideos(result[KEY]);
-        } catch (_) {
-            return [];
-        }
-    }
-
-    async function save(videos) {
-        const write = () => chrome.storage.local.set({ [KEY]: videos });
-        writeChain = writeChain.then(write, write).catch((error) => {
-            console.error('Bell Bearer: could not save bookmarks', error);
-        });
-        return writeChain;
-    }
-
-    /** Read, transform and write back as one atomic step. */
-    async function update(mutate) {
-        const run = async () => {
-            const videos = await load();
-            const next = (await mutate(videos)) || videos;
-            await chrome.storage.local.set({ [KEY]: next });
-            return next;
-        };
+    const store = Store.create({
+        keys: [KEY],
+        read: (stored) => normalizeVideos(stored[KEY]),
+        blank: () => [],
+        name: 'bookmarks',
         // A failed write answers with what is stored rather than an empty
         // list: the popup and the dashboard draw what this resolves to, and
         // [] drew every checkpoint as gone when none had been touched.
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update bookmarks', error);
-            return load();
-        });
-        return writeChain;
-    }
+        failed: () => store.load(),
+    });
+
+    const { load, save, update } = store;
 
     /** Drop anything that does not match the on-disk shape. */
     function normalizeVideos(raw) {
