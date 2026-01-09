@@ -12,59 +12,36 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
     const Ids = ns.Ids || req('./ids.js');
     const YouTube = ns.YouTube || req('./youtube.js');
 
     const { topics: TOPICS_KEY, channels: CHANNELS_KEY, newVideos: NEW_VIDEOS_KEY } = Settings.DATA;
 
-    let writeChain = Promise.resolve();
-
     const newId = (prefix) => Ids.next(prefix);
 
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([TOPICS_KEY, CHANNELS_KEY, NEW_VIDEOS_KEY]);
-            return {
-                topics: Array.isArray(stored[TOPICS_KEY]) ? stored[TOPICS_KEY] : [],
-                channels: Array.isArray(stored[CHANNELS_KEY]) ? stored[CHANNELS_KEY] : [],
-                newVideos: Array.isArray(stored[NEW_VIDEOS_KEY]) ? stored[NEW_VIDEOS_KEY] : [],
-            };
-        } catch (_) {
-            return { topics: [], channels: [], newVideos: [] };
-        }
-    }
+    const asArray = (value) => (Array.isArray(value) ? value : []);
 
-    async function save({ topics, channels, newVideos }) {
-        const values = {};
-        if (topics) values[TOPICS_KEY] = topics;
-        if (channels) values[CHANNELS_KEY] = channels;
-        if (newVideos) values[NEW_VIDEOS_KEY] = newVideos;
+    const store = Store.create({
+        keys: [TOPICS_KEY, CHANNELS_KEY, NEW_VIDEOS_KEY],
+        read: (stored) => ({
+            topics: asArray(stored[TOPICS_KEY]),
+            channels: asArray(stored[CHANNELS_KEY]),
+            newVideos: asArray(stored[NEW_VIDEOS_KEY]),
+        }),
+        // Only the parts given: save() is handed one list at a time.
+        write: ({ topics, channels, newVideos }) => {
+            const values = {};
+            if (topics) values[TOPICS_KEY] = topics;
+            if (channels) values[CHANNELS_KEY] = channels;
+            if (newVideos) values[NEW_VIDEOS_KEY] = newVideos;
+            return values;
+        },
+        blank: () => ({ topics: [], channels: [], newVideos: [] }),
+        name: 'subscriptions',
+    });
 
-        const write = () => chrome.storage.local.set(values);
-        writeChain = writeChain.then(write, write).catch((error) => {
-            console.error('Bell Bearer: could not save subscriptions', error);
-        });
-        return writeChain;
-    }
-
-    /** Read-modify-write as one atomic step, so concurrent edits do not clobber. */
-    async function update(mutate) {
-        const run = async () => {
-            const state = await load();
-            const next = (await mutate(state)) || state;
-            await chrome.storage.local.set({
-                [TOPICS_KEY]: next.topics,
-                [CHANNELS_KEY]: next.channels,
-                [NEW_VIDEOS_KEY]: next.newVideos,
-            });
-            return next;
-        };
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update subscriptions', error);
-            return { topics: [], channels: [], newVideos: [] };
-        });
-        return writeChain;
-    }
+    const { load, save, update } = store;
 
     /** Create a topic, or return the existing one with that name. */
     async function createTopic(name) {
