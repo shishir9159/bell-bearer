@@ -21,6 +21,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
     const YouTube = ns.YouTube || req('./youtube.js');
 
     const KEY = Settings.DATA.playlists;
@@ -33,39 +34,23 @@
      */
     const SEEN_LIMIT = 400;
 
-    let writeChain = Promise.resolve();
-
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([KEY]);
-            const list = stored[KEY];
-            if (!Array.isArray(list)) return [];
-            return list
-                .filter((entry) => entry && typeof entry.id === 'string')
-                .map((entry) => ({
-                    ...entry,
-                    title: entry.title || 'Playlist',
-                    seen: Array.isArray(entry.seen) ? entry.seen : [],
-                }));
-        } catch (_) {
-            return [];
-        }
+    function entriesOf(list) {
+        if (!Array.isArray(list)) return [];
+        return list
+            .filter((entry) => entry && typeof entry.id === 'string')
+            .map((entry) => ({
+                ...entry,
+                title: entry.title || 'Playlist',
+                seen: Array.isArray(entry.seen) ? entry.seen : [],
+            }));
     }
 
-    /** Read-modify-write as one atomic step, as the other stores do. */
-    async function update(mutate) {
-        const run = async () => {
-            const list = await load();
-            const next = (await mutate(list)) || list;
-            await chrome.storage.local.set({ [KEY]: next });
-            return next;
-        };
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update playlists', error);
-            return [];
-        });
-        return writeChain;
-    }
+    const { load, update } = Store.create({
+        keys: [KEY],
+        read: (stored) => entriesOf(stored[KEY]),
+        blank: () => [],
+        name: 'playlists',
+    });
 
     const has = (list, playlistId) => (list || []).some((entry) => entry.id === playlistId);
 
