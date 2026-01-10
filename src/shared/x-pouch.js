@@ -33,6 +33,7 @@
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
     const Ids = ns.Ids || req('./ids.js');
+    const Store = ns.Store || req('./store.js');
 
     const {
         xPeopleTopics: PEOPLE_TOPICS_KEY,
@@ -49,49 +50,31 @@
 
     const sideOf = (side) => SIDES[side] || SIDES.people;
 
-    let writeChain = Promise.resolve();
-
     const newId = (prefix) => Ids.next(prefix);
 
     const asArray = (value) => (Array.isArray(value) ? value : []);
 
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([
-                PEOPLE_TOPICS_KEY, POST_TOPICS_KEY, PEOPLE_KEY, POSTS_KEY,
-            ]);
-            return {
-                peopleTopics: asArray(stored[PEOPLE_TOPICS_KEY]),
-                postTopics: asArray(stored[POST_TOPICS_KEY]),
-                people: asArray(stored[PEOPLE_KEY]),
-                posts: asArray(stored[POSTS_KEY]),
-            };
-        } catch (_) {
-            // The extension reloading invalidates every content script's
-            // context; an empty pouch draws, a rejection takes the panel down.
-            return { peopleTopics: [], postTopics: [], people: [], posts: [] };
-        }
-    }
-
-    /** Read-modify-write as one atomic step, so two edits cannot clobber. */
-    async function update(mutate) {
-        const run = async () => {
-            const state = await load();
-            const next = (await mutate(state)) || state;
-            await chrome.storage.local.set({
-                [PEOPLE_TOPICS_KEY]: next.peopleTopics,
-                [POST_TOPICS_KEY]: next.postTopics,
-                [PEOPLE_KEY]: next.people,
-                [POSTS_KEY]: next.posts,
-            });
-            return next;
-        };
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update the X pouch', error);
-            return { peopleTopics: [], postTopics: [], people: [], posts: [] };
-        });
-        return writeChain;
-    }
+    /**
+     * Four keys, of which an edit usually moves one: only that one is
+     * written, so a person saved in one tab and a post in another both stay.
+     */
+    const { load, update } = Store.create({
+        keys: [PEOPLE_TOPICS_KEY, POST_TOPICS_KEY, PEOPLE_KEY, POSTS_KEY],
+        read: (stored) => ({
+            peopleTopics: asArray(stored[PEOPLE_TOPICS_KEY]),
+            postTopics: asArray(stored[POST_TOPICS_KEY]),
+            people: asArray(stored[PEOPLE_KEY]),
+            posts: asArray(stored[POSTS_KEY]),
+        }),
+        write: (state) => ({
+            [PEOPLE_TOPICS_KEY]: state.peopleTopics,
+            [POST_TOPICS_KEY]: state.postTopics,
+            [PEOPLE_KEY]: state.people,
+            [POSTS_KEY]: state.posts,
+        }),
+        blank: () => ({ peopleTopics: [], postTopics: [], people: [], posts: [] }),
+        name: 'the X pouch',
+    });
 
     /** The topics of one side, in display order. */
     function topicsOf(state, side) {
