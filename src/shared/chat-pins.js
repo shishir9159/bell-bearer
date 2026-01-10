@@ -22,12 +22,11 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
 
     const KEY = Settings.DATA.chatPins;
     const EXCERPT = 140;
     const LABEL_CAP = 80;
-
-    let writeChain = Promise.resolve();
 
     const chatKey = (site, conv) => `${site}:${conv}`;
     const text = (value) => String(value == null ? '' : value);
@@ -67,31 +66,13 @@
         return out;
     }
 
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([KEY]);
-            return clean(stored[KEY]);
-        } catch (_) {
-            // The extension reloading invalidates every content script's
-            // context; an empty set draws, a rejection takes the panel down.
-            return {};
-        }
-    }
-
-    /** Read-modify-write as one step, so two tabs pinning at once cannot clobber. */
-    async function update(mutate) {
-        const run = async () => {
-            const state = await load();
-            const next = clean((await mutate(state)) || state);
-            await chrome.storage.local.set({ [KEY]: next });
-            return next;
-        };
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update the chat pins', error);
-            return {};
-        });
-        return writeChain;
-    }
+    const { load, update } = Store.create({
+        keys: [KEY],
+        read: (stored) => clean(stored[KEY]),
+        clean,
+        blank: () => ({}),
+        name: 'the chat pins',
+    });
 
     /** The pins of one chat, oldest first — the order they were made in. */
     function forConv(state, site, conv) {
