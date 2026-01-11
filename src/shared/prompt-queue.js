@@ -32,6 +32,7 @@
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
     const Ids = ns.Ids || req('./ids.js');
+    const Store = ns.Store || req('./store.js');
 
     const KEY = Settings.DATA.promptQueue;
     /** How long a page may hold a chat's queue before another may take it over. */
@@ -48,7 +49,6 @@
 
     const STATUSES = Object.freeze(['waiting', 'sending', 'sent', 'held', 'failed']);
 
-    let writeChain = Promise.resolve();
     const newId = (prefix) => Ids.next(prefix);
 
     const blank = () => ({ items: [], holds: {}, leases: {}, paused: {} });
@@ -84,28 +84,13 @@
         };
     }
 
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([KEY]);
-            return clean(stored[KEY]);
-        } catch (_) {
-            return blank();
-        }
-    }
-
-    async function update(mutate) {
-        const run = async () => {
-            const state = await load();
-            const next = clean((await mutate(state)) || state);
-            await chrome.storage.local.set({ [KEY]: next });
-            return next;
-        };
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update the prompt queue', error);
-            return blank();
-        });
-        return writeChain;
-    }
+    const { load, update } = Store.create({
+        keys: [KEY],
+        read: (stored) => clean(stored[KEY]),
+        clean,
+        blank,
+        name: 'the prompt queue',
+    });
 
     // ------------------------------------------------------------ reading
 
