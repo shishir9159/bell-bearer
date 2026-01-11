@@ -22,7 +22,7 @@
     /**
      * @param {object} spec
      * @param {string[]} spec.keys     what is read
-     * @param {Function} spec.read     the stored values → the state
+     * @param {Function} spec.read     the stored values → the state, or a promise of it
      * @param {Function} spec.blank    the state when storage cannot be read
      * @param {string}   spec.name     for the console: "could not update <name>"
      * @param {Function} [spec.write]  the state → the values to store; the one key's, by default
@@ -36,7 +36,7 @@
 
         async function load() {
             try {
-                return read(await chrome.storage.local.get(keys));
+                return await read(await chrome.storage.local.get(keys));
             } catch (_) {
                 // The extension reloading invalidates every content script's
                 // context; an empty store draws, a rejection takes the page down.

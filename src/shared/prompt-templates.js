@@ -27,6 +27,7 @@
     const Settings = ns.Settings || req('./settings.js');
     const Ids = ns.Ids || req('./ids.js');
     const ChatSites = ns.ChatSites || req('./chat-sites.js');
+    const Store = ns.Store || req('./store.js');
 
     const KEY = Settings.DATA.promptTemplates;
     const NAME_CAP = 60;
@@ -46,8 +47,6 @@
         ['pre-mortem', 'Pre-mortem', 'Imagine it is six months from now and this plan has failed:\n\n{{plan}}\n\nList the likeliest reasons, most likely first. For each, give the earliest warning sign I could watch for and a cheap way to prevent it now.'],
         ['actions', 'Extract action items', 'Pull the action items out of this:\n\n{{text}}\n\nAs a checklist of what, who and by when — only as stated; do not invent owners or dates. Then list anything that needs a decision before it can become an action.'],
     ].map(([slug, name, body]) => Object.freeze({ id: `pt_starter_${slug}`, name, body })));
-
-    let writeChain = Promise.resolve();
 
     const newId = () => Ids.next('pt');
 
@@ -72,35 +71,20 @@
 
     const starters = (now = Date.now()) => STARTERS.map((starter) => clean({ ...starter, createdAt: now }));
 
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([KEY]);
-            if (stored[KEY] === undefined) {
-                const seeded = starters();
-                await chrome.storage.local.set({ [KEY]: seeded });
-                return seeded;
-            }
-            return templatesOf(stored[KEY]);
-        } catch (_) {
-            // A content script whose extension reloaded: an empty picker
-            // draws, a rejection takes the page's composer tools down.
-            return [];
-        }
-    }
-
-    async function update(mutate) {
-        const run = async () => {
-            const state = await load();
-            const next = templatesOf((await mutate(state)) || state);
-            await chrome.storage.local.set({ [KEY]: next });
-            return next;
-        };
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update the prompt templates', error);
-            return [];
-        });
-        return writeChain;
-    }
+    const { load, update } = Store.create({
+        keys: [KEY],
+        read: async (stored) => {
+            if (stored[KEY] !== undefined) return templatesOf(stored[KEY]);
+            // The first read writes the starters, so the ids they were given
+            // are the ids an edit to one of them finds.
+            const seeded = starters();
+            await chrome.storage.local.set({ [KEY]: seeded });
+            return seeded;
+        },
+        clean: templatesOf,
+        blank: () => [],
+        name: 'the prompt templates',
+    });
 
     async function create({ name, body, sites = [] }) {
         if (!text(name) || !text(body)) return null;
