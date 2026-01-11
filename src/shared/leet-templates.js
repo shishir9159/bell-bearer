@@ -26,6 +26,7 @@
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
     const Ids = ns.Ids || req('./ids.js');
+    const Store = ns.Store || req('./store.js');
 
     const KEY = Settings.DATA.leetTemplates;
 
@@ -90,8 +91,6 @@
     /** Every language, in the order the editor's dropdown roughly uses. */
     const list = () => Object.keys(LANGS).map((id) => ({ id, label: LANGS[id] }));
 
-    let writeChain = Promise.resolve();
-
     const newId = () => Ids.next('lt');
 
     const asArray = (value) => (Array.isArray(value) ? value : []);
@@ -119,31 +118,13 @@
     /** Everything stored, cleaned, in display order. */
     const templatesOf = (state) => asArray(state).map(clean).filter((t) => t.name);
 
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([KEY]);
-            return templatesOf(stored[KEY]);
-        } catch (_) {
-            // The extension reloading invalidates every content script's
-            // context; an empty list draws, a rejection takes the panel down.
-            return [];
-        }
-    }
-
-    /** Read-modify-write as one atomic step, so two edits cannot clobber. */
-    async function update(mutate) {
-        const run = async () => {
-            const state = await load();
-            const next = templatesOf((await mutate(state)) || state);
-            await chrome.storage.local.set({ [KEY]: next });
-            return next;
-        };
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update the LeetCode templates', error);
-            return [];
-        });
-        return writeChain;
-    }
+    const { load, update } = Store.create({
+        keys: [KEY],
+        read: (stored) => templatesOf(stored[KEY]),
+        clean: templatesOf,
+        blank: () => [],
+        name: 'the LeetCode templates',
+    });
 
     async function create({ name, lang, body }) {
         const trimmed = text(name);
