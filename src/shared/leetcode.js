@@ -26,6 +26,7 @@
     const Settings = ns.Settings || req('./settings.js');
     const Time = ns.Time || req('./time.js');
     const Fsrs = ns.Fsrs || req('./fsrs.js');
+    const Store = ns.Store || req('./store.js');
 
     const { leetProblems: PROBLEMS_KEY, leetDays: DAYS_KEY } = Settings.DATA;
 
@@ -264,39 +265,19 @@
 
     // ------------------------------------------------------------ storage
 
-    let writeChain = Promise.resolve();
-
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([PROBLEMS_KEY, DAYS_KEY]);
-            return { problems: asObject(stored[PROBLEMS_KEY]), days: asObject(stored[DAYS_KEY]) };
-        } catch (_) {
-            // The extension reloading invalidates every content script's
-            // context; an empty log draws, a rejection takes the panel down.
-            return blank();
-        }
-    }
-
     /**
-     * Read-modify-write as one atomic step. Two tabs submitting at once is not
-     * hypothetical here — a problem open in two windows is how people compare
-     * two approaches — and without the chain the second write would be built
-     * on a read taken before the first one landed.
+     * `update(mutate, now)` prunes the days back from `now`. One step at a
+     * time matters here: two tabs submitting at once is how people compare
+     * two approaches to one problem.
      */
-    async function update(mutate, now = Date.now()) {
-        const run = async () => {
-            const state = await load();
-            const next = (await mutate(state)) || state;
-            const clean = { problems: problemsOf(next), days: prune(next.days, now) };
-            await chrome.storage.local.set({ [PROBLEMS_KEY]: clean.problems, [DAYS_KEY]: clean.days });
-            return clean;
-        };
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update the LeetCode log', error);
-            return blank();
-        });
-        return writeChain;
-    }
+    const { load, update } = Store.create({
+        keys: [PROBLEMS_KEY, DAYS_KEY],
+        read: (stored) => ({ problems: asObject(stored[PROBLEMS_KEY]), days: asObject(stored[DAYS_KEY]) }),
+        clean: (next, now = Date.now()) => ({ problems: problemsOf(next), days: prune(next.days, now) }),
+        write: (state) => ({ [PROBLEMS_KEY]: state.problems, [DAYS_KEY]: state.days }),
+        blank,
+        name: 'the LeetCode log',
+    });
 
     const see = (page, now = Date.now()) => update((state) => seeIn(state, page, now), now);
 
