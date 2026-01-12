@@ -8,7 +8,7 @@
  * - In Node.js: node test-transcript.js (requires node-fetch or similar)
  */
 
-const importedModule = require('./transcript.js');
+const importedModule = require('./src/shared/transcript.js');
 
 // Simple test runner
 class TestRunner {

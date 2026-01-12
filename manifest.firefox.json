@@ -114,7 +114,7 @@
         "src/content/markdown.js",
         "src/content/cookie-banner.js",
         "src/shared/store.js",
-        "transcript.js",
+        "src/shared/transcript.js",
         "src/shared/bookmarks.js",
         "src/shared/pins.js",
         "src/shared/watched.js",

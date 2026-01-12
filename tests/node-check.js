@@ -247,7 +247,7 @@ check('timestamp links parse out of pasted text, one per line', () => {
 globalThis.BB = globalThis.BB || {};
 globalThis.BB.Dom = globalThis.BB.Dom || require('../src/shared/dom.js');
 const ReaderTranscript = require('../src/content/reader-transcript.js');
-const { FetchedTranscript } = require('../transcript.js');
+const { FetchedTranscript } = require('../src/shared/transcript.js');
 
 /** Snippets in the shape transcript.js hands over. */
 const SNIPPETS = [
@@ -391,7 +391,7 @@ checkAsync('a transcript asked for by language is its own fetch, and tracks are 
 checkAsync('the transcript api key is read off the page it runs in, not fetched in a second copy of it', async () => {
     // Every YouTube tab fetched a whole watch page — about a megabyte — to
     // read one string its own document already carried.
-    const { YouTubeTranscriptApi } = require('../transcript.js');
+    const { YouTubeTranscriptApi } = require('../src/shared/transcript.js');
     const api = new YouTubeTranscriptApi();
     const page = { scripts: [
         { src: 'https://www.youtube.com/s/player/base.js', textContent: '' },
