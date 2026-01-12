@@ -31,6 +31,7 @@
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
     const Time = ns.Time || req('./time.js');
+    const Store = ns.Store || req('./store.js');
 
     const { typerRaces: RACES_KEY, typerGrams: GRAMS_KEY, typerDays: DAYS_KEY } = Settings.DATA;
 
@@ -702,50 +703,27 @@
 
     // ------------------------------------------------------------ storage
 
-    let writeChain = Promise.resolve();
-
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([RACES_KEY, GRAMS_KEY, DAYS_KEY]);
-            return {
-                races: asArray(stored[RACES_KEY]).map(cleanRace),
-                grams: pruneGrams(stored[GRAMS_KEY]),
-                days: asObject(stored[DAYS_KEY]),
-            };
-        } catch (_) {
-            // The extension reloading invalidates every content script's
-            // context; an empty log draws, a rejection takes the panel down.
-            return blank();
-        }
-    }
-
     /**
-     * Read-modify-write as one atomic step — the serialised shape
-     * shared/leetcode.js uses, copied whole. Two tabs finishing a race at once
-     * is not hypothetical (a race left open in another window still ends), and
-     * without the chain the second write is built on a read taken before the
-     * first one landed.
+     * `update(mutate, now)` prunes the days back from `now`. One step at a
+     * time matters here too: a race left open in another window still ends,
+     * and two can finish together.
      */
-    async function update(mutate, now = Date.now()) {
-        const run = async () => {
-            const state = await load();
-            const next = (await mutate(state)) || state;
-            const clean = {
-                races: asArray(next.races).map(cleanRace).slice(0, RACE_CAP),
-                grams: pruneGrams(next.grams),
-                days: prune(next.days, now),
-            };
-            await chrome.storage.local.set({
-                [RACES_KEY]: clean.races, [GRAMS_KEY]: clean.grams, [DAYS_KEY]: clean.days,
-            });
-            return clean;
-        };
-        writeChain = writeChain.then(run, run).catch((error) => {
-            console.error('Bell Bearer: could not update the TypeRacer log', error);
-            return blank();
-        });
-        return writeChain;
-    }
+    const { load, update } = Store.create({
+        keys: [RACES_KEY, GRAMS_KEY, DAYS_KEY],
+        read: (stored) => ({
+            races: asArray(stored[RACES_KEY]).map(cleanRace),
+            grams: pruneGrams(stored[GRAMS_KEY]),
+            days: asObject(stored[DAYS_KEY]),
+        }),
+        clean: (next, now = Date.now()) => ({
+            races: asArray(next.races).map(cleanRace).slice(0, RACE_CAP),
+            grams: pruneGrams(next.grams),
+            days: prune(next.days, now),
+        }),
+        write: (state) => ({ [RACES_KEY]: state.races, [GRAMS_KEY]: state.grams, [DAYS_KEY]: state.days }),
+        blank,
+        name: 'the TypeRacer log',
+    });
 
     /** What the content script calls when a race ends. */
     const record = (race, events, now = Date.now()) =>
