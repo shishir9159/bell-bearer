@@ -90,6 +90,7 @@ that code, not a replacement — it cannot press a key or play a video.
 | `party-dev-server.js` | A party server to try the extension against before the real one exists: `party-room.js` behind that socket. `node tests/party-dev-server.js --lag 200 --jitter 150 --loss 5`. A fixture, not the product |
 | `party-conformance.js` | Replays `party-vectors.json` against a live party server in real time: `node tests/party-conformance.js ws://localhost:7070`. Run it against a server without jitter or loss |
 | `node-check.js` | The Node gate — pure logic only, no DOM, no timers |
+| `live-transcript.html`, `live-transcript.js` | Captions asked of YouTube itself, over the network — not part of either suite; see [the live transcript check](#the-live-transcript-check) |
 | `load-order.js` | Every list that loads the classic scripts (both manifests, the worker, each page, the party's lists, these test pages), and a check that each file comes after what it takes off `BB` as it loads. Run by `node-check.js`; `node tests/load-order.js` prints what is out of order |
 
 ## How it works
@@ -189,6 +190,45 @@ sowon timer decodes. The exact byte sequence is asserted **from both sides**:
 
 If you change the message, both tests must be updated together — which is the
 point.
+
+## The live transcript check
+
+`live-transcript.html` and `live-transcript.js` ask YouTube itself for
+captions, so they need the network and go red whenever YouTube changes what it
+answers — which is the point of them; the suites only ever see a mocked
+`fetch`. Open the page as an extension page,
+`chrome-extension://<id>/tests/live-transcript.html`, where the extension's
+host permissions let it reach YouTube. `node tests/live-transcript.js` runs the
+script's checks under Node.
+
+What `src/shared/transcript.js` (`BB.TranscriptApi`) asks for, in order:
+
+1. **The Innertube API key.** On a YouTube page it is read off the page's own
+   `ytcfg` script; anywhere else the watch page is fetched for it.
+2. **The caption tracks.** `POST https://www.youtube.com/youtubei/v1/player?key=…`
+   as the Android client (`ANDROID`, `20.10.38`); the answer carries
+   `captions.playerCaptionsTracklistRenderer.captionTracks[].baseUrl`.
+3. **The transcript.** `GET {baseUrl}`, with `&tlang=xx` for a translation,
+   which answers one `<text start="0.5" dur="2.1">…</text>` per line.
+
+```js
+const api = new BB.TranscriptApi.YouTubeTranscriptApi();
+const transcript = await api.fetch('dQw4w9WgXcQ', { languages: ['en'] });
+const translated = await api.fetch('dQw4w9WgXcQ', { translateTo: 'es' });
+const tracks = await api.listTranscripts('dQw4w9WgXcQ'); // each with its translationLanguages
+```
+
+Every failure is a `TranscriptError` with a `code`, and `expected: true` for a
+normal state of the video, which callers degrade on quietly rather than warn
+about:
+
+| `code` | `expected` | Cause |
+| --- | --- | --- |
+| `NO_CAPTIONS` | yes | The video has no transcripts |
+| `NOT_PLAYABLE` | yes | Private, deleted or region-locked |
+| `NO_LANGUAGE` | yes | No track in the languages asked for |
+| `IP_BLOCKED` | no | Too many requests from this address |
+| `FETCH_FAILED` | no | A network or HTTP error talking to YouTube |
 
 ## Adding a test
 

@@ -4,11 +4,11 @@
  * This test can be run in Node.js (with fetch polyfill) or in a browser console.
  * 
  * Usage:
- * - In browser: Open test-transcript.html
- * - In Node.js: node test-transcript.js (requires node-fetch or similar)
+ * - In browser: Open live-transcript.html
+ * - In Node.js: node tests/live-transcript.js (requires node-fetch or similar)
  */
 
-const importedModule = require('./src/shared/transcript.js');
+const importedModule = require('../src/shared/transcript.js');
 
 // Simple test runner
 class TestRunner {
@@ -255,7 +255,7 @@ if (typeof window === 'undefined') {
         // In Node.js, you'd need to require or import the module
         // For now, we'll assume it's loaded via HTML or another method
         console.log('Please ensure transcript.js is loaded before running tests');
-        console.log('You can run tests in the browser by opening test-transcript.html\n');
+        console.log('You can run tests in the browser by opening live-transcript.html\n');
 
         runTests().catch(error => {
             console.error('Test execution failed:', error);
