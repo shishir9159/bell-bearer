@@ -355,7 +355,8 @@ check('an old whole-second checkpoint and a point in time both shade sensibly', 
 checkAsync('a transcript asked for by language is its own fetch, and tracks are listed once', async () => {
     const asked = [];
     let listed = 0;
-    globalThis.YouTubeTranscriptApi = class {
+    const real = globalThis.BB.TranscriptApi;
+    globalThis.BB.TranscriptApi = { YouTubeTranscriptApi: class {
         fetch(id, { languages }) {
             asked.push(languages.join(','));
             return Promise.resolve({ videoId: id, languageCode: languages[0], language: languages[0], snippets: [] });
@@ -368,7 +369,7 @@ checkAsync('a transcript asked for by language is its own fetch, and tracks are 
                 { languageCode: 'de', language: 'German', isGenerated: true },
             ]);
         }
-    };
+    } };
     try {
         const Transcripts = require('../src/content/transcripts.js');
         const wrapper = Transcripts.createTranscripts({ getPreferredLanguage: () => 'en', notify() {} });
@@ -385,7 +386,7 @@ checkAsync('a transcript asked for by language is its own fetch, and tracks are 
         await wrapper.list('v');
         eq(listed, 1);
     } finally {
-        delete globalThis.YouTubeTranscriptApi;
+        globalThis.BB.TranscriptApi = real;
     }
 });
 checkAsync('the transcript api key is read off the page it runs in, not fetched in a second copy of it', async () => {

@@ -12,7 +12,8 @@
     const MAX_CACHED = 3;
 
     function createTranscripts({ getPreferredLanguage, notify }) {
-        const api = typeof YouTubeTranscriptApi !== 'undefined' ? new YouTubeTranscriptApi() : null;
+        const TranscriptApi = root.BB && root.BB.TranscriptApi;
+        const api = TranscriptApi ? new TranscriptApi.YouTubeTranscriptApi() : null;
 
         /**
          * videoId -> FetchedTranscript (insertion-ordered, oldest first). A

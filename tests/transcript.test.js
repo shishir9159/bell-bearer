@@ -4,6 +4,8 @@
  * error worth warning about, plus the TimeIndex binary search.
  */
 
+const { TranscriptError, TimeIndex, FetchedTranscriptSnippet } = window.BB.TranscriptApi;
+
 suite('transcript: error classification', () => {
     test('missing captions is an EXPECTED condition, not a failure', () => {
         const e = new TranscriptError(TranscriptError.NO_CAPTIONS, 'No captions available for this video', true);
