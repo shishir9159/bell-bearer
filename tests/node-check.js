@@ -3300,6 +3300,15 @@ check('every view the dashboard opens a site with has its scripts listed, and on
     for (const src of Object.values(files).flat()) assert(!html.includes(`"${src}"`), `${src} loads with the page as well`);
     assert(Object.keys(LoadOrder.lists()).includes('dashboard.html, then dashboard.js#VIEW_FILES.LeetStats'), 'the lists are not linted');
 });
+check('a packed upload has every file the manifest and the pages name, and none of the specs', () => {
+    const Pack = require('../tools/pack.js');
+    for (const firefox of [false, true]) {
+        eq(Pack.missing({ firefox }), [], firefox ? 'firefox' : 'chrome');
+        const names = [...Pack.files({ firefox }).keys()];
+        assert(!names.some((name) => name.startsWith('tests/') || name.startsWith('tools/') || name.endsWith('.md')), 'the package carries the dev files');
+    }
+    eq(Pack.files({ firefox: true }).get('manifest.json'), 'manifest.firefox.json');
+});
 check('and it does catch a list put the wrong way round', () => {
     const js = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
     const flipped = [...js].reverse();

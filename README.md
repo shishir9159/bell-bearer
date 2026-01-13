@@ -926,6 +926,16 @@ into the background page when a party starts.
 For Firefox, rename `manifest.firefox.json` to `manifest.json` first (it needs
 `background.scripts` rather than a service worker, and has no `tabGroups`).
 
+### Method 2: A zip for a store upload
+
+```bash
+node tools/pack.js            # dist/bell-bearer-<version>.zip
+node tools/pack.js --firefox  # the same, with manifest.firefox.json as its manifest
+```
+
+Only what runs goes in — no specs, dev servers, notes or source art — and it
+fails if the manifest or a page names a file the zip would not have.
+
 ## Project layout
 
 No build step, by design: every file is a classic script that attaches its
