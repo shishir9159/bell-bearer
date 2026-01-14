@@ -55,6 +55,11 @@ and the in-game parts (time controls per site, warning and speech settings,
 moves spoken as words), in about a second. It is a fast gate while you are changing
 that code, not a replacement — it cannot press a key or play a video.
 
+`node tests/node-check.js party` runs only the sections with "party" in their
+`# name`, and says how many it skipped; any word in the headers works (`chat`,
+`leetcode`, `store`). Run the whole thing before committing — a check can lean
+on what an earlier section left behind.
+
 ## Layout
 
 | File | Purpose |

@@ -9,13 +9,33 @@
  * what you want while actually changing that code.
  *
  *     node tests/node-check.js
+ *     node tests/node-check.js party    only the sections with "party" in their name
  */
 'use strict';
 
 let passed = 0;
 let failed = 0;
 
+/**
+ * The area asked for, if any. Everything between the checks still runs, so
+ * each section's set-up is there; only checks outside the area are skipped.
+ * A check that leaned on an earlier section's leftovers would fail in an area
+ * run and not in the whole one, which is why the whole one is the gate.
+ */
+const AREA = (process.argv[2] || '').toLowerCase();
+let inArea = !AREA;
+let skipped = 0;
+
+function section(name) {
+    inArea = !AREA || name.toLowerCase().includes(AREA);
+    if (inArea) console.log(`\n# ${name}`);
+}
+
 function check(name, fn) {
+    if (!inArea) {
+        skipped++;
+        return;
+    }
     try {
         fn();
         passed++;
@@ -26,6 +46,10 @@ function check(name, fn) {
 }
 
 async function checkAsync(name, fn) {
+    if (!inArea) {
+        skipped++;
+        return;
+    }
     try {
         await fn();
         passed++;
@@ -67,7 +91,7 @@ function assertFalling(values, msg) {
 
 const Speed = require('../src/shared/speed.js');
 
-console.log('\n# speed ladder');
+section('speed ladder');
 check('steps to the next rung strictly above', () => {
     eq(Speed.nextStep(1), 1.25);
     eq(Speed.nextStep(2), 2.25);
@@ -91,7 +115,7 @@ check('clamps out-of-range rates', () => {
 
 const Dom = require('../src/shared/dom.js');
 
-console.log('\n# escaping and URL safety');
+section('escaping and URL safety');
 check('escapes markup in text', () => eq(Dom.escapeHtml('<b>&"x"'), '&lt;b&gt;&amp;&quot;x&quot;'));
 check('javascript: URLs are neutralised', () => {
     eq(Dom.safeUrl('javascript:alert(1)'), '#');
@@ -105,7 +129,7 @@ check('http(s) URLs pass through', () => {
 
 const YouTube = require('../src/shared/youtube.js');
 
-console.log('\n# youtube URLs');
+section('youtube URLs');
 check('reads the id from every watch form', () => {
     eq(YouTube.extractVideoId('https://www.youtube.com/watch?v=abcdefghijk'), 'abcdefghijk');
     eq(YouTube.extractVideoId('https://youtu.be/abcdefghijk'), 'abcdefghijk');
@@ -123,7 +147,7 @@ check('non-watch pages have no id', () => {
 
 const PageInfo = require('../src/content/page-info.js');
 
-console.log('\n# youtube channel pages');
+section('youtube channel pages');
 check('a channel page is recognised in all four spellings', () => {
     eq(PageInfo.channelPagePath('/@mathwithming'), '/@mathwithming');
     eq(PageInfo.channelPagePath('/channel/UCabcdefghijklmnopqrstuv'), '/channel/UCabcdefghijklmnopqrstuv');
@@ -148,7 +172,7 @@ check('a watch page is not a channel page', () => {
 
 const Bookmarks = require('../src/shared/bookmarks.js');
 
-console.log('\n# checkpoints');
+section('checkpoints');
 check('adding dedupes against every existing time, not just the last', () => {
     const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [
         { time: 10 }, { time: 30 }, { time: 20 } ] }];
@@ -257,7 +281,7 @@ const SNIPPETS = [
     { text: 'third line', start: 6, duration: 3 },
 ];
 
-console.log('\n# reader — the transcript column');
+section('reader — the transcript column');
 check('blank snippets are left out and the text is tidied', () => {
     const entries = ReaderTranscript.entriesOf({ snippets: SNIPPETS });
     eq(entries.map((e) => e.text), ['first line', 'second <line>', 'third line']);
@@ -454,7 +478,7 @@ const Time = require('../src/shared/time.js');
 const now = Date.parse('2026-08-30T12:00:00Z');
 const ago = (ms) => Time.relativeTime(now - ms, now);
 
-console.log('\n# relative time');
+section('relative time');
 check('under a minute is "just now"', () => eq(ago(59 * 1000), 'just now'));
 check('rounds down (13 days is 1 week)', () => eq(ago(13 * 864e5), '1 week ago'));
 check('singular', () => eq(ago(864e5), '1 day ago'));
@@ -474,7 +498,7 @@ check('formatTime still works', () => {
 
 const Fsrs = require('../src/shared/fsrs.js');
 
-console.log('\n# fsrs — the forgetting curve');
+section('fsrs — the forgetting curve');
 check('retrievability is 1 on the day and falls from there', () => {
     eq(Fsrs.retrievability(10, 0), 1);
     assertFalling([1, 5, 20, 90].map((days) => Fsrs.retrievability(10, days)), 'elapsed days');
@@ -495,7 +519,7 @@ check('intervalFor is clamped to whole days inside the cap', () => {
     eq(Fsrs.intervalFor(1e6, 0.9, 365), 365, 'never over the cap');
 });
 
-console.log('\n# fsrs — reviewing');
+section('fsrs — reviewing');
 check('a first Good matches the published numbers', () => {
     const card = Fsrs.review(null, 3, 0, { retention: 0.9, now: 0 });
     // S_0(Good) is w[2] by definition, and at 90% retention the interval is
@@ -562,7 +586,7 @@ check('a stray grade is clamped rather than poisoning the card', () => {
     eq(Fsrs.review(null, undefined, 0, { now: 0 }).grade, 3);
 });
 
-console.log('\n# fsrs — suggesting a grade');
+section('fsrs — suggesting a grade');
 check('a 45-minute Medium with two failures is Hard, not Good', () => {
     eq(Fsrs.suggestGrade({ seconds: 45 * 60, failures: 2, difficulty: 'Medium' }), 2);
 });
@@ -607,7 +631,7 @@ const problemPage = {
     url: 'https://leetcode.com/problems/two-sum/',
 };
 
-console.log('\n# leetcode — seeing a problem');
+section('leetcode — seeing a problem');
 check('the first sighting records what the page says', () => {
     const state = Leet.seeIn(Leet.blank(), problemPage, L0);
     const problem = state.problems['two-sum'];
@@ -644,7 +668,7 @@ check('a page with no slug is not a problem page', () => {
     eq(Leet.seeIn(Leet.blank(), { title: 'Problems' }, L0).problems, {});
 });
 
-console.log('\n# leetcode — attempts and day buckets');
+section('leetcode — attempts and day buckets');
 check('an attempt buckets into the local day it happened on', () => {
     const state = Leet.addAttempt(Leet.blank(), {
         slug: 'two-sum', status: 'Wrong Answer', seconds: 300, at: L0,
@@ -687,7 +711,7 @@ check('an attempt on a problem never seen still records it', () => {
     eq(state.problems.ghost.seenAt, L0);
 });
 
-console.log('\n# leetcode — pruning');
+section('leetcode — pruning');
 check('prune drops day 401 and keeps day 400', () => {
     const state = {
         problems: {},
@@ -703,7 +727,7 @@ check('prune throws away a key that is not a date', () => {
     eq(Leet.prune({ yesterday: { submitted: 3 } }, L0), {});
 });
 
-console.log('\n# leetcode — the three rails');
+section('leetcode — the three rails');
 check('lists splits due, to-solve and solved', () => {
     let state = Leet.blank();
     state = Leet.seeIn(state, { slug: 'due-now' }, L0);
@@ -735,7 +759,7 @@ check('due comes back soonest first', () => {
     eq(Leet.lists(state, L0).due.map((p) => p.slug), ['c', 'b', 'a']);
 });
 
-console.log('\n# leetcode — grading inputs');
+section('leetcode — grading inputs');
 check('failuresSince counts only what came after the last accept', () => {
     let state = Leet.blank();
     state = Leet.addAttempt(state, { slug: 's', status: 'Wrong Answer', at: L0 });
@@ -761,7 +785,7 @@ check('the grade a session suggests follows from its own numbers', () => {
     }), 2, 'quick, but it took two goes');
 });
 
-console.log('\n# leetcode — putting something back in the queue');
+section('leetcode — putting something back in the queue');
 check('inQueue is exactly what the due and to-solve rails hold', () => {
     let state = Leet.seeIn(Leet.blank(), { slug: 'fresh' }, L0);
     eq(Leet.inQueue(state, 'fresh', L0), true, 'seen and unsolved is waiting');
@@ -794,7 +818,7 @@ check('a problem already waiting is left exactly where it is', () => {
     eq(Leet.lists(state, L0).due.length, 0);
 });
 
-console.log('\n# leetcode — the heat map');
+section('leetcode — the heat map');
 check('heatDays colours by the metric it is asked for', () => {
     let state = Leet.addAttempt(Leet.blank(), { slug: 'a', status: 'Accepted', seconds: 600, at: L0 });
     state = Leet.addAttempt(state, { slug: 'a', status: 'Wrong Answer', seconds: 90, at: L0 });
@@ -845,7 +869,7 @@ check('a day not practised yet does not break yesterday’s streak', () => {
 
 const LeetRead = require('../src/content/leet-read.js');
 
-console.log('\n# leetcode — reading the address bar');
+section('leetcode — reading the address bar');
 check('a problem page gives up its slug', () => {
     eq(LeetRead.slugOf('/problems/two-sum/'), 'two-sum');
     eq(LeetRead.slugOf('/problems/two-sum'), 'two-sum', 'with no trailing slash');
@@ -863,7 +887,7 @@ check('everything else on the site is not a problem page', () => {
     eq(LeetRead.onProblem('/problemset/all/'), false);
 });
 
-console.log('\n# leetcode — reading the stopwatch');
+section('leetcode — reading the stopwatch');
 check('both shapes of clock parse', () => {
     eq(LeetRead.parseClock('05:30'), 330);
     eq(LeetRead.parseClock('1:02:05'), 3725, 'an hour in');
@@ -929,7 +953,7 @@ function withStubbedPage(path, run) {
     }
 }
 
-console.log('\n# leetcode — the clock');
+section('leetcode — the clock');
 check('elapsed is whatever LeetCode’s own stopwatch reads', () => {
     withStubbedPage('/problems/two-sum/', ({ ui, show }) => {
         ui.onNavigate();
@@ -1028,7 +1052,7 @@ const LeetTemplates = require('../src/shared/leet-templates.js');
 const tpl = (name, lang, body = '', usedAt = 0) =>
     LeetTemplates.clean({ id: `lt_${name}`, name, lang, body, usedAt });
 
-console.log('\n# leetcode — template languages');
+section('leetcode — template languages');
 check('monaco’s names are mapped onto LeetCode’s', () => {
     eq(LeetTemplates.normalize('python'), 'python3', 'monaco has one Python mode');
     eq(LeetTemplates.normalize('go'), 'golang');
@@ -1043,7 +1067,7 @@ check('a language nobody recognises files as "any"', () => {
     eq(LeetTemplates.labelFor('golang'), 'Go');
 });
 
-console.log('\n# leetcode — offering templates');
+section('leetcode — offering templates');
 check('forLang puts this language first and the language-free ones after', () => {
     const state = [tpl('anything', ''), tpl('bisect', 'python3'), tpl('vector', 'cpp')];
     eq(LeetTemplates.forLang(state, 'python3').map((t) => t.name), ['bisect', 'anything']);
@@ -1079,7 +1103,7 @@ check('search matches the name and the body', () => {
     eq(LeetTemplates.search(state, 'python3', '').length, 2, 'an empty filter narrows nothing');
 });
 
-console.log('\n# leetcode — what a template may hold');
+section('leetcode — what a template may hold');
 check('a template with no name is not a template', () => {
     eq(LeetTemplates.templatesOf([{ name: '   ', body: 'x' }]), []);
 });
@@ -1116,7 +1140,7 @@ function calendarReply(map, extra = {}) {
 /** A unix seconds value for a UTC midnight. */
 const utcMidnight = (iso) => Date.parse(`${iso}T00:00:00.000Z`) / 1000;
 
-console.log('\n# leetcode — reading the submission calendar');
+section('leetcode — reading the submission calendar');
 check('the calendar comes back as one count per day', () => {
     const parsed = LeetApi.parseCalendar(calendarReply({
         [utcMidnight('2026-09-10')]: 4,
@@ -1159,7 +1183,7 @@ check('a username is cleaned the way LeetCode spells one', () => {
     eq(LeetApi.cleanUsername(null), '');
 });
 
-console.log('\n# leetcode — asking LeetCode for it');
+section('leetcode — asking LeetCode for it');
 checkAsync('the request is public: no cookies, just a username', async () => {
     let sent = null;
     const fetcher = async (url, options) => {
@@ -1195,7 +1219,7 @@ checkAsync('an empty username never reaches the network', async () => {
     eq(called, false);
 });
 
-console.log('\n# leetcode — the pouch panel');
+section('leetcode — the pouch panel');
 const LeetPanel = require('../src/content/leet-panel.js');
 
 check('the rail is the three lists Leet.lists hands back', () => {
@@ -1228,7 +1252,7 @@ check('a rail row escapes what it is given', () => {
     assert(row.includes('aria-pressed="true"'), 'the selected row is not marked');
 });
 
-console.log('\n# leetcode — what the grade card offers');
+section('leetcode — what the grade card offers');
 check('the four grades are offered with what each would schedule', () => {
     withStubbedPage('/problems/two-sum/', ({ ui }) => {
         const fresh = { slug: 'two-sum', difficulty: 'Medium', fsrs: null };
@@ -1278,7 +1302,7 @@ check('human() reads as a stopwatch at every scale', () => {
 require('../src/page/leet-stats.js');
 const LeetStats = globalThis.BB.LeetStats;
 
-console.log('\n# leetcode — the settings panel');
+section('leetcode — the settings panel');
 check('every leetcode setting has a control carrying its key as an id', () => {
     // This is the whole binding. src/page/settings-form.js matches a control
     // to a setting by id and nothing else, so a setting with no element is a
@@ -1311,7 +1335,7 @@ check('a leetcode panel exists for every dashboard tab', () => {
     assert(/data-site-settings="leetcode"/.test(html), 'the settings launcher has no leetcode card to open');
 });
 
-console.log('\n# leetcode — the dashboard panels');
+section('leetcode — the dashboard panels');
 check('each heat metric is banded on its own scale', () => {
     // One set of bounds cannot colour both counts and seconds: two
     // submissions is a quiet day and two seconds is nothing at all. Sharing
@@ -1393,7 +1417,7 @@ const msOf = (table, gram) => (table[gram] ? table[gram].ms : null);
 // than KEEP_DAYS after it was written.
 const R0 = new Date().setHours(23, 30, 0, 0);
 
-console.log('\n# typeracer — folding a character');
+section('typeracer — folding a character');
 check('case folds, because the shift is already its own interval', () => {
     eq(Typer.foldChar('A'), 'a');
     eq(Typer.foldChar('a'), 'a');
@@ -1415,7 +1439,7 @@ check('the punctuation you actually type survives', () => {
     eq(Typer.foldChar('—'), '-');
 });
 
-console.log('\n# typeracer — reading the keystrokes');
+section('typeracer — reading the keystrokes');
 check('a clean run credits each pair once and the roll once', () => {
     const grams = gramsOf('the', 'the');
     eq(Object.keys(grams.bi).sort(), ['he', 'th']);
@@ -1464,7 +1488,7 @@ check('a character typed twice was due twice', () => {
     eq(grams.chars.h.wrong, 1);
 });
 
-console.log('\n# typeracer — slips');
+section('typeracer — slips');
 check('a first-try miss after a clean key is a slip on the pair and the roll being typed', () => {
     // "thx<e": going for "e" after a clean "th", "x" was hit.
     const { bi, tri } = gramsOf('the quick', 'thx<e');
@@ -1507,7 +1531,7 @@ check('the slowest-pairs rows carry their slips for the table', () => {
     eq(Typer.slowest({ grams }, 'bi', { minSamples: 1 })[0].err, 4);
 });
 
-console.log('\n# typeracer — merging and evicting');
+section('typeracer — merging and evicting');
 check('merging is commutative, because it is all sums', () => {
     const a = gramsOf('the', 'the');
     const b = gramsOf('then', 'then');
@@ -1552,7 +1576,7 @@ check('the cap holds after a thousand races of novel grams', () => {
     assert(Object.keys(state.grams.tri).length <= Typer.GRAM_CAP_TRI, 'the trigram table ran away');
 });
 
-console.log('\n# typeracer — the race log');
+section('typeracer — the race log');
 check('a race lands on the local day it was typed on', () => {
     // toISOString() would file this one under tomorrow east of Greenwich —
     // the square that lights up would not be the one you were sitting at.
@@ -1642,7 +1666,7 @@ const stubNode = (textContent, extra = {}) => ({
     ...extra,
 });
 
-console.log('\n# typeracer — reading the address bar');
+section('typeracer — reading the address bar');
 check('the pit and a race are race pages, and the rest of the site is not', () => {
     eq(TyperRead.isRacePage('/'), true, 'the front door is the pit');
     eq(TyperRead.isRacePage('/pit/'), true);
@@ -1653,7 +1677,7 @@ check('the pit and a race are race pages, and the rest of the site is not', () =
     eq(TyperRead.isRacePage('/forum/thread'), false);
 });
 
-console.log('\n# typeracer — reading the quote');
+section('typeracer — reading the quote');
 check('a quote is believed only once it is long enough to be one', () => {
     const long = 'The quick brown fox jumps over the lazy dog and keeps going.';
     eq(TyperRead.quoteText(stubPage({ '.inputPanelText': stubNode(long) })), long);
@@ -1672,7 +1696,7 @@ check('a later spelling is used when the first no longer matches', () => {
     eq(TyperRead.quoteText(stubPage({ '.raceQuote': stubNode(long) })), long);
 });
 
-console.log('\n# typeracer — the box you type in');
+section('typeracer — the box you type in');
 check('a read-only box between races is not the one to listen on', () => {
     const live = stubNode('', { tagName: 'INPUT' });
     const spent = stubNode('', { tagName: 'INPUT', readOnly: true });
@@ -1688,7 +1712,7 @@ check('something that is not a field cannot be the field', () => {
     eq(TyperRead.inputBox(stubPage({ 'input.txtInput': div })), null);
 });
 
-console.log('\n# typeracer — the results panel');
+section('typeracer — the results panel');
 const resultsOf = (text) => TyperRead.readResult(stubPage({ 'table.raceResults': stubNode(text) }));
 
 check('speed, accuracy and finishing place are read off the scoreboard', () => {
@@ -1723,7 +1747,7 @@ check('the quote’s own id is taken from the link beside the result', () => {
     eq(TyperRead.quoteId(stubPage({})), '', 'a race with no link is not an error');
 });
 
-console.log('\n# typeracer — where the caret belongs');
+section('typeracer — where the caret belongs');
 check('nothing typed yet puts the caret on the front of the quote', () => {
     const first = stubNode('The');
     const panel = stubNode('The quick brown fox', { firstElementChild: first, children: [first] });
@@ -1876,7 +1900,7 @@ function makeBox(selector = 'input.txtInput') {
     };
 }
 
-console.log('\n# typeracer — counting what a delete took away');
+section('typeracer — counting what a delete took away');
 check('a plain backspace is one character', () => {
     eq(TyperUi.deletedCount({ value: 'the', selectionStart: 3, selectionEnd: 3 }, 'deleteContentBackward'), 1);
 });
@@ -1898,7 +1922,7 @@ check('an input that cannot say is treated as one character', () => {
     eq(TyperUi.deletedCount({ value: 'x' }, 'deleteContentBackward'), 1);
 });
 
-console.log('\n# typeracer — measuring a race');
+section('typeracer — measuring a race');
 check('a new quote starts a race and the keys go into it', () => {
     withTyperPage(({ ui, pass, type }) => {
         pass();
@@ -1972,7 +1996,7 @@ check('deleting past the start of the quote is not recorded', () => {
     }, { quote: 'the quick brown fox jumps over it' });
 });
 
-console.log('\n# typeracer — ending a race');
+section('typeracer — ending a race');
 check('the results panel appearing files the race', () => {
     withTyperPage(({ page, pass, type, written }) => {
         pass();
@@ -2110,7 +2134,7 @@ check('a page of the site with no race on it gets no race', () => {
     }, { quote: 'the quick brown fox jumps over it' });
 });
 
-console.log('\n# typeracer — what correcting cost');
+section('typeracer — what correcting cost');
 check('the window is the span from the wrong key to the restored prefix', () => {
     // "the quick" typed as t, h, x, q, u, then three backspaces taking the
     // x back off, then the right letters. The clock starts on the x and
@@ -2173,7 +2197,7 @@ check('correcting one mistake does not close the window on another', () => {
     eq(Typer.gramsFrom(events).correctionMs, 500);
 });
 
-console.log('\n# typeracer — clean speed');
+section('typeracer — clean speed');
 check('clean speed is the same race with the error windows taken out', () => {
     // 60 seconds, 6 of them spent correcting: the same characters in 54
     // seconds is 60/54 of the speed.
@@ -2197,7 +2221,7 @@ check('a race that was nothing but correcting reports its own speed', () => {
     eq(Typer.cleanWpmOf(40, 0, 0), 40);
 });
 
-console.log('\n# typeracer — the cost over a range');
+section('typeracer — the cost over a range');
 const costRace = (at, wpm, cleanWpm, seconds, correctionMs) =>
     ({ at, wpm, cleanWpm, seconds, correctionMs, accuracy: 95, chars: 200 });
 
@@ -2232,7 +2256,7 @@ check('a race stored before clean speed existed falls back to its own', () => {
     eq(cost.delta, 0);
 });
 
-console.log('\n# typeracer — the typing caret');
+section('typeracer — the typing caret');
 check('the caret cycles through every shape and back to the site’s own', () => {
     const seen = [];
     let mode = 'site';
@@ -2458,7 +2482,7 @@ check('uninstalling takes the caret and the class with it', () => {
 
 const Sfx = require('../src/shared/sfx.js');
 
-console.log('\n# the sound module');
+section('the sound module');
 check('a page with no Web Audio is quiet rather than broken', () => {
     // Node has no AudioContext, which is the same shape as a browser that
     // refuses one. Nothing here may throw: play() sits inside a keydown
@@ -2502,7 +2526,7 @@ check('the three chimes slide rather than sitting on one note', () => {
     assert(Sfx.VOICES.best.then > Sfx.VOICES.done.then, 'a personal best has to land higher than an ordinary finish');
 });
 
-console.log('\n# typeracer — the sound of typing');
+section('typeracer — the sound of typing');
 
 /** What was played, without an AudioContext anywhere near it. */
 function withSoundPage(run, settings) {
@@ -2613,7 +2637,7 @@ function pointsIn(svg, className) {
     return [...path[1].matchAll(/[ML]([-\d.]+) ([-\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
 }
 
-console.log('\n# the line chart');
+section('the line chart');
 check('an empty series draws nothing rather than an empty chart', () => {
     // A 640-pixel box of nothing above the panel's own "no races yet" reads
     // as a chart that has broken.
@@ -2685,7 +2709,7 @@ check('a tooltip is escaped like everything else this extension writes', () => {
     assert(svg.includes('&lt;script&gt;&amp;&quot;'), svg);
 });
 
-console.log('\n# the line chart — the run rather than the jitter');
+section('the line chart — the run rather than the jitter');
 check('the average is trailing, so the last point is the run as it stands', () => {
     // A centred window cannot produce a value for the points at the end,
     // which are the only ones anybody looks at on a chart of how they are
@@ -2705,7 +2729,7 @@ check('a window of nought does not divide by it', () => {
     eq(Spark.trend([{ x: 1, y: 50 }, { x: 2, y: 70 }], 0).map((row) => row.y), [50, 70]);
 });
 
-console.log('\n# typeracer — the headline figures');
+section('typeracer — the headline figures');
 const raceAt = (at, wpm, accuracy = 96, seconds = 30) => ({ at, wpm, accuracy, seconds, chars: 200 });
 
 check('best and the mean of the last ten are both reported', () => {
@@ -2736,7 +2760,7 @@ check('the races come back newest first, whatever order they were stored in', ()
     eq(summary.races.map((race) => race.wpm), [80, 70, 60]);
 });
 
-console.log('\n# typeracer — the races panel');
+section('typeracer — the races panel');
 
 require('../src/page/typeracer-stats.js');
 const TyperStats = globalThis.BB.TyperStats;
@@ -2773,7 +2797,7 @@ check('a typeracer panel exists for every dashboard tab it draws', () => {
         'the panel is loaded before the store it reads');
 });
 
-console.log('\n# typeracer — the slowest grams');
+section('typeracer — the slowest grams');
 
 /** A grams table built by hand, so the ranking can be asked exact questions. */
 function gramsWith(bi, chars = {}, { totalN = 100, totalMs = 20000 } = {}) {
@@ -2850,7 +2874,7 @@ check('an empty store is an empty table rather than a crash', () => {
     eq(Typer.slowest(null, 'tri', {}), []);
 });
 
-console.log('\n# typeracer — the characters you get wrong');
+section('typeracer — the characters you get wrong');
 const charsWith = (chars) => gramsWith({}, chars);
 
 check('most often and most likely are two different tables', () => {
@@ -2886,7 +2910,7 @@ check('a character never got wrong is not in a table of mistakes', () => {
     eq(Typer.mistyped(state, {}), []);
 });
 
-console.log('\n# typeracer — the weak spot panel');
+section('typeracer — the weak spot panel');
 check('a space in a gram is shown rather than left to look like a fault', () => {
     // Half the slow pairs are a letter followed by a space.
     assert(TyperStats.gramGlyph('t ').includes('␣'), TyperStats.gramGlyph('t '));
@@ -2908,7 +2932,7 @@ check('the noise floor is a setting the panel can be told about', () => {
     assert(Settings.DEFAULTS.typerMinSamples >= 3, 'below three there is no mean worth the name');
 });
 
-console.log('\n# typeracer — the practice map');
+section('typeracer — the practice map');
 check('the map is shaped for the heat map, whichever metric is picked', () => {
     let state = Typer.recordRace(Typer.blank(), { at: R0, wpm: 80, seconds: 30 }, [], R0);
     state = Typer.recordRace(state, { at: R0, wpm: 95, seconds: 45 }, [], R0);
@@ -2944,7 +2968,7 @@ check('the map metrics are the ones the store can answer', () => {
     eq(Object.keys(TyperStats.HEAT).sort(), Typer.METRICS.map((one) => one.id).sort());
 });
 
-console.log('\n# typeracer — the streak');
+section('typeracer — the streak');
 check('a run of days is counted back from today', () => {
     let state = Typer.blank();
     for (const back of [0, 1, 2]) {
@@ -2970,7 +2994,7 @@ check('never having raced is a streak of nought', () => {
     eq(Typer.streak(Typer.blank(), R0), 0);
 });
 
-console.log('\n# typeracer — the drill');
+section('typeracer — the drill');
 const drillState = (pairs) => gramsWith(Object.fromEntries(
     pairs.map((gram, i) => [gram, { n: 20, ms: 20 * (600 - i * 10), err: 0 }])));
 
@@ -3014,7 +3038,7 @@ check('nothing measured yet is no drill rather than an empty one', () => {
     eq(Typer.drill(drillState(['t ', 'e,']), { grams: 2 }), '', 'punctuation alone is nothing to drill');
 });
 
-console.log('\n# typeracer — the settings panel');
+section('typeracer — the settings panel');
 check('every reader setting has a control carrying its key as an id', () => {
     const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
     const keys = globalThis.BB.Settings.KEYS.filter((key) => /^reader/.test(key));
@@ -3146,7 +3170,7 @@ check('the surfaces main.js repaints cover every typeracer setting that changes 
     }
 });
 
-console.log('\n# the lists that have to move together');
+section('the lists that have to move together');
 
 const readRepo = (name) => require('fs').readFileSync(`${__dirname}/../${name}`, 'utf8');
 
@@ -3320,7 +3344,7 @@ check('and it does catch a list put the wrong way round', () => {
     eq(LoadOrder.lint(['src/a.js'], sources), ['src/a.js takes B as it loads, and nothing before it provides one']);
 });
 
-console.log('\n# the chess low-clock tone, on the sound module');
+section('the chess low-clock tone, on the sound module');
 check('the tone is the same two notes it always was', () => {
     // A refactor, not a redesign: 880 then 1180, 180ms apart, a sine, and a
     // peak of 0.3 of whatever the volume setting asks for.
@@ -3352,7 +3376,7 @@ check('chess.js no longer keeps an audio context of its own', () => {
     assert(/Sfx\.unlock\(\)/.test(source), 'the context is opened somewhere other than a gesture');
 });
 
-console.log('\n# typeracer — the caret hotkey');
+section('typeracer — the caret hotkey');
 
 /** A keydown as the page would send one, with the two fields matching needs. */
 const keyPress = (code, { ctrl = false, alt = false, shift = false, meta = false } = {}) => ({
@@ -3438,7 +3462,7 @@ function pongFrom({ c = 1000, skew = 500, out = 50, back = 50, hold = 10 } = {})
     return { pong: { c, s, s2 }, t3: s2 - skew + back };
 }
 
-console.log('\n# party clock');
+section('party clock');
 check('equal legs give the exact offset, and the round trip excludes the hold', () => {
     const { pong, t3 } = pongFrom();
     eq(PartyClock.sample(pong, t3), { offset: 500, rtt: 100 });
@@ -3501,7 +3525,7 @@ const PartyState = require('../src/shared/party-state.js');
 const playingAt = (over = {}) => ({ ...PartyState.blank(), seq: 4, paused: false, pos: 100, at: 10000, ...over });
 const intentOf = (over = {}) => ({ id: 1, base: 4, op: 'pause', pos: 100, at: 10000, ...over });
 
-console.log('\n# party state');
+section('party state');
 check('a playing vector extrapolates from when it was true, at its rate', () => {
     eq(PartyState.expected(playingAt(), 12000), 102);
     eq(PartyState.expected(playingAt({ rate: 1.5 }), 12000), 103);
@@ -3583,7 +3607,7 @@ function driftAt(profile) {
     };
 }
 
-console.log('\n# party drift');
+section('party drift');
 check('inside the deadband nothing is touched', () => {
     eq(driftAt().decide(0.05), { kind: 'none' });
     eq(driftAt().decide(-0.09), { kind: 'none' });
@@ -3687,7 +3711,7 @@ function roomOf(policy = {}) {
 
 const play = (over = {}) => ({ t: 'intent', id: 1, base: 0, op: 'play', pos: 10, at: 1000, ...over });
 
-console.log('\n# party room');
+section('party room');
 check('the first in is the host, and everyone hears who else is here', () => {
     const r = roomOf();
     const ana = r.join('Ana');
@@ -3855,7 +3879,7 @@ function playingRoom(policy = {}, extra = 0) {
 }
 const stall = (why = 'buffering') => ({ t: 'ready', ready: false, why });
 
-console.log('\n# party holds');
+section('party holds');
 check('a member buffering holds the room where it had got to', () => {
     const r = playingRoom();
     r.room.handle(r.ben, stall(), 3000);
@@ -3948,7 +3972,7 @@ check('a member leaving or stepping out is not waited for', () => {
 const PartyChat = require('../src/shared/party-chat.js');
 const say = (text) => ({ t: 'chat', text });
 
-console.log('\n# party chat');
+section('party chat');
 check('a line is one line of plain text, cut at a whole character', () => {
     eq(PartyChat.clean('  hi \n\t there\u0000\u001b[31m '), 'hi there[31m');
     eq([PartyChat.clean('   '), PartyChat.clean(42), PartyChat.clean(null)], ['', '', '']);
@@ -4085,7 +4109,7 @@ function runVector(vector) {
     }
 }
 
-console.log('\n# party protocol vectors');
+section('party protocol vectors');
 check('the vector file is the version this suite reads', () => eq(PartyVectors.version, 1));
 for (const vector of PartyVectors.cases) {
     check(vector.name, () => runVector(vector));
@@ -4095,7 +4119,7 @@ for (const vector of PartyVectors.cases) {
 
 const PartySites = require('../src/shared/party-sites.js');
 
-console.log('\n# party sites');
+section('party sites');
 check('a watch page names its media; anything else names none', () => {
     eq(PartySites.mediaOf('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s'), { site: 'youtube', id: 'dQw4w9WgXcQ' });
     eq(PartySites.mediaOf('https://www.netflix.com/watch/81234567?trackId=1'), { site: 'netflix', id: '81234567' });
@@ -4136,7 +4160,7 @@ check('the loader injects each party module after the ones it reads', () => {
 
 const PartyMedia = require('../src/content/party-media.js');
 
-console.log('\n# party media — the expectation ledger');
+section('party media — the expectation ledger');
 check('an event matching a write of ours is ours, once', () => {
     const ledger = PartyMedia.createLedger();
     ledger.expect('pause', null, 1000);
@@ -4237,7 +4261,7 @@ const storedDays = () => Object.keys(store)
     .filter((key) => key.startsWith(Activity.DAY_PREFIX)).map((key) => key.slice(Activity.DAY_PREFIX.length)).sort();
 
 (async () => {
-    console.log('\n# activity — recording');
+    section('activity — recording');
 
     await checkAsync('records nothing while tracking is off', async () => {
         reset({ on: false });
@@ -4414,7 +4438,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             ['2026-01-01', '2025-12-31', '2024-12-31']);
     });
 
-    console.log('\n# activity — hosts');
+    section('activity — hosts');
     check('www. is stripped', () => {
         eq(Activity.hostOf('https://www.youtube.com/x'), 'youtube.com');
         eq(Activity.hostOf('https://youtube.com/x'), 'youtube.com');
@@ -4426,7 +4450,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Activity.hostOf('file:///c:/notes.txt'), null);
     });
 
-    console.log('\n# activity — summary');
+    section('activity — summary');
 
     function seed(data, offsetDays, record) {
         const key = Time.dayKey(Date.now(), offsetDays);
@@ -4576,7 +4600,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(summary.hosts, []);
     });
 
-    console.log('\n# activity — formatting');
+    section('activity — formatting');
     check('human() reads naturally', () => {
         eq(Activity.human(0), '0m');
         eq(Activity.human(45), '45s');
@@ -4585,7 +4609,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Activity.human(3720), '1h 2m');
     });
 
-    console.log('\n# feed — whose channel is this page?');
+    section('feed — whose channel is this page?');
 
     // A channel page names a dozen channels, and only three of those mentions
     // are the page's own. The resolver used to take none of them: it took the
@@ -4620,7 +4644,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Feed.ownChannelId(null), null);
     });
 
-    console.log('\n# checkpoint ordering');
+    section('checkpoint ordering');
 
     const Pins = require('../src/shared/pins.js');
 
@@ -4659,7 +4683,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(videos.map((v) => v.id), ['old', 'new']);
     });
 
-    console.log('\n# pinning');
+    section('pinning');
     const hoisted = (videos, pins) => Pins.hoist(videos, pins).map((v) => v.id);
     const three = [vid('a', 'A', 3), vid('b', 'B', 2), vid('c', 'C', 1)];
 
@@ -4680,7 +4704,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(await Pins.toggle('x'), ['y']);
     });
 
-    console.log('\n# store');
+    section('store');
     const Store = require('../src/shared/store.js');
     const pair = () => Store.create({
         keys: ['sa', 'sb'],
@@ -4727,7 +4751,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(await one.update((state) => ({ ...state, b: [1] })), { a: [], b: [1] });
     });
 
-    console.log('\n# playlist ids');
+    section('playlist ids');
     check('a real playlist is picked out of either URL form', () => {
         eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=abc&list=PLabc123'), 'PLabc123');
         eq(YouTube.extractPlaylistId('https://www.youtube.com/playlist?list=PLabc123'), 'PLabc123');
@@ -4740,7 +4764,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=a'), null);
     });
 
-    console.log('\n# feed — fetching a large pouch');
+    section('feed — fetching a large pouch');
     await checkAsync('never opens more than MAX_PARALLEL at once', async () => {
         let running = 0;
         let peak = 0;
@@ -4757,7 +4781,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(out.slice(0, 4), [0, 1, 2, 3], 'results come back in input order');
     });
 
-    console.log('\n# reading the account’s own subscriptions');
+    section('reading the account’s own subscriptions');
 
     const YtSubs = require('../src/shared/yt-subs.js');
 
@@ -4832,7 +4856,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(YtSubs.parseSubscriptionsPage(''), []);
     });
 
-    console.log('\n# following a playlist');
+    section('following a playlist');
 
     const Playlists = require('../src/shared/playlists.js');
 
@@ -4876,7 +4900,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------------ palette
 
-    console.log('\n# palette');
+    section('palette');
 
     const Palette = require('../src/shared/palette.js');
 
@@ -4896,7 +4920,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------- cookie sites
 
-    console.log('\n# remembered cookie sites');
+    section('remembered cookie sites');
 
     const CookieSites = require('../src/shared/cookie-sites.js');
     const clearStore = () => Object.keys(store).forEach((k) => delete store[k]);
@@ -4958,7 +4982,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------------ backup
 
-    console.log('\n# export / import');
+    section('export / import');
 
     const Backup = require('../src/shared/backup.js');
 
@@ -5016,7 +5040,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // --------------------------------------------------------- shortcuts
 
-    console.log('\n# keyboard shortcuts');
+    section('keyboard shortcuts');
 
     const Keybindings = require('../src/shared/keybindings.js');
     const Shortcuts = require('../src/content/shortcuts.js');
@@ -5099,7 +5123,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // --------------------------------------------------------------- chess
 
-    console.log('\n# chess.com games');
+    section('chess.com games');
 
     const Chess = require('../src/shared/chess.js');
 
@@ -5340,7 +5364,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------------- lichess
 
-    console.log('\n# lichess games');
+    section('lichess games');
 
     const Lichess = require('../src/shared/lichess.js');
 
@@ -5487,7 +5511,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // --------------------------------------- in-game: clock warning, speech
 
-    console.log('\n# chess sites in game: clock warning and spoken moves');
+    section('chess sites in game: clock warning and spoken moves');
 
     const ChessSites = require('../src/shared/chess-sites.js');
     const { DEFAULTS: SETTING_DEFAULTS } = require('../src/shared/settings.js');
@@ -5625,7 +5649,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // -------------------------------------------------------- daily limits
 
-    console.log('\n# chess daily limits');
+    section('chess daily limits');
 
     const ChessLimits = require('../src/shared/chess-limits.js');
 
@@ -5698,7 +5722,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // -------------------------------------------------------------- trials
 
-    console.log('\n# trials');
+    section('trials');
 
     const Trials = require('../src/shared/trials.js');
 
@@ -5773,7 +5797,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // -------------------------------------------------------- framed plate
 
-    console.log('\n# the framed plate');
+    section('the framed plate');
 
     const Plate = require('../src/page/plate.js');
 
@@ -5816,7 +5840,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // -------------------------------------------------- the annotated board
 
-    console.log('\n# the annotated keyboard');
+    section('the annotated keyboard');
 
     const KeyboardWidget = require('../src/page/keyboard.js');
 
@@ -5866,7 +5890,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------- daily time limits
 
-    console.log('\n# the list of sites held to a limit');
+    section('the list of sites held to a limit');
 
     const LimitSites = require('../src/shared/limit-sites.js');
 
@@ -5966,7 +5990,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         }
     });
 
-    console.log('\n# what today has gone on, against the limit');
+    section('what today has gone on, against the limit');
 
     const TimeLimits = require('../src/shared/time-limits.js');
 
@@ -6108,7 +6132,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------- the roster
 
-    console.log('\n# a site roster, out to a file and back');
+    section('a site roster, out to a file and back');
 
     const Roster = require('../src/shared/roster.js');
 
@@ -6224,7 +6248,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------------- skim
 
-    console.log('\n# skim — where the match lands');
+    section('skim — where the match lands');
 
     const Skim = require('../src/shared/skim.js');
 
@@ -6267,7 +6291,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(low.pos, 'top');
     });
 
-    console.log('\n# skim — the list');
+    section('skim — the list');
 
     check('hint labels are one character until the alphabet runs out', () => {
         eq(Skim.hintLabels(3, 'fjd'), ['f', 'j', 'd']);
@@ -6354,7 +6378,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ---------------------------------------------------------- DomWatch
 
-    console.log('\n# the shared DOM watcher');
+    section('the shared DOM watcher');
 
     await checkAsync('a task that asks for an interval runs at most that often, and is owed the pass it skipped', async () => {
         // On X and the chat sites the page mutates on nearly every frame, and
@@ -6390,7 +6414,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------- watched marks
 
-    console.log('\n# watched marks');
+    section('watched marks');
 
     /** A fresh copy of the module, as a second tab would have. */
     const watchedInTab = () => {
@@ -6458,7 +6482,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------------ X pouch
 
-    console.log('\n# the X pouch — two independent lists');
+    section('the X pouch — two independent lists');
 
     const XPouch = require('../src/shared/x-pouch.js');
 
@@ -6608,7 +6632,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(XPouch.monogram('', '@isorokin'), 'IS');
     });
 
-    console.log('\n# the X pouch — reading x.com');
+    section('the X pouch — reading x.com');
 
     const TwitterPage = require('../src/content/twitter-page.js');
 
@@ -6646,7 +6670,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(TwitterPage.avatarUrl(null), '');
     });
 
-    console.log('\n# short ages');
+    section('short ages');
 
     check('a post age reads the way X writes it', () => {
         const now = Date.parse('2026-09-21T12:00:00Z');
@@ -6660,7 +6684,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------ opening the dashboard
 
-    console.log('\n# opening the dashboard at a site');
+    section('opening the dashboard at a site');
 
     await checkAsync('the worker hears each kind of event once, and hands it to whoever registered for it', async () => {
         // Six parts each added a runtime.onMessage listener, in three
@@ -6750,7 +6774,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------- site detection
 
-    console.log('\n# site detection');
+    section('site detection');
 
     const Site = require('../src/content/site.js');
 
@@ -6789,7 +6813,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // --------------------------------------------------- the site registry
 
-    console.log('\n# the site registry');
+    section('the site registry');
 
     const SiteIcons = require('../src/shared/site-icons.js');
 
@@ -6895,7 +6919,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------ chat sites
 
-    console.log('\n# the chat site registry');
+    section('the chat site registry');
 
     const ChatSites = require('../src/shared/chat-sites.js');
 
@@ -6967,7 +6991,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------- the conversation tree
 
-    console.log('\n# the conversation tree');
+    section('the conversation tree');
 
     const ChatTree = require('../src/shared/chat-tree.js');
 
@@ -7044,7 +7068,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------- reading chatgpt's tree
 
-    console.log('\n# reading a chatgpt conversation');
+    section('reading a chatgpt conversation');
 
     const ChatgptFormat = require('../src/shared/chatgpt-format.js');
 
@@ -7141,7 +7165,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------- landing on a turn
 
-    console.log('\n# the shared scroll helpers');
+    section('the shared scroll helpers');
 
     check('skim keeps no copy of the helpers it now shares', () => {
         const source = readRepo('src/content/skim.js');
@@ -7157,7 +7181,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------ the chat panel
 
-    console.log('\n# the chat panel');
+    section('the chat panel');
 
     const ChatPanel = require('../src/content/chat-panel.js');
 
@@ -7198,7 +7222,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ---------------------------------------------- moving the page to a turn
 
-    console.log('\n# reaching a turn');
+    section('reaching a turn');
 
     const ChatNav = require('../src/content/chat-nav.js');
 
@@ -7241,7 +7265,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------- chat hotkeys
 
-    console.log('\n# chat hotkeys');
+    section('chat hotkeys');
 
     check('the chat keys fire in the prompt box, so none is a bare letter and none clashes', () => {
         const Keybindings = require('../src/shared/keybindings.js');
@@ -7275,7 +7299,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ----------------------------------------------------- the branch tree
 
-    console.log('\n# the branch tree');
+    section('the branch tree');
 
     const ChatTreeView = require('../src/content/chat-tree-view.js');
 
@@ -7315,7 +7339,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------ comparing two answers
 
-    console.log('\n# comparing two answers');
+    section('comparing two answers');
 
     const ChatDiff = require('../src/shared/chat-diff.js');
 
@@ -7372,7 +7396,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------- chat export
 
-    console.log('\n# exporting a chat');
+    section('exporting a chat');
 
     const ChatExport = require('../src/shared/chat-export.js');
 
@@ -7428,7 +7452,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------------- zip
 
-    console.log('\n# the zip writer');
+    section('the zip writer');
 
     const Zip = require('../src/shared/zip.js');
 
@@ -7480,7 +7504,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------ bulk export
 
-    console.log('\n# bulk chat export');
+    section('bulk chat export');
 
     const ChatLibrary = require('../src/content/chat-library.js');
 
@@ -7506,7 +7530,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------- prompt templates
 
-    console.log('\n# prompt templates');
+    section('prompt templates');
 
     const PromptTemplates = require('../src/shared/prompt-templates.js');
 
@@ -7550,7 +7574,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------ prompt queue
 
-    console.log('\n# the prompt queue');
+    section('the prompt queue');
 
     const PromptQueue = require('../src/shared/prompt-queue.js');
 
@@ -7620,7 +7644,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // -------------------------------------------------------- queue strip
 
-    console.log('\n# the queue strip');
+    section('the queue strip');
 
     const ChatQueueView = require('../src/content/chat-queue-view.js');
 
@@ -7740,7 +7764,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // --------------------------------------------------- when limits reset
 
-    console.log('\n# reading when a chat limit resets');
+    section('reading when a chat limit resets');
 
     /** 18:00 today, built with setHours so the check runs in any time zone. */
     const clock = (hours, minutes = 0, days = 0) => {
@@ -7784,7 +7808,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------ chat pins
 
-    console.log('\n# chat pins');
+    section('chat pins');
 
     const ChatPins = require('../src/shared/chat-pins.js');
 
@@ -7824,7 +7848,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------ the composer
 
-    console.log('\n# the composer');
+    section('the composer');
 
     check('a prompt is only ever typed and sent by the page, never posted by us', () => {
         // The sites' send endpoints want tokens only their own page mints.
@@ -7837,7 +7861,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------ reading claude's tree
 
-    console.log('\n# reading a claude conversation');
+    section('reading a claude conversation');
 
     const ClaudeFormat = require('../src/shared/claude-format.js');
 
@@ -7909,7 +7933,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------ replaying artifacts
 
-    console.log('\n# replaying claude artifacts');
+    section('replaying claude artifacts');
 
     /** A chat that builds a component over four answers, and makes a second document too. */
     function artifactChat() {
@@ -7972,7 +7996,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------ reading claude.ai
 
-    console.log('\n# reading claude.ai');
+    section('reading claude.ai');
 
     const ClaudeRead = require('../src/content/claude-read.js');
 
@@ -8040,7 +8064,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------ claude's page bridge
 
-    console.log('\n# the claude page bridge');
+    section('the claude page bridge');
 
     /**
      * claude-page.js run against a fetch that answers `response`, with a
@@ -8104,7 +8128,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------- reading chatgpt.com
 
-    console.log('\n# reading chatgpt.com');
+    section('reading chatgpt.com');
 
     const ChatgptRead = require('../src/content/chatgpt-read.js');
 
@@ -8168,7 +8192,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ---------------------------------------------------- party loader
 
-    console.log('\n# party loader — nothing loads until a party starts');
+    section('party loader — nothing loads until a party starts');
     const PartyLoader = require('../src/background/party-loader.js');
     const fs = require('fs');
 
@@ -8242,7 +8266,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // --------------------------------------------------- party loopback
 
-    console.log('\n# party loopback — the room, with no network in between');
+    section('party loopback — the room, with no network in between');
     const PartyLoopback = require('../src/offscreen/party-loopback.js');
 
     /** A loopback and a way to open members on it, each keeping what it hears. */
@@ -8320,7 +8344,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ---------------------------------------------------- party session
 
-    console.log('\n# party session — the member the party tab plugs into');
+    section('party session — the member the party tab plugs into');
     const PartySession = require('../src/offscreen/party-session.js');
 
     /** A runtime port as the session sees it, with the tab's end to talk and hang up on. */
@@ -8502,7 +8526,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // -------------------------------------------------- party websocket
 
-    console.log('\n# party websocket — a party server, and getting back to it');
+    section('party websocket — a party server, and getting back to it');
     const PartyWs = require('../src/offscreen/party-ws.js');
     const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
     const until = async (test, what) => {
@@ -8652,7 +8676,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------ party codes
 
-    console.log('\n# party codes — a peer connection in a chat message');
+    section('party codes — a peer connection in a chat message');
     const PartyCode = require('../src/shared/party-code.js');
 
     /**
@@ -8740,7 +8764,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------- party webrtc
 
-    console.log('\n# party webrtc — invites, replies, and the channel bound to them');
+    section('party webrtc — invites, replies, and the channel bound to them');
     const PartyRtc = require('../src/offscreen/party-rtc.js');
 
     /**
@@ -8928,7 +8952,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // --------------------------------------------------- party p2p host
 
-    console.log('\n# party p2p host — the room in this browser, guests on data channels');
+    section('party p2p host — the room in this browser, guests on data channels');
     const PartyHost = require('../src/offscreen/party-host.js');
 
     /** A guest as the host sees one: its own end of an invite, speaking the wire protocol on it. */
@@ -9029,7 +9053,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ---------------------------------------------------- party tracker
 
-    console.log('\n# party tracker — meeting through a webtorrent tracker, sealed');
+    section('party tracker — meeting through a webtorrent tracker, sealed');
     const PartyTracker = require('../src/offscreen/party-tracker.js');
 
     /**
@@ -9209,7 +9233,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------- party dev server
 
-    console.log('\n# party dev server — the session over a real socket');
+    section('party dev server — the session over a real socket');
     const PartyDevServer = require('./party-dev-server.js');
 
     await checkAsync('two sessions meet through an invite, and come back as themselves after an outage', async () => {
@@ -9255,7 +9279,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ----------------------------------------------------- party worker
 
-    console.log('\n# party worker — the document a party lives in, open only while it does');
+    section('party worker — the document a party lives in, open only while it does');
     const PartyWorker = require('../src/background/party.js');
 
     check('offscreen.html loads the session after everything it reads', () => {
@@ -9477,7 +9501,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     // ------------------------------------------------------ party panel
 
-    console.log('\n# party panel — the popup\'s views, loaded only when asked for');
+    section('party panel — the popup\'s views, loaded only when asked for');
     globalThis.BB.Settings = globalThis.BB.Settings || require('../src/shared/settings.js');
     globalThis.BB.PartyCode = PartyCode;
     globalThis.BB.Ui = globalThis.BB.Ui || {};
@@ -9570,6 +9594,11 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
 
     console.log('\n' + '='.repeat(52));
-    console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
+    if (AREA && passed + failed === 0) {
+        console.log(`no section has "${AREA}" in its name`);
+        process.exit(1);
+    }
+    console.log(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green')
+        + (AREA ? `, ${skipped} outside "${AREA}" skipped` : ''));
     process.exit(failed ? 1 : 0);
 })();
