@@ -58,10 +58,11 @@
         /** A bound peer becomes one more member's link on the room. */
         function admit(peer) {
             if (closed) return peer.pc.close();
-            // The room says nothing to a link before its hello, so the guest
-            // link it sends to is there by the time it does; the other way
-            // round, the peer's first words (drained as the link is made)
-            // would reach a member link that did not exist yet.
+            // The room says nothing to a link before its hello, and peerLink
+            // hands over a hello that came early only once it has returned,
+            // so the guest link it sends to is there by the time it does; the
+            // other way round, the peer's first words would reach a member
+            // link that did not exist yet.
             let guest = null;
             const member = loop.open((msg) => guest.send(msg));
             guest = PartyRtc.peerLink(peer, {

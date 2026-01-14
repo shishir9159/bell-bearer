@@ -123,6 +123,8 @@
             let sentProof = false;
             let theirsOk = false;
             let settled = false;
+            const waiting = [];
+            let busy = false;
             const timer = setTimeout(() => finish(false), timeoutMs);
 
             function finish(ok) {
@@ -130,8 +132,9 @@
                 settled = true;
                 clearTimeout(timer);
                 // The other end may speak the moment it is bound, before
-                // whoever awaits this has put a link on the channel.
-                peer.early = [];
+                // whoever awaits this has put a link on the channel — or
+                // already has, while the last proof was being checked.
+                peer.early = ok ? waiting.splice(0) : [];
                 ctl.onmessage = peer.tick.onmessage = ok ? (event) => peer.early.push(event) : null;
                 pc.removeEventListener('connectionstatechange', watch);
                 resolve(ok);
@@ -140,7 +143,24 @@
             const say = (msg) => { try { ctl.send(JSON.stringify(msg)); } catch (_) { finish(false); } };
             function open() { say({ t: 'bind', n: PartyCode.toBase64Url(mine) }); }
 
-            ctl.onmessage = async (event) => {
+            // One message at a time. Checking a proof awaits an HMAC, and a
+            // message arriving meanwhile used to be handled beside it: a guest
+            // already bound said hello while the host was still checking its
+            // proof, the hello was taken for a failed bind, and the host
+            // dropped the guest — an invite party was refused outright.
+            ctl.onmessage = (event) => {
+                waiting.push(event);
+                if (!busy) pump();
+            };
+            async function pump() {
+                busy = true;
+                while (waiting.length && !settled) {
+                    try { await handle(waiting.shift()); } catch (_) { finish(false); }
+                }
+                busy = false;
+            }
+
+            async function handle(event) {
                 let msg;
                 try { msg = JSON.parse(event.data); } catch (_) { return finish(false); }
                 if (msg && msg.t === 'bind' && !sentProof) {
@@ -156,7 +176,7 @@
                     return finish(false);
                 }
                 if (sentProof && theirsOk) finish(true);
-            };
+            }
             pc.addEventListener('connectionstatechange', watch);
             if (ctl.readyState === 'open') open();
             else ctl.onopen = open;
@@ -282,8 +302,12 @@
 
         ctl.onmessage = receive;
         tick.onmessage = receive;
-        for (const event of peer.early || []) receive(event);
+        // What came before the link is heard once the caller holds it. Heard
+        // during this call, a guest's hello drew the room's welcome back
+        // through a link the host had not been handed yet, and threw.
+        const early = peer.early || [];
         peer.early = [];
+        if (early.length) queueMicrotask(() => { for (const event of early) if (!down) receive(event); });
         ctl.onclose = gone;
         pc.addEventListener('connectionstatechange', watch);
 

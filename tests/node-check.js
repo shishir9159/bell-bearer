@@ -8887,6 +8887,19 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(heard, ['hello', 'ping'], 'the oversized frame never went');
         eq([guestPeer.ctl.sent.map((msg) => msg.t).slice(2), guestPeer.tick.sent.map((msg) => msg.t)], [['hello'], ['ping']]);
     });
+    await checkAsync('what came before the link is heard once whoever made it holds it', async () => {
+        // A hello waiting from before was heard inside peerLink, and the room's
+        // welcome went back through a link the host had not been handed yet.
+        const { host, guest } = await rtcPair();
+        const [hostPeer, guestPeer] = await Promise.all([host, guest.bound]);
+        PartyRtc.peerLink(guestPeer, { deliver: () => {} }).send({ t: 'hello', v: 1 });
+        await tick();
+        const heard = [];
+        let link = null;
+        link = PartyRtc.peerLink(hostPeer, { deliver: (msg) => heard.push(link ? msg.t : 'too soon') });
+        await tick();
+        eq(heard, ['hello']);
+    });
     await checkAsync('a reply to another invite, or one signed with another secret, is not answered', async () => {
         const { RTC } = fakeRtc();
         const room = new Uint8Array(6);
@@ -8920,6 +8933,29 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             PartyRtc.bind(a, { ...fps, secret: new Uint8Array(16).fill(1) }),
             PartyRtc.bind(b, { ...fps, secret: new Uint8Array(16).fill(2) }),
         ]), [false, false]);
+    });
+    await checkAsync('a guest that speaks while the host is still checking its proof is bound, and heard', async () => {
+        // The host took the hello for a failed bind and dropped the guest:
+        // about one run in twelve, wherever a timer tick handed it both at once.
+        const { RTC } = fakeRtc();
+        const [a, b] = [PartyRtc.openPeer({ RTC }), PartyRtc.openPeer({ RTC })];
+        await a.pc.setLocalDescription();
+        await b.pc.setRemoteDescription(a.pc.localDescription);
+        await b.pc.setLocalDescription();
+        await a.pc.setRemoteDescription(b.pc.localDescription);
+        const options = { hostFp: a.pc.fp, guestFp: b.pc.fp, timeoutMs: 500, secret: new Uint8Array(16).fill(3) };
+        // Hold the guest's proof back, to hand it over with the guest's first word.
+        let held = null;
+        const send = b.ctl.send.bind(b.ctl);
+        b.ctl.send = (data) => { if (JSON.parse(data).t === 'proof') held = data; else send(data); };
+        const host = PartyRtc.bind(a, options);
+        eq(await PartyRtc.bind(b, options), true, 'the guest is bound');
+        assert(held, 'the guest was bound before its proof went');
+        a.ctl.onmessage({ data: held });
+        a.ctl.onmessage({ data: JSON.stringify({ t: 'hello', v: 1 }) });
+        eq(await host, true, 'the host is bound');
+        eq(a.early.map((event) => JSON.parse(event.data).t), ['hello']);
+        a.pc.close();
     });
     check('the ice settings become ice servers, with a turn server\'s credentials taken out of its url', () => {
         eq(PartyRtc.iceServers({ stun: ' stun:a.example:19302  stun:b.example ', turn: 'turn:ana:s3cr:et@relay.example:3478?transport=udp turns:relay.example:5349 http://x' }), [
@@ -9117,18 +9153,21 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const transports = { tracker: (o) => PartyTracker.createTransport({ ...o, RTC, gatherMs: 50, WebSocket: tracker.Socket }) };
         const ana = PartySession.createSession({ transports });
         const ben = PartySession.createSession({ transports });
-        const started = await ana.control({ op: 'start', mode: 'tracker', name: 'Ana', trackers: 'wss://t1 wss://t2' });
-        const code = started.status.invite;
-        await until(() => ana.status().trackers === 2, 'both trackers to answer the host');
-        const joined = await ben.control({ op: 'start', mode: 'tracker', code, name: 'Ben', trackers: 'wss://t1 wss://t2' });
-        eq([joined.ok, joined.status.members.map((m) => [m.name, m.role])], [true, [['Ana', 'host'], ['Ben', 'guest']]]);
-        await until(() => [...tracker.swarms.values()].every((swarm) => swarm.size === 1), 'Ben to leave the swarm');
+        try {
+            const started = await ana.control({ op: 'start', mode: 'tracker', name: 'Ana', trackers: 'wss://t1 wss://t2' });
+            const code = started.status.invite;
+            await until(() => ana.status().trackers === 2, 'both trackers to answer the host');
+            const joined = await ben.control({ op: 'start', mode: 'tracker', code, name: 'Ben', trackers: 'wss://t1 wss://t2' });
+            eq([joined.ok, joined.status.members.map((m) => [m.name, m.role])], [true, [['Ana', 'host'], ['Ben', 'guest']]]);
+            await until(() => [...tracker.swarms.values()].every((swarm) => swarm.size === 1), 'Ben to leave the swarm');
 
-        const said = JSON.stringify(tracker.seen);
-        assert(!said.includes(code.slice(6)) && !said.includes('a=fingerprint') && !said.includes('127.0.0.1'), 'no secret, sdp or address');
-        eq(tracker.seen.filter((msg) => msg.answer).length, 1, 'answered once though announced to two trackers');
-        await ben.control({ op: 'leave' });
-        await ana.control({ op: 'leave' });
+            const said = JSON.stringify(tracker.seen);
+            assert(!said.includes(code.slice(6)) && !said.includes('a=fingerprint') && !said.includes('127.0.0.1'), 'no secret, sdp or address');
+            eq(tracker.seen.filter((msg) => msg.answer).length, 1, 'answered once though announced to two trackers');
+        } finally {
+            await ben.control({ op: 'leave' });
+            await ana.control({ op: 'leave' });
+        }
     });
 
     /** A tracker party on fakes, with its waits cut to milliseconds, and members to add to it. */
@@ -9157,16 +9196,19 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const net = { secret, urls: ['wss://t'], RTC, gatherMs: 20, WebSocket: tracker.Socket, renewMs: 40 };
         const admitted = [];
         const host = PartyTracker.hostSwarm({ ...net, admit: (peer) => admitted.push(peer) });
-        await until(() => host.up() === 1, 'the host in the swarm');
-        const joined = await PartyTracker.joinSwarm({ ...net, timeoutMs: 400 }).done;
-        assert(joined.peer && joined.tag.length === 4, 'joined, with the tag a restart goes by');
-        await until(() => admitted.length === 1, 'the host to admit the joiner');
-        const ok = await PartyTracker.restartSwarm({ ...net, peer: joined.peer, tag: joined.tag, timeoutMs: 400 }).done;
-        eq([ok, admitted.length, joined.peer.pc.restarts], [true, 1, 1], 'no second peer on the host');
-        eq(tracker.seen.filter((msg) => msg.answer).length, 2, 'a restart sent as several offers is answered once');
-        const other = await PartyTracker.restartSwarm({ ...net, secret: PartyTracker.newCode().secret, peer: joined.peer, tag: joined.tag, timeoutMs: 100 }).done;
-        eq(other, false, 'nobody answers a restart sealed under another code');
-        host.close();
+        try {
+            await until(() => host.up() === 1, 'the host in the swarm');
+            const joined = await PartyTracker.joinSwarm({ ...net, timeoutMs: 400 }).done;
+            assert(joined.peer && joined.tag.length === 4, 'joined, with the tag a restart goes by');
+            await until(() => admitted.length === 1, 'the host to admit the joiner');
+            const ok = await PartyTracker.restartSwarm({ ...net, peer: joined.peer, tag: joined.tag, timeoutMs: 400 }).done;
+            eq([ok, admitted.length, joined.peer.pc.restarts], [true, 1, 1], 'no second peer on the host');
+            eq(tracker.seen.filter((msg) => msg.answer).length, 2, 'a restart sent as several offers is answered once');
+            const other = await PartyTracker.restartSwarm({ ...net, secret: PartyTracker.newCode().secret, peer: joined.peer, tag: joined.tag, timeoutMs: 100 }).done;
+            eq(other, false, 'nobody answers a restart sealed under another code');
+        } finally {
+            host.close();
+        }
     });
     await checkAsync('a stalled connection is restarted through the tracker, and the member never leaves', async () => {
         const party = await trackerParty();
