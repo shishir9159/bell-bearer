@@ -951,7 +951,13 @@ src/shared/     pure logic, used by every surface
   activity.js      the activity store: bucketing, pruning, summaries
   bookmarks.js     load/save/merge/import checkpoints
   subscriptions.js topics, channels, new videos
-  settings.js      every setting's key and default
+  settings.js      every setting's key and default, and every stored key's name
+  store.js         one stored record: a read with a fallback, one change at a time,
+                   and only the keys a change moved written back
+  hosts.js         a URL's host, and a host looked up in a list that covers subdomains
+  ids.js           ids for the records the stores mint
+  selectors.js     a site's page read through its table of selector spellings
+  transcript.js    BB.TranscriptApi: captions from YouTube's own player API
   youtube.js       URL parsing
   chess-sites.js   chess.com and Lichess: names, settings keys, time controls
   chess.js         chess.com games and every summary both sites share
@@ -1015,6 +1021,7 @@ src/content/    injected into pages: a core on every page (main.js, player, shor
   leet-panel.js    the pouch sheet: due, to solve, solved, templates
   typeracer-read.js every typeracer.com selector, and reading a race off one
   typeracer-ui.js  the keystroke capture, the typing caret, the sounds
+  chat-dom.js      what both chat sites' pages are read the same way for
   chatgpt-read.js  every chatgpt.com selector and request — the site's adapter
   claude-read.js   every claude.ai selector and request; rows tied to the tree by place and words
   chat-ui.js       everything on a chat site: the conversation, the toggle, hotkeys
@@ -1029,6 +1036,7 @@ src/content/    injected into pages: a core on every page (main.js, player, shor
   composer.js      typing into a chat site's prompt box, and pressing send
   scroll-to.js     landing on something in a page that scrolls inside itself
   dom-watch.js     one throttled MutationObserver for all of the above
+  bridge.js        this world's half of talking to a MAIN-world script
   overlay.js notify.js theme.js page-info.js markdown.js
 
   MAIN-world entries, loaded per site, with no chrome.* and DOM events only:
@@ -1044,6 +1052,7 @@ src/content/    injected into pages: a core on every page (main.js, player, shor
   netflix-page.js  MAIN world: Netflix's own player, for seeking without error M7375
 
 src/background/ the service worker, pulled in by background.js
+  router.js        one listener each for messages, alarms and startup, handed out by name
   proto.js         the sowon wire format
   sowon.js         focus reporting
   context-menus.js "Copy as Markdown"
@@ -1091,11 +1100,13 @@ offscreen.html  the party session's script list; Firefox reads it into the backg
 party.css       the popup's party screens, for every skin
 party-page.css  the chip, toast and chat on the page, inserted with them
 skins.css       the token layer for every skin — linked before popup/dashboard css
-skin-fonts.css  @font-face for the skin families
+skin-fonts.css  @font-face for the skin families, in the popup and the dashboard;
+                pages get the same faces from theme.js, by FontFace
 fonts/          the woff2 subsets those faces load
 textures/       parchment, newsprint and grain tiles used by the skins
 
 tests/          zero-dependency browser test suite — see tests/README.md
+tools/pack.js   the zip for a store upload: what runs, and nothing else
 ```
 
 #### Import/Export Data Format
