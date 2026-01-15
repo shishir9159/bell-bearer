@@ -1016,6 +1016,7 @@
             // The watcher's task, for the specs, which have no watcher running.
             syncNow: sync,
             limitNow: watchLimit,
+            markNow: markPinned,
             /** The worker says a scheduled prompt is due: look now rather than at the next cue. */
             wakeQueue: () => runner.tick(),
             runner,

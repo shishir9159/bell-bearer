@@ -315,7 +315,13 @@
                 const chat = window.MockChrome.state.localStore.bbChatPins['chatgpt:c1'];
                 assertDeepEqual(chat.pins.map((pin) => pin.node), ['a3']);
                 assertEqual(chat.title, 'A long chat');
-                await waitFor(() => page.host.querySelector('[data-turn-id="a3"][data-bb-chat-pinned]'), 'the mark on the page');
+                // The stage re-renders the thread after the scroll above, wiping
+                // the mark if it landed first. On a real page the watcher puts
+                // it back; this spec has none, so it stands in for it.
+                await waitFor(() => {
+                    ui.markNow();
+                    return page.host.querySelector('[data-turn-id="a3"][data-bb-chat-pinned]');
+                }, 'the mark on the page');
 
                 ui.openPouch({ tab: 'pins' });
                 await waitFor(() => document.querySelector('.bb-chat-pin'), 'the pins tab');
