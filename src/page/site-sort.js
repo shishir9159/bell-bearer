@@ -44,6 +44,13 @@
 
     const still = () => !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
+    /**
+     * The drag the page-wide class is for. A drop's settle used to take the
+     * class off whatever was being dragged when it ran out, so a card picked
+     * up again inside those few hundred milliseconds lost it mid-drag.
+     */
+    let owner = null;
+
     /** The ids of `grid`'s cards, in the order they stand. */
     const idsOf = (grid, selector) => Array.from(grid.querySelectorAll(selector), (card) => card.dataset.site);
 
@@ -66,6 +73,8 @@
     function attach(grid, { selector = '.site-card', onOrder = () => {} } = {}) {
         let press = null;
         let drag = null;
+        /** Drops still settling, each its own finish; taking the grid down ends them. */
+        const settling = new Set();
 
         const cards = () => Array.from(grid.querySelectorAll(selector));
 
@@ -150,6 +159,7 @@
                 frame: 0,
                 calm: still(),
             };
+            owner = drag;
             place();
             // Lifted: a touch larger, as if it came up off the page.
             requestAnimationFrame(() => { if (drag) drag.body.classList.add('is-up'); });
@@ -263,8 +273,12 @@
 
             const slot = done.card.getBoundingClientRect();
             const finish = () => {
+                clearTimeout(finish.timer);
+                settling.delete(finish);
                 done.ghost.remove();
                 done.card.classList.remove('is-drag-origin');
+                if (owner !== done) return;
+                owner = null;
                 document.documentElement.classList.remove('is-dragging-site');
             };
             if (done.calm) {
@@ -274,7 +288,8 @@
                 done.ghost.style.transform = `translate3d(${slot.left}px, ${slot.top}px, 0)`;
                 done.body.classList.remove('is-up');
                 done.body.style.setProperty('--tilt', '0deg');
-                setTimeout(finish, SETTLE_MS);
+                finish.timer = setTimeout(finish, SETTLE_MS);
+                settling.add(finish);
             }
 
             // The click that ends a drag is not a click on the card.
@@ -325,6 +340,7 @@
 
         return function detach() {
             if (drag) land(true);
+            settling.forEach((finish) => finish());
             release();
             grid.removeEventListener('pointerdown', onDownCapture);
             grid.removeEventListener('keydown', onCardKey);
