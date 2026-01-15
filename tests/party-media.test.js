@@ -495,7 +495,10 @@ suite('party media: readiness', () => {
             assertDeepEqual(readies(h), ['ad', 'ready']);
             // The ad cost it some time, so it is nudged back up to the room —
             // at the room's rate give or take a nudge, not the 2x set in the ad.
-            assert(await partyUntil(() => !h.video.paused && Math.abs(h.video.playbackRate - 1) <= 0.08), 'back with the room');
+            // A full nudge is 1.08, and 1.08 - 1 is a hair over 0.08 in floating
+            // point: a catch-up big enough to saturate failed this outright.
+            const nudge = window.BB.PartyDrift.PROFILES.nudge.maxNudge + 1e-9;
+            assert(await partyUntil(() => !h.video.paused && Math.abs(h.video.playbackRate - 1) <= nudge), 'back with the room');
         } finally {
             h.destroy();
             player.remove();
