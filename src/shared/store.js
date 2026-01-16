@@ -34,9 +34,14 @@
         const toStorage = write || ((state) => ({ [keys[0]]: state }));
         let chain = Promise.resolve();
 
+        /** The state as stored; throws when storage does. */
+        async function fresh() {
+            return read(await chrome.storage.local.get(keys));
+        }
+
         async function load() {
             try {
-                return await read(await chrome.storage.local.get(keys));
+                return await fresh();
             } catch (_) {
                 // The extension reloading invalidates every content script's
                 // context; an empty store draws, a rejection takes the page down.
@@ -54,10 +59,14 @@
          * Read, change and write back as one step; resolves to the new state.
          * `mutate` may change the state in place or return a new one, which
          * is why what was read is put down before it runs.
+         *
+         * Read with fresh(), never load(): a failed read used to come back as
+         * blank(), and the step wrote that, changed, over everything stored —
+         * one checkpoint added to an empty list, saved over all the others.
          */
         function update(mutate, ...context) {
             return queue(async () => {
-                const state = await load();
+                const state = await fresh();
                 const before = snapshot(toStorage(state));
                 const next = clean((await mutate(state)) || state, ...context);
                 const values = toStorage(next);

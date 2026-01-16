@@ -4750,6 +4750,24 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         }
         eq(await one.update((state) => ({ ...state, b: [1] })), { a: [], b: [1] });
     });
+    await checkAsync('a step whose read failed writes nothing, rather than the blank with its change', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        store.sa = ['kept'];
+        const one = pair();
+        const realGet = global.chrome.storage.local.get;
+        global.chrome.storage.local.get = () => Promise.reject(new Error('Extension context invalidated.'));
+        const quiet = console.error;
+        console.error = () => {};
+        try {
+            eq(await one.update((state) => ({ ...state, a: [...state.a, 'new'] })), { a: [], b: [] }, 'the fallback');
+            eq(await one.load(), { a: [], b: [] }, 'a plain read still falls back');
+        } finally {
+            global.chrome.storage.local.get = realGet;
+            console.error = quiet;
+        }
+        eq(store.sa, ['kept']);
+        eq(await one.update((state) => ({ ...state, a: [...state.a, 'new'] })), { a: ['kept', 'new'], b: [] }, 'the next step runs');
+    });
 
     section('playlist ids');
     check('a real playlist is picked out of either URL form', () => {
