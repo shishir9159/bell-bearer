@@ -39,6 +39,11 @@
             return read(await chrome.storage.local.get(keys));
         }
 
+        /**
+         * Every load is a read of its own. Sharing one read among loads asked
+         * for together was tried, and a load asked for on a change joined a
+         * read sent before the change, and drew the old values for good.
+         */
         async function load() {
             try {
                 return await fresh();

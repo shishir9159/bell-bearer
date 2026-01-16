@@ -326,11 +326,16 @@
          * filed does not read storage once per post on a timeline that is
          * still scrolling. Dropped whenever anything writes, including from
          * the dashboard in another tab.
+         *
+         * The read is held, not what it resolved to: holding the value left
+         * it null until the read landed, so every post on screen asked for one
+         * of its own after each write, and a read that was out when a write
+         * dropped it put the stale pouch back when it landed.
          */
         let pouch = null;
 
-        async function state() {
-            if (!pouch) pouch = await XPouch.load();
+        function state() {
+            if (!pouch) pouch = XPouch.load();
             return pouch;
         }
 
