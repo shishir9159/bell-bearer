@@ -38,6 +38,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
     const Time = ns.Time || req('./time.js');
 
     const ROSTERS_KEY = Settings.DATA.rosters;
@@ -307,50 +308,60 @@
 
     // ----------------------------------------------------------- storage
 
-    async function loadRosters() {
-        try {
-            const stored = await chrome.storage.local.get([ROSTERS_KEY]);
-            const rosters = stored && stored[ROSTERS_KEY];
-            return rosters && typeof rosters === 'object' && !Array.isArray(rosters) ? rosters : {};
-        } catch (_) {
-            return {};
-        }
-    }
+    const rosters = Store.create({
+        keys: [ROSTERS_KEY],
+        name: 'rosters',
+        read: (stored) => {
+            const all = stored[ROSTERS_KEY];
+            return all && typeof all === 'object' && !Array.isArray(all) ? all : {};
+        },
+        blank: () => ({}),
+    });
 
-    async function saveRoster(site, names, now = Date.now()) {
-        const rosters = await loadRosters();
-        rosters[site] = { names: (names || []).slice(0, MAX_NAMES), readAt: now };
-        await Settings.set({ [ROSTERS_KEY]: rosters });
-        return rosters;
-    }
+    const loadRosters = () => rosters.load();
 
-    async function loadJob() {
-        try {
-            const stored = await chrome.storage.local.get([JOB_KEY]);
-            const job = stored && stored[JOB_KEY];
-            return job && typeof job === 'object' ? job : null;
-        } catch (_) {
-            return null;
-        }
-    }
-
-    const saveJob = (job) => Settings.set({ [JOB_KEY]: job });
-    const clearJob = () => Settings.set({ [JOB_KEY]: null });
+    const saveRoster = (site, names, now = Date.now()) => rosters.update((all) => ({
+        ...all,
+        [site]: { names: (names || []).slice(0, MAX_NAMES), readAt: now },
+    }));
 
     /**
-     * Read, change, write — one job at a time.
+     * The job, held as `{ job }`. The store takes a step that returns null
+     * for one that changed nothing, and null is how a job is cleared.
+     *
+     * A read that fails now fails the step and writes nothing. It used to come
+     * back as no job, a step handed no job hands back none, and that was
+     * written down — clearing an apply job with days still to run.
+     */
+    const jobs = Store.create({
+        keys: [JOB_KEY],
+        name: 'the roster job',
+        read: (stored) => {
+            const job = stored[JOB_KEY];
+            return { job: job && typeof job === 'object' ? job : null };
+        },
+        write: ({ job }) => ({ [JOB_KEY]: job || null }),
+        blank: () => ({ job: null }),
+    });
+
+    const loadJob = async () => (await jobs.load()).job;
+    const saveJob = (job) => jobs.save({ job });
+    const clearJob = () => jobs.save({ job: null });
+
+    /**
+     * Read, change, write — one job at a time. Resolves to the job as written,
+     * or null when there is none or the step failed.
      *
      * Two tabs of the same site can both pick a job up, and both would then
      * follow the same account and step the cursor twice. The change is applied
      * to what is in storage now rather than to a copy read earlier, and the
      * content script also checks that the name it is looking at is still the
-     * one the job is on before it clicks anything.
+     * one the job is on before it clicks anything. A page the job is not for
+     * hands it back unchanged, and that is no longer written back over
+     * whatever the page it is for has done since.
      */
     async function updateJob(change) {
-        const next = change(await loadJob());
-        if (next) await saveJob(next);
-        else await clearJob();
-        return next;
+        return (await jobs.update((box) => ({ job: change(box.job) }))).job;
     }
 
     /**

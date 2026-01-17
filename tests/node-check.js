@@ -6296,6 +6296,50 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(RosterContent.subFromHref('/user/someone'), '');
     });
 
+    await checkAsync('a job is not cleared by a read that failed', async () => {
+        // The failed read came back as no job, a step handed no job hands back
+        // none, and that was written over a job with days still to run.
+        clearStore();
+        const job = Roster.newJob({ site: 'reddit', action: 'apply', names: ['rust', 'golang'] });
+        store[Roster.JOB_KEY] = job;
+        const realGet = global.chrome.storage.local.get;
+        global.chrome.storage.local.get = () => Promise.reject(new Error('Extension context invalidated.'));
+        const quiet = console.error;
+        console.error = () => {};
+        let next;
+        try {
+            next = await Roster.updateJob((current) => (current && current.site === 'reddit' ? Roster.release(current) : current));
+        } finally {
+            global.chrome.storage.local.get = realGet;
+            console.error = quiet;
+        }
+        eq(next, null, 'the page stops rather than presses on');
+        eq(store[Roster.JOB_KEY], job);
+    });
+
+    await checkAsync('a page the job is not for writes nothing back, and a job can still be cleared', async () => {
+        clearStore();
+        store[Roster.JOB_KEY] = Roster.newJob({ site: 'reddit', action: 'read' });
+        const realSet = global.chrome.storage.local.set;
+        let writes = 0;
+        global.chrome.storage.local.set = (...args) => { writes++; return realSet(...args); };
+        try {
+            const job = await Roster.updateJob((current) => (current && current.site === 'twitter' ? Roster.release(current) : current));
+            eq([job.site, writes], ['reddit', 0], 'handed back unchanged, so not written over the reddit page\'s step');
+            eq(await Roster.updateJob(() => null), null);
+            eq([store[Roster.JOB_KEY], writes], [null, 1]);
+        } finally {
+            global.chrome.storage.local.set = realSet;
+        }
+    });
+
+    await checkAsync('a roster read is kept per site, beside the other site\'s', async () => {
+        clearStore();
+        await Roster.saveRoster('twitter', ['ana'], 5);
+        await Roster.saveRoster('reddit', ['rust'], 6);
+        eq(await Roster.loadRosters(), { twitter: { names: ['ana'], readAt: 5 }, reddit: { names: ['rust'], readAt: 6 } });
+    });
+
     // ------------------------------------------------------------- skim
 
     section('skim — where the match lands');
