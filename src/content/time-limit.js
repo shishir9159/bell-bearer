@@ -80,7 +80,9 @@
             const spent = since ? Math.round((now - since) / 1000) : 0;
             since = watching() ? now : 0;
             if (spent <= 0) return;
-            state = await TimeLimits.update((current) => TimeLimits.add(current, at, spent, now));
+            // A failed update keeps what this page had. It used to hand back
+            // a blank day with this credit in it, and lift the block.
+            state = (await TimeLimits.update((current) => TimeLimits.add(current, at, spent, now))) || state;
             render();
         }
 
@@ -168,7 +170,7 @@
          * anyone would read as working.
          */
         async function onSnooze() {
-            state = await TimeLimits.update((current) => TimeLimits.snooze(current, at));
+            state = (await TimeLimits.update((current) => TimeLimits.snooze(current, at))) || state;
             render();
         }
 

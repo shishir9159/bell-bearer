@@ -34,6 +34,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
     const Time = ns.Time || req('./time.js');
     const LimitSites = ns.LimitSites || req('./limit-sites.js');
 
@@ -207,34 +208,30 @@
 
     // ----------------------------------------------------------- storage
 
-    async function load() {
-        try {
-            const stored = await chrome.storage.local.get([KEY]);
-            return forDay(stored && stored[KEY]);
-        } catch (_) {
-            return blank();
-        }
-    }
-
-    async function save(state) {
-        try {
-            await chrome.storage.local.set({ [KEY]: state });
-            return true;
-        } catch (_) {
-            return false;
-        }
-    }
-
     /**
      * Read, change, write. Two tabs of the same site can both be counting on
      * a machine with two windows open, so the change is applied to what is in
      * storage now rather than to a copy read earlier.
+     *
+     * Through the store helper, so the steps one page takes run one at a
+     * time: a tick, the tab being hidden and the Snooze button each used to
+     * start a read-modify-write of their own, and two in flight together lost
+     * one of them — a credit, or the snooze. A read that fails now writes
+     * nothing, where it used to write a blank day over today's tally.
+     *
+     * A failed update resolves to null, for the page to keep the state it
+     * had rather than draw the blank one.
      */
-    async function update(change) {
-        const next = change(await load());
-        await save(next);
-        return next;
-    }
+    const store = Store.create({
+        keys: [KEY],
+        name: 'time limits',
+        read: (stored) => forDay(stored[KEY]),
+        blank: () => blank(),
+        failed: () => null,
+    });
+
+    const { load, save } = store;
+    const update = (change) => store.update(change);
 
     const TimeLimits = {
         KEY, SITES, MAX_CREDIT, SNOOZE_MS,

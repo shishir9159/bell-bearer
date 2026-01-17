@@ -6148,6 +6148,38 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(TimeLimitContent.times(5), '5 times');
     });
 
+    await checkAsync('two changes a page makes together both land', async () => {
+        // A tick and the Snooze button each read, changed and wrote on their
+        // own, and whichever wrote second dropped what the other had added.
+        clearStore();
+        const now = Date.now();
+        await Promise.all([
+            TimeLimits.update((state) => TimeLimits.add(state, 'x.com', 30, now)),
+            TimeLimits.update((state) => TimeLimits.snooze(state, 'x.com', now)),
+        ]);
+        const state = await TimeLimits.load();
+        eq([state.seconds['x.com'], TimeLimits.snoozesOn(state, 'x.com', now)], [30, 1]);
+    });
+
+    await checkAsync('a change whose read failed writes nothing, and answers null', async () => {
+        clearStore();
+        const now = Date.now();
+        store[TimeLimits.KEY] = TimeLimits.add(TimeLimits.blank(now), 'x.com', 90, now);
+        const realGet = global.chrome.storage.local.get;
+        global.chrome.storage.local.get = () => Promise.reject(new Error('Extension context invalidated.'));
+        const quiet = console.error;
+        console.error = () => {};
+        let answer;
+        try {
+            answer = await TimeLimits.update((state) => TimeLimits.add(state, 'x.com', 30, now));
+        } finally {
+            global.chrome.storage.local.get = realGet;
+            console.error = quiet;
+        }
+        eq(answer, null, 'the page keeps the state it had');
+        eq(store[TimeLimits.KEY].seconds['x.com'], 90, 'today\'s tally is not reset to one credit');
+    });
+
     // ------------------------------------------------------- the roster
 
     section('a site roster, out to a file and back');
