@@ -21,6 +21,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
     const Time = ns.Time || req('./time.js');
     const ChessSites = ns.ChessSites || req('./chess-sites.js');
 
@@ -157,28 +158,32 @@
 
     // ------------------------------------------------------------- storage
 
-    async function load(now = Date.now()) {
-        try {
-            const stored = await chrome.storage.local.get([Settings.DATA.chessLimits]);
-            return forDay(stored[Settings.DATA.chessLimits], now);
-        } catch (_) {
-            return blank(now);
-        }
-    }
+    const KEY = Settings.DATA.chessLimits;
 
-    async function save(state) {
-        return Settings.set({ [Settings.DATA.chessLimits]: state });
-    }
+    /**
+     * Read as stored, and put to a day by load and update: both take the
+     * clock from their caller, and a read that applied forDay with the real
+     * one would blank a state the caller dated otherwise.
+     *
+     * A read that fails now fails the step and writes nothing. It used to
+     * come back as a blank day, which was written over the popup's one-more
+     * grants and the other site's counts.
+     */
+    const store = Store.create({
+        keys: [KEY],
+        name: 'chess limits',
+        read: (stored) => stored[KEY] || null,
+        blank: () => null,
+    });
 
-    /** Read, apply `change(state)`, write. Returns the state that was written. */
-    async function update(change, now = Date.now()) {
-        const next = change(await load(now));
-        await save(next);
-        return next;
-    }
+    const load = async (now = Date.now()) => forDay(await store.load(), now);
+    const { save } = store;
+
+    /** Read, apply `change(state)`, write. Resolves to what was written, or null when the step failed. */
+    const update = (change, now = Date.now()) => store.update((state) => change(forDay(state, now)));
 
     const ChessLimits = {
-        KEY: Settings.DATA.chessLimits,
+        KEY,
         dayKey, zeroes, blank, forDay, countToday,
         withCounts, withOneMore, statusFor, isBlocked,
         load, save, update,

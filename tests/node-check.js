@@ -5676,6 +5676,30 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         chessDailyLimits: true, chessLimitBullet: 2, chessLimitBlitz: 0, chessLimitRapid: null,
     };
 
+    await checkAsync('the day is the one the caller names, and a failed read writes nothing over the grants', async () => {
+        clearStore();
+        // DAY is not today: a read that put the state to the real clock's day
+        // would blank it before the change was applied.
+        await ChessLimits.update((state) => ChessLimits.withOneMore(state, 'chess', limitOn, DAY), DAY);
+        await ChessLimits.update((state) => ChessLimits.withCounts(state, 'lichess', { bullet: 4 }, DAY), DAY);
+        const day = await ChessLimits.load(DAY);
+        eq([day.sites.chess.grants.bullet, day.sites.lichess.counts.bullet], [1, 4]);
+
+        const realGet = global.chrome.storage.local.get;
+        global.chrome.storage.local.get = () => Promise.reject(new Error('Extension context invalidated.'));
+        const quiet = console.error;
+        console.error = () => {};
+        let answer;
+        try {
+            answer = await ChessLimits.update((state) => ChessLimits.withCounts(state, 'lichess', { bullet: 5 }, DAY), DAY);
+        } finally {
+            global.chrome.storage.local.get = realGet;
+            console.error = quiet;
+        }
+        eq(answer, null);
+        eq(store[ChessLimits.KEY].sites.chess.grants.bullet, 1, 'the popup\'s grant outlives the failed read');
+    });
+
     check("today's games are counted per bucket, in local days", () => {
         const games = [
             { end: DAY, timeClass: 'bullet' },
