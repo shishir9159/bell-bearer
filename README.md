@@ -1567,7 +1567,9 @@ The server runs its timeouts about once a second.
   grace.
 - **Handover.** A host who goes away, or leaves, hands the room to the first
   present co-host, else the earliest present member. An away host becomes a
-  co-host. If everyone is away, the host keeps the role.
+  co-host. If everyone is away, the host keeps the role. A room left with no
+  host at all, because its host left while everyone else was away, makes the
+  first member back the host, by the same rule.
 - **Kicked.** A kicked member gets `error {code:'kicked'}` and is removed.
 
 ### Constants

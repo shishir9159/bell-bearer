@@ -394,11 +394,18 @@
                     changed = true;
                 }
                 const host = [...members.values()].find(isHost);
+                const someoneHere = inOrder().some((m) => !m.away);
                 // Handed over only to someone who is actually here; with the
                 // whole room quiet the host keeps it. Back again, the old host
                 // is a co-host, so host control still lets them drive.
-                if (host && host.away && inOrder().some((m) => !m.away)) {
+                if (host && host.away && someoneHere) {
                     host.role = 'cohost';
+                    promote();
+                    changed = true;
+                } else if (!host && someoneHere) {
+                    // A host who left while everyone else was away had nobody
+                    // to hand to. Only this rule looked for a host, and only
+                    // an away one, so the room stayed without one for good.
                     promote();
                     changed = true;
                 }
