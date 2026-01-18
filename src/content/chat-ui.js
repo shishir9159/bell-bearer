@@ -702,10 +702,18 @@
          * past the time it names — the reset is rounded, and a send a minute
          * early is a wasted one. With no time to read, a quarter of an hour,
          * and then it is looked at again.
+         *
+         * A hold already standing is not written again for a time that only
+         * moved with the clock. "Try again in 30 minutes", or no time at all,
+         * gave a new `until` on every pass of the watcher, and the queue was
+         * rewritten — and sent to every chat tab, the worker and the
+         * dashboard — every time the page so much as changed.
          */
         function holdForLimit(read) {
-            const until = (read.until || Date.now() + 15 * 60000) + 60000;
+            const now = Date.now();
+            const until = (read.until || now + 15 * 60000) + 60000;
             if (until === heldUntil) return;
+            if (heldUntil > now && (!read.until || Math.abs(until - heldUntil) < 60000)) return;
             heldUntil = until;
             writeQueue((state) => PromptQueue.hold(state, adapter.site, until, read.model ? `${read.model} limit` : 'usage limit'));
         }

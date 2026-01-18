@@ -290,6 +290,31 @@
             assert(!document.getElementById('bb-chat-limit'), 'the chip outlived its page');
         });
 
+        test('a blocking notice whose time moves with the clock is held once, not on every look', async () => {
+            // "In 30 minutes" is thirty minutes from whenever it is read, and
+            // the queue was rewritten on every pass of the watcher.
+            window.MockChrome.reset();
+            const conv = conversation(4);
+            const page = stagePage(conv);
+            const notice = document.createElement('div');
+            notice.setAttribute('role', 'alert');
+            notice.textContent = 'You’ve reached our limit of messages per hour. Please try again in 30 minutes.';
+            page.host.appendChild(notice);
+            const { ui, restore } = makeUi(conv, { settings: fast });
+            try {
+                ui.install();
+                ui.limitNow();
+                await waitFor(() => queue() && queue().holds.chatgpt, 'the hold');
+                const first = queue().holds.chatgpt.until;
+                for (let i = 0; i < 4; i++) {
+                    await settle(20);
+                    ui.limitNow();
+                }
+                await settle(100);
+                assertEqual(queue().holds.chatgpt.until, first, 'the hold was written again');
+            } finally { restore(); }
+        });
+
         test('the composer buttons are drawn only while asked for, and do what the hotkeys do', async () => {
             window.MockChrome.reset();
             const conv = conversation(4);
