@@ -1445,7 +1445,7 @@ Client → server:
 | `ping {c, seq, rtt?}` | Heartbeat and clock sample; `seq` is the client's latest; `rtt` its own measure, for the member list |
 | `intent {id, base, op, pos, at, rate?, media?, paused?}` | "I did this, at this position, at this room time, having seen `base`." `op` is `play`, `pause`, `seek`, `rate` or `media` |
 | `ready {ready, why?}` | `ready:false` with `why` of `buffering`, `loading` or `ad` |
-| `request {op}` | A guest asking the hosts to do something, in host control |
+| `request {op}` | A guest asking the hosts to do something, in host control. At most one per member every 2 s; more are dropped without a word |
 | `policy {control?, wait?, locked?}` | Host only |
 | `role {member, role}` | Host only: `cohost`, `guest`, or `host` to hand over |
 | `kick {member}` | Host only |
@@ -1583,6 +1583,7 @@ The server runs its timeouts about once a second.
 | `at` accepted | −3000 / +500 ms |
 | away / removed | 15 s / 60 s |
 | hold timeout | 8 s |
+| requests | 1 per member per 2 s |
 | holds only up to | 6 members present |
 | anti-flap | 3 holds in 120 s → lagging 5 min |
 | timed-out straggler | lagging 2 min |

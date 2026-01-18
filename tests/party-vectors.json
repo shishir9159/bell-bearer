@@ -112,6 +112,22 @@
       "absent": [{ "to": "c", "msg": { "t": "request" } }]
     },
     {
+      "name": "a guest asks the hosts once in two seconds at most",
+      "policy": { "control": "host" },
+      "steps": [
+        { "at": 0, "join": "a", "name": "Ana" },
+        { "at": 0, "join": "b", "name": "Ben" },
+        { "at": 1000, "from": "b", "msg": { "t": "request", "op": "pause" } },
+        { "at": 1500, "from": "b", "msg": { "t": "request", "op": "play" } },
+        { "at": 3000, "from": "b", "msg": { "t": "request", "op": "seek" } }
+      ],
+      "expect": [
+        { "to": "a", "msg": { "t": "request", "from": "@b", "op": "pause" } },
+        { "to": "a", "msg": { "t": "request", "from": "@b", "op": "seek" } }
+      ],
+      "absent": [{ "to": "a", "msg": { "t": "request", "op": "play" } }]
+    },
+    {
       "name": "a buffering member holds the room, and the release starts a lead ahead",
       "steps": [
         { "at": 0, "join": "a", "name": "Ana" },

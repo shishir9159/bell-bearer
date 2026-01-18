@@ -30,6 +30,12 @@
     const VERSION = 1;
     const MAX_MEMBERS = 16;
     const INTENTS_PER_S = 5;
+    /**
+     * A request puts a toast on every host's page, and nothing else limited
+     * it: a guest could put up hundreds in a second. One per member in this
+     * long is as fast as anyone asks for a pause by hand.
+     */
+    const REQUEST_MS = 2000;
     const NAME_MAX = 32;
     const CONTROLS = Object.freeze(['everyone', 'host']);
     const ROLES = Object.freeze(['host', 'cohost', 'guest']);
@@ -160,7 +166,7 @@
                 id: mint('m'), resume: mint('r'), name: cleanName(name),
                 role: members.size === 0 ? 'host' : 'guest', order: joined++,
                 lastSeen: now, away: false, ready: true, why: null, solo: false,
-                rtt: null, lagging: false, laggingUntil: 0, holdTimes: [], intents: [], chats: [],
+                rtt: null, lagging: false, laggingUntil: 0, holdTimes: [], intents: [], chats: [], askedAt: -Infinity,
             };
             members.set(m.id, m);
             welcome(m, now);
@@ -310,7 +316,8 @@
                     intent(m, msg, now);
                     break;
                 case 'request':
-                    if (!PartyState.OPS.includes(msg.op)) break;
+                    if (!PartyState.OPS.includes(msg.op) || now - m.askedAt < REQUEST_MS) break;
+                    m.askedAt = now;
                     for (const one of members.values()) {
                         if (one.role !== 'guest' && one !== m) send(one.id, { t: 'request', from: m.id, op: msg.op });
                     }
@@ -418,7 +425,7 @@
     }
 
     const PartyRoom = {
-        VERSION, MAX_MEMBERS, INTENTS_PER_S, AWAY_MS, REMOVE_MS, CONTROLS, ROLES,
+        VERSION, MAX_MEMBERS, INTENTS_PER_S, REQUEST_MS, AWAY_MS, REMOVE_MS, CONTROLS, ROLES,
         HOLD_TIMEOUT_MS, HOLD_MAX_MEMBERS, FLAP_HOLDS, LAG_MS, EXCLUDE_MS, LEAD_PAD_MS, LEAD_MIN_MS, LEAD_MAX_MS, WHYS,
         createRoom, mintRandom,
     };
