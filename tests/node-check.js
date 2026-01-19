@@ -8577,6 +8577,46 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(pong && Math.abs(pong.s - t - skew) < 100, `room time is the new room's: ${pong && pong.s - t}`);
         await session.control({ op: 'leave' });
     });
+    await checkAsync('REGRESSION: welcomed as a new member, the session says again that the tab is solo and buffering', async () => {
+        // Past the resume grace, or into a tracker party's next room, the
+        // member is new and starts ready and in step. The tab only reports a
+        // change, so the room showed a solo, buffering member as "Ready" and
+        // started without waiting for them.
+        let deliver = null;
+        const said = [];
+        const room = (id) => ({ id, policy: {}, members: [], state: { seq: 1, paused: true, pos: 0, rate: 1, at: 0 } });
+        const transport = {
+            open(fn) {
+                deliver = fn;
+                return {
+                    send(msg) {
+                        if (msg.t === 'create') deliver({ t: 'welcome', you: 'm1', resume: 'r1', room: room('p1') });
+                        else if (msg.t !== 'ping') said.push(msg);
+                    },
+                    close() {},
+                };
+            },
+            close() {},
+        };
+        const session = PartySession.createSession({ transports: { loopback: () => transport }, now: () => 1000 });
+        await session.control({ op: 'start', name: 'Ana' });
+        const tab = tabPort();
+        session.connect(tab);
+        tab.say({ t: 'solo', solo: true });
+        tab.say({ t: 'ready', ready: false, why: 'loading' });
+        said.length = 0;
+        deliver({ t: 'welcome', you: 'm1', resume: 'r1', room: room('p1') });
+        eq(said, [], 'back as the same member, the room still has it');
+        deliver({ t: 'welcome', you: 'm2', resume: 'r2', room: room('p1') });
+        eq(said, [{ t: 'ready', ready: false, why: 'loading' }, { t: 'solo', solo: true }], 'a new member is told');
+        said.length = 0;
+        tab.say({ t: 'solo', solo: false });
+        tab.say({ t: 'ready', ready: true });
+        said.length = 0;
+        deliver({ t: 'welcome', you: 'm3', resume: 'r3', room: room('p2') });
+        eq(said, [], 'a member ready and in step has nothing to say');
+        await session.control({ op: 'leave' });
+    });
     await checkAsync('the tab says how far off its player is, for the popup, and the room never hears it', async () => {
         const loop = PartyLoopback.createLoopback();
         const session = PartySession.createSession({ transports: { loopback: () => loop }, now: () => 1000 });

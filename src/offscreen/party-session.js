@@ -97,6 +97,7 @@
             if (!party) return;
             if (!party.ready) {
                 party.ready = true;
+                party.why = null;
                 party.link.send({ t: 'ready', ready: true });
             }
             if (party.solo) {
@@ -154,6 +155,10 @@
                     // kept beside the old room's, which, faster, went on
                     // setting room time for the whole window.
                     const moved = party.roomId !== null && party.roomId !== msg.room.id;
+                    // Welcomed as someone else: past the resume grace, or into a
+                    // tracker party's next room. That member starts ready and in
+                    // step, and the tab only says either when it changes.
+                    const fresh = party.me !== null && party.me !== msg.you;
                     if (moved) clock.reset();
                     Object.assign(party, {
                         me: msg.you, resume: msg.resume, roomId: msg.room.id, up: true,
@@ -167,6 +172,8 @@
                         clearTimeout(party.pingTimer);
                         heartbeat(PartyClock.BURST - 1);
                     }
+                    if (fresh && !party.ready) party.link.send({ t: 'ready', ready: false, why: party.why });
+                    if (fresh && party.solo) party.link.send({ t: 'solo', solo: true });
                     break;
                 }
                 // The transport's own word that the authority is out of reach
@@ -233,7 +240,10 @@
                 return;
             }
             if (!FROM_TAB.includes(msg.t)) return;
-            if (msg.t === 'ready') party.ready = msg.ready !== false;
+            if (msg.t === 'ready') {
+                party.ready = msg.ready !== false;
+                party.why = party.ready ? null : msg.why;
+            }
             if (msg.t === 'solo') party.solo = msg.solo === true;
             party.link.send(msg);
         }
@@ -290,7 +300,7 @@
             if (!transport) return { ok: false, error: 'address' };
             const mine = {
                 mode, transport, link: null, me: null, roomId: null, resume: null, state: null, members: [], policy: null,
-                ready: true, solo: false, up: false, pingTimer: null, beating: false, started: false, welcomes: 0,
+                ready: true, why: null, solo: false, up: false, pingTimer: null, beating: false, started: false, welcomes: 0,
                 log: PartyChat.createLog(), notes: 0, unread: 0, lastFrom: null, chatOpen: false,
             };
             // A loopback welcomes inside the send below; a socket, some time later.
