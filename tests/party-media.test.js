@@ -54,6 +54,11 @@ async function partyHarness(over = {}) {
         ...over,
     });
     media.attach();
+    // The session's answer to the attach ping: room time is ours. Drift is
+    // not corrected until the clock has a sample.
+    // `unsynced` leaves it unanswered, for the spec about exactly that.
+    const ping = sent.find((msg) => msg.t === 'ping');
+    if (!over.unsynced) media.receive({ t: 'pong', c: ping.c, s: ping.c, s2: ping.c });
 
     let seq = 1;
     const vector = (fields) => ({ seq, media: party, paused: true, pos: 0, rate: 1, at: Date.now(), by: 'm2', hold: null, ...fields });
@@ -136,6 +141,25 @@ suite('party media: telling our writes from the user', () => {
             await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
             assert(Math.abs(h.video.currentTime - 30) < 0.5, `pulled back to ${h.video.currentTime}`);
             assertDeepEqual(h.intents().map((one) => [one.op, Math.round(one.pos)]), [['seek', 30]]);
+        } finally { h.destroy(); }
+    });
+
+    test('REGRESSION: nothing is corrected against a clock with no sample yet', async () => {
+        // The welcome lands before the session answers the first ping, and
+        // room time used to be read off our own clock until it did. With the
+        // room's clock 2 s behind ours, a player in step was seeked 2 s on.
+        const h = await partyHarness({ unsynced: true });
+        try {
+            let seeks = 0;
+            h.video.addEventListener('seeking', () => { seeks++; });
+            h.room({ paused: false, pos: 0, at: Date.now() - 2000 });
+            await partyWait(window.BB.PartyMedia.DRIFT_EVAL_MS + 200);
+            assertEqual(seeks, 0, 'not seeked before the clock is known');
+            const c = window.BB.PartyClock.localNow();
+            h.media.receive({ t: 'pong', c, s: c - 2000, s2: c - 2000 });
+            await partyWait(window.BB.PartyMedia.DRIFT_EVAL_MS + 200);
+            assertEqual(seeks, 0, 'in step once it is');
+            assert(!h.video.paused, 'and playing all along');
         } finally { h.destroy(); }
     });
 

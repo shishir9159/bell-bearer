@@ -49,6 +49,8 @@
     /** A rate change this soon after a new source is the page resetting it, not the user. */
     const SOURCE_RESET_MS = 4000;
     const CLOCK_PING_MS = 60000;
+    /** Asked again this often while the session has no room time to answer with yet. */
+    const CLOCK_RETRY_MS = 1000;
     /** A stall shorter than this is the player's ordinary hiccup, not worth holding a room over. */
     const STALL_MS = 800;
     /** How often the session hears how far off we are, for the popup's "Synced ±40 ms". */
@@ -154,6 +156,7 @@
         let awaitPlaying = false;
         let startTimer = null;
         let pingTimer = null;
+        let burstTimer = null;
         let status = 'joining';
         let canSeek = true;
         /** The last rate nudge written, while a player that may revert it is on probation. */
@@ -241,7 +244,7 @@
             if (!rateQueued) write('rate', room.rate);
             if (room.paused || room.hold) {
                 write('pause');
-            } else if (PartyState.scheduled(room, roomNow)) {
+            } else if (clock.ready() && PartyState.scheduled(room, roomNow)) {
                 // A release on a shared start time: everyone waits for the
                 // same room instant rather than for their message to land.
                 write('pause');
@@ -268,6 +271,11 @@
         function correct() {
             const video = getVideo();
             if (!room || !video || suspended() || solo || pending || seekTimer || rateQueued || !onRoomMedia()) return;
+            // Before the first pong, room time is only our own clock. The
+            // welcome lands before that pong does, and with the room's clock
+            // a second or two off ours a player in step was seeked out of it
+            // on every join and every reload.
+            if (!clock.ready()) return;
             const t = now();
             const expected = PartyState.expected(room, clock.toRoom(t));
             lastDrift = video.currentTime - expected;
@@ -505,6 +513,20 @@
             send({ t: 'ping', c: now(), seq: room ? room.seq : 0 });
         }
 
+        /**
+         * A few pings back to back, so the first offset is not one sample,
+         * then one a second until any is answered: the session answers none
+         * until it has heard the authority's clock itself.
+         */
+        function burst(left = PartyClock.BURST) {
+            clearTimeout(burstTimer);
+            burstTimer = null;
+            if (!attached) return;
+            ping();
+            if (left > 1) burstTimer = setTimeout(() => burst(left - 1), PartyClock.BURST_GAP_MS);
+            else if (!clock.ready()) burstTimer = setTimeout(() => burst(1), CLOCK_RETRY_MS);
+        }
+
         function receive(msg) {
             if (!attached || !msg || typeof msg.t !== 'string') return;
             switch (msg.t) {
@@ -528,7 +550,13 @@
                     pending = null;
                     setStatus('rejected', msg.why);
                     break;
-                case 'pong': clock.add(msg, now()); break;
+                case 'pong': {
+                    const first = !clock.ready();
+                    clock.add(msg, now());
+                    // The room as it stood was played without its clock: now with it.
+                    if (first && clock.ready()) follow();
+                    break;
+                }
                 case 'keepalive': {
                     // The session is in a background page that is unloaded
                     // after thirty idle seconds (Firefox), and our ping is the
@@ -561,7 +589,7 @@
             for (const [type, fn] of LISTENERS) document.addEventListener(type, fn, { capture: true, passive: true });
             if (profile.navigated) document.addEventListener(profile.navigated, onNavigated);
             if (player) player.holdRate(true, { step: stepRoomRate });
-            ping();
+            burst();
             pingTimer = setInterval(ping, CLOCK_PING_MS);
         }
 
@@ -570,7 +598,7 @@
             attached = false;
             for (const [type, fn] of LISTENERS) document.removeEventListener(type, fn, { capture: true });
             if (profile.navigated) document.removeEventListener(profile.navigated, onNavigated);
-            for (const timer of [seekTimer, startTimer, stallTimer, rateQueued && rateQueued.timer, pending && pending.timer]) clearTimeout(timer);
+            for (const timer of [seekTimer, startTimer, stallTimer, burstTimer, rateQueued && rateQueued.timer, pending && pending.timer]) clearTimeout(timer);
             rateQueued = null;
             clearInterval(pingTimer);
             pending = null;
