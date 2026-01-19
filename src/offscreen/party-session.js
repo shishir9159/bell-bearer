@@ -148,7 +148,13 @@
         function fromAuthority(msg) {
             if (!party || !msg || typeof msg.t !== 'string') return;
             switch (msg.t) {
-                case 'welcome':
+                case 'welcome': {
+                    // Another room — a tracker party's next host, a server
+                    // that lost ours — keeps another clock. Its samples were
+                    // kept beside the old room's, which, faster, went on
+                    // setting room time for the whole window.
+                    const moved = party.roomId !== null && party.roomId !== msg.room.id;
+                    if (moved) clock.reset();
                     Object.assign(party, {
                         me: msg.you, resume: msg.resume, roomId: msg.room.id, up: true,
                         policy: msg.room.policy, members: msg.room.members, state: msg.room.state,
@@ -157,7 +163,12 @@
                     party.joined();
                     // Welcomed after the start returned: a guest the host let in.
                     if (party.started) beat();
+                    if (moved && party.beating) {
+                        clearTimeout(party.pingTimer);
+                        heartbeat(PartyClock.BURST - 1);
+                    }
                     break;
+                }
                 // The transport's own word that the authority is out of reach
                 // for now; the next welcome is it back. `waiting` is one that
                 // cannot be reached until the user does something — hands a

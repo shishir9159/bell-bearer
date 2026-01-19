@@ -163,6 +163,22 @@ suite('party media: telling our writes from the user', () => {
         } finally { h.destroy(); }
     });
 
+    test('REGRESSION: a welcome from another room measures the clock again', async () => {
+        // The session starts its clock again for a new room, and the samples
+        // here were made from the old one; the next ping was a minute away.
+        const h = await partyHarness();
+        try {
+            const state = () => ({ seq: h.seq, media: PARTY_VIDEO, paused: true, pos: 0, rate: 1, at: Date.now(), by: 'm2', hold: null });
+            const pings = () => h.sent.filter((msg) => msg.t === 'ping').length;
+            h.media.receive({ t: 'welcome', you: 'm1', room: { id: 'p1', state: state() } });
+            const before = pings();
+            h.media.receive({ t: 'welcome', you: 'm1', room: { id: 'p1', state: state() } });
+            assertEqual(pings(), before, 'a resume into the same room keeps it');
+            h.media.receive({ t: 'welcome', you: 'm9', room: { id: 'p2', state: state() } });
+            assert(pings() > before, 'asked again at once');
+        } finally { h.destroy(); }
+    });
+
     test('a user rate change is an intent', async () => {
         const h = await partyHarness();
         try {

@@ -3496,6 +3496,15 @@ check('a path that stays slow is adopted once the fast sample rolls out', () => 
     eq(clock.offset(), 700);
     eq(clock.minRtt(), 300);
 });
+check('REGRESSION: on a tie the newer sample wins, so a moved offset is taken at once', () => {
+    // Over the tab's port every round trip ties, and the oldest used to win:
+    // a correction in the session reached the tab a whole window late.
+    const clock = PartyClock.createClock();
+    for (let i = 0; i < PartyClock.WINDOW; i++) clock.add(pongFrom({ c: i * 60000, skew: 0 }).pong, pongFrom({ c: i * 60000, skew: 0 }).t3);
+    const moved = pongFrom({ c: 600000, skew: 1500 });
+    clock.add(moved.pong, moved.t3);
+    eq(clock.offset(), 1500);
+});
 check('room and local time convert both ways', () => {
     const clock = PartyClock.createClock();
     eq(clock.offset(), 0, 'no sample is no correction');
@@ -8533,6 +8542,40 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             eq(session.status().state.paused, true, 'and no longer heard');
         }
         await leave();
+    });
+    await checkAsync('REGRESSION: a welcome from another room starts the clock again', async () => {
+        // A tracker party's next host, or a server that lost the room, keeps
+        // its own clock. The old room's samples stayed in the window and, with
+        // the faster round trip, went on setting room time.
+        let deliver = null;
+        let skew = 0;
+        let rtt = 10;
+        let t = 100000;
+        const room = (id, seq) => ({ id, policy: {}, members: [], state: { seq, paused: true, pos: 0, rate: 1, at: 0 } });
+        const transport = {
+            open(fn) {
+                deliver = fn;
+                return {
+                    send(msg) {
+                        if (msg.t === 'create') deliver({ t: 'welcome', you: 'm1', resume: 'r1', room: room('p1', 1) });
+                        if (msg.t === 'ping') deliver({ t: 'pong', c: msg.c, s: msg.c + rtt / 2 + skew, s2: msg.c + rtt / 2 + skew });
+                    },
+                    close() {},
+                };
+            },
+            close() {},
+        };
+        const session = PartySession.createSession({ transports: { loopback: () => transport }, now: () => (t += rtt) && t - rtt });
+        await session.control({ op: 'start', name: 'Ana' });
+        skew = 2000;
+        rtt = 80;
+        deliver({ t: 'welcome', you: 'm9', resume: 'r9', room: room('p2', 5) });
+        const tab = tabPort();
+        session.connect(tab);
+        tab.say({ t: 'ping', c: t });
+        const pong = tab.last('pong');
+        assert(pong && Math.abs(pong.s - t - skew) < 100, `room time is the new room's: ${pong && pong.s - t}`);
+        await session.control({ op: 'leave' });
     });
     await checkAsync('the tab says how far off its player is, for the popup, and the room never hears it', async () => {
         const loop = PartyLoopback.createLoopback();

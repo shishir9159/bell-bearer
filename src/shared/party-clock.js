@@ -80,8 +80,11 @@
 
         function fastest() {
             let best = null;
+            // A tie goes to the newer sample. Over the tab's one-hop port
+            // every round trip ties, and keeping the oldest held on to an
+            // offset the session had since corrected for the whole window.
             for (const one of samples) {
-                if (!best || one.rtt < best.rtt) best = one;
+                if (!best || one.rtt <= best.rtt) best = one;
             }
             return best;
         }

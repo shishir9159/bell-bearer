@@ -140,6 +140,8 @@
         let me = null;
         let room = null;
         let cseq = 0;
+        /** The room the clock was measured against; undefined before the first welcome. */
+        let roomId;
         /** { id, timer } while an intent of ours is unanswered. */
         let pending = null;
         let snapNext = false;
@@ -531,6 +533,13 @@
             if (!attached || !msg || typeof msg.t !== 'string') return;
             switch (msg.t) {
                 case 'welcome': {
+                    // The session's clock starts again for another room, and
+                    // the samples here were made from its old one.
+                    if (roomId !== undefined && msg.room.id !== roomId) {
+                        clock.reset();
+                        burst();
+                    }
+                    roomId = msg.room.id;
                     me = msg.you;
                     room = null;
                     if (pending) clearTimeout(pending.timer);
