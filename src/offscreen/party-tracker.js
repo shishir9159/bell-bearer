@@ -397,6 +397,7 @@
         const holding = PartyWs.createHoldBuffer();
 
         function hear(msg) {
+            if (msg.t !== 'welcome') holding.heard(msg);
             switch (msg.t) {
                 case 'welcome':
                     Object.assign(seen, { you: msg.you, resume: msg.resume, members: msg.room.members, state: msg.room.state, policy: msg.room.policy });
@@ -404,8 +405,9 @@
                     // the roster. Not the host role, which can be handed on.
                     seen.owner = msg.room.members.length ? msg.room.members[0].id : null;
                     up = true;
+                    holding.welcome(msg, (one) => link && link.send(one));
                     deliver(msg);
-                    holding.flush((one) => link.send(one));
+                    holding.settled();
                     return;
                 case 'members': seen.members = msg.list; break;
                 // The room's last lines, for the room this member may have to
@@ -524,6 +526,7 @@
         function close() {
             closed = true;
             clearTimeout(stall);
+            holding.close();
             if (pending) pending.cancel();
             if (link) link.close();
             if (hosting) {
@@ -548,7 +551,7 @@
                                 else if (result.error !== 'closed') deliver({ t: 'error', code: result.error });
                             });
                         } else if (up && link) {
-                            link.send(msg);
+                            if (holding.sent(msg)) link.send(msg);
                         } else {
                             holding.hold(msg);
                         }

@@ -8828,6 +8828,62 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(w.last().sent.slice(1).map((msg) => msg.text || msg.t), ['ready', 'line 3', 'line 4', 'line 5', 'line 6', 'line 7']);
         w.transport.close();
     });
+    await checkAsync('REGRESSION: what went into a socket that had died is said again on the way back', async () => {
+        // A dead path is not noticed for up to SILENT_MS, and what was sent
+        // meanwhile was gone: a solo pressed then never reached the room.
+        const roomOf = (you, seq, me = {}) => ({ t: 'welcome', v: 1, you, resume: `z${seq}`, now: 0, room: { id: 'r1', policy: {}, members: [{ id: you, ready: true, solo: false, ...me }], state: { seq } } });
+        const w = wsLink({ url: 'ws://h:1' });
+        w.link.send({ t: 'create', v: 1, name: 'Ana' });
+        w.last().accept();
+        w.last().say({ t: 'created', room: 'r1', secret: 'k' });
+        w.last().say(roomOf('m1', 3));
+        const intent = { t: 'intent', id: 7, base: 3, op: 'pause', pos: 20 };
+        for (const msg of [{ t: 'solo', solo: true }, intent, { t: 'chat', text: 'still there?' }, { t: 'ready', ready: false, why: 'buffering' }]) w.link.send(msg);
+        eq(w.last().sent.length, 5, 'sent, into a socket nobody knows is dead');
+        w.last().die();
+        await tick();
+        w.last().accept();
+        w.last().say(roomOf('m1', 3));
+        eq(w.last().sent.slice(1), [{ t: 'ready', ready: false, why: 'buffering' }, { t: 'solo', solo: true }, intent], 'what the room is missing');
+        w.last().say({ t: 'members', list: [] });
+        eq(w.last().sent.slice(4), [{ t: 'chat', text: 'still there?' }], 'the line, once the history is in');
+        w.transport.close();
+    });
+    await checkAsync('what did arrive is not said again, and a session saying it as well is one copy', async () => {
+        const roomOf = (you, seq, me = {}) => ({ t: 'welcome', v: 1, you, resume: `z${seq}`, now: 0, room: { id: 'r1', policy: {}, members: [{ id: you, ready: true, solo: false, ...me }], state: { seq } } });
+        const sockets = fakeSockets();
+        const transport = PartyWs.createTransport({ WebSocket: sockets.Fake, random: () => 0, url: 'ws://h:1' });
+        // The session says solo again as it hears it is a new member.
+        const link = transport.open((msg) => { if (msg.t === 'welcome' && msg.you === 'm2') link.send({ t: 'solo', solo: true }); });
+        const last = () => sockets.last();
+        link.send({ t: 'create', v: 1, name: 'Ana' });
+        last().accept();
+        last().say({ t: 'created', room: 'r1', secret: 'k' });
+        last().say(roomOf('m1', 3));
+        link.send({ t: 'solo', solo: true });
+        link.send({ t: 'intent', id: 7, base: 3, op: 'pause', pos: 20 });
+        link.send({ t: 'chat', text: 'heard' });
+        link.send({ t: 'chat', text: 'echo lost' });
+        last().say({ t: 'state', seq: 4, ack: { member: 'm1', id: 7 } });
+        last().say({ t: 'chat', id: 'c1', from: 'm1', text: 'heard' });
+        last().die();
+        await tick();
+        last().accept();
+        last().say(roomOf('m1', 4, { solo: true }));
+        last().say({ t: 'chat', id: 'c2', from: 'm1', text: 'echo lost', past: true });
+        last().say({ t: 'members', list: [] });
+        eq(last().sent.slice(1), [], 'acknowledged, echoed, in the history, or already the room\'s');
+
+        link.send({ t: 'intent', id: 8, base: 4, op: 'play', pos: 20 });
+        last().die();
+        await tick();
+        last().accept();
+        last().say({ t: 'error', code: 'expired' });
+        last().accept();
+        last().say(roomOf('m2', 6));
+        eq(last().sent.slice(1), [{ t: 'solo', solo: true }], 'an intent the room has moved past is let go; solo once, though the session said it too');
+        transport.close();
+    });
     await checkAsync('past the grace it joins again as someone new instead of ending the party', async () => {
         const w = wsLink({ url: 'ws://h:1' });
         w.link.send({ t: 'create', v: 1, name: 'Ana' });

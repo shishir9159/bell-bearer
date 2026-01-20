@@ -58,25 +58,131 @@
      */
     const holdLine = (lines, msg) => [...lines, msg].slice(-PartyChat.BURST);
 
+    /** How long the chat said again waits for the room's history, if the members announcement never comes. */
+    const HISTORY_WAIT_MS = 2000;
+
     /**
-     * What a transport keeps while its way to the room is down: the latest of
-     * each HELD kind, and the last few chat lines. `flush(send)` sends them in
-     * that order and forgets them. The tracker transport had its own copy.
+     * What a transport keeps so that nothing said is lost to a drop.
+     *
+     * Said while the way to the room is down: the latest of each HELD kind,
+     * and the last few chat lines, sent on the way back.
+     *
+     * Said while it still looked up is kept too. A socket whose path has died
+     * is not noticed for up to SILENT_MS, and everything sent in that time
+     * went into it and was gone: a solo pressed then never reached the room,
+     * even for a member that came back as itself. So what was sent is kept
+     * until the room shows it arrived, and the welcome on the way back is
+     * checked against it:
+     *
+     * - ready and solo: the welcome's roster says what the room has for us,
+     *   and whatever differs from what we last said is said again.
+     * - an intent, until it is acknowledged or rejected: sent again only if
+     *   the room has not moved since it was made, so one that did land, or
+     *   that somebody else's change overtook, cannot drag the room back.
+     * - chat, until it comes back as our own line: said again only once the
+     *   room's history is in (the members announcement follows it), less any
+     *   line of ours the history already has.
      */
-    function createHoldBuffer() {
+    function createHoldBuffer({ setTimer = setTimeout, clearTimer = clearTimeout } = {}) {
         const held = new Map();
         let lines = [];
+        /** ready and solo: the latest said, sent or held. */
+        const said = {};
+        /** Said again by a welcome, so the session's own saying of it right after is not a second copy. */
+        let resent = {};
+        let intent = null;
+        let unechoed = [];
+        /** Every member id the room has given us: a line in the history may be from any of them. */
+        const mine = new Set();
+        /** { send, lines, timer } while chat waits for the history. */
+        let due = null;
+
+        function without(list, line) {
+            const at = list.findIndex((one) => PartyChat.clean(one.text) === line.text);
+            return at < 0 ? list : [...list.slice(0, at), ...list.slice(at + 1)];
+        }
+        function sayDue() {
+            if (!due) return;
+            const { send, timer } = due;
+            const out = due.lines.slice(-PartyChat.BURST);
+            clearTimer(timer);
+            due = null;
+            for (const line of out) {
+                send(line);
+                unechoed = holdLine(unechoed, line);
+            }
+        }
+
         return {
-            /** Keep `msg` if it is worth keeping across a drop; anything else is let go. */
+            /** Keep `msg` while the way is down, if it is worth keeping across a drop; anything else is let go. */
             hold(msg) {
+                if (msg.t === 'ready' || msg.t === 'solo') said[msg.t] = msg;
                 if (HELD.includes(msg.t)) held.set(msg.t, msg);
                 else if (msg.t === 'chat') lines = holdLine(lines, msg);
             },
-            flush(send) {
-                for (const t of HELD) if (held.has(t)) send(held.get(t));
-                for (const line of lines) send(line);
+            /** `msg` is going out on a way that looks up. False if it is a copy of what the welcome just said again. */
+            sent(msg) {
+                if (msg.t === 'ready' || msg.t === 'solo') {
+                    const copy = resent[msg.t] && JSON.stringify(resent[msg.t]) === JSON.stringify(msg);
+                    said[msg.t] = msg;
+                    if (copy) return false;
+                } else if (msg.t === 'intent') {
+                    intent = msg;
+                } else if (msg.t === 'chat') {
+                    unechoed = holdLine(unechoed, msg);
+                }
+                return true;
+            },
+            /** What the room said: whether it shows that something sent arrived. */
+            heard(msg) {
+                if (msg.t === 'state' && intent && msg.ack && mine.has(msg.ack.member) && msg.ack.id === intent.id) intent = null;
+                else if (msg.t === 'reject' && intent && msg.id === intent.id) intent = null;
+                else if (msg.t === 'chat' && mine.has(msg.from)) {
+                    unechoed = without(unechoed, msg);
+                    if (due) due.lines = without(due.lines, msg);
+                } else if (msg.t === 'members') sayDue();
+            },
+            /** Welcomed back: say again whatever the room is missing, and what was held. */
+            welcome(msg, send) {
+                mine.add(msg.you);
+                const room = msg.room || {};
+                const me = (room.members || []).find((m) => m.id === msg.you) || {};
+                resent = {};
+                const ready = said.ready;
+                if (ready && (me.ready !== (ready.ready !== false) || (ready.ready === false && me.why !== ready.why))) {
+                    send(ready);
+                    resent.ready = ready;
+                }
+                const solo = said.solo;
+                if (solo && (me.solo === true) !== (solo.solo === true)) {
+                    send(solo);
+                    resent.solo = solo;
+                }
+                const next = held.get('intent') || (intent && room.state && room.state.seq === intent.base ? intent : null);
+                intent = null;
+                if (next) {
+                    send(next);
+                    intent = next;
+                }
                 held.clear();
+                // Lines that went out may be in the history that follows; only
+                // with none of those can the held ones go at once.
+                const went = [...(due ? due.lines : []), ...unechoed];
+                const waiting = [...went, ...lines];
+                if (due) clearTimer(due.timer);
+                due = null;
+                unechoed = [];
                 lines = [];
+                if (waiting.length) {
+                    due = { send, lines: waiting, timer: setTimer(sayDue, HISTORY_WAIT_MS) };
+                    if (!went.length) sayDue();
+                }
+            },
+            /** The welcome has been handed on: a copy said after this is meant. */
+            settled() { resent = {}; },
+            close() {
+                if (due) clearTimer(due.timer);
+                due = null;
             },
         };
     }
@@ -220,8 +326,11 @@
                     joined = true;
                     up = true;
                     attempt = 0;
+                    // What the room is missing goes before the session hears
+                    // it is back, so the session saying the same is a copy.
+                    holding.welcome(msg, transmit);
                     deliver(msg);
-                    holding.flush(transmit);
+                    holding.settled();
                     return;
                 case 'error':
                     if (msg.code === 'expired' && resume && secret) {
@@ -235,6 +344,7 @@
                     deliver(msg);
                     return;
                 default:
+                    holding.heard(msg);
                     deliver(msg);
             }
         }
@@ -243,6 +353,7 @@
             closed = true;
             clearTimeout(retryTimer);
             retryTimer = null;
+            holding.close();
             hangUp();
         }
 
@@ -258,7 +369,7 @@
                             create = { ...msg, v: VERSION };
                             connect();
                         } else if (up) {
-                            transmit(msg);
+                            if (holding.sent(msg)) transmit(msg);
                         } else {
                             holding.hold(msg);
                         }
@@ -272,7 +383,7 @@
 
     const PartyWs = {
         PREFIX, VERSION, MAX_FRAME, BACKOFF_MIN_MS, BACKOFF_MAX_MS, CONNECT_MS, SILENT_MS, HELD,
-        serverUrl, inviteCode, readInvite, holdLine, createHoldBuffer, createTransport,
+        HISTORY_WAIT_MS, serverUrl, inviteCode, readInvite, holdLine, createHoldBuffer, createTransport,
     };
 
     root.BB = root.BB || {};
