@@ -33,6 +33,13 @@
         return `<span class="party-dot"></span><span class="party-line">Synced${drift}${title}</span>`;
     }
 
+    /**
+     * A round trip as the authority reported it. A party server, or another
+     * browser hosting, can send anything there, and it went into the markup
+     * as it came: a number is shown, and anything else is not.
+     */
+    const rttOf = (m, mine) => (!mine && Number.isFinite(m.rtt) ? `${Math.round(m.rtt)} ms` : '—');
+
     function memberRow(p, m) {
         const s = p.status;
         const mine = m.id === s.you;
@@ -44,7 +51,7 @@
                     <div class="party-member-name">${p.esc(m.name || 'Someone')}${mine ? ' (you)' : ''}${ROLE[m.role] ? `<span class="party-pill">${ROLE[m.role]}</span>` : ''}${m.lagging ? '<span class="party-pill is-warn">lagging</span>' : ''}</div>
                     <div class="party-member-state">${stateOf(m)}</div>
                 </div>
-                <span class="party-rtt">${mine || m.rtt === null || m.rtt === undefined ? '—' : `${m.rtt} ms`}</span>
+                <span class="party-rtt">${rttOf(m, mine)}</span>
                 ${menu ? `<button type="button" class="party-menu" data-act="menu" data-member="${p.esc(m.id)}" aria-label="More for ${p.esc(m.name)}" aria-expanded="${open}">${DOTS}</button>` : ''}
             </div>
             ${open ? `<div class="party-member-acts">

@@ -9766,6 +9766,26 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(keys.length, 8);
         for (const key of keys) assert(html.includes(`id="${key}"`), key);
     });
+    check('REGRESSION: a round trip the authority sends is shown only as a number', () => {
+        // It went into the popup's markup as it came. A server or a hosting
+        // browser could put an image, a style or a working host control there.
+        const RoomView = require('../src/page/party-room-view.js');
+        const esc = globalThis.BB.Dom.escapeHtml;
+        const evil = '<img src="http://x.invalid/b.png"><button data-act="role" data-member="m9" data-role="host">Fix</button>';
+        const status = {
+            you: 'm1', policy: {}, up: true,
+            members: [
+                { id: 'm1', name: 'Ana', role: 'host', ready: true, rtt: 5 },
+                { id: 'm2', name: 'Ben', role: 'guest', ready: true, rtt: evil },
+                { id: 'm3', name: 'Cat', role: 'guest', ready: true, rtt: 41.6 },
+                { id: 'm4', name: 'Dan', role: 'guest', ready: true, rtt: null },
+            ],
+        };
+        const html = RoomView.render({ status, esc, tab: null, openMember: null, subhead: ({ title }) => esc(title) });
+        assert(!html.includes('<img') && !html.includes('data-member="m9"'), 'nothing of it is markup');
+        const rtts = [...html.matchAll(/class="party-rtt">([^<]*)</g)].map((one) => one[1]);
+        eq(rtts, ['—', '—', '42 ms', '—'], 'yours, a string, a number, none');
+    });
     check('a countdown is m:ss and never goes below nothing', () => {
         eq([PartyPanel.countdown(61400, 0), PartyPanel.countdown(9000, 0), PartyPanel.countdown(0, 5000)], ['1:01', '0:09', '0:00']);
     });
