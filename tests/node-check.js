@@ -9378,8 +9378,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const knobs = { RTC, gatherMs: 20, WebSocket: tracker.Socket, joinMs: 400, renewMs: 40, stallMs: 30 };
         const transports = { tracker: (o) => PartyTracker.createTransport({ ...o, ...knobs }) };
         const sessions = [];
-        const add = async (name, code) => {
-            const session = PartySession.createSession({ transports, now: () => Date.now() });
+        const add = async (name, code, { now = () => Date.now() } = {}) => {
+            const session = PartySession.createSession({ transports, now });
             sessions.push(session);
             const started = await session.control({ op: 'start', mode: 'tracker', name, code, trackers: 'wss://t' });
             assert(started.ok, `${name} started: ${started.error}`);
@@ -9464,6 +9464,32 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             eq(heardBy().find((line) => !line.sys).id, said.id, 'under the id everyone else already has it by');
         } finally {
             await party.leave();
+        }
+    });
+    await checkAsync('REGRESSION: a room carried on runs from the new host\'s own clock', async () => {
+        // takeOver() stamped the state with Date.now(), but the new room runs
+        // on the session's clock. Ahead of it, the room jumped forward; behind
+        // it, the start read as still to come and held everyone paused.
+        for (const skew of [3000, -3000]) {
+            const party = await trackerParty();
+            try {
+                const ana = await party.add('Ana');
+                await until(() => ana.session.status().trackers === 1, 'the host in the swarm');
+                const ben = await party.add('Ben', ana.code, { now: () => Date.now() + skew });
+                const tab = tabPort();
+                ben.session.connect(tab);
+                const t0 = Date.now();
+                tab.say({ t: 'intent', id: 1, base: 0, op: 'play', pos: 100, at: Date.now() });
+                await until(() => ana.session.status().state.paused === false, 'Ben\'s play to reach Ana');
+                await ana.session.control({ op: 'leave' });
+                await until(() => ben.session.status().trackers !== undefined, 'Ben to carry the room on');
+                const state = ben.session.status().state;
+                const roomNow = Date.now() + skew;
+                const off = PartyState.expected(state, roomNow) - (100 + (Date.now() - t0) / 1000);
+                assert(Math.abs(off) < 0.3 && !PartyState.scheduled(state, roomNow), `clock ${skew}: off by ${off.toFixed(2)} s`);
+            } finally {
+                await party.leave();
+            }
         }
     });
     await checkAsync('a joiner says whether the trackers or the host were missing', async () => {

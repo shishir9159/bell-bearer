@@ -27,6 +27,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const PartyCode = ns.PartyCode || req('../shared/party-code.js');
+    const PartyClock = ns.PartyClock || req('../shared/party-clock.js');
     const PartyState = ns.PartyState || req('../shared/party-state.js');
     const PartyChat = ns.PartyChat || req('../shared/party-chat.js');
     const PartyWs = ns.PartyWs || req('./party-ws.js');
@@ -504,9 +505,15 @@
          * the same code, from the state it last had. The vector is re-based
          * on this browser's clock — the old room's `at` was the old host's —
          * so what was playing carries on from where it had got to.
+         *
+         * The clock the new room runs on, that is: the session's, which is
+         * performance.now() off its time origin. Stamped with Date.now(), the
+         * room jumped by however far the two had drifted apart, or, stamped
+         * ahead of its own clock, held everyone paused until it caught up.
          */
         function takeOver() {
-            const state = seen.state && { ...seen.state, pos: PartyState.expected(seen.state, roomNow()), at: Date.now(), hold: null };
+            const now = hostOptions.now || PartyClock.localNow;
+            const state = seen.state && { ...seen.state, pos: PartyState.expected(seen.state, roomNow()), at: now(), hold: null };
             const room = PartyHost.createHost({ ...hostOptions, policy: seen.policy || hostOptions.policy, state, chat: seen.chat });
             hosting = { room, swarm: hostSwarm({ secret, admit: room.admit, ...net }) };
             seen.resume = null;
