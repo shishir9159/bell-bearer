@@ -9353,11 +9353,14 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
      * A WebTorrent tracker in memory, doing what the real ones do with a
      * swarm: offers handed one each to other peers on the same hash, answers
      * handed to `to_peer_id`, and `stopped` leaving. `seen` keeps every frame
-     * it was sent, to check what a tracker gets to read.
+     * it was sent, to check what a tracker gets to read. A socket in
+     * `blocked` is one whose browser has lost its network: nothing it says
+     * arrives, and nothing is handed to it.
      */
     function fakeTracker({ down = false } = {}) {
         const swarms = new Map();
         const seen = [];
+        const blocked = new Set();
         class Socket {
             constructor(url) {
                 Object.assign(this, { url, readyState: 0 });
@@ -9368,11 +9371,12 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
                 }, 1);
             }
             send(text) {
+                if (blocked.has(this)) return;
                 const msg = JSON.parse(text);
                 seen.push(msg);
                 const swarm = swarms.get(msg.info_hash) || new Map();
                 swarms.set(msg.info_hash, swarm);
-                const tell = (socket, out) => setTimeout(() => socket.onmessage && socket.onmessage({ data: JSON.stringify({ action: 'announce', info_hash: msg.info_hash, ...out }) }), 1);
+                const tell = (socket, out) => setTimeout(() => !blocked.has(socket) && socket.onmessage && socket.onmessage({ data: JSON.stringify({ action: 'announce', info_hash: msg.info_hash, ...out }) }), 1);
                 if (msg.answer) {
                     const to = swarm.get(msg.to_peer_id);
                     if (to) tell(to, { peer_id: msg.peer_id, offer_id: msg.offer_id, answer: msg.answer });
@@ -9381,14 +9385,14 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
                 if (msg.event === 'stopped') return swarm.delete(msg.peer_id);
                 swarm.set(msg.peer_id, this);
                 tell(this, { interval: 120, complete: 0, incomplete: swarm.size });
-                const others = [...swarm.entries()].filter(([id]) => id !== msg.peer_id);
+                const others = [...swarm.entries()].filter(([id, socket]) => id !== msg.peer_id && !blocked.has(socket));
                 (msg.offers || []).forEach((one, i) => {
                     if (others[i]) tell(others[i][1], { peer_id: msg.peer_id, offer_id: one.offer_id, offer: one.offer });
                 });
             }
             close() { this.readyState = 3; }
         }
-        return { Socket, seen, swarms };
+        return { Socket, seen, swarms, blocked };
     }
 
     await checkAsync('a tracker code is the secret, and the swarm and key come from it alone', async () => {
@@ -9431,18 +9435,34 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     async function trackerParty() {
         const { RTC, all } = fakeRtc();
         const tracker = fakeTracker();
-        const knobs = { RTC, gatherMs: 20, WebSocket: tracker.Socket, joinMs: 400, renewMs: 40, stallMs: 30 };
-        const transports = { tracker: (o) => PartyTracker.createTransport({ ...o, ...knobs }) };
+        /** Whose browser each socket is, so one can be cut off from the tracker. */
+        const owners = new Map();
+        const knobs = { RTC, gatherMs: 20, joinMs: 400, renewMs: 40, stallMs: 30, probeMs: 100 };
         const sessions = [];
         const add = async (name, code, { now = () => Date.now() } = {}) => {
+            class Socket extends tracker.Socket {
+                constructor(url) {
+                    super(url);
+                    owners.set(this, name);
+                }
+            }
+            const transports = { tracker: (o) => PartyTracker.createTransport({ ...o, ...knobs, WebSocket: Socket }) };
             const session = PartySession.createSession({ transports, now });
             sessions.push(session);
             const started = await session.control({ op: 'start', mode: 'tracker', name, code, trackers: 'wss://t' });
             assert(started.ok, `${name} started: ${started.error}`);
             return { session, code: started.status.invite };
         };
+        /** That browser's way to the tracker goes, or comes back; its sockets stay open, as a dead path's do. */
+        function offline(name, off = true) {
+            for (const [socket, owner] of owners) {
+                if (owner !== name) continue;
+                if (off) tracker.blocked.add(socket);
+                else tracker.blocked.delete(socket);
+            }
+        }
         const leave = () => Promise.all(sessions.map((one) => one.control({ op: 'leave' })));
-        return { all, tracker, add, leave };
+        return { all, tracker, add, offline, leave };
     }
     const roles = (session) => session.status().members.map((m) => `${m.name}:${m.role}`);
 
@@ -9518,6 +9538,86 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             const heardBy = () => danTab.heard.flatMap((msg) => (msg.t === 'chat-log' ? msg.lines : msg.t === 'chat-line' ? [msg.line] : []));
             await until(() => heardBy().some((line) => line.text === 'the cliffs!'), 'Dan, joining after the handover, to see what was said before it');
             eq(heardBy().find((line) => !line.sys).id, said.id, 'under the id everyone else already has it by');
+        } finally {
+            await party.leave();
+        }
+    });
+    const hosting = (session) => session.status().active && session.status().trackers !== undefined;
+    const hostOf = (session) => (session.status().members.find((m) => m.role === 'host') || {}).name;
+    const settle = async (test, what, ms = 6000) => {
+        for (const end = Date.now() + ms; !test() && Date.now() < end;) await tick();
+        assert(test(), `timed out waiting for ${what}`);
+    };
+    check('a later room beats an earlier one, and in one generation the lower token stays', () => {
+        const a = PartyTracker.newClaim(0);
+        const b = PartyTracker.newClaim(1);
+        eq([PartyTracker.beats(b, a), PartyTracker.beats(a, b)], [true, false]);
+        const [low, high] = [{ gen: 1, token: '0a' }, { gen: 1, token: 'f0' }];
+        eq([PartyTracker.beats(low, high), PartyTracker.beats(high, low), PartyTracker.beats(low, low)], [true, false, false]);
+        assert(/^[0-9a-f]{16}$/.test(a.token) && a.token !== PartyTracker.newClaim(0).token);
+    });
+    await checkAsync('REGRESSION: a host back to find its room carried on steps down and joins it, with whoever found it meanwhile', async () => {
+        // A host whose network went long enough for the next in line to
+        // carry the room on came back still hosting under the same code.
+        // New joiners landed in either room, and neither host ever knew.
+        const party = await trackerParty();
+        try {
+            const ana = await party.add('Ana');
+            await until(() => ana.session.status().trackers === 1, 'the host in the swarm');
+            const ben = await party.add('Ben', ana.code);
+            const cat = await party.add('Cat', ana.code);
+            const anas = party.all.filter((pc) => pc.connectionState === 'connected' && pc.localDescription.type === 'answer');
+            party.offline('Ana');
+            for (const pc of anas) {
+                pc.state('failed', 'closed');
+                pc.other.state('failed', 'closed');
+            }
+            await settle(() => hosting(ben.session) && hostOf(cat.session) === 'Ben' && cat.session.status().up, 'Ben to carry the room on');
+
+            // Ana back while Ben cannot be reached: a newcomer finds her old room.
+            party.offline('Ben');
+            party.offline('Ana', false);
+            const eve = await party.add('Eve', ana.code);
+            eq([hostOf(eve.session), hosting(ana.session)], ['Ana', true], 'two rooms under one code');
+
+            party.offline('Ben', false);
+            await settle(() => !hosting(ana.session) && [ana, eve].every((one) => one.session.status().up && hostOf(one.session) === 'Ben'),
+                'Ana to step down, and her room to follow her');
+            eq(roles(ben.session).sort(), ['Ana:guest', 'Ben:host', 'Cat:guest', 'Eve:guest']);
+        } finally {
+            await party.leave();
+        }
+    });
+    await checkAsync('REGRESSION: two members who both carried the room on settle on one', async () => {
+        // Ben's path went quiet, so the room marked him away; Cat heard that
+        // roster and Ben did not. When the host left, each was next by its
+        // own roster, and each hosted a room of one from then on.
+        const party = await trackerParty();
+        let jump = 0;
+        try {
+            const ana = await party.add('Ana', undefined, { now: () => Date.now() + jump });
+            await until(() => ana.session.status().trackers === 1, 'the host in the swarm');
+            const ben = await party.add('Ben', ana.code);
+            const cat = await party.add('Cat', ana.code);
+            const bens = party.all.find((pc) => pc.connectionState === 'connected' && pc.localDescription.type === 'offer');
+            for (const channel of [...bens.channels, ...bens.other.channels]) channel.send = () => {};
+            // The room's clock a quarter of a minute on: everyone quiet that long is away, then Cat speaks.
+            jump = PartyRoom.AWAY_MS + 1000;
+            await settle(() => (cat.session.status().members.find((m) => m.name === 'Ben') || {}).away, 'the room to mark Ben away', 3000);
+            const catTab = tabPort();
+            cat.session.connect(catTab);
+            catTab.say({ t: 'ready', ready: true });
+            await settle(() => !(cat.session.status().members.find((m) => m.name === 'Cat') || {}).away, 'Cat to be heard');
+            assert(!(ben.session.status().members.find((m) => m.name === 'Ben') || {}).away, 'Ben never heard he was away');
+
+            await ana.session.control({ op: 'leave' });
+            let both = false;
+            await settle(() => {
+                both = both || (hosting(ben.session) && hosting(cat.session));
+                return both && [ben, cat].filter((one) => hosting(one.session)).length === 1
+                    && hostOf(ben.session) === hostOf(cat.session) && ben.session.status().up && cat.session.status().up;
+            }, 'both to carry it on, then one to step down');
+            eq(roles(ben.session).length, 2, 'one room, both in it');
         } finally {
             await party.leave();
         }

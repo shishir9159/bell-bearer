@@ -52,6 +52,15 @@
     const DISCONNECT_MS = 5000;
     /** How long a restart waits for the host's answer before meeting it again from scratch. */
     const RESTART_MS = 15000;
+    /**
+     * How often a hosting browser asks the swarm whether another one is
+     * hosting under the same code. Two can be: a host whose network went
+     * long enough for the next in line to carry the room on comes back still
+     * hosting, and two guests whose last rosters differ can each decide they
+     * are next. Every new joiner then landed in one or the other at random,
+     * and neither host ever knew. See `beats`.
+     */
+    const PROBE_MS = 10000;
     /** What a guest keeps while its way to the host is down, latest of each: the WebSocket transport's list. */
     const HELD = PartyWs.HELD;
     const LABELS = Object.freeze({ topic: 'bb-party/topic', seal: 'bb-party/seal' });
@@ -178,6 +187,28 @@
     const ANNOUNCE = Object.freeze({ uploaded: 0, downloaded: 0, left: 0 });
     const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 
+    /**
+     * A hosting browser's claim to the code: `gen` counts the times the room
+     * was carried on (the first host is 0, whoever takes over from a room of
+     * gen n is n + 1), and `token` breaks a tie. A later room beats an
+     * earlier one, which is what the old host coming back is; two rooms of one
+     * gen are two guests that both took over, and the lower token stays. Every
+     * browser reaches the same answer, so the loser steps down and joins.
+     */
+    const newClaim = (gen) => ({ gen, token: hex(PartyCode.randomBytes(8)) });
+    const beats = (a, b) => (a.gen !== b.gen ? a.gen > b.gen : a.token < b.token);
+
+    /** A claim sealed as `{[field]: claim}`; a description is packed bytes and never parses as one. */
+    const encodeClaim = (field, claim) => new TextEncoder().encode(JSON.stringify({ [field]: claim }));
+    function decodeClaim(bytes, field) {
+        try {
+            const one = JSON.parse(new TextDecoder().decode(bytes))[field];
+            return one && Number.isInteger(one.gen) && one.gen >= 0 && typeof one.token === 'string' ? { gen: one.gen, token: one.token } : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
     /** A sealed blob that opens under our key as the kind expected (and the tag, if one is), unpacked; else null. */
     async function opened(key, sealed, kind, tag) {
         const bytes = await unseal(key, sealed);
@@ -195,12 +226,31 @@
      * restarting ICE, and is answered on the peer it has rather than a new
      * one: the channels, and the member on them, carry on.
      */
-    function hostSwarm({ secret, urls, admit, iceServers, RTC, gatherMs, WebSocket }) {
+    function hostSwarm({ secret, urls, admit, iceServers, RTC, gatherMs, WebSocket, claim = null, onBeaten = () => {}, probeMs = PROBE_MS }) {
         const answered = new Set();
         const admitted = new Map();
+        /** Our probes' offer ids, so an answer to one is known. */
+        const probes = new Set();
         let swarm = null;
         let closed = false;
         let keys = null;
+        let probeTimer = null;
+
+        function heardClaim(theirs) {
+            if (!theirs || closed || !beats(theirs, claim)) return;
+            onBeaten(theirs);
+        }
+
+        async function probe() {
+            if (closed || !swarm) return;
+            const sdp = await seal(keys.key, encodeClaim('probe', claim));
+            const offers = Array.from({ length: OFFERS }, () => {
+                const id = binary(PartyCode.randomBytes(HASH_BYTES));
+                probes.add(id);
+                return { offer_id: id, offer: { type: 'offer', sdp } };
+            });
+            if (!closed) swarm.announce({ numwant: OFFERS, offers });
+        }
 
         const answerWith = async (msg, reply, tag, desc) => reply({
             to_peer_id: msg.peer_id, offer_id: msg.offer_id,
@@ -222,10 +272,24 @@
         }
 
         async function hear(msg, reply) {
+            if (msg.answer) {
+                if (!claim || !probes.has(msg.offer_id)) return;
+                const bytes = await unseal(keys.key, msg.answer.sdp);
+                return heardClaim(bytes && decodeClaim(bytes, 'claim'));
+            }
             if (!msg.offer || answered.has(msg.offer_id)) return;
-            const offer = await opened(keys.key, msg.offer.sdp, 'offer');
-            if (!offer || answered.has(msg.offer_id)) return;
+            const bytes = await unseal(keys.key, msg.offer.sdp);
+            if (!bytes || answered.has(msg.offer_id)) return;
             answered.add(msg.offer_id);
+            // Another host asking: say who we are, and step down if it is the later room.
+            const theirs = decodeClaim(bytes, 'probe');
+            if (theirs) {
+                if (!claim) return;
+                await reply({ to_peer_id: msg.peer_id, offer_id: msg.offer_id, answer: { type: 'answer', sdp: await seal(keys.key, encodeClaim('claim', claim)) } });
+                return heardClaim(theirs);
+            }
+            const offer = PartyCode.unpack(bytes);
+            if (!offer || offer.kind !== 'offer') return;
             const known = admitted.get(hex(offer.tag));
             if (known) return restart(known, offer, msg, reply);
             const made = await PartyRtc.makeAnswer(offer.desc, { iceServers, RTC, gatherMs });
@@ -235,18 +299,25 @@
             const bound = await PartyRtc.bind(made.peer, { secret, hostFp: made.desc.fingerprint, guestFp: offer.desc.fingerprint });
             if (!bound || closed) return made.peer.pc.close();
             admitted.set(hex(offer.tag), { peer: made.peer, desc: made.desc, ufrag: offer.desc.ufrag });
+            // Which room this is, for the guest to count from if it carries it on.
+            if (claim) {
+                try { made.peer.ctl.send(JSON.stringify({ t: 'claim', gen: claim.gen })); } catch (_) { /* closing */ }
+            }
             admit(made.peer);
         }
 
         const ready = keysFor(secret).then((derived) => {
             keys = derived;
-            if (!closed) swarm = createSwarm({ urls, topic: keys.topic, WebSocket, hear, announce: () => ({ ...ANNOUNCE, numwant: 0 }) });
+            if (closed) return;
+            swarm = createSwarm({ urls, topic: keys.topic, WebSocket, hear, announce: () => ({ ...ANNOUNCE, numwant: 0 }) });
+            if (claim) probeTimer = setInterval(probe, probeMs);
         });
         return {
             ready,
             up: () => (swarm ? swarm.up() : 0),
             close() {
                 closed = true;
+                clearInterval(probeTimer);
                 if (swarm) swarm.close();
             },
         };
@@ -383,7 +454,7 @@
      *   line takes the room over, as it stood, under the same code (see
      *   takeOver); the others find them in the swarm and join as new members.
      */
-    function createGuest({ secret, code, net, host: hostOptions, roomNow, joinMs = JOIN_MS, stallMs = DISCONNECT_MS }) {
+    function createGuest({ secret, code, net, host: hostOptions, roomNow, joinMs = JOIN_MS, stallMs = DISCONNECT_MS, first = false }) {
         let deliver = () => {};
         let hello = null;
         let link = null;
@@ -393,7 +464,8 @@
         let stall = null;
         let up = false;
         let closed = false;
-        const seen = { you: null, owner: null, resume: null, members: [], state: null, policy: null, chat: [] };
+        /** `gen` is the room's, as its host said when it let us in: see newClaim. */
+        const seen = { you: null, owner: null, resume: null, members: [], state: null, policy: null, chat: [], gen: 0 };
         const holding = PartyWs.createHoldBuffer();
 
         function hear(msg) {
@@ -418,6 +490,10 @@
                     break;
                 }
                 case 'policy': seen.policy = { control: msg.control, wait: msg.wait, locked: msg.locked }; break;
+                // The tracker's own word, not the room's: the session never hears it.
+                case 'claim':
+                    seen.gen = Number.isInteger(msg.gen) && msg.gen >= 0 ? msg.gen : 0;
+                    return;
                 case 'state': {
                     const { t, ack, ...state } = msg;
                     if (!seen.state || state.seq >= seen.state.seq) seen.state = state;
@@ -485,7 +561,7 @@
             const result = await meet(next ? joinMs / 2 : joinMs * 2);
             if (result.peer) return attach(result);
             if (result.error === 'closed') return null;
-            if (result.error === 'no-host' && next) return takeOver();
+            if (result.error === 'no-host' && next) return takeOver(seen.gen + 1);
             return deliver({ t: 'error', code: 'host-left' });
         }
 
@@ -513,14 +589,31 @@
          * room jumped by however far the two had drifted apart, or, stamped
          * ahead of its own clock, held everyone paused until it caught up.
          */
-        function takeOver() {
+        function takeOver(gen) {
             const now = hostOptions.now || PartyClock.localNow;
             const state = seen.state && { ...seen.state, pos: PartyState.expected(seen.state, roomNow()), at: now(), hold: null };
             const room = PartyHost.createHost({ ...hostOptions, policy: seen.policy || hostOptions.policy, state, chat: seen.chat });
-            hosting = { room, swarm: hostSwarm({ secret, admit: room.admit, ...net }) };
+            hosting = { room, swarm: hostSwarm({ secret, admit: room.admit, ...net, claim: newClaim(gen), onBeaten: stepDown }) };
             seen.resume = null;
             link = room.open(hear);
             greet();
+        }
+
+        /**
+         * Another browser is hosting a later room under this code: this one
+         * closes, which sends its guests to look for the host again, and the
+         * swarm's one host left is who they find — and who this browser
+         * joins, as someone new.
+         */
+        function stepDown() {
+            if (closed || !hosting) return;
+            const { room, swarm } = hosting;
+            hosting = null;
+            swarm.close();
+            if (link) link.close();
+            room.close();
+            seen.resume = null;
+            lost();
         }
 
         function close() {
@@ -538,6 +631,7 @@
         return {
             invite: () => code,
             trackers: () => (hosting ? hosting.swarm.up() : undefined),
+            guests: () => (hosting ? hosting.room.guests() : 0),
             open(receive) {
                 deliver = receive;
                 return {
@@ -546,6 +640,7 @@
                         if (msg.t === 'create') {
                             if (hello) return;
                             hello = msg;
+                            if (first) return takeOver(0);
                             meet(joinMs).then((result) => {
                                 if (result.peer) attach(result);
                                 else if (result.error !== 'closed') deliver({ t: 'error', code: result.error });
@@ -573,7 +668,7 @@
         const urls = trackerUrls(options.trackers);
         const net = {
             urls, iceServers: options.iceServers || PartyHost.DEFAULT_ICE,
-            RTC: options.RTC, gatherMs: options.gatherMs, WebSocket: options.WebSocket, renewMs: options.renewMs,
+            RTC: options.RTC, gatherMs: options.gatherMs, WebSocket: options.WebSocket, renewMs: options.renewMs, probeMs: options.probeMs,
         };
         if (options.code) {
             const secret = readCode(options.code);
@@ -583,26 +678,22 @@
                 roomNow: options.roomNow || Date.now,
             });
         }
+        // Hosting from the start, as a member that took over a room nobody
+        // had yet: so a host that finds a later room under its code steps
+        // down and joins it the way any member carries on. `trackers` is how
+        // many trackers answer: none means nobody can find this party, and
+        // codes are the way in.
         const { code, secret } = newCode();
-        const host = PartyHost.createHost(options);
-        const swarm = hostSwarm({ secret, admit: host.admit, ...net });
-        return {
-            open: host.open,
-            invite: () => code,
-            guests: host.guests,
-            /** How many trackers are answering: none means nobody can find this party, and codes are the way in. */
-            trackers: swarm.up,
-            close() {
-                swarm.close();
-                host.close();
-            },
-        };
+        return createGuest({
+            secret, code, net, host: options, joinMs: options.joinMs, stallMs: options.stallMs,
+            roomNow: options.roomNow || Date.now, first: true,
+        });
     }
 
     const PartyTracker = {
-        PREFIX, SECRET_BYTES, OFFERS, DEFAULT_TRACKERS, INTERVAL_MIN_S, INTERVAL_MAX_S, RENEW_MS, RETRY_MS, JOIN_MS,
+        PREFIX, SECRET_BYTES, OFFERS, PROBE_MS, DEFAULT_TRACKERS, INTERVAL_MIN_S, INTERVAL_MAX_S, RENEW_MS, RETRY_MS, JOIN_MS,
         RESTART_MS, DISCONNECT_MS, HELD, LABELS,
-        newCode, readCode, trackerUrls, keysFor, seal, unseal, createSwarm, hostSwarm, joinSwarm, restartSwarm, createTransport,
+        newCode, readCode, trackerUrls, keysFor, seal, unseal, newClaim, beats, createSwarm, hostSwarm, joinSwarm, restartSwarm, createTransport,
     };
 
     root.BB = root.BB || {};

@@ -837,7 +837,10 @@ derived from it, so a tracker sees which addresses connect and when, never the
 code or a word of what is said. The Tracker tile says how many of your trackers
 are answering before you pick it, and if none does, the start fails and offers
 codes instead. When the host leaves, the next in line hosts after about fifteen
-seconds and everyone else reconnects to them.
+seconds and everyone else reconnects to them. If two browsers end up hosting the
+one code — a host back from an outage to find the room carried on, or two
+members who each thought they were next — the later room stays, and the other
+host steps down and joins it with whoever had found it.
 
 **Server** and **Relay** are the sturdiest. A member who drops (a closed lid,
 a Wi-Fi change) comes back as the same member within a minute, and a host who
