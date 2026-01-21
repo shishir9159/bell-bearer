@@ -876,10 +876,19 @@
          * Never done, and for X's reason: the site rebuilds its header on its
          * own schedule, so a task that retired after placing it once would
          * leave it gone for the rest of the session.
+         *
+         * A toggle already placed is moved when the slot is somewhere else.
+         * claude.ai draws its header before the actions beside Share, and a
+         * toggle put wherever the header first offered stayed there for the
+         * whole session — at the header's left edge, nowhere near Share.
          */
         function injectToggle() {
-            if (document.getElementById(TOGGLE_ID)) return false;
             const slot = adapter.headerSlot();
+            const placed = document.getElementById(TOGGLE_ID);
+            if (placed) {
+                if (slot && placed.parentElement !== slot) slot.prepend(placed);
+                return false;
+            }
             if (!slot) return false;
 
             const button = document.createElement('button');

@@ -19,7 +19,28 @@
 
     const HOST_ID = 'bb-chat-test';
 
-    function stageClaude(conv) {
+    /**
+     * claude.ai's two headers, as it draws them: a chat's, with the title on
+     * the left and the actions slot holding Activity and Share on the right,
+     * and /new's, where the same slot holds only the incognito button.
+     */
+    const CHAT_ACTIONS = `<div data-testid="wiggle-controls-actions" style="display:flex">
+                <div id="session-activity-header-toggle"><button type="button" aria-label="Activity panel">A</button></div>
+                <div data-testid="wiggle-controls-actions-group"><button type="button" data-testid="wiggle-controls-actions-share">Share</button></div>
+            </div>`;
+    const chatHeader = (actions = CHAT_ACTIONS) => `
+        <div data-testid="chat-header" style="height:48px;display:flex;align-items:center">
+            <div data-testid="session-title-split"><button type="button">A long chat</button></div>
+            <div style="flex:1"></div>
+            <div id="dframe-header-actions-slot" style="display:flex">${actions}</div>
+        </div>`;
+    const NEW_CHAT_HEADER = `
+        <header style="height:48px"><div style="display:flex;align-items:center">
+            <div style="flex:1"></div>
+            <div id="dframe-header-actions-slot" style="display:flex"><button type="button" aria-label="Use incognito">I</button></div>
+        </div></header>`;
+
+    function stageClaude(conv, { header = chatHeader() } = {}) {
         teardown();
         const Tree = BB().ChatTree;
         const page = { leaf: conv.current, clicks: 0, sent: [], answerMs: 150 };
@@ -28,7 +49,7 @@
         host.id = HOST_ID;
         host.style.cssText = 'position:fixed;left:0;top:0;width:640px;height:520px;background:#fff;color:#000;z-index:1;';
         host.innerHTML = `
-            <div data-testid="chat-header" style="height:48px"><div data-testid="wiggle-controls-actions"><button>Share</button></div></div>
+            ${header}
             <div data-autoscroll-container="true" style="position:relative;height:360px;overflow-y:auto">
                 <div data-testid="transcript-list" style="position:relative"></div>
             </div>
@@ -127,6 +148,65 @@
     const claudeConversation = (pairs) => Object.assign(conversation(pairs), { site: 'claude' });
 
     suite('chat — on claude.ai', () => {
+        test('the toggle goes first among the actions on the right, before Activity and Share', async () => {
+            window.MockChrome.reset();
+            const conv = claudeConversation(4);
+            const page = stageClaude(conv);
+            const { ui, restore } = makeClaudeUi(conv);
+            try {
+                ui.install();
+                ui.injectToggle();
+                const toggle = document.getElementById('bb-chat-toggle');
+                const actions = page.host.querySelector('[data-testid="wiggle-controls-actions"]');
+                assert(toggle && actions.firstElementChild === toggle, 'the toggle is not first among the actions');
+                const title = page.host.querySelector('[data-testid="session-title-split"]');
+                assert(toggle.getBoundingClientRect().left > title.getBoundingClientRect().right, 'the toggle is not right of the title');
+                toggle.click();
+                assert(document.getElementById('bb-chat-panel'), 'the panel did not open');
+                toggle.click();
+                assert(!document.getElementById('bb-chat-panel'), 'a second press did not close it');
+            } finally { restore(); }
+        });
+
+        test('a toggle placed before a chat’s actions were drawn moves in among them', async () => {
+            window.MockChrome.reset();
+            const conv = claudeConversation(4);
+            const page = stageClaude(conv, { header: chatHeader('') });
+            const { ui, restore } = makeClaudeUi(conv);
+            try {
+                ui.install();
+                ui.injectToggle();
+                const header = page.host.querySelector('[data-testid="chat-header"]');
+                const slot = page.host.querySelector('#dframe-header-actions-slot');
+                const toggle = document.getElementById('bb-chat-toggle');
+                assert(toggle && toggle.parentElement === slot, 'the toggle did not wait in the actions slot');
+                assert(header.firstElementChild !== toggle, 'the toggle went to the header’s left edge');
+                slot.insertAdjacentHTML('beforeend', CHAT_ACTIONS);
+                ui.injectToggle();
+                assert(document.getElementById('bb-chat-toggle') === toggle, 'the toggle was drawn again rather than moved');
+                assert(slot.querySelector('[data-testid="wiggle-controls-actions"]').firstElementChild === toggle,
+                    'the toggle stayed where the header first offered');
+            } finally { restore(); }
+        });
+
+        test('on /new the toggle sits beside the incognito button, and a header with no actions gets none', async () => {
+            window.MockChrome.reset();
+            const conv = claudeConversation(4);
+            const page = stageClaude(conv, { header: NEW_CHAT_HEADER });
+            const { ui, restore } = makeClaudeUi(conv);
+            try {
+                ui.install();
+                ui.injectToggle();
+                const toggle = document.getElementById('bb-chat-toggle');
+                const incognito = page.host.querySelector('[aria-label="Use incognito"]');
+                assert(toggle && toggle.nextElementSibling === incognito, 'the toggle is not beside the incognito button');
+                toggle.remove();
+                page.host.querySelector('#dframe-header-actions-slot').remove();
+                ui.injectToggle();
+                assert(!document.getElementById('bb-chat-toggle'), 'a header with no actions was given the toggle at its edge');
+            } finally { restore(); }
+        });
+
         test('the outline reaches a Claude turn the page has not mounted, by its place and its words', async () => {
             window.MockChrome.reset();
             const conv = claudeConversation(20);

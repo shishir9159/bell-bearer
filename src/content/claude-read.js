@@ -52,7 +52,16 @@
         siblingNext: ['button[aria-label="Next"]', 'button[aria-label*="Next" i]'],
         siblingCount: ['span', 'div'],
         header: ['[data-testid="chat-header"]', 'header'],
-        headerActions: ['[data-testid="wiggle-controls-actions"]', '[data-testid="chat-header"] [data-testid*="actions"]'],
+        /**
+         * Where the panel's toggle goes: the actions at the header's right
+         * end. In a chat that is Activity and Share; on /new, where there is
+         * no chat header, the slot holding the incognito button.
+         */
+        headerActions: [
+            '[data-testid="wiggle-controls-actions"]',
+            '#dframe-header-actions-slot',
+            '[data-testid="chat-header"] [data-testid*="actions"]',
+        ],
         composerTools: ['[data-testid="input-menu-plus"]', 'button[aria-label*="Add files" i]', 'button[aria-label*="attach" i]'],
         limitNotice: ['[data-testid*="limit" i]', '[role="alert"]', '[role="status"]', 'fieldset ~ div', '[data-testid="chat-footer-row"]'],
         signIn: ['a[href="/login"]', '[data-testid="login-form"]'],
@@ -209,8 +218,14 @@
         return tool ? tool.parentElement : null;
     }
 
+    /**
+     * The actions, or nothing — never the header itself. Both of claude.ai's
+     * headers open with the title, so a toggle prepended into the header
+     * was drawn at its left edge: on /new always, and on a chat whenever
+     * the header was drawn before its actions were.
+     */
     function headerSlot() {
-        return find('headerActions') || find('header');
+        return find('headerActions');
     }
 
     function threadRight() {
