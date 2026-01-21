@@ -4777,6 +4777,36 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(store.sa, ['kept']);
         eq(await one.update((state) => ({ ...state, a: [...state.a, 'new'] })), { a: ['kept', 'new'], b: [] }, 'the next step runs');
     });
+    await checkAsync('a store whose extension was reloaded falls back without an error; any other failure says so', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        const one = pair();
+        const said = [];
+        const [realGet, realSet, error] = [global.chrome.storage.local.get, global.chrome.storage.local.set, console.error];
+        console.error = (...args) => said.push(String(args[0]));
+        try {
+            global.chrome.storage.local.get = () => Promise.reject(new Error('Extension context invalidated.'));
+            eq(await one.update((state) => state), { a: [], b: [] }, 'the fallback');
+            global.chrome.storage.local.set = () => Promise.reject(new Error('Extension context invalidated.'));
+            await one.save({ a: [1], b: [] });
+            eq(said, [], 'a page left open across a reload is not an error');
+
+            // The runtime losing its id says the same, whatever the message.
+            global.chrome.runtime = {};
+            global.chrome.storage.local.get = () => Promise.reject(new Error('Cannot read properties of undefined'));
+            await one.update((state) => state);
+            eq(said, [], 'an orphaned script went on saying so');
+            delete global.chrome.runtime;
+
+            global.chrome.storage.local.get = realGet;
+            global.chrome.storage.local.set = realSet;
+            eq(await one.update(() => { throw new Error('no'); }), { a: [], b: [] });
+            eq(said, ['Bell Bearer: could not update the pair'], 'a real failure went unreported');
+        } finally {
+            Object.assign(global.chrome.storage.local, { get: realGet, set: realSet });
+            delete global.chrome.runtime;
+            console.error = error;
+        }
+    });
 
     section('playlist ids');
     check('a real playlist is picked out of either URL form', () => {

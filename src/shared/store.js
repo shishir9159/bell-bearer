@@ -20,6 +20,24 @@
     const snapshot = (values) => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, JSON.stringify(value)]));
 
     /**
+     * Whether a failure is only the extension having gone from under this
+     * script: reloaded or updated while the page stayed open. Every chrome.*
+     * call throws from then on, and the store falls back as it does for any
+     * failure — but it used to say so as an error, and a page left open
+     * across a reload put one in the extension's error list every time its
+     * clock banked a tick or its queue took a look, for as long as it stayed
+     * open. Anything else is a real failure and is still reported.
+     */
+    function orphaned(error) {
+        if (/extension context invalidated/i.test(String((error && error.message) || error))) return true;
+        try {
+            return !!chrome.runtime && !chrome.runtime.id;
+        } catch (_) {
+            return true;
+        }
+    }
+
+    /**
      * @param {object} spec
      * @param {string[]} spec.keys     what is read
      * @param {Function} spec.read     the stored values → the state, or a promise of it
@@ -81,7 +99,7 @@
                 if (Object.keys(values).length) await chrome.storage.local.set(values);
                 return next;
             }, (error) => {
-                console.error(`Bell Bearer: could not update ${name}`, error);
+                if (!orphaned(error)) console.error(`Bell Bearer: could not update ${name}`, error);
                 return failed();
             });
         }
@@ -89,7 +107,7 @@
         /** Write `state` as it is, in its turn — for clearing, and for importing. */
         function save(state) {
             return queue(() => chrome.storage.local.set(toStorage(state)), (error) => {
-                console.error(`Bell Bearer: could not save ${name}`, error);
+                if (!orphaned(error)) console.error(`Bell Bearer: could not save ${name}`, error);
             });
         }
 
