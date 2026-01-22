@@ -7146,6 +7146,53 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Site.detectSite('notclaude.ai'), 'other');
     });
 
+    // ------------------------------------------------- the forge registry
+
+    section('the forge registry');
+
+    const ForgeSites = require('../src/shared/forge-sites.js');
+
+    check('every forge setting the registry can name has a default, and each is off', () => {
+        // Each puts a button into the forge's own page, which is asked for.
+        eq(ForgeSites.allKeys(), ['githubCiWatch', 'gitlabCiWatch', 'forgejoCiWatch']);
+        eq(ForgeSites.allKeys().map((key) => globalThis.BB.Settings.DEFAULTS[key]), [false, false, false]);
+        eq([ForgeSites.siteKey('gitlab', 'ciWatch'), ForgeSites.siteKey('gitlab', 'nonsense'), ForgeSites.siteKey('nowhere', 'ciWatch')],
+            ['gitlabCiWatch', null, null]);
+    });
+    check('a github run is the same run on any of its tabs, and a pull request on any of its', () => {
+        const run = ForgeSites.pageOfUrl('https://github.com/microsoft/vscode/actions/runs/37600934749');
+        eq(run, { site: 'github', kind: 'run', repo: 'microsoft/vscode', number: '37600934749', key: 'github:microsoft/vscode:run:37600934749' });
+        for (const tail of ['/job/1066', '/attempts/2', '?pr=4', '#summary-9']) {
+            eq(ForgeSites.pageOfUrl(`https://github.com/microsoft/vscode/actions/runs/37600934749${tail}`).key, run.key, tail);
+        }
+        eq(ForgeSites.pageOfUrl('https://github.com/microsoft/vscode/pull/340224/checks').key, 'github:microsoft/vscode:pull:340224');
+        eq(ForgeSites.pageOfUrl('https://www.github.com/a/b/pull/7/files').kind, 'pull');
+    });
+    check('a github page that is neither is nothing to watch', () => {
+        for (const url of ['https://github.com/microsoft/vscode', 'https://github.com/microsoft/vscode/actions',
+            'https://github.com/microsoft/vscode/actions/runs/abc', 'https://github.com/microsoft/vscode/pulls',
+            'https://github.com/microsoft/vscode/issues/12', 'https://gist.github.com/a/b/pull/1', 'not a url']) {
+            eq(ForgeSites.pageOfUrl(url), null, url);
+        }
+    });
+    check('a gitlab project is everything before /-/, however deep its groups go', () => {
+        eq(ForgeSites.pageOfUrl('https://gitlab.com/gitlab-org/gitlab-runner/-/pipelines/2921579040').key,
+            'gitlab:gitlab-org/gitlab-runner:run:2921579040');
+        const deep = ForgeSites.pageOfUrl('https://gitlab.com/a/b/c/d/project/-/merge_requests/7353/diffs');
+        eq([deep.repo, deep.kind, deep.number], ['a/b/c/d/project', 'pull', '7353']);
+        for (const url of ['https://gitlab.com/gitlab-org/gitlab-runner/-/pipelines', 'https://gitlab.com/gitlab-org/gitlab-runner/-/jobs/12',
+            'https://gitlab.com/project/-/pipelines/1', 'https://gitlab.com/a/b/pipelines/1']) {
+            eq(ForgeSites.pageOfUrl(url), null, url);
+        }
+    });
+    check('codeberg reads as forgejo: runs under actions, pull requests under pulls', () => {
+        eq(ForgeSites.pageOfUrl('https://codeberg.org/forgejo/forgejo/actions/runs/205222/jobs/0/attempt/1').key, 'forgejo:forgejo/forgejo:run:205222');
+        eq(ForgeSites.pageOfUrl('https://codeberg.org/forgejo/forgejo/pulls/14738/files').key, 'forgejo:forgejo/forgejo:pull:14738');
+        eq(ForgeSites.pageOfUrl('https://codeberg.org/forgejo/forgejo/pull/14738'), null, 'that is github\'s word');
+        eq([ForgeSites.siteOfHost('codeberg.org').name, ForgeSites.siteOfHost('CODEBERG.ORG').id, ForgeSites.siteOfHost('example.org')],
+            ['Codeberg', 'forgejo', null]);
+    });
+
     // ------------------------------------------------- the conversation tree
 
     section('the conversation tree');

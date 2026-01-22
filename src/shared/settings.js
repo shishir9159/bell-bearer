@@ -285,6 +285,15 @@
         claudeExportDollars: true,
         claudeExportThinking: false,
 
+        // Git forges, one set per forge; the key names come from
+        // src/shared/forge-sites.js#siteKey. Per forge:
+        //   <forge>CiWatch — a Watch button on a CI run and on a pull
+        //     request, for a desktop notification when it finishes. Off, by
+        //     the rule every button put into a site's own page follows.
+        githubCiWatch: false,
+        gitlabCiWatch: false,
+        forgejoCiWatch: false,
+
         // Watch party, as a party is started from this browser: the name the
         // room shows for you (blank is "Guest"), who may drive — 'everyone'
         // or 'host' and co-hosts — and whether the room waits for a member
