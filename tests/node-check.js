@@ -7256,6 +7256,85 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(CiWatch.message(watch, { state: 'manual', failed: [], left: 1 }, 'manual').title, 'Checks stopped at a manual job — microsoft/vscode');
     });
 
+    section('the forge ci watch — the worker');
+
+    require('../src/background/router.js');
+    const CiWatchWorker = require('../src/background/ci-watch.js');
+
+    /** The worker over fakes that write down what they were asked. */
+    function ciWorker({ session = true } = {}) {
+        const kept = {};
+        const asked = { notes: [], cleared: [], tabs: [], windows: [] };
+        const areaOf = { get: async (key) => ({ [key]: kept[key] }), set: async (values) => { Object.assign(kept, JSON.parse(JSON.stringify(values))); } };
+        const api = {
+            storage: session ? { session: areaOf } : { local: areaOf },
+            runtime: { getURL: (path) => `chrome-extension://bb/${path}` },
+            notifications: { create: async (id, options) => { asked.notes.push({ id, ...options }); }, clear: async (id) => { asked.cleared.push(id); } },
+            tabs: {
+                get: async (id) => { if (id === 404) throw new Error('No tab with id'); return { id, windowId: 9 }; },
+                update: async (id, props) => { asked.tabs.push([id, props]); },
+            },
+            windows: { update: async (id, props) => { asked.windows.push([id, props]); } },
+        };
+        return { worker: CiWatchWorker.createWorker(api), kept, asked };
+    }
+    const fromTab = (id) => ({ tab: { id } });
+    const ciWatch = { key: 'github:microsoft/vscode:run:1', noun: 'Run', label: 'chore: bump', repo: 'microsoft/vscode' };
+
+    await checkAsync('a watch is its tab\'s, and only a page on the same run gets it back', async () => {
+        const { worker } = ciWorker();
+        eq(await worker.start({ watch: ciWatch }, fromTab(7)), { ok: true });
+        eq((await worker.get({ key: ciWatch.key }, fromTab(7))).label, 'chore: bump');
+        eq(await worker.get({ key: 'github:microsoft/vscode:run:2' }, fromTab(7)), null, 'another run in the same tab');
+        eq(await worker.get({ key: ciWatch.key }, fromTab(8)), null, 'the same run in another tab');
+        eq(await worker.get({ key: ciWatch.key }, {}), null, 'not from a tab at all');
+        eq(await worker.start({ watch: {} }, fromTab(7)), { ok: false });
+    });
+    await checkAsync('the end of a run is said once, and only for a watch the worker knows', async () => {
+        const { worker, asked } = ciWorker();
+        await worker.start({ watch: ciWatch }, fromTab(7));
+        const end = { key: ciWatch.key, title: 'Run passed — microsoft/vscode', message: 'chore: bump' };
+        eq(await worker.done(end, fromTab(7)), { ok: true });
+        eq(await worker.done(end, fromTab(7)), { ok: false }, 'a second report of the same end');
+        eq(await worker.done(end, fromTab(8)), { ok: false }, 'a tab that was not watching');
+        eq(asked.notes.length, 1);
+        const [note] = asked.notes;
+        assert(note.id.startsWith('bb-ci:7:'), note.id);
+        eq([note.type, note.title, note.message, note.iconUrl], ['basic', end.title, end.message, 'chrome-extension://bb/icons/icon128.png']);
+        eq(await worker.get({ key: ciWatch.key }, fromTab(7)), null, 'the watch is over');
+    });
+    await checkAsync('stopping, or closing the tab, ends a watch without a word', async () => {
+        const { worker, asked } = ciWorker({ session: false });
+        await worker.start({ watch: ciWatch }, fromTab(7));
+        await worker.start({ watch: { ...ciWatch, key: 'gitlab:a/b:run:3' } }, fromTab(8));
+        eq(await worker.stop({ key: 'gitlab:a/b:run:4' }, fromTab(8)), { ok: false }, 'not the run it watches');
+        eq(await worker.stop({ key: ciWatch.key }, fromTab(7)), { ok: true });
+        await worker.closed(8);
+        eq(await worker.all(), {});
+        eq(asked.notes, []);
+    });
+    await checkAsync('two tabs starting at once both keep their watch', async () => {
+        const { worker } = ciWorker();
+        await Promise.all([1, 2, 3].map((tab) => worker.start({ watch: { ...ciWatch, key: `k${tab}` } }, fromTab(tab))));
+        eq(Object.keys(await worker.all()).sort(), ['1', '2', '3']);
+    });
+    await checkAsync('a click brings the watched tab forward, and a closed one quietly does not', async () => {
+        const { worker, asked } = ciWorker();
+        eq(await worker.clicked('bb-ci:7:1700000000000'), true);
+        eq([asked.cleared, asked.tabs, asked.windows], [['bb-ci:7:1700000000000'], [[7, { active: true }]], [[9, { focused: true }]]]);
+        eq(await worker.clicked('bb-ci:404:1'), false, 'closed since');
+        eq(await worker.clicked('somebody-else:7:1'), false, 'not ours');
+    });
+    check('the worker is loaded, after the router, and the notifications it raises are asked for', () => {
+        const scripts = [.../importScripts\(([\s\S]*?)\);/.exec(readRepo('background.js'))[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+        assert(scripts.indexOf('src/background/ci-watch.js') > scripts.indexOf('src/background/router.js'));
+        for (const name of ['manifest.json', 'manifest.firefox.json']) {
+            const doc = JSON.parse(readRepo(name));
+            assert(doc.permissions.includes('notifications'), name);
+        }
+        assert(JSON.parse(readRepo('manifest.firefox.json')).background.scripts.includes('src/background/ci-watch.js'));
+    });
+
     // ------------------------------------------------- the conversation tree
 
     section('the conversation tree');

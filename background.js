@@ -34,6 +34,7 @@ importScripts(
     'src/background/trials.js',
     'src/background/skim.js',
     'src/background/prompt-queue.js',
+    'src/background/ci-watch.js',
     'src/background/party-loader.js',
     'src/background/party.js',
 );
