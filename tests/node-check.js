@@ -7193,6 +7193,69 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             ['Codeberg', 'forgejo', null]);
     });
 
+    section('the forge ci watch — reading a run');
+
+    const CiWatch = require('../src/shared/ci-watch.js');
+
+    check('every spelling the three forges were seen to draw reads as its state', () => {
+        // Copied from the live pages and their data, October 2026.
+        const seen = {
+            failed: ['failed:  octicon octicon-x-circle-fill color-fg-danger', 'failing checks', 'FAILURE', 'TIMED_OUT', 'STARTUP_FAILURE',
+                'ERROR', 'status_failed_borderless-icon', 'ci-icon ci-icon-variant-danger', 'failed', 'failure',
+                'svg octicon-x-circle-fill text red', 'commit-status icon text red svg octicon-x', 'commit-status icon text red svg gitea-exclamation'],
+            running: ['currently running: ', 'anim-rotate', 'StatusIcon-module__animRotate__PjD3B', 'in progress checks', 'IN_PROGRESS',
+                'prc-Spinner-SpinnerAnimation-tutJZ', 'status_running_borderless-icon', 'running', 'svg octicon-meter text yellow job-status-rotate'],
+            queued: ['queued: ', 'QUEUED', 'PENDING', 'EXPECTED', 'status_pending_borderless', 'created', 'preparing', 'waiting_for_resource',
+                'scheduled', 'waiting', 'blocked', 'commit-status icon text yellow svg octicon-dot-fill'],
+            passed: ['completed successfully: ', 'octicon octicon-check-circle-fill color-fg-success', 'successful checks', 'SUCCESS', 'NEUTRAL',
+                'status_success_borderless-icon', 'status_warning', 'success', 'svg octicon-check-circle-fill text green',
+                'commit-status icon text green svg octicon-check', 'commit-status icon text yellow svg gitea-exclamation'],
+            cancelled: ['cancelled: octicon-stop', 'CANCELLED', 'status_canceled', 'canceling'],
+            skipped: ['skipped: octicon-skip', 'SKIPPED', 'STALE', 'commit-status icon text grey svg octicon-skip'],
+            manual: ['status_manual', 'manual', 'ACTION_REQUIRED'],
+        };
+        for (const [state, spellings] of Object.entries(seen)) {
+            for (const one of spellings) eq(CiWatch.stateOf(one), state, one);
+        }
+        eq([CiWatch.stateOf(''), CiWatch.stateOf('   '), CiWatch.stateOf('unknown'), CiWatch.stateOf(null)], [null, null, null, null]);
+        eq(CiWatch.stateOf('Blocked by required conditions'), 'queued', '"required" is not red');
+    });
+    check('a run\'s own state is taken as drawn; checks with none are read from their jobs', () => {
+        const jobs = (...states) => states.map((state, i) => ({ name: `job ${i}`, state }));
+        eq(CiWatch.summarize({ state: 'running', jobs: jobs('passed', 'failed', 'running') }),
+            { state: 'running', failed: ['job 1'], left: 1 });
+        eq(CiWatch.summarize({ jobs: jobs('passed', 'queued') }).state, 'running', 'a check yet to start');
+        eq(CiWatch.summarize({ jobs: jobs('passed', 'failed', 'cancelled') }).state, 'failed');
+        eq(CiWatch.summarize({ jobs: jobs('passed', 'cancelled') }).state, 'cancelled');
+        eq(CiWatch.summarize({ jobs: jobs('passed', 'manual', 'skipped') }).state, 'manual');
+        eq(CiWatch.summarize({ jobs: jobs('skipped', 'skipped') }).state, 'skipped');
+        eq(CiWatch.summarize({ jobs: jobs('passed', 'skipped') }).state, 'passed');
+        eq([CiWatch.summarize({ jobs: [] }), CiWatch.summarize(null), CiWatch.summarize({ jobs: [{ name: 'x', state: null }] })], [null, null, null]);
+    });
+    check('a job drawn twice is named once, and a nameless one not at all', () => {
+        // GitHub draws each job in the sidebar and again in the graph.
+        const twice = [{ name: 'Linux / Electron', state: 'failed' }, { name: ' Linux / Electron ', state: 'failed' }, { name: '', state: 'failed' }];
+        eq(CiWatch.summarize({ state: 'failed', jobs: twice }).failed, ['Linux / Electron']);
+    });
+    check('the watch ends when the run does, or at the first failure', () => {
+        const at = (state, failed = []) => CiWatch.outcome({ state, failed, left: 0 });
+        eq([at('running'), at('queued'), at('passed'), at('cancelled'), at('manual'), at('skipped')],
+            [null, null, 'passed', 'cancelled', 'manual', 'skipped']);
+        eq(at('running', ['Compile & Hygiene']), 'failed', 'the run goes on; the wait is over');
+        eq(at('failed'), 'failed', 'a failure the page names no job for');
+        eq(CiWatch.outcome(null), null);
+    });
+    check('the notification says what ended, how, where, and which jobs failed', () => {
+        const watch = { noun: 'Checks', label: 'chore: bump @github/copilot-sdk', repo: 'microsoft/vscode' };
+        eq(CiWatch.message(watch, { state: 'passed', failed: [], left: 0 }, 'passed'),
+            { title: 'Checks passed — microsoft/vscode', message: 'chore: bump @github/copilot-sdk' });
+        const early = CiWatch.message(watch, { state: 'running', failed: ['A', 'B', 'C', 'D', 'E'], left: 3 }, 'failed');
+        eq(early.message.split('\n')[1], 'Failed: A, B, C and 2 more (3 still running)');
+        const late = CiWatch.message({ ...watch, noun: 'Pipeline' }, { state: 'failed', failed: ['lint'], left: 0 }, 'failed');
+        eq(late, { title: 'Pipeline failed — microsoft/vscode', message: 'chore: bump @github/copilot-sdk\nFailed: lint' });
+        eq(CiWatch.message(watch, { state: 'manual', failed: [], left: 1 }, 'manual').title, 'Checks stopped at a manual job — microsoft/vscode');
+    });
+
     // ------------------------------------------------- the conversation tree
 
     section('the conversation tree');
