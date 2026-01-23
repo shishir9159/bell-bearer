@@ -73,12 +73,14 @@
      * How the watch ends, or null while it goes on. A failed job ends it
      * before the run does: a run that is not set to stop on the first
      * failure can go on for half an hour after it, and its failure is what
-     * the wait was for.
+     * the wait was for. Only a failure new since the watch began, though:
+     * `known` are those already drawn when it was started, which the user
+     * had in front of them as they asked to hear about the rest.
      */
-    function outcome(summary) {
+    function outcome(summary, known = []) {
         if (!summary) return null;
         if (finished(summary.state)) return summary.state;
-        return summary.failed.length ? 'failed' : null;
+        return summary.failed.some((name) => !known.includes(name)) ? 'failed' : null;
     }
 
     const WORDS = Object.freeze({

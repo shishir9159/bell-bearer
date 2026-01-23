@@ -153,6 +153,12 @@
 <script src="../src/content/chat-runner.js"></script>
 <script src="../src/content/chat-queue-view.js"></script>
 <script src="../src/content/chat-ui.js"></script>
+
+<!-- The git forges' CI watch: the registry, the reading every forge shares,
+     and the page side. In manifest order. -->
+<script src="../src/shared/forge-sites.js"></script>
+<script src="../src/shared/ci-watch.js"></script>
+<script src="../src/content/ci-watch.js"></script>
 <!-- The watch party. No manifest lists these — the party loader injects
      them into a party's tab — so this page is the one place they load
      together with the content scripts, in the loader's order. -->

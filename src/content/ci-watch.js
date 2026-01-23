@@ -1,0 +1,227 @@
+/**
+ * Watching a CI run from its own page: a Watch button, and the reading that
+ * tells the worker when the run is over. The forge is the adapter's business
+ * (src/content/github-read.js and the two beside it); nothing here names one.
+ *
+ * By the time a watch matters the tab is in the background — that is the
+ * point of one, and the difficulty. DomWatch coalesces onto animation frames
+ * and a hidden tab runs none, so the reading keeps paths of its own:
+ *   - its own MutationObserver, which a hidden tab still delivers to, read
+ *     once a burst has settled;
+ *   - a read whenever the tab comes back into view;
+ *   - a slow timer, for the pages that stop updating themselves while out
+ *     of sight — GitHub's pull request checks and GitLab's pipelines both
+ *     do — whose adapter knows a request the page itself makes instead.
+ *     Chrome lets a hidden tab's timer fire about once a minute, so that is
+ *     its pace; asking for more would buy nothing.
+ */
+(function (root) {
+    'use strict';
+
+    const { ForgeSites, CiWatch } = root.BB;
+
+    const BUTTON_ID = 'bb-ci-watch';
+    const POLL_MS = 60 * 1000;
+    /** A page redraws in bursts; the run is read once the burst is over. */
+    const SETTLE_MS = 500;
+    /** What a burst is made of: the icons' labels and classes change, not only the nodes. */
+    const WATCHED_ATTRIBUTES = ['aria-label', 'class', 'data-testid', 'data-tooltip-content'];
+
+    function createCiWatch({ adapter, watcher, notify, getSettings, ask, win = root, doc = root.document }) {
+        const site = adapter.site;
+        const forge = ForgeSites.get(site);
+
+        /** What this tab shows, when it is a run or a pull request. */
+        let page = null;
+        /** The watch, while there is one: { key, noun, label, repo, known }. */
+        let watching = null;
+        let observer = null;
+        let timer = 0;
+        let settle = 0;
+
+        const enabled = () => getSettings()[ForgeSites.siteKey(site, 'ciWatch')] === true;
+
+        function summary(from = doc) {
+            try { return CiWatch.summarize(adapter.ci.read(from, page)); } catch (_) { return null; }
+        }
+
+        // ---------------------------------------------------------- reading
+
+        function check(read = summary()) {
+            if (!watching || !page || page.key !== watching.key) return;
+            const ended = CiWatch.outcome(read, watching.known);
+            if (ended) finish(read, ended);
+        }
+
+        function soon() {
+            if (settle) return;
+            settle = setTimeout(() => {
+                settle = 0;
+                check();
+            }, SETTLE_MS);
+        }
+
+        /** The adapter's request when it has one; the page as it stands when that says nothing. */
+        async function poll() {
+            if (!watching) return;
+            const fetched = adapter.ci.fetch ? CiWatch.summarize(await adapter.ci.fetch(page)) : null;
+            check(fetched || summary());
+        }
+
+        function onVisible() {
+            if (doc.visibilityState === 'visible') check();
+        }
+
+        function observe() {
+            if (observer || !doc.body) return;
+            observer = new MutationObserver(soon);
+            observer.observe(doc.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: WATCHED_ATTRIBUTES });
+            doc.addEventListener('visibilitychange', onVisible);
+            timer = setInterval(poll, POLL_MS);
+            poll();
+        }
+
+        function unobserve() {
+            if (observer) observer.disconnect();
+            observer = null;
+            clearInterval(timer);
+            clearTimeout(settle);
+            timer = 0;
+            settle = 0;
+            doc.removeEventListener('visibilitychange', onVisible);
+        }
+
+        // --------------------------------------------------------- the watch
+
+        async function start() {
+            const now = summary();
+            const already = now && CiWatch.finished(now.state) ? now.state : null;
+            if (already) {
+                notify(`${forge.nouns[page.kind]} already ${already === 'manual' ? 'stopped at a manual job' : already}`, 'info');
+                return;
+            }
+            const watch = {
+                key: page.key,
+                noun: forge.nouns[page.kind],
+                label: adapter.ci.label(doc, page),
+                repo: page.repo,
+                // Failures already on screen are what the user was looking
+                // at; a watch is for the rest of the run.
+                known: now ? now.failed : [],
+            };
+            const answer = await ask({ action: 'ciWatchStart', watch });
+            if (!answer || !answer.ok) {
+                notify('Could not start watching — reload the page and try again', 'error');
+                return;
+            }
+            watching = watch;
+            observe();
+            render();
+            notify('Watching — a notification comes when it finishes', 'success');
+        }
+
+        async function stop() {
+            const key = watching && watching.key;
+            watching = null;
+            unobserve();
+            render();
+            if (key) await ask({ action: 'ciWatchStop', key });
+        }
+
+        function finish(read, ended) {
+            const watch = watching;
+            watching = null;
+            unobserve();
+            render();
+            const words = CiWatch.message(watch, read, ended);
+            ask({ action: 'ciWatchDone', key: watch.key, ...words });
+            // The desktop notification is for a tab out of sight; one on
+            // screen says it here too, where the eyes already are.
+            if (doc.visibilityState === 'visible') notify(words.title, ended === 'passed' ? 'success' : 'error', 6000);
+        }
+
+        /** A tab that was watching this run before it reloaded goes on watching it. */
+        async function resume() {
+            if (!page) return;
+            const key = page.key;
+            const watch = await ask({ action: 'ciWatchGet', key });
+            if (!watch || !page || page.key !== key || watching) return;
+            watching = { known: [], ...watch };
+            observe();
+            render();
+        }
+
+        // ---------------------------------------------------------- the button
+
+        function render() {
+            const button = doc.getElementById(BUTTON_ID);
+            if (!button) return;
+            const on = !!watching;
+            button.textContent = on ? 'Watching' : 'Watch';
+            button.classList.toggle('bb-ci-watching', on);
+            button.setAttribute('aria-pressed', String(on));
+            button.title = on
+                ? 'Stop watching'
+                : `Get a desktop notification when ${page && page.kind === 'pull' ? 'these checks finish' : 'this run finishes'}`;
+        }
+
+        /** Put in, kept in and taken out on the page's own redraws; never done, since the page redraws for good. */
+        function place() {
+            const placed = doc.getElementById(BUTTON_ID);
+            if (!enabled() || !page) {
+                if (placed) placed.remove();
+                return false;
+            }
+            const slot = adapter.ci.slot(doc, page);
+            if (!slot) return false;
+            if (placed) {
+                if (placed.parentElement !== slot) slot.prepend(placed);
+                return false;
+            }
+            const button = doc.createElement('button');
+            button.type = 'button';
+            button.id = BUTTON_ID;
+            button.className = `${adapter.ci.buttonClass || ''} bb-ci-watch`.trim();
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (watching) stop(); else start();
+            });
+            slot.prepend(button);
+            render();
+            return false;
+        }
+
+        // ------------------------------------------------------------ the page
+
+        function onNavigate() {
+            page = ForgeSites.pageOfUrl(win.location.href);
+            // Off to another page, the watch waits in the worker for this tab
+            // to come back to its run; this page just stops reading.
+            if (watching && (!page || page.key !== watching.key)) {
+                watching = null;
+                unobserve();
+            }
+            const stale = doc.getElementById(BUTTON_ID);
+            if (stale) stale.remove();
+            watcher.add('ci-watch-button', place);
+            resume();
+        }
+
+        function install() {
+            onNavigate();
+        }
+
+        /** The switch was turned, on this page or another: show or take away the button now. */
+        function refreshSurfaces() {
+            watcher.add('ci-watch-button', place);
+        }
+
+        return { install, onNavigate, refreshSurfaces, check, poll, isWatching: () => !!watching };
+    }
+
+    const CiWatchContent = { BUTTON_ID, POLL_MS, SETTLE_MS, createCiWatch };
+
+    root.BB.CiWatchContent = CiWatchContent;
+    if (typeof module !== 'undefined' && module.exports) module.exports = CiWatchContent;
+})(typeof globalThis !== 'undefined' ? globalThis : this);

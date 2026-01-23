@@ -63,8 +63,11 @@
             const watch = message && message.watch;
             if (tab === null || !watch || !watch.key) return { ok: false };
             return change((watches) => {
+                // `known` are the failures on screen as it started, which do
+                // not end it; a reload must not forget them and end it at once.
+                const known = Array.isArray(watch.known) ? watch.known.slice(0, 100).map(String) : [];
                 watches[tab] = { key: String(watch.key), noun: String(watch.noun || 'Run'), label: String(watch.label || ''),
-                    repo: String(watch.repo || ''), since: Date.now() };
+                    repo: String(watch.repo || ''), known, since: Date.now() };
                 return { ok: true };
             });
         }

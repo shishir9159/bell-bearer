@@ -7243,6 +7243,9 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             [null, null, 'passed', 'cancelled', 'manual', 'skipped']);
         eq(at('running', ['Compile & Hygiene']), 'failed', 'the run goes on; the wait is over');
         eq(at('failed'), 'failed', 'a failure the page names no job for');
+        const going = { state: 'running', failed: ['lint'], left: 2 };
+        eq([CiWatch.outcome(going, ['lint']), CiWatch.outcome({ ...going, failed: ['lint', 'test'] }, ['lint'])], [null, 'failed'],
+            'a failure on screen as the watch began is not news; the next one is');
         eq(CiWatch.outcome(null), null);
     });
     check('the notification says what ended, how, where, and which jobs failed', () => {
@@ -7283,8 +7286,9 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     await checkAsync('a watch is its tab\'s, and only a page on the same run gets it back', async () => {
         const { worker } = ciWorker();
-        eq(await worker.start({ watch: ciWatch }, fromTab(7)), { ok: true });
-        eq((await worker.get({ key: ciWatch.key }, fromTab(7))).label, 'chore: bump');
+        eq(await worker.start({ watch: { ...ciWatch, known: ['lint'] } }, fromTab(7)), { ok: true });
+        const kept = await worker.get({ key: ciWatch.key }, fromTab(7));
+        eq([kept.label, kept.known], ['chore: bump', ['lint']], 'the failures it began with outlive a reload');
         eq(await worker.get({ key: 'github:microsoft/vscode:run:2' }, fromTab(7)), null, 'another run in the same tab');
         eq(await worker.get({ key: ciWatch.key }, fromTab(8)), null, 'the same run in another tab');
         eq(await worker.get({ key: ciWatch.key }, {}), null, 'not from a tab at all');
