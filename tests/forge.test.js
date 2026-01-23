@@ -212,4 +212,135 @@
             teardown();
         });
     });
+
+    // ------------------------------------------------------------ github
+
+    /** github.com's run page, October 2026: the header, then the job graph, then the sidebar listing the jobs again. */
+    const graphJob = (path, label, cls, duration) => `
+        <streaming-graph-job class="js-socket-channel WorkflowJob position-relative">
+            <a class="WorkflowJob-title d-flex flex-items-center" href="/microsoft/vscode/actions/runs/1/job/${path.length}">
+                <div class="width-full"><div class="d-flex flex-auto flex-items-center">
+                    <div><svg aria-label="${label}" class="${cls}"></svg></div>
+                    ${path.map((part) => `<span class="css-truncate css-truncate-overflow">${part}</span>`).join('<span>/</span>')}
+                </div><div class="flex-self-baseline text-small color-fg-muted">${duration}</div></div>
+            </a>
+        </streaming-graph-job>`;
+    const githubRun = (head) => `
+        <page-header class="PageHeader">
+            <div class="PageHeader-titleBar">
+                <div class="PageHeader-titleWrap">
+                    <span class="PageHeader-leadingVisual actions-workflow-runs-status">
+                        <span class="hide-sm hide-md"><svg aria-label="${head[0]}" class="${head[1]}"></svg></span>
+                        <span class="hide-lg hide-xl"><svg aria-label="${head[0]}" class="${head[1]}"></svg></span>
+                    </span>
+                    <h1 class="PageHeader-title"><span><span class="markdown-title">chore: bump the sdk</span> <span class="color-fg-muted">#69717</span></span></h1>
+                </div>
+                <span class="PageHeader-actions"><div class="d-none d-md-flex"><button type="button" class="Button Button--iconOnly">…</button></div></span>
+            </div>
+        </page-header>
+        <div class="visual-graph"><div class="WorkflowCard">
+            ${graphJob(['Compile &amp; Hygiene'], 'completed successfully: ', 'octicon octicon-check-circle-fill color-fg-success', '5m 40s')}
+            ${graphJob(['Linux', 'Electron-Smoke'], 'failed: ', 'octicon octicon-x-circle-fill color-fg-danger', '15m 49s')}
+            ${graphJob(['Windows', 'Electron'], 'currently running: ', 'anim-rotate', '')}
+        </div></div>
+        <ul><li><a class="prc-ActionList-ActionListContent" href="/microsoft/vscode/actions/runs/1/job/9"><svg class="octicon octicon-check-circle-fill"></svg>Compile &amp; Hygiene</a></li></ul>`;
+    const RUNNING = ['currently running: ', 'anim-rotate'];
+    const FAILED = ['failed: ', 'octicon octicon-x-circle-fill color-fg-danger'];
+
+    /** A pull request's React merge box: a list per state, each named by a heading only a screen reader sees. */
+    const checkList = (id, heading, rows) => `
+        <div class="ListView-module__container"><h3 class="sr-only" id="${id}">${heading}</h3>
+            <ul aria-labelledby="${id}">${rows.map((name) => `
+                <li aria-label="${name} started 7m ago"><div class="Title-module__container"><h4 class="Title-module__heading">${name}</h4></div></li>`).join('')}
+            </ul></div>`;
+    const githubPull = (lists = true) => `
+        <div class="prc-PageHeader-PageHeader-YLwBQ">
+            <h1><span class="markdown-title">chore: bump the sdk</span></h1>
+            <div class="prc-PageHeader-Actions-wawWm"><div class="d-flex gap-2"><button type="button">Code</button></div></div>
+        </div>
+        <section aria-label="Checks">
+            <div class="MergeBoxSectionHeader-module__wrapper"><div class="flex-1">
+                <h3>Checks awaiting conflict resolution</h3><p class="fgColor-muted mb-0">2 failing, 1 in progress, 1 successful checks</p>
+            </div></div>
+            ${lists ? checkList('r1', 'failing checks', ['Code OSS / Compile &amp; Hygiene (pull_request)', 'Code OSS / Linux / Electron (pull_request)'])
+                + checkList('r2', 'in progress checks', ['VS Code PR Check'])
+                + checkList('r3', 'successful checks', ['chat-lib tests (ubuntu-latest)']) : ''}
+        </section>`;
+    const PULL = { site: 'github', kind: 'pull', repo: 'microsoft/vscode', number: '340202' };
+    const RUN = { site: 'github', kind: 'run', repo: 'microsoft/vscode', number: '1' };
+
+    suite('forge ci watch: github', () => {
+        test('a run reads as its header icon says, and each job of the graph once, named without its time', async () => {
+            stage(githubRun(RUNNING));
+            const { GithubRead, CiWatch } = BB();
+            const read = GithubRead.adapter.ci.read(document, RUN);
+            assertEqual(read.state, 'running');
+            assertDeepEqual(read.jobs, [
+                { name: 'Compile & Hygiene', state: 'passed' },
+                { name: 'Linux / Electron-Smoke', state: 'failed' },
+                { name: 'Windows / Electron', state: 'running' },
+            ]);
+            assertDeepEqual(CiWatch.summarize(read), { state: 'running', failed: ['Linux / Electron-Smoke'], left: 1 });
+            teardown();
+        });
+
+        test('a finished run reads finished, is named by its title, and takes the button before its menu', async () => {
+            const host = stage(githubRun(FAILED));
+            const { ci } = BB().GithubRead.adapter;
+            assertEqual(ci.read(document, RUN).state, 'failed');
+            assertEqual(ci.label(document, RUN), 'chore: bump the sdk');
+            assertEqual(ci.slot(document, RUN), host.querySelector('.PageHeader-actions'));
+            teardown();
+        });
+
+        test('a pull request\'s checks read by the list each is in, whatever the heading above says', async () => {
+            const host = stage(githubPull());
+            const { GithubRead, CiWatch } = BB();
+            const summary = CiWatch.summarize(GithubRead.adapter.ci.read(document, PULL));
+            assertDeepEqual(summary, { state: 'running', failed: ['Code OSS / Compile & Hygiene (pull_request)', 'Code OSS / Linux / Electron (pull_request)'], left: 1 });
+            assertEqual(GithubRead.adapter.ci.slot(document, PULL), host.querySelector('.d-flex.gap-2'));
+            assertEqual(GithubRead.adapter.ci.label(document, PULL), 'chore: bump the sdk');
+            teardown();
+        });
+
+        test('with its list folded away, the counts under the heading still say what failed', async () => {
+            stage(githubPull(false));
+            const { GithubRead, CiWatch } = BB();
+            const read = GithubRead.adapter.ci.read(document, PULL);
+            assertDeepEqual(read.jobs.map((job) => job.state), ['failed', 'failed', 'running', 'passed']);
+            assertDeepEqual(CiWatch.summarize(read), { state: 'running', failed: [], left: 1 }, 'no names to give');
+            assertDeepEqual(GithubRead.countedJobs('2 failing, 1 pending, and 33 successful checks').length, 36);
+            teardown();
+        });
+
+        test('the old merge box: one list, an icon on each row', async () => {
+            stage(`<div class="merge-status-list">
+                <div class="merge-status-item"><svg class="octicon octicon-x color-fg-danger"></svg><strong>build</strong></div>
+                <div class="merge-status-item"><svg class="octicon octicon-check color-fg-success"></svg><strong>lint</strong></div>
+            </div>`);
+            const read = BB().GithubRead.adapter.ci.read(document, PULL);
+            assertDeepEqual(read.jobs, [{ name: 'build', state: 'failed' }, { name: 'lint', state: 'passed' }]);
+            teardown();
+        });
+
+        test('out of sight, a pull request\'s checks are asked for as the merge box asks, and an odd answer is not believed', async () => {
+            const { GithubRead } = BB();
+            const calls = [];
+            const answer = (status, body) => async (url, options) => {
+                calls.push([url, options]);
+                return { ok: status === 200, json: async () => body };
+            };
+            const checks = { statusChecks: [{ displayName: 'build', state: 'FAILURE' }, { displayName: 'lint', state: 'IN_PROGRESS' }], statusRollup: {} };
+            const read = await GithubRead.fetchChecks(PULL, { fetchImpl: answer(200, checks) });
+            assertDeepEqual(read, { state: null, jobs: [{ name: 'build', state: 'failed' }, { name: 'lint', state: 'running' }] });
+            assertEqual(calls[0][0], '/microsoft/vscode/pull/340202/page_data/status_checks');
+            assertEqual(calls[0][1].headers['GitHub-Verified-Fetch'], 'true');
+            assertEqual(await GithubRead.fetchChecks(PULL, { fetchImpl: answer(406, checks) }), null, 'refused');
+            assertEqual(await GithubRead.fetchChecks(PULL, { fetchImpl: answer(200, { checks: [] }) }), null, 'another shape');
+            assertEqual(await GithubRead.fetchChecks(PULL, { fetchImpl: async () => { throw new TypeError('offline'); } }), null, 'offline');
+            calls.length = 0;
+            assertEqual(await GithubRead.fetchChecks(RUN, { fetchImpl: answer(200, checks) }), null, 'a run keeps itself current');
+            assertEqual(calls.length, 0);
+        });
+    });
 })();
