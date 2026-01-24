@@ -343,4 +343,98 @@
             assertEqual(calls.length, 0);
         });
     });
+
+    // ------------------------------------------------------------ gitlab
+
+    /** gitlab.com's status icon: the state is in the svg's test id; the words are translated. */
+    const gitlabIcon = (status, variant, tag = 'span') => `<${tag} class="ci-icon gl-inline-flex ci-icon-variant-${variant}" data-testid="ci-icon">
+        <span class="ci-icon-gl-icon-wrapper"><svg data-testid="status_${status}_borderless-icon" class="gl-icon s16"></svg></span>
+        <span class="gl-sr-only">Status: ${status}</span></${tag}>`;
+    const gitlabJob = (name, status, variant) => `<div data-testid="ci-job-item"><a data-testid="ci-job-item-content">
+        ${gitlabIcon(status, variant)}<div data-testid="job-name-row">${name}</div></a></div>`;
+    const gitlabPipeline = (status, variant) => `
+        <div data-testid="pipeline-header">
+            <header class="gl-flex"><div class="gl-flex gl-w-full gl-flex-wrap">
+                <h1 class="gl-heading-1" data-testid="page-heading">#2840224658</h1>
+                <div class="page-heading-actions gl-flex" data-testid="page-heading-actions"></div>
+            </div></header>
+            <div data-testid="pipeline-created-status">${gitlabIcon(status, variant, 'a')}</div>
+        </div>
+        <div class="pipeline-graph">${gitlabJob('workload', 'failed', 'danger')}${gitlabJob('unit tests', 'success', 'success')}${gitlabJob('lint', 'warning', 'warning')}</div>`;
+    const gitlabMerge = `
+        <div class="detail-page-header gl-flex">
+            <h1 class="title gl-heading-1" data-testid="title-content">[19.2] Push deb packages to Pulp</h1>
+            <div class="js-issuable-actions"><button type="button" class="btn btn-md btn-default">Code</button></div>
+        </div>
+        <div class="mr-state-widget"><div data-testid="pipeline-container"><div class="mr-widget-section">
+            ${gitlabIcon('running', 'info', 'a')}
+            <button data-testid="pipeline-mini-graph-dropdown-toggle">${gitlabIcon('success', 'success')}</button>
+        </div></div></div>`;
+    const PIPELINE = { site: 'gitlab', kind: 'run', repo: 'gitlab-org/ci/gitlab-runner', number: '2840224658' };
+    const MERGE = { site: 'gitlab', kind: 'pull', repo: 'gitlab-org/ci/gitlab-runner', number: '7353' };
+
+    /** GitLab's API, as a table of address → answer. */
+    function gitlabApi(table) {
+        const asked = [];
+        const fetchImpl = async (url) => {
+            asked.push(url);
+            const body = table[url];
+            return { ok: body !== undefined, json: async () => body };
+        };
+        return { asked, fetchImpl };
+    }
+    const API = '/api/v4/projects/gitlab-org%2Fci%2Fgitlab-runner';
+
+    suite('forge ci watch: gitlab', () => {
+        test('a pipeline reads as its header icon says, with the jobs its graph draws', async () => {
+            const host = stage(gitlabPipeline('running', 'info'));
+            const { ci } = BB().GitlabRead.adapter;
+            const read = ci.read(document, PIPELINE);
+            assertEqual(read.state, 'running');
+            assertDeepEqual(read.jobs, [{ name: 'workload', state: 'failed' }, { name: 'unit tests', state: 'passed' }, { name: 'lint', state: 'passed' }],
+                'a job allowed to fail is drawn as a warning, and is no failure');
+            assertEqual(ci.slot(document, PIPELINE), host.querySelector('[data-testid="page-heading-actions"]'));
+            teardown();
+        });
+
+        test('a merge request reads its latest pipeline\'s icon, not a stage\'s, and takes the button among its header\'s actions', async () => {
+            const host = stage(gitlabMerge);
+            const { ci } = BB().GitlabRead.adapter;
+            assertDeepEqual(ci.read(document, MERGE), { state: 'running', jobs: [] });
+            assertEqual(ci.slot(document, MERGE), host.querySelector('.js-issuable-actions'));
+            assertEqual(ci.label(document, MERGE), '[19.2] Push deb packages to Pulp');
+            teardown();
+        });
+
+        test('out of sight, the API: the pipeline, and those of its failed jobs that were not allowed to fail', async () => {
+            const { GitlabRead } = BB();
+            const { asked, fetchImpl } = gitlabApi({
+                [`${API}/pipelines/2840224658`]: { id: 2840224658, status: 'failed' },
+                [`${API}/pipelines/2840224658/jobs?scope[]=failed&per_page=100`]: [
+                    { name: 'workload', status: 'failed', allow_failure: false },
+                    { name: 'flaky', status: 'failed', allow_failure: true },
+                ],
+            });
+            const read = await GitlabRead.fetchPipeline(PIPELINE, { fetchImpl });
+            assertDeepEqual(read, { state: 'failed', jobs: [{ name: 'workload', state: 'failed' }] });
+            assertEqual(asked.length, 2);
+        });
+
+        test('a merge request\'s pipeline is whichever is its latest at each look', async () => {
+            const { GitlabRead } = BB();
+            const { asked, fetchImpl } = gitlabApi({
+                [`${API}/merge_requests/7353`]: { iid: 7353, head_pipeline: { id: 99, status: 'success' } },
+                [`${API}/pipelines/99/jobs?scope[]=failed&per_page=100`]: [],
+            });
+            assertDeepEqual(await GitlabRead.fetchPipeline(MERGE, { fetchImpl }), { state: 'passed', jobs: [] });
+            assertDeepEqual(asked, [`${API}/merge_requests/7353`, `${API}/pipelines/99/jobs?scope[]=failed&per_page=100`]);
+        });
+
+        test('an API that refuses, or has no pipeline to give, is not believed', async () => {
+            const { GitlabRead } = BB();
+            assertEqual(await GitlabRead.fetchPipeline(PIPELINE, gitlabApi({})), null, 'not found');
+            assertEqual(await GitlabRead.fetchPipeline(MERGE, gitlabApi({ [`${API}/merge_requests/7353`]: { head_pipeline: null } })), null, 'none yet');
+            assertEqual(await GitlabRead.fetchPipeline(PIPELINE, { fetchImpl: async () => { throw new TypeError('offline'); } }), null);
+        });
+    });
 })();

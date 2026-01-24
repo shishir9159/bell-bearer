@@ -17,7 +17,8 @@
 }
 
 /* A row that spaces its own children already. */
-.gap-2 > .bb-ci-watch { margin-right: 0; }
+.gap-2 > .bb-ci-watch,
+.page-heading-actions > .bb-ci-watch { margin-right: 0; }
 
 /* Watching: a dot that breathes, in the ink of the label beside it. */
 .bb-ci-watch.bb-ci-watching::before {

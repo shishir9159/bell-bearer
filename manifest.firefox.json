@@ -47,7 +47,8 @@
         "*://*.chatgpt.com/*",
         "*://*.chat.openai.com/*",
         "*://*.claude.ai/*",
-        "*://github.com/*"
+        "*://github.com/*",
+        "*://gitlab.com/*"
       ],
       "js": [
         "src/shared/time.js",
@@ -434,7 +435,8 @@
     },
     {
       "matches": [
-        "*://github.com/*"
+        "*://github.com/*",
+        "*://gitlab.com/*"
       ],
       "js": [
         "src/shared/time.js",
@@ -468,6 +470,7 @@
         "src/shared/forge-sites.js",
         "src/shared/ci-watch.js",
         "src/content/github-read.js",
+        "src/content/gitlab-read.js",
         "src/content/ci-watch.js",
         "src/content/main.js"
       ],
