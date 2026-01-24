@@ -409,7 +409,11 @@
      * never names a forge, so the next one is one line here and one entry in
      * src/shared/forge-sites.js.
      */
-    const FORGE_ADAPTERS = { github: () => BB.GithubRead.adapter, gitlab: () => BB.GitlabRead.adapter };
+    const FORGE_ADAPTERS = {
+        github: () => BB.GithubRead.adapter,
+        gitlab: () => BB.GitlabRead.adapter,
+        forgejo: () => BB.ForgejoRead.adapter,
+    };
     let forgeUi = null;
 
     if (BB.ForgeSites && BB.ForgeSites.get(site) && FORGE_ADAPTERS[site]) {

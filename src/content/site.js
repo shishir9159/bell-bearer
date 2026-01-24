@@ -42,6 +42,8 @@
         // docs.gitlab.com are other sites, with no runs on them.
         if (host === 'github.com') return 'github';
         if (host === 'gitlab.com') return 'gitlab';
+        // Codeberg runs Forgejo, and the adapter is Forgejo's.
+        if (host === 'codeberg.org') return 'forgejo';
         return 'other';
     }
 

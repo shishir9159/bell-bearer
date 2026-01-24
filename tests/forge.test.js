@@ -437,4 +437,86 @@
             assertEqual(await GitlabRead.fetchPipeline(PIPELINE, { fetchImpl: async () => { throw new TypeError('offline'); } }), null);
         });
     });
+
+    // ----------------------------------------------------------- forgejo
+
+    /** codeberg.org's status icon: an octicon and a colour, and a tooltip in the reader's language. */
+    const forgejoIcon = (word, cls) => `<span class="tw-flex tw-items-center" data-tooltip-content="${word}"><svg class="svg ${cls}"></svg></span>`;
+    const forgejoJob = (name, word, cls) => `<a class="job-brief-item" href="/forgejo/forgejo/actions/runs/205222/jobs/0">
+        <div class="job-brief-item-left">${forgejoIcon(word, cls)}<span class="job-brief-name tw-mx-2 gt-ellipsis">${name}</span></div>
+        <span class="job-brief-item-right"><span class="step-summary-duration">5m2s</span></span></a>`;
+    const forgejoRun = `
+        <div id="repo-action-view" data-locale-status-running="Läuft">
+            <div class="action-view-header"><div class="action-info-summary">
+                <div class="action-info-summary-title">${forgejoIcon('Läuft', 'octicon-meter text yellow job-status-rotate')}
+                    <h2 class="action-info-summary-title-text">Update renovate Docker tag to v44.141.0</h2></div>
+                <div class="action-info-summary-actions"></div>
+            </div></div>
+            <div class="action-view-left"><div class="job-brief-list">
+                ${forgejoJob('backend-checks', 'Erfolg', 'octicon-check-circle-fill text green')}
+                ${forgejoJob('test-unit', 'Fehlgeschlagen', 'octicon-x-circle-fill text red')}
+                ${forgejoJob('test-e2e', 'Läuft', 'octicon-meter text yellow job-status-rotate')}
+            </div></div>
+        </div>`;
+    const forgejoStatus = (name, cls, said) => `<div class="commit-status-item"><svg class="commit-status icon text ${cls}"></svg>
+        <div class="status-context gt-ellipsis">${name} <span class="text light-2">${said}</span></div>
+        <div class="ui status-details"><span><a href="/forgejo/forgejo/actions/runs/1/jobs/0">Details</a></span></div></div>`;
+    const forgejoPull = `
+        <div class="issue-title-header"><div id="issue-title-display" class="issue-title">
+            <h1 class="tw-break-anywhere">Fix commit status reporting <span class="index">#14738</span></h1><div class="button-row"></div>
+        </div></div>
+        <div class="singular-commit"><div class="commit-status-panel">${forgejoStatus('testing / test-unit (pull_request)', 'green svg octicon-check', 'Successful')}</div></div>
+        <div class="ui timeline"><div class="timeline-item comment merge box"><div class="content"><div class="ui attached segment">
+            <div class="commit-status-panel"><div class="ui top attached header commit-status-header">Some checks failed <a>Hide checks</a></div>
+                <div class="commit-status-list">
+                    ${forgejoStatus('testing / test-unit (pull_request)', 'red svg octicon-x', 'Failing after 4m')}
+                    ${forgejoStatus('testing / coverage (pull_request)', 'yellow svg octicon-dot-fill', 'Blocked by required conditions')}
+                    ${forgejoStatus('lint (pull_request)', 'green svg octicon-check', 'Successful in 1m')}
+                    ${forgejoStatus('pr-checklist / warn-user (pull_request_target)', 'grey svg octicon-skip', 'Has been skipped')}
+                </div></div>
+        </div></div></div></div>`;
+    const FORGEJO_RUN = { site: 'forgejo', kind: 'run', repo: 'forgejo/forgejo', number: '205222' };
+    const FORGEJO_PULL = { site: 'forgejo', kind: 'pull', repo: 'forgejo/forgejo', number: '14738' };
+
+    suite('forge ci watch: forgejo', () => {
+        test('a run reads its icons\' classes, whatever language their tooltips are in', async () => {
+            const host = stage(forgejoRun);
+            const { ForgejoRead, CiWatch } = BB();
+            const read = ForgejoRead.adapter.ci.read(document, FORGEJO_RUN);
+            assertDeepEqual(CiWatch.summarize(read), { state: 'running', failed: ['test-unit'], left: 1 });
+            assertEqual(ForgejoRead.adapter.ci.label(document, FORGEJO_RUN), 'Update renovate Docker tag to v44.141.0');
+            assertEqual(ForgejoRead.adapter.ci.slot(document, FORGEJO_RUN), host.querySelector('.action-info-summary-actions'));
+            teardown();
+        });
+
+        test('a pull request reads the merge box\'s statuses, each named without what it says of itself', async () => {
+            const host = stage(forgejoPull);
+            const { ForgejoRead, CiWatch } = BB();
+            const read = ForgejoRead.adapter.ci.read(document, FORGEJO_PULL);
+            assertDeepEqual(read.jobs.map((job) => [job.name, job.state]), [
+                ['testing / test-unit (pull_request)', 'failed'],
+                ['testing / coverage (pull_request)', 'queued'],
+                ['lint (pull_request)', 'passed'],
+                ['pr-checklist / warn-user (pull_request_target)', 'skipped'],
+            ], 'not the commit popup\'s copy');
+            assertDeepEqual(CiWatch.summarize(read), { state: 'running', failed: ['testing / test-unit (pull_request)'], left: 1 });
+            assertEqual(ForgejoRead.adapter.ci.slot(document, FORGEJO_PULL), host.querySelector('.button-row'));
+            assertEqual(ForgejoRead.adapter.ci.label(document, FORGEJO_PULL), 'Fix commit status reporting #14738');
+            teardown();
+        });
+
+        test('out of sight, a pull request is fetched as a reload would and read the same way; a run is left to its own polling', async () => {
+            const { ForgejoRead } = BB();
+            const asked = [];
+            const page = (status, html) => async (url) => { asked.push(url); return { ok: status === 200, text: async () => html }; };
+            const read = await ForgejoRead.fetchChecks(FORGEJO_PULL, { fetchImpl: page(200, forgejoPull) });
+            assertEqual(asked[0], '/forgejo/forgejo/pulls/14738');
+            assertEqual(read.jobs.length, 4);
+            assertEqual(await ForgejoRead.fetchChecks(FORGEJO_PULL, { fetchImpl: page(503, 'busy') }), null);
+            assertEqual(await ForgejoRead.fetchChecks(FORGEJO_PULL, { fetchImpl: page(200, '<p>no checks here</p>') }), null);
+            asked.length = 0;
+            assertEqual(await ForgejoRead.fetchChecks(FORGEJO_RUN, { fetchImpl: page(200, forgejoPull) }), null);
+            assertEqual(asked.length, 0);
+        });
+    });
 })();

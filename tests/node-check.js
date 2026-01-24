@@ -3206,7 +3206,7 @@ check('every page gets exactly one isolated-world entry, and it is the one for i
         youtube: 'src/content/youtube-ui.js', twitter: 'src/content/twitter-ui.js', reddit: 'src/content/roster.js',
         chess: 'src/content/chess.js', lichess: 'src/content/chess.js', leetcode: 'src/content/leet-ui.js',
         typeracer: 'src/content/typeracer-ui.js', chatgpt: 'src/content/chat-ui.js', claude: 'src/content/chat-ui.js',
-        github: 'src/content/github-read.js', gitlab: 'src/content/gitlab-read.js',
+        github: 'src/content/github-read.js', gitlab: 'src/content/gitlab-read.js', forgejo: 'src/content/forgejo-read.js',
     };
     const entries = isolatedEntries();
     for (const url of [
@@ -3216,7 +3216,8 @@ check('every page gets exactly one isolated-world entry, and it is the one for i
         'https://play.typeracer.com/', 'https://data.typeracer.com/pit/profile', 'https://chatgpt.com/c/1',
         'https://chat.openai.com/', 'https://claude.ai/chat/1', 'https://www.netflix.com/watch/1', 'https://example.com/',
         'https://github.com/microsoft/vscode/actions/runs/1', 'https://gist.github.com/a/b',
-        'https://gitlab.com/gitlab-org/gitlab-runner/-/pipelines/1', 'https://docs.gitlab.com/ci/',
+        'https://gitlab.com/gitlab-org/gitlab-runner/-/pipelines/1', 'https://docs.gitlab.com/ci/', 'https://codeberg.org/forgejo/forgejo/pulls/1',
+        'https://docs.codeberg.org/',
     ]) {
         const taking = entries.filter((entry) => entryTakes(entry, url));
         eq(taking.length, 1, url);
@@ -7200,6 +7201,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(['github.com', 'www.github.com', 'gist.github.com', 'notgithub.com'].map((host) => Site.detectSite(host)),
             ['github', 'github', 'other', 'other']);
         eq(['gitlab.com', 'docs.gitlab.com', 'about.gitlab.com'].map((host) => Site.detectSite(host)), ['gitlab', 'other', 'other']);
+        eq(['codeberg.org', 'docs.codeberg.org', 'translate.codeberg.org'].map((host) => Site.detectSite(host)), ['forgejo', 'other', 'other']);
     });
     check('each forge that is detected has its entry and its adapter, and its switch reaches an open page', () => {
         const Site = require('../src/content/site.js');
