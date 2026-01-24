@@ -38,6 +38,9 @@
         if (/(^|\.)typeracer\.com$/.test(host)) return 'typeracer';
         if (/(^|\.)(chatgpt\.com|chat\.openai\.com)$/.test(host)) return 'chatgpt';
         if (/(^|\.)claude\.ai$/.test(host)) return 'claude';
+        // The forges by their exact host: gist.github.com and
+        // docs.gitlab.com are other sites, with no runs on them.
+        if (host === 'github.com') return 'github';
         return 'other';
     }
 

@@ -3206,6 +3206,7 @@ check('every page gets exactly one isolated-world entry, and it is the one for i
         youtube: 'src/content/youtube-ui.js', twitter: 'src/content/twitter-ui.js', reddit: 'src/content/roster.js',
         chess: 'src/content/chess.js', lichess: 'src/content/chess.js', leetcode: 'src/content/leet-ui.js',
         typeracer: 'src/content/typeracer-ui.js', chatgpt: 'src/content/chat-ui.js', claude: 'src/content/chat-ui.js',
+        github: 'src/content/github-read.js',
     };
     const entries = isolatedEntries();
     for (const url of [
@@ -3214,6 +3215,7 @@ check('every page gets exactly one isolated-world entry, and it is the one for i
         'https://www.chess.com/play', 'https://lichess.org/abc', 'https://leetcode.com/problems/two-sum/',
         'https://play.typeracer.com/', 'https://data.typeracer.com/pit/profile', 'https://chatgpt.com/c/1',
         'https://chat.openai.com/', 'https://claude.ai/chat/1', 'https://www.netflix.com/watch/1', 'https://example.com/',
+        'https://github.com/microsoft/vscode/actions/runs/1', 'https://gist.github.com/a/b',
     ]) {
         const taking = entries.filter((entry) => entryTakes(entry, url));
         eq(taking.length, 1, url);
@@ -3244,7 +3246,7 @@ check('each site entry is the core list, then its own files, then main.js', () =
 check('the page every other entry is built on carries no site\'s own module', () => {
     const [generic] = isolatedEntries();
     for (const file of generic.js) {
-        assert(!/youtube-ui|pouch-sheet|reader|twitter|chess|leet|typeracer|chat|roster|checkpoints|transcript/.test(file), file);
+        assert(!/youtube-ui|pouch-sheet|reader|twitter|chess|leet|typeracer|chat|roster|checkpoints|transcript|forge|ci-watch|github/.test(file), file);
     }
 });
 check('the skins\' faces are not a content-script stylesheet, and the injected UI adds the same ones', () => {
@@ -7191,6 +7193,25 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(ForgeSites.pageOfUrl('https://codeberg.org/forgejo/forgejo/pull/14738'), null, 'that is github\'s word');
         eq([ForgeSites.siteOfHost('codeberg.org').name, ForgeSites.siteOfHost('CODEBERG.ORG').id, ForgeSites.siteOfHost('example.org')],
             ['Codeberg', 'forgejo', null]);
+    });
+    check('a forge is detected by its exact host, and nothing beside it is', () => {
+        const Site = require('../src/content/site.js');
+        eq(['github.com', 'www.github.com', 'gist.github.com', 'notgithub.com'].map((host) => Site.detectSite(host)),
+            ['github', 'github', 'other', 'other']);
+    });
+    check('each forge that is detected has its entry and its adapter, and its switch reaches an open page', () => {
+        const Site = require('../src/content/site.js');
+        const main = readRepo('src/content/main.js');
+        const entry = JSON.parse(readRepo('manifest.json')).content_scripts.find((one) => (one.js || []).includes('src/content/ci-watch.js'));
+        const detected = ForgeSites.list().filter((forge) => Site.detectSite(forge.hosts[0]) === forge.id);
+        assert(detected.length, 'no forge is detected at all');
+        for (const forge of detected) {
+            for (const pattern of forge.tabPatterns) assert(entry.matches.includes(pattern), `${pattern} is not matched`);
+            const file = `src/content/${forge.id}-read.js`;
+            assert(entry.js.indexOf(file) > -1 && entry.js.indexOf(file) < entry.js.indexOf('src/content/main.js'), `${file} is not loaded before main.js`);
+            assert(new RegExp(`${forge.id}: \\(\\) => BB\\.\\w+Read\\.adapter`).test(main), `${forge.id} has no adapter in main.js`);
+        }
+        assert(/forgeSurfacesChanged && forgeUi\) forgeUi\.refreshSurfaces\(\)/.test(main), 'turning the switch would wait for a reload');
     });
 
     section('the forge ci watch — reading a run');

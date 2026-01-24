@@ -402,6 +402,38 @@
         window.addEventListener('popstate', () => watcher.schedule());
     }
 
+    // ------------------------------------------------------- git forges
+
+    /**
+     * The forge's adapter by id, as the chat sites have theirs: the CI watch
+     * never names a forge, so the next one is one line here and one entry in
+     * src/shared/forge-sites.js.
+     */
+    const FORGE_ADAPTERS = { github: () => BB.GithubRead.adapter };
+    let forgeUi = null;
+
+    if (BB.ForgeSites && BB.ForgeSites.get(site) && FORGE_ADAPTERS[site]) {
+        const watcher = DomWatch.createWatcher();
+
+        forgeUi = BB.CiWatchContent.createCiWatch({
+            adapter: FORGE_ADAPTERS[site](), watcher, notify, getSettings: () => settings, ask: askWorker,
+        });
+        forgeUi.install();
+
+        // The X treatment once more: every forge moves between a run and its
+        // jobs, or a pull request's tabs, without loading a page, and none
+        // announces it in a way the isolated world can hear.
+        let lastPath = location.pathname;
+        watcher.add('forge-route', () => {
+            if (location.pathname !== lastPath) {
+                lastPath = location.pathname;
+                forgeUi.onNavigate();
+            }
+            return false;
+        });
+        window.addEventListener('popstate', () => watcher.schedule());
+    }
+
     /**
      * Note that a video has actually been watched.
      *
@@ -606,6 +638,9 @@
         'shortcuts',
     ] : [];
 
+    /** And a forge's Watch button, on its switch. */
+    const FORGE_SURFACES = forgeUi ? BB.ForgeSites.allKeys() : [];
+
     /** And what an open YouTube reader has to follow without being closed. */
     const READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'readerHideChrome', 'skin'];
 
@@ -623,6 +658,8 @@
         const readerSurfacesChanged = READER_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
         const chatSurfacesChanged = CHAT_SURFACES.some((key) =>
+            key in values && values[key] !== settings[key]);
+        const forgeSurfacesChanged = FORGE_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
 
         Object.assign(settings, values);
@@ -642,6 +679,7 @@
         if (typerSurfacesChanged && typerUi) typerUi.refreshSurfaces();
         if (readerSurfacesChanged && reader) reader.refresh();
         if (chatSurfacesChanged && chatUi) chatUi.refreshSurfaces();
+        if (forgeSurfacesChanged && forgeUi) forgeUi.refreshSurfaces();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
         if (timeLimit) timeLimit.sync();

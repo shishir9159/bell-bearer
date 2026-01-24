@@ -1,0 +1,39 @@
+/*
+ * The git forges: the CI watch's button.
+ *
+ * Loaded after content.css, and only by the forges' manifest entry. The
+ * button wears the forge's own button classes (each adapter's buttonClass),
+ * so it looks like its neighbours on each forge and in either of its
+ * themes; these rules only add what none of them has — a sign that a watch
+ * is on — and the room a button needs where the forge's row leaves none.
+ */
+
+.bb-ci-watch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 8px;
+    white-space: nowrap;
+}
+
+/* A row that spaces its own children already. */
+.gap-2 > .bb-ci-watch { margin-right: 0; }
+
+/* Watching: a dot that breathes, in the ink of the label beside it. */
+.bb-ci-watch.bb-ci-watching::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: bb-ci-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes bb-ci-breathe {
+    0%, 100% { opacity: .25; }
+    50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bb-ci-watch.bb-ci-watching::before { animation: none; opacity: .8; }
+}
