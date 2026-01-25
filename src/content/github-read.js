@@ -9,15 +9,17 @@
  * Actions run's header and job graph rendered on the server and kept live
  * over its socket, and a pull request's merge box drawn by React.
  *
- * The two kinds of page behave differently out of sight, which is the whole
- * of what `fetch` is for. A run page goes on updating in a background tab —
- * jobs were seen finishing in one that had been hidden for minutes. A pull
- * request's checks do not: the same checks sat at "10 in progress" in a
- * hidden tab while the run itself was down to six. So for a pull request the
- * watch also asks for what the merge box asks for when it is on screen —
- * `page_data/status_checks`, with the page's own session — about once a
- * minute. No other request is made, and none to GitHub's API, which would
- * count against sixty an hour.
+ * Neither page can be trusted to keep itself current, which is the whole of
+ * what `fetch` is for. A pull request's checks stop in a hidden tab: they sat
+ * at "10 in progress" while the run itself was down to six. A run page
+ * usually goes on — jobs were seen finishing in a tab hidden for minutes —
+ * but a watched one, on screen, also stopped for good, still "running" ten
+ * minutes after a fresh load of it said the run had passed, and nothing
+ * ended the watch. So about once a minute the watch asks for what the page
+ * itself asks for when it updates: a run's `header_partial` and
+ * `graph_partial`, and a pull request's `page_data/status_checks`, with the
+ * page's own session. No other request is made, and none to GitHub's API,
+ * which would count against sixty an hour.
  */
 (function (root) {
     'use strict';
@@ -110,9 +112,8 @@
     }
 
     /**
-     * The checks as the merge box itself fetches them, for a tab out of
-     * sight. Null for a run, which keeps itself current, and for any
-     * answer not in the shape it was seen in — the page is read instead.
+     * The checks as the merge box itself fetches them. Null for any answer
+     * not in the shape it was seen in: the page is read instead.
      */
     async function fetchChecks(page, { fetchImpl = root.fetch } = {}) {
         if (!page || page.kind !== 'pull') return null;
@@ -131,6 +132,30 @@
         }
     }
 
+    /**
+     * A run as its page refreshes itself: the header, which has the run's
+     * icon, and the graph, which has its jobs — 36 KB between them, where
+     * the whole page is over 200.
+     */
+    async function fetchRun(page, { fetchImpl = root.fetch, parse = (html) => new DOMParser().parseFromString(html, 'text/html') } = {}) {
+        if (!page || page.kind !== 'run') return null;
+        const base = `/${page.repo}/actions/runs/${page.number}`;
+        try {
+            const parts = await Promise.all(['header_partial', 'graph_partial'].map(async (part) => {
+                const response = await fetchImpl(`${base}/${part}`, {
+                    credentials: 'same-origin',
+                    headers: { Accept: 'text/html', 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                return response.ok ? response.text() : '';
+            }));
+            return readRun(parse(parts.join('\n')));
+        } catch (_) {
+            return null;
+        }
+    }
+
+    const fetchState = (page, options) => (page && page.kind === 'run' ? fetchRun(page, options) : fetchChecks(page, options));
+
     function label(doc, page) {
         const title = text(find(page && page.kind === 'run' ? 'runTitle' : 'pullTitle', doc));
         return title || String(doc.title || '').split(' · ')[0].trim();
@@ -145,7 +170,7 @@
         site: 'github',
         ci: {
             read,
-            fetch: fetchChecks,
+            fetch: fetchState,
             label,
             slot,
             /** Primer's own button, which every github.com page carries the styles for. */
@@ -153,7 +178,7 @@
         },
     };
 
-    const GithubRead = { SELECTORS, adapter, readRun, readChecks, countedJobs, fetchChecks, jobName };
+    const GithubRead = { SELECTORS, adapter, readRun, readChecks, countedJobs, fetchChecks, fetchRun, jobName };
 
     root.BB = root.BB || {};
     root.BB.GithubRead = GithubRead;

@@ -339,8 +339,33 @@
             assertEqual(await GithubRead.fetchChecks(PULL, { fetchImpl: answer(200, { checks: [] }) }), null, 'another shape');
             assertEqual(await GithubRead.fetchChecks(PULL, { fetchImpl: async () => { throw new TypeError('offline'); } }), null, 'offline');
             calls.length = 0;
-            assertEqual(await GithubRead.fetchChecks(RUN, { fetchImpl: answer(200, checks) }), null, 'a run keeps itself current');
+            assertEqual(await GithubRead.fetchChecks(RUN, { fetchImpl: answer(200, checks) }), null, 'a run is not a pull request');
             assertEqual(calls.length, 0);
+        });
+
+        test('a run is read again from the two partials its page refreshes itself from, since the page can stop', async () => {
+            // Seen live: a watched run's page still drew "running" ten
+            // minutes after a fresh load of it said the run had passed.
+            const { GithubRead } = BB();
+            const whole = document.createElement('div');
+            whole.innerHTML = githubRun(['completed successfully: ', 'octicon octicon-check-circle-fill color-fg-success']);
+            const parts = {
+                '/microsoft/vscode/actions/runs/1/header_partial': whole.querySelector('page-header').outerHTML,
+                '/microsoft/vscode/actions/runs/1/graph_partial': whole.querySelector('.visual-graph').outerHTML,
+            };
+            const asked = [];
+            const fetchImpl = async (url, options) => {
+                asked.push([url, options.headers['X-Requested-With']]);
+                return { ok: url in parts, text: async () => parts[url] };
+            };
+            const read = await GithubRead.adapter.ci.fetch(RUN, { fetchImpl });
+            assertEqual(read.state, 'passed');
+            assertDeepEqual(read.jobs.map((job) => job.name), ['Compile & Hygiene', 'Linux / Electron-Smoke', 'Windows / Electron']);
+            assertDeepEqual(asked.map(([url]) => url).sort(), Object.keys(parts).sort());
+            assert(asked.every(([, how]) => how === 'XMLHttpRequest'), 'asked as the page asks');
+            delete parts['/microsoft/vscode/actions/runs/1/graph_partial'];
+            assertDeepEqual((await GithubRead.adapter.ci.fetch(RUN, { fetchImpl })).jobs, [], 'the header alone still says how the run stands');
+            assertEqual(await GithubRead.adapter.ci.fetch(RUN, { fetchImpl: async () => ({ ok: false, text: async () => '' }) }), null);
         });
     });
 
