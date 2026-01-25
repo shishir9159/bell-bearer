@@ -340,6 +340,34 @@
                     </div>
                 </div>
 
+                <!-- The forges' keys come from src/shared/forge-sites.js#siteKey;
+                     node-check asserts every one has a switch here. -->
+                <div class="settings-section" data-plate="Git forges">
+                    <p>A <strong>Watch</strong> button on a CI run and on a pull request. Click it, carry on elsewhere, and a desktop notification says when the run has finished: passed, or failed and which jobs did. Clicking the notification brings the tab back.</p>
+                    <p class="settings-hint">The run is read from its open tab, so keep the tab open; it can be in the background. Nothing is sent anywhere: where a forge's page stops updating while out of sight, the tab asks the forge itself, once a minute and with your own session, for what the page would have shown.</p>
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="githubCiWatch">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <label class="setting-label" for="githubCiWatch">On <span class="bb-proper">GitHub</span> — Actions runs and pull request checks</label>
+                    </div>
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="gitlabCiWatch">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <label class="setting-label" for="gitlabCiWatch">On <span class="bb-proper">GitLab</span> — pipelines and merge requests</label>
+                    </div>
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="forgejoCiWatch">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <label class="setting-label" for="forgejoCiWatch">On <span class="bb-proper">Codeberg</span> — Forgejo Actions runs and pull request checks</label>
+                    </div>
+                </div>
+
                 <div class="settings-section" data-plate="Site-specific">
                     <p>Settings that only make sense for one particular site — pick it to see them.</p>
                     <div class="sites-grid" id="settingsSitesGrid"></div>

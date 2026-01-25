@@ -7163,6 +7163,10 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([ForgeSites.siteKey('gitlab', 'ciWatch'), ForgeSites.siteKey('gitlab', 'nonsense'), ForgeSites.siteKey('nowhere', 'ciWatch')],
             ['gitlabCiWatch', null, null]);
     });
+    check('every forge switch is in Settings, bound by carrying its key as its id', () => {
+        const html = readRepo('dashboard.html');
+        for (const key of ForgeSites.allKeys()) assert(html.includes(`<input type="checkbox" id="${key}">`), `${key} has no switch`);
+    });
     check('a github run is the same run on any of its tabs, and a pull request on any of its', () => {
         const run = ForgeSites.pageOfUrl('https://github.com/microsoft/vscode/actions/runs/37600934749');
         eq(run, { site: 'github', kind: 'run', repo: 'microsoft/vscode', number: '37600934749', key: 'github:microsoft/vscode:run:37600934749' });
