@@ -16,6 +16,13 @@
     white-space: nowrap;
 }
 
+/* GitHub's run header stacks its actions as blocks, which put the button on
+   a line of its own above the run's menu; with the button in, they are a row. */
+.PageHeader-actions:has(> .bb-ci-watch) {
+    display: flex;
+    align-items: flex-start;
+}
+
 /* A row that spaces its own children already. */
 .gap-2 > .bb-ci-watch,
 .page-heading-actions > .bb-ci-watch { margin-right: 0; }
