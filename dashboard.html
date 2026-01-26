@@ -126,6 +126,11 @@
                 <div id="claudePinsPanel" class="site-panel" data-site="claude" data-chat-pins="claude"></div>
                 <div id="claudePromptsPanel" class="site-panel" data-site="claude" data-chat-prompts></div>
                 <div id="claudeQueuePanel" class="site-panel" data-site="claude" data-chat-queue="claude"></div>
+
+                <!-- The forges: what is being watched on each, from src/page/ci-watch-view.js. -->
+                <div id="githubWatchingPanel" class="site-panel" data-site="github" data-ci-watches="github"></div>
+                <div id="gitlabWatchingPanel" class="site-panel" data-site="gitlab" data-ci-watches="gitlab"></div>
+                <div id="forgejoWatchingPanel" class="site-panel" data-site="forgejo" data-ci-watches="forgejo"></div>
             </div>
         </div>
 
@@ -812,6 +817,7 @@
     <script src="src/page/tab-actions.js"></script>
     <script src="src/shared/chat-sites.js"></script>
     <script src="src/page/chat-settings.js"></script>
+    <script src="src/shared/forge-sites.js"></script>
     <script src="dashboard.js"></script>
 </body>
 

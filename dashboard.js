@@ -76,6 +76,11 @@
             { id: 'prompts', label: 'Prompts', panel: 'claudePromptsPanel' },
             { id: 'queue', label: 'Queue', panel: 'claudeQueuePanel' },
         ],
+        // A forge's page is what is being watched on it; the watching itself
+        // is done on the forge, in the run's own tab.
+        github: [{ id: 'watching', label: 'Watching', panel: 'githubWatchingPanel' }],
+        gitlab: [{ id: 'watching', label: 'Watching', panel: 'gitlabWatchingPanel' }],
+        forgejo: [{ id: 'watching', label: 'Watching', panel: 'forgejoWatchingPanel' }],
     };
 
     /**
@@ -98,6 +103,7 @@
         LeetStats: ['src/shared/fsrs.js', 'src/shared/leetcode.js', 'src/shared/leet-api.js', 'src/page/leet-stats.js'],
         LeetTemplatesView: ['src/shared/leet-templates.js', 'src/page/leet-templates-view.js'],
         ChatViews: ['src/shared/chat-pins.js', 'src/shared/prompt-templates.js', 'src/shared/prompt-queue.js', 'src/page/chat-views.js'],
+        CiWatchView: ['src/page/ci-watch-view.js'],
         // In the page already, for its voice list; only its panels wait.
         TyperStats: [],
     };
@@ -112,6 +118,9 @@
         typeracer: ['TyperStats'],
         chatgpt: ['ChatViews'],
         claude: ['ChatViews'],
+        github: ['CiWatchView'],
+        gitlab: ['CiWatchView'],
+        forgejo: ['CiWatchView'],
     };
 
     /** And the views a site's settings panel shows: today's time, beside its limit. */
@@ -332,6 +341,11 @@
             on('siteSubtabs', 'click', (event) => {
                 const tab = event.target.closest('.site-subtab');
                 if (tab) this.switchSiteTab(tab.dataset.tab);
+            });
+            // A view's way to that site's settings, without being handed this page.
+            on('siteWorkspace', 'click', (event) => {
+                const link = event.target.closest('[data-open-settings]');
+                if (link) this.openSiteSettings(link.dataset.openSettings);
             });
 
             const settingsGrid = document.getElementById('settingsSitesGrid');

@@ -7167,6 +7167,16 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const html = readRepo('dashboard.html');
         for (const key of ForgeSites.allKeys()) assert(html.includes(`<input type="checkbox" id="${key}">`), `${key} has no switch`);
     });
+    check('each forge has a card in the launcher under the id it is detected by, and a page behind it', () => {
+        const SiteIcons = require('../src/shared/site-icons.js');
+        const html = readRepo('dashboard.html');
+        const dashboard = readRepo('dashboard.js');
+        for (const site of ForgeSites.list()) {
+            eq(SiteIcons.get(site.id) && SiteIcons.get(site.id).name, site.name, site.id);
+            assert(html.includes(`id="${site.id}WatchingPanel"`) && dashboard.includes(`'${site.id}WatchingPanel'`), `${site.id} opens on nothing`);
+        }
+        eq(SiteIcons.ORDER.slice(-3), ['github', 'gitlab', 'forgejo'], 'after every site a saved order already names');
+    });
     check('a github run is the same run on any of its tabs, and a pull request on any of its', () => {
         const run = ForgeSites.pageOfUrl('https://github.com/microsoft/vscode/actions/runs/37600934749');
         eq(run, { site: 'github', kind: 'run', repo: 'microsoft/vscode', number: '37600934749', key: 'github:microsoft/vscode:run:37600934749' });
@@ -7357,6 +7367,22 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([asked.cleared, asked.tabs, asked.windows], [['bb-ci:7:1700000000000'], [[7, { active: true }]], [[9, { focused: true }]]]);
         eq(await worker.clicked('bb-ci:404:1'), false, 'closed since');
         eq(await worker.clicked('somebody-else:7:1'), false, 'not ours');
+    });
+    check('the dashboard lists a forge\'s watches from the worker\'s own key, the newest first', () => {
+        const View = require('../src/page/ci-watch-view.js');
+        eq(View.KEY, CiWatchWorker.KEY);
+        const watches = {
+            7: { key: 'github:a/b:run:1', noun: 'Run', label: 'older', repo: 'a/b', since: 1000 },
+            8: { key: 'gitlab:g/p:run:2', noun: 'Pipeline', label: 'not github', repo: 'g/p', since: 3000 },
+            9: { key: 'github:a/b:pull:3', noun: 'Checks', label: '<b>newer</b>', repo: 'a/b', since: 2000 },
+        };
+        eq(View.listFor('github', watches).map((one) => [one.tab, one.label]), [[9, '<b>newer</b>'], [7, 'older']]);
+        eq(View.listFor('forgejo', watches), []);
+        const html = View.render('github', View.listFor('github', watches), 2000 + 5 * 60000);
+        assert(html.includes('&lt;b&gt;newer&lt;/b&gt;') && !html.includes('<b>newer'), 'a title is the page\'s, and is text');
+        assert(html.includes('Checks · a/b · watched since 5 minutes ago'), html);
+        const empty = View.render('forgejo', []);
+        assert(empty.includes('Nothing on Codeberg is being watched') && empty.includes('data-open-settings="forgejo"'), empty);
     });
     check('the worker is loaded, after the router, and the notifications it raises are asked for', () => {
         const scripts = [.../importScripts\(([\s\S]*?)\);/.exec(readRepo('background.js'))[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);

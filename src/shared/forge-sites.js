@@ -62,6 +62,8 @@
             tabPatterns: Object.freeze(['*://github.com/*']),
             /** What a notification calls each kind of page: an Actions run, a pull request's checks. */
             nouns: Object.freeze({ run: 'Run', pull: 'Checks' }),
+            /** What the Watch button goes on, as Settings says it. */
+            watches: 'Actions runs and pull requests',
             pageOf: (pathname) => ownerRepoPage(pathname, 'pull'),
         }),
         gitlab: Object.freeze({
@@ -72,6 +74,7 @@
             tabPatterns: Object.freeze(['*://gitlab.com/*']),
             // A merge request's checks are its pipeline, and GitLab calls them that.
             nouns: Object.freeze({ run: 'Pipeline', pull: 'Pipeline' }),
+            watches: 'pipelines and merge requests',
             pageOf: gitlabPage,
         }),
         forgejo: Object.freeze({
@@ -81,6 +84,7 @@
             hosts: Object.freeze(['codeberg.org']),
             tabPatterns: Object.freeze(['*://codeberg.org/*']),
             nouns: Object.freeze({ run: 'Run', pull: 'Checks' }),
+            watches: 'Forgejo Actions runs and pull requests',
             pageOf: (pathname) => ownerRepoPage(pathname, 'pulls'),
         }),
     });
