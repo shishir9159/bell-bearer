@@ -7158,10 +7158,15 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     check('every forge setting the registry can name has a default, and each is off', () => {
         // Each puts a button into the forge's own page, which is asked for.
-        eq(ForgeSites.allKeys(), ['githubCiWatch', 'gitlabCiWatch', 'forgejoCiWatch']);
-        eq(ForgeSites.allKeys().map((key) => globalThis.BB.Settings.DEFAULTS[key]), [false, false, false]);
+        eq(ForgeSites.allKeys(), ['githubCiWatch', 'githubFolderDownload', 'gitlabCiWatch', 'forgejoCiWatch']);
+        eq(ForgeSites.allKeys().map((key) => globalThis.BB.Settings.DEFAULTS[key]), [false, false, false, false]);
         eq([ForgeSites.siteKey('gitlab', 'ciWatch'), ForgeSites.siteKey('gitlab', 'nonsense'), ForgeSites.siteKey('nowhere', 'ciWatch')],
             ['gitlabCiWatch', null, null]);
+    });
+    check('only a forge without a folder download of its own has one from here', () => {
+        // GitLab's and Forgejo's folder menus both zip a folder already.
+        eq(ForgeSites.list().map((site) => ForgeSites.siteKey(site.id, 'folderDownload')), ['githubFolderDownload', null, null]);
+        eq(Object.keys(globalThis.BB.Settings.DEFAULTS).filter((key) => /FolderDownload$/.test(key)), ['githubFolderDownload']);
     });
     check('every forge has a settings panel of its own, drawn before binding, whose switch carries its key as its id', () => {
         const ForgeSettings = require('../src/page/forge-settings.js');
@@ -7169,9 +7174,13 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const dashboard = readRepo('dashboard.js');
         for (const site of ForgeSites.list()) {
             assert(html.includes(`data-site-settings="${site.id}" data-forge-settings="${site.id}"`), `${site.id} has no settings panel`);
-            const key = ForgeSites.siteKey(site.id, 'ciWatch');
-            assert(ForgeSettings.panelHtml(site).includes(`<input type="checkbox" id="${key}">`), `${key} has no switch`);
-            eq(html.includes(`id="${key}"`), false, `${key} is drawn twice`);
+            const panel = ForgeSettings.panelHtml(site);
+            for (const kind of site.features) {
+                const key = ForgeSites.siteKey(site.id, kind);
+                assert(panel.includes(`<input type="checkbox" id="${key}">`), `${key} has no switch`);
+                eq(html.includes(`id="${key}"`), false, `${key} is drawn twice`);
+            }
+            eq(panel.includes('FolderDownload'), site.features.includes('folderDownload'), `${site.id} draws a switch it has no key for`);
         }
         assert(!html.includes('data-plate="Git forges"'), 'the switches are under General as well');
         const at = dashboard.indexOf('ForgeSettings.mountAll()');
@@ -7402,6 +7411,35 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             assert(doc.permissions.includes('notifications'), name);
         }
         assert(JSON.parse(readRepo('manifest.firefox.json')).background.scripts.includes('src/background/ci-watch.js'));
+    });
+
+    section('the forge folder download');
+
+    const GithubFolder = require('../src/content/github-read.js');
+
+    check('a github folder is anything under /tree/, and a repo, a file or a run is not', () => {
+        eq(GithubFolder.folderAt('/yt-dlp/yt-dlp/tree/master/yt_dlp/extractor'), { repo: 'yt-dlp/yt-dlp', url: '/yt-dlp/yt-dlp/tree/master/yt_dlp/extractor' });
+        eq(GithubFolder.folderAt('/a/b/tree/feature/x/src?plain=1').url, '/a/b/tree/feature/x/src');
+        for (const path of ['/a/b', '/a/b/tree', '/a/b/blob/main/x.js', '/a/b/actions/runs/1', '/a']) eq(GithubFolder.folderAt(path), null, path);
+    });
+    await checkAsync('the folder is read from its own JSON: the commit it is at, and its path', async () => {
+        const answer = (body, ok = true) => async () => ({ ok, json: async () => body });
+        const route = { path: 'yt_dlp/extractor/youtube', refInfo: { name: 'master', currentOid: '51bab8a0116f4d8004c315706d809782607d5847' }, tree: { items: [] } };
+        eq(await GithubFolder.readFolder({ url: '/x' }, { fetchImpl: answer({ payload: { codeViewTreeRoute: route } }) }),
+            { oid: '51bab8a0116f4d8004c315706d809782607d5847', path: 'yt_dlp/extractor/youtube', items: [] });
+        eq(await GithubFolder.readFolder({ url: '/x' }, { fetchImpl: answer({ payload: { codeViewTreeRoute: { ...route, refInfo: { currentOid: 'main' } } } }) }), null,
+            'a name where a commit should be');
+        eq(await GithubFolder.readFolder({ url: '/x' }, { fetchImpl: answer({}, false) }), null);
+        eq(await GithubFolder.readFolder({ url: '/x' }, { fetchImpl: async () => { throw new Error('offline'); } }), null);
+    });
+    await checkAsync('the file finder\'s list is cut to the folder, and a sibling that starts the same is not in it', async () => {
+        const asked = [];
+        const fetchImpl = async (url) => { asked.push(url); return { ok: true, json: async () => ({ paths: ['a/lib/x.js', 'a/lib/y/z.md', 'a/libx/no.js', 'b.js'] }) }; };
+        eq(await GithubFolder.listFolder({ repo: 'o/r' }, { oid: 'f'.repeat(40), path: 'a/lib', items: [] }, { fetchImpl }), ['a/lib/x.js', 'a/lib/y/z.md']);
+        eq(asked, [`/o/r/tree-list/${'f'.repeat(40)}`]);
+    });
+    check('each file is fetched raw, from the forge itself, at the commit, its path escaped', () => {
+        eq(GithubFolder.adapter.folder.rawUrl({ repo: 'o/r' }, { oid: 'f'.repeat(40) }, 'docs/a b#1.md'), `/o/r/raw/${'f'.repeat(40)}/docs/a%20b%231.md`);
     });
 
     // ------------------------------------------------- the conversation tree

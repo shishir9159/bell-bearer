@@ -290,7 +290,11 @@
         //   <forge>CiWatch — a Watch button on a CI run and on a pull
         //     request, for a desktop notification when it finishes. Off, by
         //     the rule every button put into a site's own page follows.
+        //   <forge>FolderDownload — a button that saves the folder on screen
+        //     as a .zip, built here from its raw files. GitHub's alone: the
+        //     other two forges' folder menus already do it. Off, by the same rule.
         githubCiWatch: false,
+        githubFolderDownload: false,
         gitlabCiWatch: false,
         forgejoCiWatch: false,
 

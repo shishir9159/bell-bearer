@@ -15,6 +15,24 @@
 
     const esc = Dom.escapeHtml;
 
+    /** A forge's folder switch, for the forges that have one; nothing for the rest. */
+    function folderHtml(site) {
+        const key = ForgeSites.siteKey(site.id, 'folderDownload');
+        if (!key) return '';
+        return `
+            <h4 class="shortcut-heading">Folders</h4>
+            <p class="settings-hint">A <strong>Download folder</strong> button beside a folder's own buttons on ${esc(site.hosts[0])}. It saves
+               that folder, and everything under it, as a .zip — built in this tab from the files' raw copies at the commit you
+               are looking at, rather than through a third-party site.</p>
+            <div class="settings-option">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="${key}">
+                    <span class="toggle-slider"></span>
+                </label>
+                <label class="setting-label" for="${key}">Download folder button on folders</label>
+            </div>`;
+    }
+
     function panelHtml(site) {
         const key = ForgeSites.siteKey(site.id, 'ciWatch');
         const name = esc(site.name);
@@ -35,7 +53,8 @@
             <h4 class="shortcut-heading">What it asks for</h4>
             <p class="settings-hint chess-settings-lead">The run is read from its open tab, so keep the tab open; it can be in the background. Nothing is
                sent anywhere: where ${name}'s page stops updating while out of sight, the tab asks ${name} itself, about once a
-               minute and with your own session, for what the page would have shown.</p>`;
+               minute and with your own session, for what the page would have shown.</p>
+            ${folderHtml(site)}`;
     }
 
     /** Fill every `[data-forge-settings="<forge id>"]` on the page. */

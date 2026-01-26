@@ -20,6 +20,10 @@
  * `graph_partial`, and a pull request's `page_data/status_checks`, with the
  * page's own session. No other request is made, and none to GitHub's API,
  * which would count against sixty an hour.
+ *
+ * A folder download, once it is clicked, keeps to the same rule: the
+ * folder's own JSON, the file finder's `tree-list` of the commit, and each
+ * file's `/raw/` copy, every one a request the page itself makes.
  */
 (function (root) {
     'use strict';
@@ -53,6 +57,14 @@
         checkCounts: ['section[aria-label="Checks"] h3 + p', 'section[aria-label="Checks"] p', '.branch-action-item .status-meta'],
         pullTitle: ['[data-component="PH_Title"] .markdown-title', 'h1 .markdown-title', 'bdi.js-issue-title', '.js-issue-title'],
         pullSlot: ['[class*="PageHeader-Actions"] .d-flex.gap-2', '[class*="PageHeader-Actions"]', '.gh-header-actions'],
+
+        /**
+         * A folder's own row of buttons — Go to file, Add file, its "…" —
+         * found by the menu at its end. The header is drawn twice, a wide
+         * and a narrow copy, one of them hidden; the wide one first.
+         */
+        folderSlot: ['.react-code-view-header-element--wide div:has(> [data-testid="tree-overflow-menu-anchor"])',
+            'div:has(> [data-testid="tree-overflow-menu-anchor"])', '.file-navigation .d-flex'],
     });
 
     const { find, findAll } = Selectors.table(SELECTORS);
@@ -166,6 +178,80 @@
         return find(page.kind === 'run' ? 'runSlot' : 'pullSlot', doc);
     }
 
+    // ------------------------------------------------------------ folders
+
+    const JSON_HEADERS = { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+
+    /**
+     * /owner/repo/tree/<ref>/<path> is a folder. Where the ref ends and the
+     * path begins is the page's to say — a branch may have slashes in it —
+     * so this only says that it is one.
+     */
+    function folderAt(pathname) {
+        const [owner, repo, area, ...rest] = String(pathname || '').split(/[?#]/)[0].split('/').filter(Boolean);
+        return owner && repo && area === 'tree' && rest.length ? { repo: `${owner}/${repo}`, url: `/${owner}/${repo}/tree/${rest.join('/')}` } : null;
+    }
+
+    /**
+     * The commit a folder is at and its path in the repo, as the page asks
+     * for them when it moves to a folder: its own address, as JSON. Read
+     * there rather than off the page's embedded data, which is the first
+     * page's and goes stale on every move after it.
+     */
+    async function readFolder(folder, { fetchImpl = root.fetch } = {}) {
+        try {
+            const response = await fetchImpl(folder.url, { credentials: 'same-origin', headers: JSON_HEADERS });
+            if (!response.ok) return null;
+            const data = await response.json();
+            const route = data && data.payload && data.payload.codeViewTreeRoute;
+            const oid = route && route.refInfo && route.refInfo.currentOid;
+            if (!/^[0-9a-f]{40}$/.test(oid || '') || typeof route.path !== 'string') return null;
+            return { oid, path: route.path, items: (route.tree && route.tree.items) || [] };
+        } catch (_) {
+            return null;
+        }
+    }
+
+    /**
+     * Every file under the folder, as paths from the repo's root. The file
+     * finder's own list comes first — the whole repo at that commit, in one
+     * request — and each folder's JSON, one by one, only when that says
+     * nothing about this one.
+     */
+    async function listFolder(folder, at, { fetchImpl = root.fetch } = {}) {
+        const prefix = `${at.path}/`;
+        try {
+            const response = await fetchImpl(`/${folder.repo}/tree-list/${at.oid}`, { credentials: 'same-origin', headers: JSON_HEADERS });
+            const data = response.ok ? await response.json() : null;
+            const inside = (data && Array.isArray(data.paths) ? data.paths : []).filter((path) => path.startsWith(prefix));
+            if (inside.length) return inside;
+        } catch (_) { /* walked below */ }
+
+        const files = [];
+        const walk = async (items) => {
+            for (const item of items) {
+                if (item.contentType === 'directory') {
+                    const below = await readFolder({ url: `/${folder.repo}/tree/${at.oid}/${encodePath(item.path)}` }, { fetchImpl });
+                    if (!below) throw new Error(`Could not read ${item.path}`);
+                    await walk(below.items);
+                } else if (item.contentType !== 'submodule') {
+                    files.push(item.path);
+                }
+            }
+        };
+        await walk(at.items);
+        return files;
+    }
+
+    const encodePath = (path) => String(path).split('/').map(encodeURIComponent).join('/');
+
+    /**
+     * The file's raw copy at the commit, from github.com itself. It redirects
+     * to raw.githubusercontent.com — with a token on the way for a private
+     * repo, which the CDN would refuse without — and that answers any origin.
+     */
+    const rawUrl = (folder, at, path) => `/${folder.repo}/raw/${at.oid}/${encodePath(path)}`;
+
     const adapter = {
         site: 'github',
         ci: {
@@ -176,9 +262,17 @@
             /** Primer's own button, which every github.com page carries the styles for. */
             buttonClass: 'Button Button--secondary Button--small',
         },
+        folder: {
+            at: folderAt,
+            read: readFolder,
+            list: listFolder,
+            rawUrl,
+            slot: (doc) => find('folderSlot', doc),
+            buttonClass: 'Button Button--secondary Button--medium',
+        },
     };
 
-    const GithubRead = { SELECTORS, adapter, readRun, readChecks, countedJobs, fetchChecks, fetchRun, jobName };
+    const GithubRead = { SELECTORS, adapter, readRun, readChecks, countedJobs, fetchChecks, fetchRun, jobName, folderAt, readFolder, listFolder };
 
     root.BB = root.BB || {};
     root.BB.GithubRead = GithubRead;

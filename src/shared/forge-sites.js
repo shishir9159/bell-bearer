@@ -65,6 +65,8 @@
             /** What the Watch button goes on, as Settings says it. */
             watches: 'Actions runs and pull requests',
             pageOf: (pathname) => ownerRepoPage(pathname, 'pull'),
+            /** Which of SITE_KEYS' features this forge has; each is one setting. */
+            features: Object.freeze(['ciWatch', 'folderDownload']),
         }),
         gitlab: Object.freeze({
             id: 'gitlab',
@@ -76,6 +78,8 @@
             nouns: Object.freeze({ run: 'Pipeline', pull: 'Pipeline' }),
             watches: 'pipelines and merge requests',
             pageOf: gitlabPage,
+            // A folder's own download menu already offers it as an archive.
+            features: Object.freeze(['ciWatch']),
         }),
         forgejo: Object.freeze({
             id: 'forgejo',
@@ -86,6 +90,10 @@
             nouns: Object.freeze({ run: 'Run', pull: 'Checks' }),
             watches: 'Forgejo Actions runs and pull requests',
             pageOf: (pathname) => ownerRepoPage(pathname, 'pulls'),
+            // No folder download: Forgejo's folder menu has its own Download
+            // ZIP of just that folder (/archive/<ref>:<path>.zip), served
+            // compressed by the forge — codeberg.org, October 2026.
+            features: Object.freeze(['ciWatch']),
         }),
     });
 
@@ -121,21 +129,24 @@
     /**
      * Whole-forge setting keys, one builder each, as chat-sites.js has them:
      *   ('gitlab', 'ciWatch') → 'gitlabCiWatch'
+     * A forge owns only the keys for the features it lists: a switch for a
+     * button its pages would never draw is one nobody can explain.
      */
     const SITE_KEYS = Object.freeze({
         ciWatch: (p) => `${p}CiWatch`,
+        folderDownload: (p) => `${p}FolderDownload`,
     });
 
     function siteKey(siteId, kind) {
         const site = get(siteId);
         const build = SITE_KEYS[kind];
-        if (!site || !build) return null;
+        if (!site || !build || !site.features.includes(kind)) return null;
         return build(site.prefix);
     }
 
     /** Every setting key every forge owns. Asserted against DEFAULTS. */
     function allKeys() {
-        return list().flatMap((site) => Object.values(SITE_KEYS).map((build) => build(site.prefix)));
+        return list().flatMap((site) => site.features.map((kind) => SITE_KEYS[kind](site.prefix)));
     }
 
     const ForgeSites = { SITES, SITE_KEYS, get, list, siteOfHost, pageOfUrl, siteKey, allKeys };
