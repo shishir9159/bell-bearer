@@ -7163,9 +7163,19 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([ForgeSites.siteKey('gitlab', 'ciWatch'), ForgeSites.siteKey('gitlab', 'nonsense'), ForgeSites.siteKey('nowhere', 'ciWatch')],
             ['gitlabCiWatch', null, null]);
     });
-    check('every forge switch is in Settings, bound by carrying its key as its id', () => {
+    check('every forge has a settings panel of its own, drawn before binding, whose switch carries its key as its id', () => {
+        const ForgeSettings = require('../src/page/forge-settings.js');
         const html = readRepo('dashboard.html');
-        for (const key of ForgeSites.allKeys()) assert(html.includes(`<input type="checkbox" id="${key}">`), `${key} has no switch`);
+        const dashboard = readRepo('dashboard.js');
+        for (const site of ForgeSites.list()) {
+            assert(html.includes(`data-site-settings="${site.id}" data-forge-settings="${site.id}"`), `${site.id} has no settings panel`);
+            const key = ForgeSites.siteKey(site.id, 'ciWatch');
+            assert(ForgeSettings.panelHtml(site).includes(`<input type="checkbox" id="${key}">`), `${key} has no switch`);
+            eq(html.includes(`id="${key}"`), false, `${key} is drawn twice`);
+        }
+        assert(!html.includes('data-plate="Git forges"'), 'the switches are under General as well');
+        const at = dashboard.indexOf('ForgeSettings.mountAll()');
+        assert(at > -1 && at < dashboard.indexOf('SettingsForm.bindAll()'), 'drawn after the form was bound, so never bound');
     });
     check('each forge has a card in the launcher under the id it is detected by, and a page behind it', () => {
         const SiteIcons = require('../src/shared/site-icons.js');

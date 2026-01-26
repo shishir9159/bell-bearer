@@ -194,6 +194,8 @@
             ChessSettings.mountAll();
             // And the chat sites' panels, whose control ids are their keys.
             if (window.BB.ChatSettings) window.BB.ChatSettings.mountAll();
+            // And the forges', the same way.
+            if (window.BB.ForgeSettings) window.BB.ForgeSettings.mountAll();
             // And the same for the TypeRacer voice list, whose <option>s come
             // from the sound module rather than from the page.
             if (window.BB.TyperStats) window.BB.TyperStats.mountSettings();
