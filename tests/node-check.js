@@ -7978,6 +7978,138 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([(date >> 9) + 1980, (date >> 5) & 15, date & 31], [2025, 11, 13]);
     });
 
+    // ------------------------------------------------------------- mp4
+
+    section('merging a video and an audio mp4');
+
+    const Mp4Mux = require('../src/shared/mp4-mux.js');
+
+    const u32s = (...values) => {
+        const out = new Uint8Array(values.length * 4);
+        values.forEach((value, i) => new DataView(out.buffer).setUint32(i * 4, value));
+        return out;
+    };
+    const ascii4 = (text) => Uint8Array.from(text, (c) => c.charCodeAt(0));
+    const fullBox = (type, version, flags, ...parts) => Mp4Mux.box(type, u32s(version * 2 ** 24 + flags), ...parts);
+
+    /**
+     * A DASH stream as YouTube serves one: ftyp, a one-track moov, a sidx,
+     * then a moof and an mdat per fragment. Each fragment's one sample is
+     * the text `<marker><n>`, so where it lands can be checked byte for byte.
+     * `absolute` writes each base offset as a position in the file instead
+     * of leaving it to the moof.
+     */
+    function dashStream({ marker, handler, scale, media, starts, absolute = false, edit = 0 }) {
+        const duration = Math.round((starts[starts.length - 1] + 1) * scale);
+        const tkhd = fullBox('tkhd', 0, 3, u32s(0, 0, 1, 0, duration), new Uint8Array(60));
+        const mdia = Mp4Mux.box('mdia', fullBox('mdhd', 0, 0, u32s(0, 0, media, Math.round(duration * media / scale)), new Uint8Array(4)),
+            fullBox('hdlr', 0, 0, u32s(0), ascii4(handler), new Uint8Array(13)));
+        const edts = edit ? [Mp4Mux.box('edts', fullBox('elst', 0, 0, u32s(1, edit, 0, 0x10000)))] : [];
+        const moov = Mp4Mux.box('moov', fullBox('mvhd', 0, 0, u32s(0, 0, scale, duration), new Uint8Array(76), u32s(2)),
+            Mp4Mux.box('mvex', fullBox('trex', 0, 0, u32s(1, 1, 0, 0, 0))), Mp4Mux.box('trak', tkhd, ...edts, mdia));
+        const parts = [Mp4Mux.box('ftyp', ascii4('dash'), u32s(0), ascii4('iso6')), moov, fullBox('sidx', 0, 0, u32s(1, scale, 0, 0, 0))];
+        let at = parts.reduce((sum, part) => sum + part.length, 0);
+        starts.forEach((start, n) => {
+            const sample = ascii4(`${marker}${n}`);
+            const moofOf = (dataOffset) => Mp4Mux.box('moof', fullBox('mfhd', 0, 0, u32s(n + 1)), Mp4Mux.box('traf',
+                absolute ? fullBox('tfhd', 0, 0x000001, u32s(1, 0, at)) : fullBox('tfhd', 0, 0x020000, u32s(1)),
+                fullBox('tfdt', 0, 0, u32s(Math.round(start * media))), fullBox('trun', 0, 0x000001, u32s(1, dataOffset))));
+            const moof = moofOf(moofOf(0).length + 8);
+            parts.push(moof, Mp4Mux.box('mdat', sample));
+            at += moof.length + 8 + sample.length;
+        });
+        const bytes = new Uint8Array(at);
+        let put = 0;
+        for (const part of parts) { bytes.set(part, put); put += part.length; }
+        return bytes;
+    }
+
+    /** The merged file as one buffer, and each fragment read back the way a player reads it. */
+    function readMerged({ parts, size }, sources) {
+        const bytes = new Uint8Array(size);
+        let at = 0;
+        for (const part of parts) {
+            const chunk = part instanceof Uint8Array ? part : sources[part.source].subarray(part.at, part.at + part.size);
+            bytes.set(chunk, at);
+            at += chunk.length;
+        }
+        eq(at, size, 'the parts add up to the size given');
+        const dv = new DataView(bytes.buffer);
+        const top = Mp4Mux.boxesIn(bytes);
+        const fragments = top.filter((one) => one.type === 'moof').map((moof) => {
+            const kids = (parent) => Mp4Mux.boxesIn(bytes, parent.at + 8, parent.at + parent.size);
+            const mfhd = kids(moof).find((one) => one.type === 'mfhd');
+            const traf = kids(moof).find((one) => one.type === 'traf');
+            const [tfhd, tfdt, trun] = ['tfhd', 'tfdt', 'trun'].map((type) => kids(traf).find((one) => one.type === type));
+            const base = dv.getUint32(tfhd.at + 8) & 1 ? dv.getUint32(tfhd.at + 16) * 2 ** 32 + dv.getUint32(tfhd.at + 20) : moof.at;
+            const start = base + dv.getInt32(trun.at + 16);
+            return { seq: dv.getUint32(mfhd.at + 12), track: dv.getUint32(tfhd.at + 12), time: dv.getUint32(tfdt.at + 12),
+                sample: String.fromCharCode(...bytes.subarray(start, start + 2)) };
+        });
+        return { bytes, dv, top, fragments };
+    }
+
+    const videoStream = (more = {}) => dashStream({ marker: 'V', handler: 'vide', scale: 15360, media: 15360, starts: [0, 4, 8], edit: 15360 * 12, ...more });
+    const audioStream = (more = {}) => dashStream({ marker: 'A', handler: 'soun', scale: 44100, media: 44100, starts: [0, 10], ...more });
+
+    await checkAsync('both tracks come out in one moov, the audio renumbered to track 2', async () => {
+        const sources = [videoStream(), audioStream()];
+        const merged = await Mp4Mux.merge(sources.map(Mp4Mux.bytesSource));
+        const { bytes, dv, top } = readMerged(merged, sources);
+        eq(top.slice(0, 2).map((one) => one.type), ['ftyp', 'moov']);
+        assert(!top.some((one) => one.type === 'sidx'), 'an index of one stream\'s bytes is kept');
+        const moov = top[1];
+        const inMoov = Mp4Mux.boxesIn(bytes, moov.at + 8, moov.at + moov.size);
+        eq(inMoov.map((one) => one.type), ['mvhd', 'mvex', 'trak', 'trak']);
+        const ids = inMoov.filter((one) => one.type === 'trak').map((trak) => dv.getUint32(Mp4Mux.boxesIn(bytes, trak.at + 8, trak.at + trak.size)[0].at + 20));
+        eq(ids, [1, 2]);
+        const mvex = inMoov[1];
+        eq(Mp4Mux.boxesIn(bytes, mvex.at + 8, mvex.at + mvex.size).map((trex) => dv.getUint32(trex.at + 12)), [1, 2]);
+        const mvhd = inMoov[0];
+        eq([dv.getUint32(mvhd.at + 20), dv.getUint32(mvhd.at + mvhd.size - 4)], [15360, 3], 'the video\'s timescale, and the next free track');
+        // Eleven seconds of audio is longer than nine of video, and is said in the video's units.
+        eq([dv.getUint32(mvhd.at + 24), merged.seconds], [11 * 15360, 11]);
+        const audioTkhd = Mp4Mux.boxesIn(bytes, inMoov[3].at + 8, inMoov[3].at + inMoov[3].size)[0];
+        eq(dv.getUint32(audioTkhd.at + 28), 11 * 15360, 'the audio track\'s length in the movie\'s timescale');
+    });
+    await checkAsync('the fragments are interleaved by start time and numbered again, and every sample is where its moof says', async () => {
+        const sources = [videoStream(), audioStream()];
+        const { fragments } = readMerged(await Mp4Mux.merge(sources.map(Mp4Mux.bytesSource)), sources);
+        eq(fragments.map((one) => [one.seq, one.track, one.sample]), [
+            [1, 1, 'V0'], [2, 2, 'A0'], [3, 1, 'V1'], [4, 1, 'V2'], [5, 2, 'A1'],
+        ]);
+    });
+    await checkAsync('a base offset written as a file position is moved with its fragment', async () => {
+        const sources = [videoStream({ absolute: true }), audioStream({ absolute: true })];
+        const { fragments } = readMerged(await Mp4Mux.merge(sources.map(Mp4Mux.bytesSource)), sources);
+        eq(fragments.map((one) => one.sample), ['V0', 'A0', 'V1', 'V2', 'A1']);
+    });
+    await checkAsync('the mdats are named in their sources rather than copied', async () => {
+        const sources = [videoStream(), audioStream()];
+        const { parts } = await Mp4Mux.merge(sources.map(Mp4Mux.bytesSource));
+        const spliced = parts.filter((part) => !(part instanceof Uint8Array));
+        eq(spliced.map((part) => part.source), [0, 1, 0, 0, 1]);
+        eq(spliced.map((part) => part.size), [10, 10, 10, 10, 10]);
+    });
+    await checkAsync('one stream on its own comes through as a file of its own', async () => {
+        const sources = [videoStream()];
+        const { fragments } = readMerged(await Mp4Mux.merge(sources.map(Mp4Mux.bytesSource)), sources);
+        eq(fragments.map((one) => one.sample), ['V0', 'V1', 'V2']);
+    });
+    await checkAsync('a cut-short stream, a stream that is not mp4, and an encrypted one are each refused', async () => {
+        const refused = async (sources) => {
+            try { await Mp4Mux.merge(sources.map(Mp4Mux.bytesSource)); } catch (error) { return error.message; }
+            return 'merged';
+        };
+        const whole = videoStream();
+        assert(/cut short/.test(await refused([whole.subarray(0, whole.length - 3), audioStream()])));
+        assert(/not an MP4/.test(await refused([new TextEncoder().encode('<html>Sign in to confirm you\'re not a bot</html>')])));
+        const locked = videoStream();
+        const hdlr = new TextDecoder('latin1').decode(locked).indexOf('vide');
+        locked.set(ascii4('enca'), hdlr);
+        assert(/encrypted/.test(await refused([locked])), 'an encrypted sample entry went through');
+    });
+
     // ------------------------------------------------------ bulk export
 
     section('bulk chat export');
