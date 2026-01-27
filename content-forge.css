@@ -1,5 +1,5 @@
 /*
- * The git forges: the CI watch's button.
+ * The git forges: the CI watch's button, and the folder download's.
  *
  * Loaded after content.css, and only by the forges' manifest entry. The
  * button wears the forge's own button classes (each adapter's buttonClass),
@@ -44,4 +44,14 @@
 
 @media (prefers-reduced-motion: reduce) {
     .bb-ci-watch.bb-ci-watching::before { animation: none; opacity: .8; }
+}
+
+/* Download folder sits first in a row that spaces its own children; it only
+   needs not to wrap while it counts the files it is zipping. */
+.bb-folder-download {
+    white-space: nowrap;
+}
+
+.bb-folder-download:disabled {
+    cursor: progress;
 }

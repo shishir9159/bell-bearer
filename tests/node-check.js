@@ -7415,6 +7415,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     section('the forge folder download');
 
+    globalThis.BB.Zip = require('../src/shared/zip.js');
+    const FolderDownload = require('../src/content/folder-download.js');
     const GithubFolder = require('../src/content/github-read.js');
 
     check('a github folder is anything under /tree/, and a repo, a file or a run is not', () => {
@@ -7440,6 +7442,27 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
     check('each file is fetched raw, from the forge itself, at the commit, its path escaped', () => {
         eq(GithubFolder.adapter.folder.rawUrl({ repo: 'o/r' }, { oid: 'f'.repeat(40) }, 'docs/a b#1.md'), `/o/r/raw/${'f'.repeat(40)}/docs/a%20b%231.md`);
+    });
+    check('a zip opens to the folder itself, with what is under it', () => {
+        eq(FolderDownload.entryName('src/shared', 'src/shared/zip.js'), 'shared/zip.js');
+        eq(FolderDownload.entryName('docs', 'docs/a/b.md'), 'docs/a/b.md');
+    });
+    await checkAsync('the files are fetched a few at a time, kept in order, and the first failure ends it', async () => {
+        let inFlight = 0;
+        let most = 0;
+        const out = await FolderDownload.mapLimit([5, 1, 3, 2], 2, async (n) => {
+            most = Math.max(most, ++inFlight);
+            await new Promise((done) => setTimeout(done, n));
+            inFlight--;
+            return n * 10;
+        });
+        eq([out, most], [[50, 10, 30, 20], 2]);
+        const started = [];
+        let error = null;
+        try {
+            await FolderDownload.mapLimit([1, 2, 3, 4, 5], 1, async (n) => { started.push(n); if (n === 2) throw new Error('two'); });
+        } catch (thrown) { error = thrown.message; }
+        eq([error, started], ['two', [1, 2]]);
     });
 
     // ------------------------------------------------- the conversation tree

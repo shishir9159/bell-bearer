@@ -544,4 +544,134 @@
             assertEqual(asked.length, 0);
         });
     });
+
+    // ------------------------------------------------------- folder download
+
+    /** Just enough of a zip reader for a stored archive: each entry's name and text. */
+    function unzip(bytes) {
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const end = bytes.length - 22;
+        let at = view.getUint32(end + 16, true);
+        const out = {};
+        for (let i = view.getUint16(end + 10, true); i > 0; i--) {
+            const size = view.getUint32(at + 24, true);
+            const nameLength = view.getUint16(at + 28, true);
+            const local = view.getUint32(at + 42, true);
+            const name = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength));
+            const start = local + 30 + view.getUint16(local + 26, true);
+            out[name] = new TextDecoder().decode(bytes.subarray(start, start + size));
+            at += 46 + nameLength;
+        }
+        return out;
+    }
+
+    const OID = 'c0ffee'.padEnd(40, '0');
+    const FOLDER_URL = '/a/b/tree/feature/x/src/lib';
+    const folderRow = `<div class="react-code-view-header-element--wide"><div class="d-flex gap-2">
+        <div><button type="button">Add file</button></div><button type="button" data-testid="tree-overflow-menu-anchor"></button>
+        </div></div>`;
+    const treeJson = (path, items = []) => ({ payload: { codeViewTreeRoute: { path, refInfo: { name: 'feature/x', currentOid: OID }, tree: { items } } } });
+
+    /** github.com as the folder download sees it: a URL in, JSON or bytes out, and every URL written down. */
+    function fakeGithub(routes) {
+        const asked = [];
+        const fetchImpl = async (url) => {
+            asked.push(url);
+            const answer = routes[url];
+            if (answer === undefined) return { ok: false, status: 404, json: async () => null, arrayBuffer: async () => new ArrayBuffer(0) };
+            return {
+                ok: true,
+                status: 200,
+                json: async () => answer,
+                arrayBuffer: async () => new TextEncoder().encode(String(answer)).buffer,
+            };
+        };
+        return { fetchImpl, asked };
+    }
+
+    function makeFolder({ routes = {}, path = FOLDER_URL, on = true } = {}) {
+        const settings = { githubFolderDownload: on };
+        const notes = [];
+        const saved = [];
+        const github = fakeGithub(routes);
+        const win = { location: { pathname: path } };
+        const ui = BB().FolderDownload.createFolderDownload({
+            adapter: BB().GithubRead.adapter, watcher: nowWatcher(), notify: (text, type) => notes.push([text, type]),
+            getSettings: () => settings, fetchImpl: github.fetchImpl, save: (name, bytes) => saved.push({ name, files: unzip(bytes) }), win,
+        });
+        const button = () => document.getElementById(BB().FolderDownload.BUTTON_ID);
+        return { ui, settings, notes, saved, github, win, button };
+    }
+
+    const lib = {
+        [FOLDER_URL]: treeJson('src/lib'),
+        [`/a/b/tree-list/${OID}`]: { paths: ['README.md', 'src/lib/a.js', 'src/lib/deep/b.txt', 'src/libx/not-this.js'] },
+        [`/a/b/raw/${OID}/src/lib/a.js`]: 'export const a = 1;',
+        [`/a/b/raw/${OID}/src/lib/deep/b.txt`]: 'bé',
+    };
+
+    suite('forge folder download', () => {
+        test('it goes first in the folder\'s own row while its switch is on, and not on a file or once the switch is off', async () => {
+            const host = stage(folderRow);
+            const { ui, settings, button, win } = makeFolder();
+            ui.install();
+            assertEqual(host.querySelector('.d-flex').firstElementChild, button());
+            assertEqual(button().textContent, 'Download folder');
+            assertEqual(button().className, 'Button Button--secondary Button--medium bb-folder-download');
+            settings.githubFolderDownload = false;
+            ui.refreshSurfaces();
+            assertEqual(button(), null);
+            settings.githubFolderDownload = true;
+            win.location.pathname = '/a/b/blob/feature/x/src/lib/a.js';
+            ui.onNavigate();
+            assertEqual(button(), null, 'a file is not a folder');
+            teardown();
+        });
+
+        test('a click zips the files under the folder, at the commit the page is on, named from the folder', async () => {
+            stage(folderRow);
+            const { ui, button, saved, notes, github } = makeFolder({ routes: lib });
+            ui.install();
+            button().click();
+            await waitFor(() => saved.length, 'the zip to be saved');
+            assertEqual(saved[0].name, 'lib.zip');
+            assertDeepEqual(saved[0].files, { 'lib/a.js': 'export const a = 1;', 'lib/deep/b.txt': 'bé' });
+            assertDeepEqual(notes.pop(), ['Saved lib.zip — 2 files', 'success']);
+            assert(!github.asked.some((url) => /libx/.test(url)), 'a sibling that shares the name\'s start was fetched');
+            await waitFor(() => !button().disabled, 'the button to come back');
+            assertEqual(button().textContent, 'Download folder');
+            teardown();
+        });
+
+        test('when the file finder says nothing of the folder, its folders are walked one by one', async () => {
+            stage(folderRow);
+            const routes = {
+                [FOLDER_URL]: treeJson('src/lib', [{ path: 'src/lib/deep', contentType: 'directory' }, { path: 'src/lib/a.js', contentType: 'file' },
+                    { path: 'src/lib/vendor', contentType: 'submodule' }]),
+                [`/a/b/tree/${OID}/src/lib/deep`]: treeJson('src/lib/deep', [{ path: 'src/lib/deep/b.txt', contentType: 'file' }]),
+                [`/a/b/raw/${OID}/src/lib/a.js`]: 'a',
+                [`/a/b/raw/${OID}/src/lib/deep/b.txt`]: 'b',
+            };
+            const { ui, button, saved } = makeFolder({ routes });
+            ui.install();
+            button().click();
+            await waitFor(() => saved.length, 'the zip to be saved');
+            assertDeepEqual(Object.keys(saved[0].files), ['lib/deep/b.txt', 'lib/a.js']);
+            teardown();
+        });
+
+        test('a file that will not come saves nothing and says which', async () => {
+            stage(folderRow);
+            const routes = { ...lib };
+            delete routes[`/a/b/raw/${OID}/src/lib/deep/b.txt`];
+            const { ui, button, saved, notes } = makeFolder({ routes });
+            ui.install();
+            button().click();
+            await waitFor(() => notes.length, 'the failure to be told');
+            assertDeepEqual(notes[0], ['Could not fetch src/lib/deep/b.txt (404)', 'error']);
+            assertEqual(saved.length, 0);
+            await waitFor(() => !button().disabled, 'the button to come back');
+            teardown();
+        });
+    });
 })();

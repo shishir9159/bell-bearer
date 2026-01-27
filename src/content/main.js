@@ -415,14 +415,21 @@
         forgejo: () => BB.ForgejoRead.adapter,
     };
     let forgeUi = null;
+    /** The Download folder button, on a forge whose adapter reads folders. */
+    let folderUi = null;
 
     if (BB.ForgeSites && BB.ForgeSites.get(site) && FORGE_ADAPTERS[site]) {
         const watcher = DomWatch.createWatcher();
+        const adapter = FORGE_ADAPTERS[site]();
 
         forgeUi = BB.CiWatchContent.createCiWatch({
-            adapter: FORGE_ADAPTERS[site](), watcher, notify, getSettings: () => settings, ask: askWorker,
+            adapter, watcher, notify, getSettings: () => settings, ask: askWorker,
         });
         forgeUi.install();
+        if (adapter.folder) {
+            folderUi = BB.FolderDownload.createFolderDownload({ adapter, watcher, notify, getSettings: () => settings });
+            folderUi.install();
+        }
 
         // The X treatment once more: every forge moves between a run and its
         // jobs, or a pull request's tabs, without loading a page, and none
@@ -432,6 +439,7 @@
             if (location.pathname !== lastPath) {
                 lastPath = location.pathname;
                 forgeUi.onNavigate();
+                if (folderUi) folderUi.onNavigate();
             }
             return false;
         });
@@ -642,7 +650,7 @@
         'shortcuts',
     ] : [];
 
-    /** And a forge's Watch button, on its switch. */
+    /** And a forge's Watch and Download folder buttons, on their switches. */
     const FORGE_SURFACES = forgeUi ? BB.ForgeSites.allKeys() : [];
 
     /** And what an open YouTube reader has to follow without being closed. */
@@ -684,6 +692,7 @@
         if (readerSurfacesChanged && reader) reader.refresh();
         if (chatSurfacesChanged && chatUi) chatUi.refreshSurfaces();
         if (forgeSurfacesChanged && forgeUi) forgeUi.refreshSurfaces();
+        if (forgeSurfacesChanged && folderUi) folderUi.refreshSurfaces();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
         if (timeLimit) timeLimit.sync();

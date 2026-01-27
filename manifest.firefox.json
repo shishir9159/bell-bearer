@@ -469,12 +469,14 @@
         "src/content/markdown.js",
         "src/content/cookie-banner.js",
         "src/shared/selectors.js",
+        "src/shared/zip.js",
         "src/shared/forge-sites.js",
         "src/shared/ci-watch.js",
         "src/content/github-read.js",
         "src/content/gitlab-read.js",
         "src/content/forgejo-read.js",
         "src/content/ci-watch.js",
+        "src/content/folder-download.js",
         "src/content/main.js"
       ],
       "css": [
