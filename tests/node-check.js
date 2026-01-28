@@ -8110,6 +8110,132 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/encrypted/.test(await refused([locked])), 'an encrypted sample entry went through');
     });
 
+    // ------------------------------------------------------- saving a video
+
+    section('saving a video — the rendition, the pieces, the file');
+
+    globalThis.BB.Mp4Mux = Mp4Mux;
+    const VideoDownload = require('../src/content/video-download.js');
+
+    const rendition = (width, height, more = {}) => ({ width, height, p: Math.min(width, height), label: `${Math.min(width, height)}p`, fps: 30, rank: 0, ...more });
+
+    check('the quality wanted is the picture the player draws, else the one it was told to keep', () => {
+        eq(VideoDownload.wanted({ videoWidth: 1920, videoHeight: 800 }, 720), { width: 1920, height: 800, p: 800 });
+        eq(VideoDownload.wanted({ videoWidth: 1080, videoHeight: 1920 }, 0).p, 1080, 'a short is named by its narrow side');
+        eq(VideoDownload.wanted({ videoWidth: 0, videoHeight: 0 }, 1080), { p: 1080 }, 'no frame drawn yet');
+        eq(VideoDownload.wanted(null, 0), null);
+    });
+    check('the exact size wins; then the same lines; then the nearest below, and only then above', () => {
+        const wide = rendition(1920, 800, { label: '1080p', p: 1080 });
+        eq(VideoDownload.pick([rendition(1280, 534, { label: '720p', p: 720 }), wide], { width: 1920, height: 800, p: 800 }), wide,
+            'a scope film is 1080p by name and 800 lines by picture');
+        const list = [rendition(1280, 720), rendition(1920, 1080), rendition(3840, 2160, { rank: 1 })];
+        eq(VideoDownload.pick(list, { p: 1080 }).height, 1080);
+        eq(VideoDownload.pick(list, { p: 1440 }).height, 1080, 'nothing at 1440, so the nearest below');
+        eq(VideoDownload.pick(list, { p: 144 }).height, 720, 'nothing below, so the nearest above');
+        eq(VideoDownload.pick(list, null).height, 1080, 'nothing to match: the best up to 1080p');
+        eq(VideoDownload.pick([], { p: 720 }), null);
+    });
+    check('among equals, the higher frame rate, then the adapter\'s codec, then the higher bitrate', () => {
+        const av1 = rendition(1920, 1080, { fps: 60, rank: 1 });
+        const avc = rendition(1920, 1080, { fps: 60, rank: 0, bitrate: 1 });
+        const avcRich = rendition(1920, 1080, { fps: 60, rank: 0, bitrate: 2 });
+        eq(VideoDownload.pick([rendition(1920, 1080, { fps: 30 }), av1, avc, avcRich], { width: 1920, height: 1080, p: 1080 }), avcRich);
+    });
+    check('a stream is fetched in pieces that cover it end to end', () => {
+        eq(VideoDownload.chunks(25, 10), [[0, 9], [10, 19], [20, 24]]);
+        eq(VideoDownload.chunks(20, 10), [[0, 9], [10, 19]]);
+        eq(VideoDownload.chunks(0, 10), []);
+    });
+    check('a title becomes a file name any system takes, with the quality after it', () => {
+        eq(VideoDownload.fileName('AC/DC: "Live" at <River Plate>?', '1080p60'), 'AC DC Live at River Plate (1080p60).mp4');
+        eq(VideoDownload.fileName('  ...  ', ''), 'video.mp4');
+        eq(VideoDownload.fileName('Ends with a dot.', '720p'), 'Ends with a dot (720p).mp4');
+        assert(VideoDownload.fileName('x'.repeat(400), '720p').length < 170);
+    });
+
+    /** A server that answers `?range=a-b` from `bytes`, with whatever `trouble` says first. */
+    function rangeServer(files, trouble = {}) {
+        const asked = [];
+        const fetchImpl = async (url) => {
+            asked.push(url);
+            const [base, query] = url.split('?');
+            const range = /range=(\d+)-(\d+)/.exec(query || '');
+            const bytes = files[base] || files[url];
+            const problem = trouble[url] && trouble[url].shift();
+            if (problem === 'drop') throw new TypeError('Failed to fetch');
+            if (typeof problem === 'number') return { ok: false, status: problem, blob: async () => new Blob([]) };
+            if (!bytes) return { ok: false, status: 404, blob: async () => new Blob([]) };
+            const body = range ? bytes.subarray(Number(range[1]), Number(range[2]) + 1) : bytes;
+            return { ok: true, status: 200, blob: async () => new Blob([problem === 'short' ? body.subarray(1) : body]) };
+        };
+        return { fetchImpl, asked };
+    }
+    const blobBytes = async (blob) => new Uint8Array(await blob.arrayBuffer());
+
+    await checkAsync('the pieces come back in order, and a dropped, busy or short one is asked for again', async () => {
+        const bytes = Uint8Array.from({ length: 25 }, (_, i) => i);
+        const url = 'https://v.example/s?x=1';
+        const server = rangeServer({ 'https://v.example/s': bytes }, { [`${url}&range=10-19`]: ['drop', 503], [`${url}&range=20-24`]: ['short'] });
+        const sizes = [];
+        const blob = await VideoDownload.fetchStream({ url, size: 25 }, { fetchImpl: server.fetchImpl, chunk: 10, retryMs: 0, onPiece: (size) => sizes.push(size) });
+        eq(Array.from(await blobBytes(blob)), Array.from(bytes));
+        eq([server.asked.length, sizes.sort((a, b) => a - b)], [6, [5, 10, 10]]);
+        eq(VideoDownload.CHUNK, 10 << 20, 'yt-dlp\'s piece size, which googlevideo does not throttle');
+    });
+    await checkAsync('a refused piece is not asked for again, and the whole stream fails with it', async () => {
+        const url = 'https://v.example/gone';
+        const server = rangeServer({}, { [`${url}?range=0-9`]: [403] });
+        let message = '';
+        try { await VideoDownload.fetchStream({ url, size: 10 }, { fetchImpl: server.fetchImpl }); } catch (error) { message = error.message; }
+        assert(/refused \(403\)/.test(message), message);
+        eq(server.asked.length, 1);
+    });
+    await checkAsync('a segment list is fetched whole, each in its place', async () => {
+        const server = rangeServer({ 'https://v.example/init.mp4': ascii4('II'), 'https://v.example/1.m4s': ascii4('11'), 'https://v.example/2.m4s': ascii4('22') });
+        const blob = await VideoDownload.fetchStream({ urls: ['https://v.example/init.mp4', 'https://v.example/1.m4s', 'https://v.example/2.m4s'] }, { fetchImpl: server.fetchImpl });
+        eq(new TextDecoder().decode(await blobBytes(blob)), 'II1122');
+    });
+
+    /** An adapter with nothing to say about any site: two streams, served by `server`. */
+    function fakeVideoSite(streams, more = {}) {
+        return { site: 'test', onVideo: () => true, storedQuality: () => 0, plan: async () => ({ label: '720p', fileName: 'A video (720p).mp4', streams }), ...more };
+    }
+
+    await checkAsync('a download fetches both streams, merges them, and saves one playable file', async () => {
+        const video = videoStream();
+        const audio = audioStream();
+        const server = rangeServer({ 'https://v.example/video': video, 'https://v.example/audio': audio });
+        const notes = [];
+        const saved = [];
+        const downloader = VideoDownload.createDownloader({
+            adapter: fakeVideoSite([{ url: 'https://v.example/video', size: video.length }, { url: 'https://v.example/audio', size: audio.length }]),
+            notify: (text, type) => notes.push([text, type]), getVideoElement: () => ({ videoWidth: 1280, videoHeight: 720 }),
+            fetchImpl: server.fetchImpl, save: (name, blob, type) => saved.push({ name, blob, type }),
+        });
+        eq(downloader.info(), { ok: true, busy: false, percent: 0, label: '720p' });
+        await downloader.start();
+        eq([saved.length, saved[0].name, saved[0].type], [1, 'A video (720p).mp4', 'video/mp4']);
+        const bytes = await blobBytes(saved[0].blob);
+        const merged = readMerged({ parts: [bytes], size: bytes.length }, []);
+        eq(merged.fragments.map((one) => one.sample), ['V0', 'A0', 'V1', 'V2', 'A1']);
+        eq(notes[notes.length - 1], ['Saved A video (720p).mp4', 'success']);
+        assert(notes.some(([text]) => text === 'Downloading 720p — 100%'), JSON.stringify(notes));
+    });
+    await checkAsync('a site with the download switched off is offered nothing, and a failure is said, not thrown', async () => {
+        const off = VideoDownload.createDownloader({ adapter: fakeVideoSite([]), notify: () => {}, getVideoElement: () => null, enabled: () => false, save: () => assert(false, 'saved') });
+        eq(off.info(), { ok: false });
+        await off.start();
+        const notes = [];
+        const failing = VideoDownload.createDownloader({
+            adapter: fakeVideoSite([], { plan: async () => { throw new Error('YouTube would not give the streams: Sign in'); } }),
+            notify: (text, type) => notes.push([text, type]), getVideoElement: () => null, save: () => assert(false, 'saved'),
+        });
+        await failing.start();
+        eq(notes.pop(), ['YouTube would not give the streams: Sign in', 'error']);
+        eq(failing.info().busy, false);
+    });
+
     // ------------------------------------------------------ bulk export
 
     section('bulk chat export');
