@@ -202,6 +202,22 @@
                 sendResponse({ ok: !!chatUi });
                 break;
 
+            case 'downloadInfo':
+                sendResponse(downloader ? downloader.info() : { ok: false });
+                break;
+
+            // Answered at once: the download goes on in this tab long after
+            // the popup that asked for it has closed.
+            case 'downloadVideo':
+                if (downloader) downloader.start();
+                sendResponse({ ok: !!downloader });
+                break;
+
+            case 'downloadCancel':
+                if (downloader) downloader.cancel();
+                sendResponse({ ok: !!downloader });
+                break;
+
             case 'copyLinkAsMarkdown':
                 markdown.copy(markdown.buildLinkMarkdown(message.linkUrl, message.selectionText)).then((ok) => {
                     if (ok) notify('Copied link as Markdown', 'success');
@@ -224,6 +240,8 @@
     let chatUi = null;
     /** The YouTube reader; built on YouTube only, and opened on demand. */
     let reader = null;
+    /** Saving the video on the page as an .mp4, on a site with an adapter for it. */
+    let downloader = null;
 
     /**
      * Whichever site's pouch surface this page has, or null for the rest. On
@@ -256,6 +274,14 @@
         reader = Reader.createReader({
             player, watcher, getVideo, getSettings: () => settings, transcripts, recorder,
             copyText: (text) => markdown.copy(text),
+        });
+
+        downloader = BB.VideoDownload.createDownloader({
+            adapter: BB.YoutubeDownload.adapter, notify,
+            // The player locator keeps one element, and Shorts swaps it on every swipe.
+            getVideoElement: () => (Site.isShortsPath() ? Site.activeShortsVideo() : getVideoElement()),
+            getVideoId: () => PageInfo.getVideoId(),
+            enabled: () => settings.youtubeDownload === true,
         });
 
         // YouTube is a single-page app: it fires yt-navigate-finish instead of

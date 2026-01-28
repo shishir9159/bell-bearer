@@ -126,12 +126,15 @@
         "src/shared/yt-subs.js",
         "src/shared/playlists.js",
         "src/shared/pouch-button.js",
+        "src/shared/mp4-mux.js",
         "src/content/transcripts.js",
         "src/content/checkpoints.js",
         "src/content/pouch-sheet.js",
         "src/content/youtube-ui.js",
         "src/content/reader-transcript.js",
         "src/content/reader.js",
+        "src/content/video-download.js",
+        "src/content/youtube-download.js",
         "src/content/main.js"
       ],
       "css": [

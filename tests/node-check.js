@@ -8236,6 +8236,89 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(failing.info().busy, false);
     });
 
+    section('saving a youtube video');
+
+    const YoutubeDownload = require('../src/content/youtube-download.js');
+
+    /** A visionos answer in the shape YouTube gave for Big Buck Bunny, October 2026, cut to what is read. */
+    const fmt = (itag, mimeType, more = {}) => ({ itag, mimeType, url: `https://rr1.googlevideo.com/videoplayback?itag=${itag}`, contentLength: String(itag * 1000), bitrate: itag, ...more });
+    const ytAnswer = (formats, more = {}) => ({
+        playabilityStatus: { status: 'OK' },
+        videoDetails: { title: 'Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film', isLive: false },
+        streamingData: { adaptiveFormats: formats },
+        ...more,
+    });
+    const BUNNY = [
+        fmt(401, 'video/mp4; codecs="av01.0.13M.08"', { width: 3840, height: 2160, fps: 60, qualityLabel: '2160p60' }),
+        fmt(315, 'video/webm; codecs="vp9"', { width: 3840, height: 2160, fps: 60, qualityLabel: '2160p60' }),
+        fmt(400, 'video/mp4; codecs="av01.0.12M.08"', { width: 2560, height: 1440, fps: 60, qualityLabel: '1440p60' }),
+        fmt(299, 'video/mp4; codecs="avc1.64002A"', { width: 1920, height: 1080, fps: 60, qualityLabel: '1080p60' }),
+        fmt(399, 'video/mp4; codecs="av01.0.09M.08"', { width: 1920, height: 1080, fps: 60, qualityLabel: '1080p60' }),
+        fmt(137, 'video/mp4; codecs="avc1.640028"', { width: 1920, height: 1080, fps: 60, qualityLabel: '1080p60', url: undefined, signatureCipher: 's=x&url=y' }),
+        fmt(134, 'video/mp4; codecs="avc1.4D401E"', { width: 640, height: 360, fps: 30, qualityLabel: '360p' }),
+        fmt(140, 'audio/mp4; codecs="mp4a.40.2"', { audioQuality: 'AUDIO_QUALITY_MEDIUM' }),
+        fmt(140, 'audio/mp4; codecs="mp4a.40.2"', { isDrc: true, bitrate: 999 }),
+        fmt(141, 'audio/mp4; codecs="mp4a.40.2"', { audioTrack: { displayName: 'French', audioIsDefault: false }, bitrate: 900 }),
+        fmt(139, 'audio/mp4; codecs="mp4a.40.5"', {}),
+        fmt(251, 'audio/webm; codecs="opus"', { bitrate: 5000 }),
+    ];
+
+    check('the player request is yt-dlp\'s visionos client, without cookies, carrying the page\'s visitor id', () => {
+        const { url, init } = YoutubeDownload.playerRequest('aqz-KE-bpKQ', 'Cgt-visitor');
+        eq([url, init.method, init.credentials], ['/youtubei/v1/player?prettyPrint=false', 'POST', 'omit']);
+        eq([init.headers['X-YouTube-Client-Name'], init.headers['X-YouTube-Client-Version'], init.headers['X-Goog-Visitor-Id']], ['101', '1.02', 'Cgt-visitor']);
+        const body = JSON.parse(init.body);
+        eq([body.videoId, body.context.client.clientName, body.context.client.visitorData, body.contentCheckOk], ['aqz-KE-bpKQ', 'VISIONOS', 'Cgt-visitor', true]);
+        assert(!('X-Goog-Visitor-Id' in YoutubeDownload.playerRequest('x', '').init.headers), 'an empty visitor id is still sent');
+    });
+    check('only MP4 with a plain address is offered, and the sound is the original, not a dub or the stable-volume copy', () => {
+        const read = YoutubeDownload.readPlayer(ytAnswer(BUNNY));
+        eq(read.video.map((one) => `${one.label} ${one.rank}`), ['2160p60 1', '1440p60 1', '1080p60 0', '1080p60 1', '360p 0']);
+        eq(read.audio.map((one) => one.bitrate), [140, 139], 'loudest-first, without the DRC copy, the French dub or the opus');
+        eq(read.title, 'Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film');
+    });
+    check('a video YouTube will not play this way, or a live one, says why', () => {
+        eq(YoutubeDownload.readPlayer({ playabilityStatus: { status: 'LOGIN_REQUIRED', reason: 'Sign in to confirm you’re not a bot' } }),
+            { ok: false, reason: 'Sign in to confirm you’re not a bot' });
+        eq(YoutubeDownload.readPlayer(ytAnswer(BUNNY, { videoDetails: { isLive: true } })).reason, 'a live stream has no end to save');
+        eq(YoutubeDownload.readPlayer(null).ok, false);
+    });
+    check('the quality the gear menu kept, and the visitor id the page was given, are read as the page wrote them', () => {
+        const win = (value) => ({ localStorage: { getItem: () => value } });
+        eq(YoutubeDownload.storedQuality(win('{"data":"{\\"quality\\":1080,\\"previousQuality\\":480}","expiration":1821081782210,"creation":1789977782210}')), 1080);
+        eq([YoutubeDownload.storedQuality(win(null)), YoutubeDownload.storedQuality(win('not json'))], [0, 0]);
+        const doc = { scripts: [{ textContent: 'var a = 1;' }, { textContent: 'ytcfg.set({"INNERTUBE_API_KEY":"k","VISITOR_DATA":"CgtaWnp%3D%3D","X":1});' }] };
+        eq([YoutubeDownload.visitorData(doc), YoutubeDownload.visitorData({ scripts: [] })], ['CgtaWnp%3D%3D', '']);
+    });
+    await checkAsync('the plan is the rendition the player shows, as MP4, with the best original sound', async () => {
+        globalThis.BB.VideoDownload = VideoDownload;
+        const answering = (answer) => async () => ({ ok: true, json: async () => answer });
+        const plan = (want) => YoutubeDownload.adapter.plan({ videoId: 'aqz-KE-bpKQ', want, doc: { scripts: [] }, fetchImpl: answering(ytAnswer(BUNNY)) });
+        const hd = await plan({ width: 1920, height: 1080, p: 1080 });
+        eq([hd.label, hd.streams.map((one) => /itag=(\d+)/.exec(one.url)[1]), hd.note], ['1080p60', ['299', '140'], '']);
+        eq(hd.fileName, 'Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film (1080p60).mp4');
+        eq((await plan({ width: 2560, height: 1440, p: 1440 })).streams[0].url, BUNNY[2].url, 'above 1080p the MP4 is AV1');
+        const noMp4 = YoutubeDownload.adapter.plan({ videoId: 'x', want: { p: 2160 }, doc: { scripts: [] },
+            fetchImpl: answering(ytAnswer(BUNNY.filter((one) => one.itag !== 401))) });
+        eq((await noMp4).note, '2160p is not offered as MP4 here — saving 1440p60');
+        let message = '';
+        try { await YoutubeDownload.adapter.plan({ videoId: 'x', want: null, doc: { scripts: [] }, fetchImpl: async () => ({ ok: false, status: 429 }) }); } catch (error) { message = error.message; }
+        eq(message, 'YouTube refused to list the streams (429)');
+    });
+    check('a watch page, a short or a live page has a video to save, and the home page does not', () => {
+        const at = (pathname) => YoutubeDownload.adapter.onVideo({ location: { pathname } }, 'abc');
+        eq(['/watch', '/shorts/abc', '/live/abc', '/', '/results', '/@channel'].map(at), [true, true, true, false, false, false]);
+        eq(YoutubeDownload.adapter.onVideo({ location: { pathname: '/watch' } }, null), false);
+    });
+    check('the youtube entry loads the merge, the core and the adapter before main.js', () => {
+        for (const name of ['manifest.json', 'manifest.firefox.json']) {
+            const entry = JSON.parse(readRepo(name)).content_scripts.find((one) => one.js.includes('src/content/youtube-ui.js'));
+            const at = (file) => entry.js.indexOf(file);
+            assert(at('src/shared/mp4-mux.js') > -1 && at('src/shared/mp4-mux.js') < at('src/content/video-download.js'), name);
+            assert(at('src/content/video-download.js') < at('src/content/youtube-download.js') && at('src/content/youtube-download.js') < at('src/content/main.js'), name);
+        }
+    });
+
     // ------------------------------------------------------ bulk export
 
     section('bulk chat export');
