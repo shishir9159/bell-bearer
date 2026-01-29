@@ -163,7 +163,7 @@
         if (!tkhd) throw new Error('A track with no header');
         const wide = trak[tkhd.at + 8] === 1;
         dv.setUint32(tkhd.at + (wide ? 28 : 20), id);
-        setSized(dv, tkhd.at + (wide ? 36 : 28), wide, rescale(getSized(dv, tkhd.at + (wide ? 36 : 28), wide)));
+        setSized(dv, tkhd.at + (wide ? 36 : 28), wide, rescale(track.length));
         const elst = dig(trak, top, ['edts', 'elst']);
         if (elst) {
             const longEntries = trak[elst.at + 8] === 1;
@@ -193,7 +193,8 @@
 
     /**
      * `sources` is [video, audio] — or one, which is passed through the same
-     * way. Resolves to `{ parts, size, seconds }`: `parts` in file order, each
+     * way — each with `seconds`, its length, where its headers might not say
+     * it. Resolves to `{ parts, size, seconds }`: `parts` in file order, each
      * either bytes to write or `{ source, at, size }`, an mdat to copy from
      * that source.
      */
@@ -206,6 +207,11 @@
             const moov = await source.read(moovBox.at, moovBox.size);
             if (encrypted(moov)) throw new Error('This stream is encrypted (DRM), so it cannot be saved');
             const track = { ...trackOf(moov), fragments: [] };
+            // Vimeo packages its streams the way a live one is, length 0 in
+            // every header; its playlist says how long each is, and the
+            // caller passes that on. Without it a player has no length to
+            // seek against.
+            track.length = track.movieDuration || Math.round((source.seconds || 0) * track.movieScale);
             for (let i = 0; i + 1 < top.length; i++) {
                 if (top[i].type !== 'moof' || top[i + 1].type !== 'mdat') continue;
                 const moof = await source.read(top[i].at, top[i].size);
@@ -217,7 +223,7 @@
 
         const first = tracks[0];
         const scale = first.movieScale;
-        const duration = Math.max(...tracks.map((track) => Math.round(track.movieDuration * scale / track.movieScale)));
+        const duration = Math.max(...tracks.map((track) => Math.round(track.length * scale / track.movieScale)));
 
         const mvhd = first.moov.slice(first.mvhd.at, first.mvhd.at + first.mvhd.size);
         const wide = mvhd[8] === 1;

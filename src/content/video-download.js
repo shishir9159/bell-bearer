@@ -140,7 +140,8 @@
     /**
      * A stream as one Blob. Either `{ url, size, rangeParam }` — one file,
      * fetched in pieces named in its query, as googlevideo takes them — or
-     * `{ urls }`, a list of segments to fetch whole, init segment first.
+     * `{ urls, head }`, a list of segments to fetch whole, after `head`, an
+     * init segment already in hand (Vimeo sends it inline, in base64).
      * `onPiece(bytes)` hears of each piece as it lands.
      */
     async function fetchStream(stream, { fetchImpl, signal, onPiece = () => {}, chunk = CHUNK, retryMs }) {
@@ -150,7 +151,7 @@
                 onPiece(blob.size);
                 return blob;
             });
-            return new Blob(blobs);
+            return new Blob(stream.head ? [stream.head, ...blobs] : blobs);
         }
         const join = stream.url.includes('?') ? '&' : '?';
         const blobs = await mapLimit(chunks(stream.size, chunk), PARALLEL, async ([start, end]) => {
@@ -202,7 +203,7 @@
             let file = blobs[0];
             if (!plan.whole) {
                 notify('Putting the picture and the sound together…', 'info', SHOWN_MS);
-                const merged = await Mp4Mux.merge(blobs.map(blobSource));
+                const merged = await Mp4Mux.merge(blobs.map((blob, index) => ({ ...blobSource(blob), seconds: plan.streams[index].seconds })));
                 file = new Blob(merged.parts.map((part) => (part instanceof Uint8Array ? part : blobs[part.source].slice(part.at, part.at + part.size))));
             }
             save(plan.fileName, file, 'video/mp4');

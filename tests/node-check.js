@@ -7999,8 +7999,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
      * `absolute` writes each base offset as a position in the file instead
      * of leaving it to the moof.
      */
-    function dashStream({ marker, handler, scale, media, starts, absolute = false, edit = 0 }) {
-        const duration = Math.round((starts[starts.length - 1] + 1) * scale);
+    function dashStream({ marker, handler, scale, media, starts, absolute = false, edit = 0, unsaid = false }) {
+        const duration = unsaid ? 0 : Math.round((starts[starts.length - 1] + 1) * scale);
         const tkhd = fullBox('tkhd', 0, 3, u32s(0, 0, 1, 0, duration), new Uint8Array(60));
         const mdia = Mp4Mux.box('mdia', fullBox('mdhd', 0, 0, u32s(0, 0, media, Math.round(duration * media / scale)), new Uint8Array(4)),
             fullBox('hdlr', 0, 0, u32s(0), ascii4(handler), new Uint8Array(13)));
@@ -8090,6 +8090,17 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const spliced = parts.filter((part) => !(part instanceof Uint8Array));
         eq(spliced.map((part) => part.source), [0, 1, 0, 0, 1]);
         eq(spliced.map((part) => part.size), [10, 10, 10, 10, 10]);
+    });
+    await checkAsync('a stream whose headers leave its length out takes the length it is given', async () => {
+        // Vimeo's, October 2026: mvhd, mdhd and mehd all 0, the length in its playlist.
+        const sources = [videoStream({ unsaid: true }), audioStream({ unsaid: true })];
+        const given = sources.map((bytes, i) => ({ ...Mp4Mux.bytesSource(bytes), seconds: [9.5, 11.25][i] }));
+        const merged = await Mp4Mux.merge(given);
+        const { bytes, dv, top } = readMerged(merged, sources);
+        const inMoov = Mp4Mux.boxesIn(bytes, top[1].at + 8, top[1].at + top[1].size);
+        eq([dv.getUint32(inMoov[0].at + 24), merged.seconds], [Math.round(11.25 * 15360), 11.25]);
+        const tkhds = inMoov.filter((one) => one.type === 'trak').map((trak) => Mp4Mux.boxesIn(bytes, trak.at + 8, trak.at + trak.size)[0]);
+        eq(tkhds.map((tkhd) => dv.getUint32(tkhd.at + 28)), [Math.round(9.5 * 15360), Math.round(11.25 * 15360)]);
     });
     await checkAsync('one stream on its own comes through as a file of its own', async () => {
         const sources = [videoStream()];
