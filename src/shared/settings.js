@@ -257,6 +257,12 @@
         shortsSeek: false,
         shortsSeekSeconds: 5,
 
+        // A Download button in the popup on a YouTube video: picture and
+        // sound in one .mp4, at the quality the player is on. Off until
+        // asked for — it asks YouTube for the streams as one of its apps
+        // would, which is the user's call to make, not a default.
+        youtubeDownload: false,
+
         // Chat sites, one set per site; the key names come from
         // src/shared/chat-sites.js#siteKey. Per site:
         //   <site>ComposerTools — Prompts and Queue buttons beside the site's

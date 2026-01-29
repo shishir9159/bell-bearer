@@ -8319,6 +8319,28 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         }
     });
 
+    section('saving a youtube video — the switch and the popup');
+
+    check('the download is off until Settings › YouTube turns it on, and the switch is bound by its key', () => {
+        eq(globalThis.BB.Settings.DEFAULTS.youtubeDownload, false);
+        const html = readRepo('dashboard.html');
+        assert(html.includes('<input type="checkbox" id="youtubeDownload">'), 'no switch');
+        const start = html.indexOf('id="youtubeSettingsPanel"');
+        const next = html.indexOf('class="settings-section"', start);
+        const at = html.indexOf('id="youtubeDownload"');
+        assert(at > start && (next < 0 || at < next), 'the switch is not in the YouTube panel');
+    });
+    check('the popup asks the tab, and the tab answers all three questions', () => {
+        const popup = readRepo('popup.js');
+        const main = readRepo('src/content/main.js');
+        assert(readRepo('popup.html').includes('id="downloadBar"') && popup.includes("Settings.get(['youtubeDownload'])"), 'the bar is not tied to the switch');
+        for (const action of ['downloadInfo', 'downloadVideo', 'downloadCancel']) {
+            assert(readRepo('src/page/tab-actions.js').includes(`action: '${action}'`), `the popup never asks ${action}`);
+            assert(main.includes(`case '${action}':`), `the tab never answers ${action}`);
+        }
+        assert(/enabled: \(\) => settings\.youtubeDownload === true/.test(main), 'the tab would download with the switch off');
+    });
+
     // ------------------------------------------------------ bulk export
 
     section('bulk chat export');

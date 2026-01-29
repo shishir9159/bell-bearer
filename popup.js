@@ -69,6 +69,7 @@
 
             on('dashboardBtn', 'click', () => openDashboard(ChessSites.get(this.site) ? `#site/${this.site}` : ''));
             on('openReaderBtn', 'click', () => this.openReader());
+            on('downloadBtn', 'click', () => this.toggleDownload());
             on('partyStartBtn', 'click', () => this.openParty('start'));
             on('partyJoinBtn', 'click', () => this.openParty('join'));
 
@@ -178,7 +179,10 @@
             document.body.dataset.bbSite = this.site;
 
             document.getElementById('youtubePanel').hidden = this.site !== 'youtube';
-            if (this.site === 'youtube') this.setupReaderBar();
+            if (this.site === 'youtube') {
+                this.setupReaderBar();
+                this.setupDownloadBar();
+            }
             // The party plays on YouTube and Netflix. On Netflix its bar is
             // the popup's only content, so it moves out of the YouTube panel.
             const partyBar = document.getElementById('partyBar');
@@ -250,6 +254,48 @@
             // A tab opened before the extension was installed or reloaded
             // has no content script to answer.
             note.textContent = 'Reload the YouTube tab first — Bell Bearer is not running in it yet';
+        }
+
+        // -------------------------------------------------------- download
+
+        /**
+         * Download, on a page whose video can be saved — on YouTube once
+         * Settings › YouTube has asked for it. The button names the quality
+         * the player is on, as the tab reads it, which is what it will save.
+         * The work is the tab's: this only starts it, follows it and stops it.
+         */
+        async setupDownloadBar() {
+            if (this.site === 'youtube' && !(await Settings.get(['youtubeDownload'])).youtubeDownload) return;
+            this.downloadTab = await TabActions.activeTab();
+            const info = await TabActions.downloadInfo(this.downloadTab);
+            if (info && !info.ok) return;
+            document.getElementById('downloadBar').hidden = false;
+            this.showDownload(info);
+            // While it runs, the percentage follows it.
+            this.downloadTimer = setInterval(async () => {
+                if (this.downloadBusy) this.showDownload(await TabActions.downloadInfo(this.downloadTab));
+            }, 1000);
+        }
+
+        showDownload(info) {
+            const button = document.getElementById('downloadBtn');
+            const note = document.getElementById('downloadNote');
+            // A tab opened before the extension was installed or reloaded has
+            // no content script to answer.
+            button.disabled = !info;
+            this.downloadBusy = !!(info && info.busy);
+            button.textContent = !info ? 'Download' : info.busy ? 'Cancel' : `Download${info.label ? ` ${info.label}` : ''}`;
+            note.textContent = !info ? 'Reload the tab first — Bell Bearer is not running in it yet'
+                : info.busy ? `Saving — ${info.percent}%. It carries on in the tab if this closes.`
+                    : 'Picture and sound in one .mp4, at the quality the player is on';
+        }
+
+        async toggleDownload() {
+            const info = await TabActions.downloadInfo(this.downloadTab);
+            if (!info || !info.ok) return;
+            if (info.busy) await TabActions.cancelDownload(this.downloadTab);
+            else await TabActions.startDownload(this.downloadTab);
+            this.showDownload({ ...info, busy: !info.busy, percent: 0 });
         }
 
         // ----------------------------------------------------- watch party

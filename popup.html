@@ -56,6 +56,12 @@
                 <button id="openReaderBtn" class="btn-reader" type="button" disabled>Open the reader</button>
                 <span class="reader-bar-note" id="readerBarNote" aria-live="polite"></span>
             </div>
+            <!-- Saving the video as one .mp4. On YouTube only once Settings
+                 asks for it; popup.js moves it to #vimeoPanel on Vimeo. -->
+            <div class="reader-bar" id="downloadBar" hidden>
+                <button id="downloadBtn" class="btn-reader" type="button">Download</button>
+                <span class="reader-bar-note" id="downloadNote" aria-live="polite"></span>
+            </div>
             <!-- A second home for this bar, on Netflix, is #netflixPanel below:
                  popup.js moves it there, so there is one bar and one set of
                  listeners. -->

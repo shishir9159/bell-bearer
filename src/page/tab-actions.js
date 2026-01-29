@@ -136,7 +136,31 @@
         return !!(answer && answer.ok);
     }
 
-    const TabActions = { activeTab, findVideoTab, getRate, stepRate, seek, openReader };
+    /**
+     * The tab's video download: what it would save — `{ ok, busy, percent,
+     * label }` — or null when there is no content script to ask. No injected
+     * fallback, for the reader's reason: the download is the content
+     * script's own.
+     */
+    async function downloadInfo(tab) {
+        if (!tab || tab.id == null) return null;
+        return ask(tab.id, { action: 'downloadInfo' });
+    }
+
+    /** Start saving the tab's video, or stop it. True when the tab took the message. */
+    async function startDownload(tab) {
+        if (!tab || tab.id == null) return false;
+        const answer = await ask(tab.id, { action: 'downloadVideo' });
+        return !!(answer && answer.ok);
+    }
+
+    async function cancelDownload(tab) {
+        if (!tab || tab.id == null) return false;
+        const answer = await ask(tab.id, { action: 'downloadCancel' });
+        return !!(answer && answer.ok);
+    }
+
+    const TabActions = { activeTab, findVideoTab, getRate, stepRate, seek, openReader, downloadInfo, startDownload, cancelDownload };
 
     root.BB = root.BB || {};
     root.BB.TabActions = TabActions;

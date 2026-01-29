@@ -698,6 +698,15 @@
                             <input type="number" id="shortsSeekSeconds" min="1" max="30" step="1">
                         </div>
 
+                        <p class="settings-hint">A <strong>Download</strong> button in the popup on a video saves it as one .mp4 — picture and sound together — at the quality the player is on. YouTube is asked for the streams the way its own apps ask, the way yt-dlp does; progress shows on the video's page, and the download carries on there if the popup closes.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="youtubeDownload">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="youtubeDownload">Download button in the popup on a video</label>
+                        </div>
+
                         <p class="settings-hint">The reader puts YouTube's own player beside the video's transcript, with your checkpoints under it — the same player, moved rather than copied, so it keeps playing, at the speed and with the captions it had. Open it from the popup or with <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>R</kbd>.</p>
                         <div class="settings-option">
                             <label class="setting-label" for="readerLayout">Open the reader in</label>
