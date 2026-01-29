@@ -8352,6 +8352,98 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/enabled: \(\) => settings\.youtubeDownload === true/.test(main), 'the tab would download with the switch off');
     });
 
+    section('saving a vimeo video');
+
+    const VimeoDownload = require('../src/content/vimeo-download.js');
+
+    check('a clip is found in any of vimeo\'s addresses for one, with an unlisted clip\'s hash', () => {
+        const at = (url) => VimeoDownload.clipOf(url);
+        eq(at('https://vimeo.com/1231817291'), { id: '1231817291', hash: '' });
+        eq(at('https://vimeo.com/1231817291/8272103f6e?share=copy'), { id: '1231817291', hash: '8272103f6e' });
+        eq(at('https://www.vimeo.com/channels/staffpicks/1231817291').id, '1231817291');
+        eq(at('https://vimeo.com/groups/123/videos/456').id, '456');
+        eq(at('https://vimeo.com/showcase/11/video/22').id, '22');
+        for (const url of ['https://vimeo.com/', 'https://vimeo.com/watch', 'https://vimeo.com/channels/staffpicks', 'https://player.vimeo.com/video/1', 'nonsense']) {
+            eq(at(url), null, url);
+        }
+    });
+    check('a config whose request names DRM, or whose playlist is under /drm/, is encrypted; an .mpd is read as its .json', () => {
+        const config = (request) => ({ video: { title: 'Beeps' }, request });
+        const cdns = (url) => ({ files: { dash: { default_cdn: 'akfire', cdns: { akfire: { url } } } } });
+        eq(VimeoDownload.readConfig(config(cdns('https://vod.example/v2/playlist/av/primary/playlist.json?omit=av1'))),
+            { title: 'Beeps', drm: false, playlist: 'https://vod.example/v2/playlist/av/primary/playlist.json?omit=av1' });
+        eq(VimeoDownload.readConfig(config({ ...cdns('https://vod.example/v2/playlist/drm/cenc,derivedv2,a/playlist.mpd?x=1'), drm: {} })).drm, true);
+        eq(VimeoDownload.readConfig(config(cdns('https://vod.example/v2/playlist/drm/cenc/playlist.mpd'))).drm, true);
+        eq(VimeoDownload.readConfig(config(cdns('https://vod.example/v2/playlist.mpd?x=1'))).playlist, 'https://vod.example/v2/playlist.json?x=1');
+        eq(VimeoDownload.readConfig(null), { title: '', drm: false, playlist: '' });
+    });
+
+    /** A playlist in the shape vimeo.com served one, October 2026, cut to two video streams and both sounds. */
+    const VIMEO_PLAYLIST_URL = 'https://vod-adaptive-ak.vimeocdn.com/exp=1~hmac=x/62fd/psid=1/v2/playlist/av/primary/prot/cXNyPTE/playlist.json?omit=opus&pathsig=y';
+    const vimeoStream = (id, more) => ({ id, base_url: '', mime_type: 'video/mp4', duration: 907.82, init_segment: Buffer.from(`init-${id}`).toString('base64'),
+        segments: [{ start: 0, end: 6, url: `cmFuZ2U9MC0x/avf/${id}.mp4?pathsig=a` }, { start: 6, end: 12, url: `cmFuZ2U9Mi0z/avf/${id}.mp4?pathsig=b` }], ...more });
+    const vimeoPlaylist = {
+        clip_id: '62fddc37', base_url: '../../../../../range/prot/',
+        video: [
+            vimeoStream('v360', { codecs: 'avc1.64001E', width: 640, height: 360, framerate: 23.976, bitrate: 781000 }),
+            vimeoStream('v1080', { codecs: 'avc1.64002A', width: 1920, height: 1080, framerate: 23.976, bitrate: 5765000 }),
+        ],
+        audio: [
+            vimeoStream('opus', { mime_type: 'audio/mp4', codecs: 'opus', bitrate: 102000 }),
+            vimeoStream('aac', { mime_type: 'audio/mp4', codecs: 'mp4a.40.2', bitrate: 196000 }),
+        ],
+    };
+
+    check('the playlist\'s addresses resolve against the playlist, its init segments are bytes, and AAC comes before Opus', () => {
+        const read = VimeoDownload.readPlaylist(vimeoPlaylist, VIMEO_PLAYLIST_URL);
+        eq(read.video.map((one) => [one.label, one.fps, one.rank]), [['360p', 24, 0], ['1080p', 24, 0]]);
+        eq(read.video[1].urls, [
+            'https://vod-adaptive-ak.vimeocdn.com/exp=1~hmac=x/62fd/psid=1/v2/range/prot/cmFuZ2U9MC0x/avf/v1080.mp4?pathsig=a',
+            'https://vod-adaptive-ak.vimeocdn.com/exp=1~hmac=x/62fd/psid=1/v2/range/prot/cmFuZ2U9Mi0z/avf/v1080.mp4?pathsig=b',
+        ]);
+        eq(new TextDecoder().decode(read.video[1].head), 'init-v1080');
+        eq([read.audio.map((one) => one.codecs), read.audio[0].seconds], [['mp4a.40.2', 'opus'], 907.82]);
+    });
+
+    /** vimeo.com as a download sees it, in the order it is asked. */
+    function fakeVimeo({ config }) {
+        const asked = [];
+        const fetchImpl = async (url, init = {}) => {
+            asked.push({ url, init });
+            const json = (body) => ({ ok: true, status: 200, json: async () => body });
+            if (url === '/_next/viewer') return json({ jwt: 'anon.jwt' });
+            if (url.startsWith('https://api.vimeo.com/videos/')) return json({ config_url: 'https://player.vimeo.com/video/1231817291/config?h=x&s=signed' });
+            if (url.startsWith('https://player.vimeo.com/')) return json(config);
+            if (url === VIMEO_PLAYLIST_URL) return json(vimeoPlaylist);
+            return { ok: false, status: 404 };
+        };
+        return { fetchImpl, asked };
+    }
+    const vimeoConfig = (more = {}) => ({ video: { title: 'Beeps' }, request: { files: { dash: { default_cdn: 'a', cdns: { a: { url: VIMEO_PLAYLIST_URL } } } }, ...more } });
+    const vimeoPage = { querySelector: (selector) => (selector === 'meta[name="video-signature-1231817291"]' ? { content: 'anon-sig' } : null) };
+
+    await checkAsync('the plan asks as the page does — its token, the API with the page\'s signature, the signed config — and picks the size playing', async () => {
+        const site = fakeVimeo({ config: vimeoConfig() });
+        const plan = await VimeoDownload.adapter.plan({ want: { width: 1920, height: 1080, p: 1080 }, win: { location: { href: 'https://vimeo.com/1231817291' } },
+            doc: vimeoPage, fetchImpl: site.fetchImpl });
+        eq([plan.label, plan.fileName, plan.streams.length], ['1080p', 'Beeps (1080p).mp4', 2]);
+        eq(new TextDecoder().decode(plan.streams[1].head), 'init-aac');
+        eq(plan.streams[0].seconds, 907.82);
+        const api = new URL(site.asked[1].url);
+        eq([api.pathname, api.searchParams.get('anon_signature'), api.searchParams.get('fields'), site.asked[1].init.headers.Authorization],
+            ['/videos/1231817291', 'anon-sig', 'config_url', 'jwt anon.jwt']);
+        eq(site.asked.map((one) => one.init.credentials), ['include', undefined, 'include', 'omit'], 'the playlist goes without cookies, which its CDN does not take');
+    });
+    await checkAsync('an encrypted clip is refused before a single stream is asked for', async () => {
+        const site = fakeVimeo({ config: vimeoConfig({ drm: { asset: 'x' } }) });
+        let message = '';
+        try {
+            await VimeoDownload.adapter.plan({ want: null, win: { location: { href: 'https://vimeo.com/1231817291' } }, doc: vimeoPage, fetchImpl: site.fetchImpl });
+        } catch (error) { message = error.message; }
+        eq(message, VimeoDownload.DRM_REFUSAL);
+        assert(!site.asked.some((one) => one.url === VIMEO_PLAYLIST_URL), 'the playlist was fetched');
+    });
+
     // ------------------------------------------------------ bulk export
 
     section('bulk chat export');
