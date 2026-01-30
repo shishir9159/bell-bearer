@@ -47,7 +47,9 @@
         "*://*.claude.ai/*",
         "*://github.com/*",
         "*://gitlab.com/*",
-        "*://codeberg.org/*"
+        "*://codeberg.org/*",
+        "*://vimeo.com/*",
+        "*://www.vimeo.com/*"
       ],
       "js": [
         "src/shared/time.js",
@@ -483,6 +485,48 @@
       "css": [
         "content.css",
         "content-forge.css"
+      ]
+    },
+    {
+      "matches": [
+        "*://vimeo.com/*",
+        "*://www.vimeo.com/*"
+      ],
+      "js": [
+        "src/shared/time.js",
+        "src/shared/dom.js",
+        "src/shared/speed.js",
+        "src/shared/settings.js",
+        "src/shared/store.js",
+        "src/shared/hosts.js",
+        "src/shared/ids.js",
+        "src/shared/keybindings.js",
+        "src/shared/skim.js",
+        "src/shared/limit-sites.js",
+        "src/shared/time-limits.js",
+        "src/shared/youtube.js",
+        "src/shared/cookie-sites.js",
+        "src/content/site.js",
+        "src/content/notify.js",
+        "src/content/overlay.js",
+        "src/content/dom-watch.js",
+        "src/content/theme.js",
+        "src/content/page-info.js",
+        "src/content/player.js",
+        "src/content/shortcuts.js",
+        "src/content/scroll-to.js",
+        "src/content/skim.js",
+        "src/content/link-hints.js",
+        "src/content/time-limit.js",
+        "src/content/markdown.js",
+        "src/content/cookie-banner.js",
+        "src/shared/mp4-mux.js",
+        "src/content/video-download.js",
+        "src/content/vimeo-download.js",
+        "src/content/main.js"
+      ],
+      "css": [
+        "content.css"
       ]
     },
     {

@@ -192,6 +192,13 @@
                 netflix.appendChild(partyBar);
                 netflix.hidden = false;
             }
+            // The download bar's other home: on Vimeo it is the popup.
+            if (this.site === 'vimeo') {
+                const vimeo = document.getElementById('vimeoPanel');
+                vimeo.appendChild(document.getElementById('downloadBar'));
+                vimeo.hidden = false;
+                this.setupDownloadBar();
+            }
             this.resumeParty();
             const chessSite = ChessSites.get(this.site);
             document.getElementById('chessPanel').hidden = !chessSite;

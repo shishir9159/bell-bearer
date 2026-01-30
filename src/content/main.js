@@ -314,6 +314,14 @@
         warmPouchInBackground();
     }
 
+    // ------------------------------------------------------- Vimeo extras
+
+    // Not behind a switch, as YouTube's is: on Vimeo the popup's Download
+    // is the only thing Bell Bearer adds, and it does nothing until clicked.
+    if (site === 'vimeo') {
+        downloader = BB.VideoDownload.createDownloader({ adapter: BB.VimeoDownload.adapter, notify, getVideoElement });
+    }
+
     // ------------------------------------------------------------ X extras
 
     if (site === 'twitter') {

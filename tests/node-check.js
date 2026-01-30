@@ -3207,6 +3207,7 @@ check('every page gets exactly one isolated-world entry, and it is the one for i
         chess: 'src/content/chess.js', lichess: 'src/content/chess.js', leetcode: 'src/content/leet-ui.js',
         typeracer: 'src/content/typeracer-ui.js', chatgpt: 'src/content/chat-ui.js', claude: 'src/content/chat-ui.js',
         github: 'src/content/github-read.js', gitlab: 'src/content/gitlab-read.js', forgejo: 'src/content/forgejo-read.js',
+        vimeo: 'src/content/vimeo-download.js',
     };
     const entries = isolatedEntries();
     for (const url of [
@@ -3217,7 +3218,7 @@ check('every page gets exactly one isolated-world entry, and it is the one for i
         'https://chat.openai.com/', 'https://claude.ai/chat/1', 'https://www.netflix.com/watch/1', 'https://example.com/',
         'https://github.com/microsoft/vscode/actions/runs/1', 'https://gist.github.com/a/b',
         'https://gitlab.com/gitlab-org/gitlab-runner/-/pipelines/1', 'https://docs.gitlab.com/ci/', 'https://codeberg.org/forgejo/forgejo/pulls/1',
-        'https://docs.codeberg.org/',
+        'https://docs.codeberg.org/', 'https://vimeo.com/1231817291', 'https://www.vimeo.com/channels/staffpicks/1', 'https://player.vimeo.com/video/1',
     ]) {
         const taking = entries.filter((entry) => entryTakes(entry, url));
         eq(taking.length, 1, url);
@@ -8366,6 +8367,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         for (const url of ['https://vimeo.com/', 'https://vimeo.com/watch', 'https://vimeo.com/channels/staffpicks', 'https://player.vimeo.com/video/1', 'nonsense']) {
             eq(at(url), null, url);
         }
+        const Site = require('../src/content/site.js');
+        eq(['vimeo.com', 'www.vimeo.com', 'player.vimeo.com', 'notvimeo.com'].map((host) => Site.detectSite(host)), ['vimeo', 'vimeo', 'other', 'other']);
     });
     check('a config whose request names DRM, or whose playlist is under /drm/, is encrypted; an .mpd is read as its .json', () => {
         const config = (request) => ({ video: { title: 'Beeps' }, request });
@@ -8442,6 +8445,12 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         } catch (error) { message = error.message; }
         eq(message, VimeoDownload.DRM_REFUSAL);
         assert(!site.asked.some((one) => one.url === VIMEO_PLAYLIST_URL), 'the playlist was fetched');
+    });
+    check('the popup moves its download bar to vimeo, with no switch in the way, and the tab builds a downloader there', () => {
+        const popup = readRepo('popup.js');
+        assert(readRepo('popup.html').includes('<div id="vimeoPanel" hidden></div>'));
+        assert(/this\.site === 'vimeo'[\s\S]{0,200}appendChild\(document\.getElementById\('downloadBar'\)\)/.test(popup), 'the bar stays in the YouTube panel');
+        assert(/site === 'vimeo'[\s\S]{0,300}BB\.VimeoDownload\.adapter/.test(readRepo('src/content/main.js')), 'no downloader on vimeo');
     });
 
     // ------------------------------------------------------ bulk export

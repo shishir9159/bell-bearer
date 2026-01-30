@@ -44,6 +44,9 @@
         if (host === 'gitlab.com') return 'gitlab';
         // Codeberg runs Forgejo, and the adapter is Forgejo's.
         if (host === 'codeberg.org') return 'forgejo';
+        // vimeo.com alone: player.vimeo.com is the player's frame on other
+        // sites' pages, where a content script does not run.
+        if (host === 'vimeo.com') return 'vimeo';
         return 'other';
     }
 
