@@ -32,6 +32,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Watch party**: A YouTube video or a Netflix episode in sync with other people, each on their own account — through a server, your own relay, browser-to-browser codes or public trackers — with a chat beside the player
 - **LeetCode**: Each problem timed on LeetCode's own stopwatch, submissions recorded from its own traffic, an FSRS-5 review schedule graded in one click, your notes and code templates on the page, and a mock-interview mode that hides the hints
 - **TypeRacer**: Every race logged from the keystrokes themselves — the letter pairs you stall on, the characters you reach for wrongly, and what correcting them costs you in words per minute — plus a typing caret and a synthesised key sound
+- **Downloads**: The video in a YouTube or Vimeo tab saved from the popup as one .mp4, at the quality the player is on — YouTube's once Settings › YouTube turns it on, and never a DRM-protected Vimeo clip; and a GitHub folder as a .zip, from a button beside its own. When YouTube changes and a download stops working, `node tools/yt-check.js` says which step broke
 - **Reward System**: Track watch credits to spend them on popcorn for later
 
 Export and Import sit in the dashboard header, beside the theme button, and

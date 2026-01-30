@@ -3,7 +3,7 @@
  * streams exactly as src/content/youtube-download.js asks from the page —
  * its CLIENT, its request, its reading of the answer — then the first
  * bytes of the video and the sound it would pick, and says which of those
- * steps broke. download-yt.md has what each failure has meant before.
+ * steps broke.
  *
  * yt-dlp keeps the same watch with tests pinned to real videos; this is the
  * one-video version, to run when a download fails, or before trusting a
@@ -11,6 +11,20 @@
  *
  *   node tools/yt-check.js               Big Buck Bunny, at 1080p
  *   node tools/yt-check.js <id> [lines]  another video, at another quality
+ *
+ * What the first FAIL has meant before, and the mend:
+ *   - no visitor id: ytcfg's spelling moved; update visitorData's pattern.
+ *   - the client is not answered (4xx): its version was retired; copy the
+ *     client's current row from yt-dlp's yt_dlp/extractor/youtube/_base.py.
+ *   - it will not play ("Sign in to confirm you're not a bot"), its streams
+ *     have no plain addresses (SABR, or a signature to solve), no MP4 is
+ *     offered, or the first bytes are refused (403 — a PO token is now
+ *     wanted, as android_vr's were in August 2026): the client is spent.
+ *     Switch it, the way yt-dlp switches its defaults: take the first of
+ *     _DEFAULT_JSLESS_CLIENTS in _video.py, copy its row into CLIENT, and
+ *     check the row says REQUIRE_JS_PLAYER: False with no required GVS PO
+ *     token. Those are the only clients a page can use without a JavaScript
+ *     challenge solver and BotGuard of its own.
  */
 'use strict';
 
@@ -66,7 +80,7 @@ async function main(id = 'aqz-KE-bpKQ', lines = 1080) {
 
 main(process.argv[2], Number(process.argv[3]) || 1080)
     .then((ok) => {
-        console.log(ok ? '\nThe download should work.' : '\nThe download is broken at the first FAIL — see download-yt.md.');
+        console.log(ok ? '\nThe download should work.' : '\nThe download is broken at the first FAIL — this file\'s header says what that has meant.');
         process.exit(ok ? 0 : 1);
     })
     .catch((error) => {

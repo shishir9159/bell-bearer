@@ -1,7 +1,8 @@
 /**
  * youtube.com, for src/content/video-download.js: where a video's streams
  * are and which of them to save. Everything that will break when YouTube
- * changes is in this file, and download-yt.md says how to mend it.
+ * changes is in this file; `node tools/yt-check.js` says which part broke,
+ * and its header how each has been mended before.
  *
  * Not from the page's own player. Its player response has had no stream
  * addresses since YouTube moved the web player to SABR — one POST stream
