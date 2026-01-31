@@ -8360,6 +8360,122 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(!/getElementById\('\w*Note'\)/.test(readRepo('popup.js')), 'popup.js still writes a description');
     });
 
+    section('saving a video — where it goes');
+
+    check('the folder setting stays inside Downloads, and keeps nothing the browser would refuse', () => {
+        const name = 'Big Buck Bunny (480p).mp4';
+        eq(VideoDownload.savePath('', name), name);
+        eq(VideoDownload.savePath('  YouTube ', name), `YouTube/${name}`);
+        eq(VideoDownload.savePath('Videos\\YouTube\\', name), `Videos/YouTube/${name}`);
+        eq(VideoDownload.savePath('../../Windows', name), `Windows/${name}`);
+        eq(VideoDownload.savePath('C:\\Users\\me', name), `C/Users/me/${name}`);
+        eq(VideoDownload.savePath('/etc/ talks. ', name), `etc/talks/${name}`);
+        eq(VideoDownload.savePath('a<b>|c?', name), `abc/${name}`);
+    });
+
+    /** A saver over a worker that answers `answer`, with what it was sent and what the link saved. */
+    function fakeSaver(options, answer) {
+        const sent = [];
+        const linked = [];
+        const urls = { made: 0, types: [], revoked: [], createObjectURL(blob) { this.made += 1; this.types.push(blob.type); return `blob:https://www.youtube.com/${this.made}`; }, revokeObjectURL(url) { this.revoked.push(url); } };
+        const saver = VideoDownload.createSaver({
+            options: () => options, urls,
+            send: async (message) => { sent.push(message); return typeof answer === 'function' ? answer(message) : answer; },
+            link: (name) => linked.push(name),
+        });
+        return { saver, sent, linked, urls };
+    }
+
+    await checkAsync('with neither setting, a link saves it into Downloads, as before', async () => {
+        const { saver, sent, linked } = fakeSaver({ ask: false, folder: '' }, { ok: true });
+        eq(await saver.save('a.mp4', new Blob(['x'])), true);
+        eq(linked, ['a.mp4']);
+        eq(sent, []);
+    });
+    await checkAsync('with a folder, the worker is handed the path, and the blob is kept until the save ends', async () => {
+        const { saver, sent, linked, urls } = fakeSaver({ ask: false, folder: 'YouTube' }, { ok: true, id: 4 });
+        const saving = saver.save('a.mp4', new Blob(['x']), 'video/mp4');
+        await new Promise((done) => setTimeout(done, 0));
+        eq(sent, [{ action: 'saveDownload', url: 'blob:https://www.youtube.com/1', filename: 'YouTube/a.mp4', ask: false }]);
+        eq(urls.types, ['video/mp4'], 'an untyped file is saved by Chrome as .txt');
+        eq(urls.revoked, [], 'let go before the browser read it');
+        saver.ended({ url: 'blob:https://www.youtube.com/1', state: 'complete' });
+        eq(await saving, true);
+        eq(urls.revoked, ['blob:https://www.youtube.com/1']);
+        eq(linked, []);
+    });
+    await checkAsync('closing Save As is "not saved", in Chrome\'s way and in Firefox\'s, and nothing falls back to Downloads', async () => {
+        const chrome = fakeSaver({ ask: true, folder: '' }, { ok: true, id: 5 });
+        const saving = chrome.saver.save('a.mp4', new Blob(['x']));
+        await new Promise((done) => setTimeout(done, 0));
+        eq(chrome.sent[0].ask, true);
+        chrome.saver.ended({ url: chrome.sent[0].url, state: 'interrupted', error: 'USER_CANCELED' });
+        eq(await saving, false);
+        const firefox = fakeSaver({ ask: true, folder: '' }, { ok: false, error: 'Download canceled by the user' });
+        eq(await firefox.saver.save('a.mp4', new Blob(['x'])), false);
+        eq([...chrome.linked, ...firefox.linked], []);
+        eq(firefox.urls.revoked.length, 1);
+    });
+    await checkAsync('a failed save is an error, and a worker that cannot take it leaves the link to save it', async () => {
+        const failing = fakeSaver({ ask: false, folder: 'YouTube' }, { ok: true, id: 6 });
+        const saving = failing.saver.save('a.mp4', new Blob(['x']));
+        await new Promise((done) => setTimeout(done, 0));
+        failing.saver.ended({ url: failing.sent[0].url, state: 'interrupted', error: 'FILE_NO_SPACE' });
+        let message = '';
+        try { await saving; } catch (error) { message = error.message; }
+        eq(message, 'The browser could not save it (FILE_NO_SPACE)');
+        for (const answer of [null, { ok: false, error: 'Invalid filename' }]) {
+            const gone = fakeSaver({ ask: false, folder: 'YouTube' }, answer);
+            eq(await gone.saver.save('a.mp4', new Blob(['x'])), true);
+            eq(gone.linked, ['a.mp4']);
+        }
+    });
+
+    /** The worker's half over a fake browser whose download is `state` as soon as it is searched for. */
+    function fakeDownloads(state) {
+        const store = {};
+        const told = [];
+        const asked = [];
+        const api = {
+            storage: { session: { get: async (key) => ({ [key]: store[key] }), set: async (values) => Object.assign(store, JSON.parse(JSON.stringify(values))) } },
+            tabs: { sendMessage: async (tabId, message) => told.push([tabId, message]) },
+            downloads: {
+                download: async (options) => { asked.push(options); return 9; },
+                search: async ({ id }) => [{ id, state: state(), error: state() === 'interrupted' ? 'USER_CANCELED' : '' }],
+            },
+        };
+        return { worker: require('../src/background/downloads.js').createWorker(api), told, asked, store };
+    }
+
+    await checkAsync('the worker starts the download, keeps it by tab, and tells the tab once when it is over', async () => {
+        let state = 'in_progress';
+        const { worker, told, asked, store } = fakeDownloads(() => state);
+        const answer = await worker.save({ url: 'blob:https://www.youtube.com/1', filename: 'YouTube/a.mp4', ask: true }, { tab: { id: 3 } });
+        eq(answer, { ok: true, id: 9 });
+        eq(asked, [{ url: 'blob:https://www.youtube.com/1', filename: 'YouTube/a.mp4', saveAs: true }]);
+        eq(Object.keys(store.bbSaving), ['9']);
+        state = 'interrupted';
+        worker.changed({ id: 9, state: { current: 'interrupted' } });
+        worker.changed({ id: 9, state: { current: 'interrupted' } });
+        await new Promise((done) => setTimeout(done, 10));
+        eq(told, [[3, { action: 'downloadSaved', url: 'blob:https://www.youtube.com/1', state: 'interrupted', error: 'USER_CANCELED' }]]);
+        eq(store.bbSaving, {});
+    });
+    await checkAsync('a save over before it was kept is still told, and Save As is left to the browser when not asked for', async () => {
+        const { worker, told, asked } = fakeDownloads(() => 'complete');
+        await worker.save({ url: 'blob:https://vimeo.com/2', filename: 'a.mp4', ask: false }, { tab: { id: 4 } });
+        eq('saveAs' in asked[0], false);
+        eq(told.map(([tab, message]) => [tab, message.state]), [[4, 'complete']]);
+        eq((await worker.save({ url: 'https://example.com/a.mp4', filename: 'a.mp4' }, { tab: { id: 4 } })).ok, false);
+    });
+    check('the worker may download, and youtube and vimeo both save the way the settings ask', () => {
+        eq([globalThis.BB.Settings.DEFAULTS.downloadAskWhere, globalThis.BB.Settings.DEFAULTS.downloadFolder], [false, '']);
+        for (const name of ['manifest.json', 'manifest.firefox.json']) assert(JSON.parse(readRepo(name)).permissions.includes('downloads'), name);
+        const main = readRepo('src/content/main.js');
+        assert(/youtubeDownload === true,\s*save: saver\.save/.test(main), 'youtube saves without the settings');
+        assert(/VimeoDownload\.adapter[^\n]*save: saver\.save/.test(main), 'vimeo saves without the settings');
+    });
+
     section('saving a vimeo video');
 
     const VimeoDownload = require('../src/content/vimeo-download.js');

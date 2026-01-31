@@ -262,6 +262,11 @@
         // asked for — it asks YouTube for the streams as one of its apps
         // would, which is the user's call to make, not a default.
         youtubeDownload: false,
+        // Where a saved video goes, on YouTube and Vimeo alike: the browser's
+        // Save As every time, and a folder inside Downloads ('' is Downloads
+        // itself). An extension can name no folder outside Downloads.
+        downloadAskWhere: false,
+        downloadFolder: '',
 
         // Chat sites, one set per site; the key names come from
         // src/shared/chat-sites.js#siteKey. Per site:

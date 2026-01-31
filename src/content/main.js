@@ -218,6 +218,13 @@
                 sendResponse({ ok: !!downloader });
                 break;
 
+            // The worker, when the browser has finished saving a file this
+            // tab handed it: the file's blob can go now.
+            case 'downloadSaved':
+                saver.ended(message);
+                sendResponse({ ok: true });
+                break;
+
             case 'copyLinkAsMarkdown':
                 markdown.copy(markdown.buildLinkMarkdown(message.linkUrl, message.selectionText)).then((ok) => {
                     if (ok) notify('Copied link as Markdown', 'success');
@@ -242,6 +249,11 @@
     let reader = null;
     /** Saving the video on the page as an .mp4, on a site with an adapter for it. */
     let downloader = null;
+    /** Where it is saved, as Settings › YouTube asks, for YouTube and Vimeo alike. */
+    const saver = BB.VideoDownload ? BB.VideoDownload.createSaver({
+        options: () => ({ ask: settings.downloadAskWhere === true, folder: settings.downloadFolder || '' }),
+        send: askWorker,
+    }) : { ended: () => {} };
 
     /**
      * Whichever site's pouch surface this page has, or null for the rest. On
@@ -282,6 +294,7 @@
             getVideoElement: () => (Site.isShortsPath() ? Site.activeShortsVideo() : getVideoElement()),
             getVideoId: () => PageInfo.getVideoId(),
             enabled: () => settings.youtubeDownload === true,
+            save: saver.save,
         });
 
         // YouTube is a single-page app: it fires yt-navigate-finish instead of
@@ -319,7 +332,7 @@
     // Not behind a switch, as YouTube's is: on Vimeo the popup's Download
     // is the only thing Bell Bearer adds, and it does nothing until clicked.
     if (site === 'vimeo') {
-        downloader = BB.VideoDownload.createDownloader({ adapter: BB.VimeoDownload.adapter, notify, getVideoElement });
+        downloader = BB.VideoDownload.createDownloader({ adapter: BB.VimeoDownload.adapter, notify, getVideoElement, save: saver.save });
     }
 
     // ------------------------------------------------------------ X extras
