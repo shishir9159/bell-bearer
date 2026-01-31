@@ -1964,9 +1964,14 @@ html.is-dragging-site .site-card:hover { transform: none; box-shadow: var(--card
 
 /* ---------- Settings → Chess.com / Lichess (src/page/chess-settings.js) ---------- */
 
-.chess-settings-lead { margin: 0 0 12px; }
+/* As specific as `.settings-section p.settings-hint`, which it comes after:
+   on its class alone it lost to that rule's `margin: 8px 0 0`, and the rows
+   under every lead sat flush against it. */
+.settings-section p.chess-settings-lead { margin: 0 0 12px; }
 
 .chess-warn-list { display: flex; flex-direction: column; gap: 10px; }
+/* A switch over its list of seconds, the list's own gap apart. */
+.settings-option + .chess-warn-list { margin-top: 10px; }
 .chess-warn-name { min-width: 48px; }
 .text-control.chess-warn-seconds { min-width: 0; width: 88px; }
 .chess-warn-unit { color: var(--text-muted); }
@@ -2590,17 +2595,24 @@ body[data-skin="deco"] .bb-plate {
 /* What the row allows, between the host and the remove button. */
 .limit-what { font-size: 11.5px; color: var(--accent-ink); white-space: nowrap; }
 
-/* ---------- a site's own settings panel: x.com ---------- */
+/* ---------- a site's own settings panel ---------- */
 
 /* .settings-option carries no vertical margin of its own, and the General
    section spaces each of its rows with an inline style. That is fine for a
-   list written once and wrong here, where the rows come in runs of two and
-   three under a hint apiece — four flush rows read as one control with four
-   labels, which is what this panel looked like. Spaced by being in the panel
-   instead, so a row added later is spaced without being told to be. */
-#twitterSettingsPanel .settings-option { margin-top: 14px; }
-#twitterSettingsPanel p.settings-hint { margin-top: 24px; }
-#twitterSettingsPanel p.settings-hint:first-child { margin-top: 0; }
+   list written once and wrong in a site's panel, where the rows come in runs
+   of two and three under a hint apiece — four flush rows read as one control
+   with four labels. This was X's panel alone at first, and every other panel
+   kept its flush rows: YouTube's from Preferred Subtitles down, all of
+   ChatGPT's, LeetCode's and TypeRacer's. Spaced by being in a site's panel
+   instead, so a row added later is spaced without being told to be.
+
+   Not the chess panels: their rows come in lists that space themselves, and
+   a hint there follows the controls it explains rather than opening the next
+   run, so 24px above it would hand it to the wrong ones. */
+[data-site-settings]:not([data-chess-settings]) .settings-option { margin-top: 14px; }
+[data-site-settings]:not([data-chess-settings]) p.settings-hint { margin-top: 24px; }
+[data-site-settings]:not([data-chess-settings]) :is(.settings-option, p.settings-hint):first-child,
+[data-site-settings]:not([data-chess-settings]) .shortcut-heading + :is(.settings-option, p.settings-hint) { margin-top: 0; }
 
 .limit-panel { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 
