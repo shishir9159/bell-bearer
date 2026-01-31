@@ -49,26 +49,25 @@
              shortcut, the transcript they attach to) — shown only when the
              active tab is on YouTube. See popup.js#applySiteLayout. -->
         <div id="youtubePanel" hidden>
-            <!-- The first per-site action in the popup rather than a setting:
-                 it does something to the page, so it sits up here with the
-                 speed bar rather than in the dashboard. -->
-            <div class="reader-bar" id="readerBar">
-                <button id="openReaderBtn" class="btn-reader" type="button" disabled>Open the reader</button>
-                <span class="reader-bar-note" id="readerBarNote" aria-live="polite"></span>
-            </div>
-            <!-- Saving the video as one .mp4. On YouTube only once Settings
-                 asks for it; popup.js moves it to #vimeoPanel on Vimeo. -->
-            <div class="reader-bar" id="downloadBar" hidden>
-                <button id="downloadBtn" class="btn-reader" type="button">Download</button>
-                <span class="reader-bar-note" id="downloadNote" aria-live="polite"></span>
-            </div>
-            <!-- A second home for this bar, on Netflix, is #netflixPanel below:
-                 popup.js moves it there, so there is one bar and one set of
-                 listeners. -->
-            <div class="party-bar" id="partyBar" hidden>
-                <button id="partyStartBtn" class="btn-reader" type="button">Start a party</button>
-                <button id="partyJoinBtn" class="btn-party-join" type="button">Join</button>
-                <span class="reader-bar-note">Watch this video in sync</span>
+            <!-- What the popup does to the page, in one row: saving the video,
+                 the watch party and the reader. They act on the page rather
+                 than being settings, so they sit up here with the speed bar
+                 rather than in the dashboard. Download shows on YouTube only
+                 once Settings asks for it. Where one of them is all there is,
+                 popup.js moves it into that site's own row below — the
+                 download to #vimeoPanel, the party to #netflixPanel — so each
+                 has one set of listeners. -->
+            <div class="page-actions" id="pageActions">
+                <div class="page-action" id="downloadBar" hidden>
+                    <button id="downloadBtn" class="btn-reader" type="button">Download</button>
+                </div>
+                <div class="page-action" id="partyBar" hidden>
+                    <button id="partyStartBtn" class="btn-reader" type="button">Start a party</button>
+                    <button id="partyJoinBtn" class="btn-party-join" type="button">Join</button>
+                </div>
+                <div class="page-action" id="readerBar">
+                    <button id="openReaderBtn" class="btn-reader" type="button" disabled>Open the reader</button>
+                </div>
             </div>
             <div class="main-content" id="mainContent">
                 <div class="video-list" id="videoList"></div>
@@ -103,11 +102,11 @@
             <div class="leet-pop-body" id="leetPopupBody"></div>
         </div>
 
-        <!-- Netflix: the watch party's bar, and nothing else. -->
-        <div id="netflixPanel" hidden></div>
+        <!-- Netflix: the watch party's buttons, and nothing else. -->
+        <div id="netflixPanel" class="page-actions" hidden></div>
 
-        <!-- Vimeo: the download bar, moved here from the YouTube panel. -->
-        <div id="vimeoPanel" hidden></div>
+        <!-- Vimeo: the download button, moved here from the YouTube panel. -->
+        <div id="vimeoPanel" class="page-actions" hidden></div>
 
         <!-- The watch party, once it is asked for or on: start, join, the
              code exchange, the room and how it ended. Drawn by

@@ -183,8 +183,9 @@
                 this.setupReaderBar();
                 this.setupDownloadBar();
             }
-            // The party plays on YouTube and Netflix. On Netflix its bar is
-            // the popup's only content, so it moves out of the YouTube panel.
+            // The party plays on YouTube and Netflix. On Netflix its buttons
+            // are the popup's only content, so they move out of the YouTube
+            // panel's row into a row of their own.
             const partyBar = document.getElementById('partyBar');
             partyBar.hidden = this.site !== 'youtube' && this.site !== 'netflix';
             if (this.site === 'netflix') {
@@ -192,7 +193,7 @@
                 netflix.appendChild(partyBar);
                 netflix.hidden = false;
             }
-            // The download bar's other home: on Vimeo it is the popup.
+            // The download button's other home: on Vimeo it is the popup.
             if (this.site === 'vimeo') {
                 const vimeo = document.getElementById('vimeoPanel');
                 vimeo.appendChild(document.getElementById('downloadBar'));
@@ -234,25 +235,21 @@
 
         /**
          * The reader needs a video to read, so the button is only live on a
-         * watch page — and says why when it is not, rather than sitting there
-         * greyed out with no explanation.
+         * watch page — and its tooltip says why when it is not, rather than
+         * it sitting there greyed out with no explanation.
          */
         async setupReaderBar() {
             const button = document.getElementById('openReaderBtn');
-            const note = document.getElementById('readerBarNote');
             const tab = await TabActions.activeTab();
             let onVideo = false;
             try {
                 onVideo = !!window.BB.YouTube.extractVideoId(tab.url) && /^\/(watch|live)\b/.test(new URL(tab.url).pathname);
             } catch (_) { /* no tab, or not a URL */ }
             button.disabled = !onVideo;
-            note.textContent = onVideo
-                ? 'The player, its transcript and your notes, side by side'
-                : 'Open a video to read it beside its transcript';
+            button.title = onVideo ? '' : 'Open a video to read it beside its transcript';
         }
 
         async openReader() {
-            const note = document.getElementById('readerBarNote');
             const tab = await TabActions.activeTab();
             if (await TabActions.openReader(tab)) {
                 window.close();
@@ -260,7 +257,7 @@
             }
             // A tab opened before the extension was installed or reloaded
             // has no content script to answer.
-            note.textContent = 'Reload the YouTube tab first — Bell Bearer is not running in it yet';
+            Ui.toast('Reload the YouTube tab first — Bell Bearer is not running in it yet', 'error');
         }
 
         // -------------------------------------------------------- download
@@ -286,15 +283,13 @@
 
         showDownload(info) {
             const button = document.getElementById('downloadBtn');
-            const note = document.getElementById('downloadNote');
             // A tab opened before the extension was installed or reloaded has
             // no content script to answer.
             button.disabled = !info;
+            button.title = info ? '' : 'Reload the tab first — Bell Bearer is not running in it yet';
             this.downloadBusy = !!(info && info.busy);
-            button.textContent = !info ? 'Download' : info.busy ? 'Cancel' : `Download${info.label ? ` ${info.label}` : ''}`;
-            note.textContent = !info ? 'Reload the tab first — Bell Bearer is not running in it yet'
-                : info.busy ? `Saving — ${info.percent}%. It carries on in the tab if this closes.`
-                    : 'Picture and sound in one .mp4, at the quality the player is on';
+            // How far it has got is on the button that stops it.
+            button.textContent = !info ? 'Download' : info.busy ? `Cancel (${info.percent}%)` : `Download${info.label ? ` ${info.label}` : ''}`;
         }
 
         async toggleDownload() {

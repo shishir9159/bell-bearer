@@ -214,16 +214,24 @@ header h1 {
 }
 
 
-/* The reader button: the same accent-soft ground as the speed bar above it,
-   because both act on the page rather than on the list below. */
-.reader-bar {
+/* Download, the watch party and the reader: one row on the same accent-soft
+   ground as the speed bar above it, because all of them act on the page
+   rather than on the list below. They were three bars, each with a line
+   saying what its button does; the buttons say it themselves, and why one is
+   greyed out is its tooltip. */
+.page-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     padding: 8px 14px;
     background: var(--accent-soft);
     border-bottom: 1px solid var(--border);
 }
+
+/* A group is its buttons alone, so every button in the row is the same gap
+   from the next; the group is only there for popup.js to show, hide and move. */
+.page-action { display: contents; }
 
 .btn-reader {
     flex-shrink: 0;
@@ -246,23 +254,8 @@ header h1 {
     cursor: default;
 }
 
-.reader-bar-note {
-    min-width: 0;
-    color: var(--text-muted);
-    font-size: 11.5px;
-}
-
-/* The watch party's way in, under the reader's. Its views are party.css,
-   loaded with the party's code. */
-.party-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    background: var(--accent-soft);
-    border-bottom: 1px solid var(--border);
-}
-
+/* The watch party's Join, beside its Start. Its views are party.css, loaded
+   with the party's code. */
 .btn-party-join {
     flex-shrink: 0;
     padding: 5px 12px;
