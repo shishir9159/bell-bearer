@@ -26,7 +26,11 @@
      * are not throttled at all.
      */
     const CHUNK = 10 << 20;
-    /** Pieces in flight per stream. */
+    /**
+     * Pieces in flight for each stream, all of them in one pool; one more
+     * for a list of segments, each of which is a few seconds and so spends
+     * more of its time waiting for an answer than being sent.
+     */
     const PARALLEL = 3;
     /** How long a progress toast stays up between two updates. */
     const SHOWN_MS = 120 * 1000;
@@ -86,30 +90,52 @@
     const blobSource = (blob) => ({ size: blob.size, read: async (at, length) => new Uint8Array(await blob.slice(at, at + length).arrayBuffer()) });
 
     /**
-     * A stream as one Blob. Either `{ url, size, rangeParam }` — one file,
-     * fetched in pieces named in its query, as googlevideo takes them — or
-     * `{ urls, head }`, a list of segments to fetch whole, after `head`, an
-     * init segment already in hand (Vimeo sends it inline, in base64).
-     * `onPiece(bytes)` hears of each piece as it lands.
+     * A stream's pieces. `{ url, size, rangeParam }` is one file, fetched in
+     * ranges named in its query, as googlevideo takes them; `{ urls }` is a
+     * list of segments, each fetched whole.
      */
-    async function fetchStream(stream, { fetchImpl, signal, onPiece = () => {}, chunk = CHUNK, retryMs }) {
-        const refused = (status) => `The stream was refused (${status}) — reload the page and try again`;
-        if (stream.urls) {
-            const blobs = await FetchPool.mapLimit(stream.urls, PARALLEL + 1, async (url) => {
-                const blob = await FetchPool.fetchBody(url, { fetchImpl, signal, retryMs, refused });
-                onPiece(blob.size);
-                return blob;
-            });
-            return new Blob(stream.head ? [stream.head, ...blobs] : blobs);
-        }
+    function piecesOf(stream, chunk = CHUNK) {
+        if (stream.urls) return stream.urls.map((url) => ({ url }));
         const join = stream.url.includes('?') ? '&' : '?';
-        const blobs = await FetchPool.mapLimit(chunks(stream.size, chunk), PARALLEL, async ([start, end]) => {
-            const blob = await FetchPool.fetchBody(`${stream.url}${join}${stream.rangeParam || 'range'}=${start}-${end}`,
-                { fetchImpl, signal, expect: end - start + 1, retryMs, refused });
-            onPiece(blob.size);
+        return chunks(stream.size, chunk).map(([start, end]) => ({
+            url: `${stream.url}${join}${stream.rangeParam || 'range'}=${start}-${end}`, expect: end - start + 1,
+        }));
+    }
+
+    /**
+     * Each stream as one Blob — after its `head` where it has one, an init
+     * segment already in hand (Vimeo sends it inline, in base64) — every
+     * piece of every stream through one pool. A pool per stream left the
+     * video on three connections from the moment the sound was in, which is
+     * most of a download: on a 90 Mbit/s line that took a tenth longer
+     * (October 2026). `onPiece(bytes, pieces)` hears of each piece as it
+     * lands, and how many there are in all.
+     */
+    async function fetchStreams(streams, { fetchImpl, signal, onPiece = () => {}, chunk = CHUNK, retryMs }) {
+        const pieces = streams.flatMap((stream, index) => piecesOf(stream, chunk).map((piece) => ({ ...piece, index })));
+        const limit = streams.reduce((sum, stream) => sum + (stream.urls ? PARALLEL + 1 : PARALLEL), 0);
+        const refused = (status) => `The stream was refused (${status}) — reload the page and try again`;
+        const blobs = await FetchPool.mapLimit(pieces, limit, async ({ url, expect }) => {
+            const blob = await FetchPool.fetchBody(url, { fetchImpl, signal, expect, retryMs, refused });
+            onPiece(blob.size, pieces.length);
             return blob;
         });
-        return new Blob(blobs);
+        return streams.map((stream, index) => {
+            const own = blobs.filter((_, at) => pieces[at].index === index);
+            return new Blob(stream.head ? [stream.head, ...own] : own);
+        });
+    }
+
+    /**
+     * The streams as one file, its mdats sliced from the streams rather than
+     * copied. A stream on its own is put through the merge as well: its
+     * headers may leave its length out, as Vimeo's do, and the merge writes
+     * in the one it is given.
+     */
+    async function assemble(blobs, streams) {
+        const merged = await Mp4Mux.merge(blobs.map((blob, index) => ({ ...blobSource(blob), seconds: streams[index].seconds })));
+        const parts = merged.parts.map((part) => (part instanceof Uint8Array ? part : blobs[part.source].slice(part.at, part.at + part.size)));
+        return new Blob(parts, { type: 'video/mp4' });
     }
 
     /**
@@ -204,26 +230,20 @@
             if (plan.note) notify(plan.note, 'info', 4000);
 
             // Progress by bytes when every size is known, by pieces when not.
-            const total = plan.streams.reduce((sum, stream) => sum + (stream.size || 0), 0);
-            const pieces = plan.streams.reduce((sum, stream) => sum + (stream.urls ? stream.urls.length : chunks(stream.size).length), 0);
+            const total = plan.streams.every((stream) => stream.size) ? plan.streams.reduce((sum, stream) => sum + stream.size, 0) : 0;
             let bytes = 0;
             let landed = 0;
-            const onPiece = (size) => {
+            const onPiece = (size, pieces) => {
                 bytes += size;
                 landed += 1;
-                const now = Math.floor(100 * (plan.streams.every((stream) => stream.size) ? bytes / total : landed / pieces));
+                const now = Math.floor(100 * (total ? bytes / total : landed / pieces));
                 if (now === percent) return;
                 percent = now;
                 notify(`Downloading ${plan.label} — ${percent}%`, 'info', SHOWN_MS);
             };
-            const blobs = await Promise.all(plan.streams.map((stream) => fetchStream(stream, { fetchImpl, signal, onPiece })));
-
-            let file = blobs[0];
-            if (!plan.whole) {
-                notify('Putting the picture and the sound together…', 'info', SHOWN_MS);
-                const merged = await Mp4Mux.merge(blobs.map((blob, index) => ({ ...blobSource(blob), seconds: plan.streams[index].seconds })));
-                file = new Blob(merged.parts.map((part) => (part instanceof Uint8Array ? part : blobs[part.source].slice(part.at, part.at + part.size))));
-            }
+            const blobs = await fetchStreams(plan.streams, { fetchImpl, signal, onPiece });
+            notify('Putting the picture and the sound together…', 'info', SHOWN_MS);
+            const file = await assemble(blobs, plan.streams);
             percent = 100;
             const saved = await save(plan.fileName, file, 'video/mp4');
             if (saved === false) notify('Not saved', 'info', 4000);
@@ -253,7 +273,7 @@
         return { info, start, cancel };
     }
 
-    const VideoDownload = { CHUNK, wanted, pick, chunks, fileName, fetchStream, savePath, createSaver, createDownloader };
+    const VideoDownload = { CHUNK, wanted, pick, chunks, fileName, piecesOf, fetchStreams, assemble, savePath, createSaver, createDownloader };
 
     root.BB = root.BB || {};
     root.BB.VideoDownload = VideoDownload;

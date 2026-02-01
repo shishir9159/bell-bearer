@@ -8201,7 +8201,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const url = 'https://v.example/s?x=1';
         const server = rangeServer({ 'https://v.example/s': bytes }, { [`${url}&range=10-19`]: ['drop', 503], [`${url}&range=20-24`]: ['short'] });
         const sizes = [];
-        const blob = await VideoDownload.fetchStream({ url, size: 25 }, { fetchImpl: server.fetchImpl, chunk: 10, retryMs: 0, onPiece: (size) => sizes.push(size) });
+        const [blob] = await VideoDownload.fetchStreams([{ url, size: 25 }], { fetchImpl: server.fetchImpl, chunk: 10, retryMs: 0, onPiece: (size) => sizes.push(size) });
         eq(Array.from(await blobBytes(blob)), Array.from(bytes));
         eq([server.asked.length, sizes.sort((a, b) => a - b)], [6, [5, 10, 10]]);
         eq(VideoDownload.CHUNK, 10 << 20, 'yt-dlp\'s piece size, which googlevideo does not throttle');
@@ -8210,14 +8210,31 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const url = 'https://v.example/gone';
         const server = rangeServer({}, { [`${url}?range=0-9`]: [403] });
         let message = '';
-        try { await VideoDownload.fetchStream({ url, size: 10 }, { fetchImpl: server.fetchImpl }); } catch (error) { message = error.message; }
+        try { await VideoDownload.fetchStreams([{ url, size: 10 }], { fetchImpl: server.fetchImpl }); } catch (error) { message = error.message; }
         assert(/refused \(403\)/.test(message), message);
         eq(server.asked.length, 1);
     });
     await checkAsync('a segment list is fetched whole, each in its place', async () => {
         const server = rangeServer({ 'https://v.example/init.mp4': ascii4('II'), 'https://v.example/1.m4s': ascii4('11'), 'https://v.example/2.m4s': ascii4('22') });
-        const blob = await VideoDownload.fetchStream({ urls: ['https://v.example/init.mp4', 'https://v.example/1.m4s', 'https://v.example/2.m4s'] }, { fetchImpl: server.fetchImpl });
+        const [blob] = await VideoDownload.fetchStreams([{ urls: ['https://v.example/init.mp4', 'https://v.example/1.m4s', 'https://v.example/2.m4s'] }], { fetchImpl: server.fetchImpl });
         eq(new TextDecoder().decode(await blobBytes(blob)), 'II1122');
+    });
+    await checkAsync('the streams share one pool: once the sound is in, the picture has all six connections', async () => {
+        const server = rangeServer({ 'https://v.example/video': new Uint8Array(120), 'https://v.example/audio': new Uint8Array(10) });
+        const going = { video: 0, all: 0, mostVideo: 0, most: 0 };
+        const fetchImpl = async (url) => {
+            const video = url.includes('/video');
+            going.all += 1;
+            going.video += video ? 1 : 0;
+            going.most = Math.max(going.most, going.all);
+            going.mostVideo = Math.max(going.mostVideo, going.video);
+            await new Promise((done) => setTimeout(done, 1));
+            going.all -= 1;
+            going.video -= video ? 1 : 0;
+            return server.fetchImpl(url);
+        };
+        const blobs = await VideoDownload.fetchStreams([{ url: 'https://v.example/video', size: 120 }, { url: 'https://v.example/audio', size: 10 }], { fetchImpl, chunk: 10 });
+        eq([blobs.map((blob) => blob.size), going.mostVideo, going.most], [[120, 10], 6, 6]);
     });
 
     /** An adapter with nothing to say about any site: two streams, served by `server`. */
