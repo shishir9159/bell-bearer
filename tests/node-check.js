@@ -8475,6 +8475,14 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/youtubeDownload === true,\s*save: saver\.save/.test(main), 'youtube saves without the settings');
         assert(/VimeoDownload\.adapter[^\n]*save: saver\.save/.test(main), 'vimeo saves without the settings');
     });
+    check('the two rows sit under the YouTube download switch, shown only while it is on', () => {
+        const html = readRepo('dashboard.html');
+        const row = html.indexOf('id="youtubeDownload"');
+        const follow = html.indexOf('<div class="settings-follow">', row);
+        assert(follow > row && follow < html.indexOf('</div>', html.indexOf('for="youtubeDownload"')) + 40, 'the rows are not right after the switch');
+        for (const key of ['downloadAskWhere', 'downloadFolder']) assert(html.indexOf(`id="${key}"`) > follow, `${key} is not in the rows`);
+        assert(readRepo('dashboard.css').includes('.settings-option:has(> .toggle-switch input:not(:checked)) + .settings-follow { display: none; }'), 'the rows show with the switch off');
+    });
 
     section('saving a vimeo video');
 

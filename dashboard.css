@@ -2614,6 +2614,13 @@ body[data-skin="deco"] .bb-plate {
 [data-site-settings]:not([data-chess-settings]) :is(.settings-option, p.settings-hint):first-child,
 [data-site-settings]:not([data-chess-settings]) .shortcut-heading + :is(.settings-option, p.settings-hint) { margin-top: 0; }
 
+/* Rows that only mean something while the switch just above them is on —
+   where a video is saved, under YouTube's Download switch — set in under
+   that switch's label, and gone while it is off. Said by position rather
+   than by setting, so the next such pair needs only the markup. */
+.settings-follow { margin-top: 14px; padding-left: calc(42px + 12px); }
+.settings-option:has(> .toggle-switch input:not(:checked)) + .settings-follow { display: none; }
+
 .limit-panel { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
 
 .limit-figure { display: flex; align-items: baseline; gap: 10px; }
