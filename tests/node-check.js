@@ -7417,6 +7417,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     section('the forge folder download');
 
     globalThis.BB.Zip = require('../src/shared/zip.js');
+    const FetchPool = require('../src/shared/fetch-pool.js');
     const FolderDownload = require('../src/content/folder-download.js');
     const GithubFolder = require('../src/content/github-read.js');
 
@@ -7451,7 +7452,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     await checkAsync('the files are fetched a few at a time, kept in order, and the first failure ends it', async () => {
         let inFlight = 0;
         let most = 0;
-        const out = await FolderDownload.mapLimit([5, 1, 3, 2], 2, async (n) => {
+        const out = await FetchPool.mapLimit([5, 1, 3, 2], 2, async (n) => {
             most = Math.max(most, ++inFlight);
             await new Promise((done) => setTimeout(done, n));
             inFlight--;
@@ -7461,9 +7462,19 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const started = [];
         let error = null;
         try {
-            await FolderDownload.mapLimit([1, 2, 3, 4, 5], 1, async (n) => { started.push(n); if (n === 2) throw new Error('two'); });
+            await FetchPool.mapLimit([1, 2, 3, 4, 5], 1, async (n) => { started.push(n); if (n === 2) throw new Error('two'); });
         } catch (thrown) { error = thrown.message; }
         eq([error, started], ['two', [1, 2]]);
+    });
+    await checkAsync('a file whose connection drops is asked for again, and a refusal is worded by whoever asked', async () => {
+        const asked = [];
+        const answers = [() => { throw new TypeError('Failed to fetch'); }, () => ({ ok: true, status: 200, arrayBuffer: async () => new Uint8Array([7, 8]).buffer }), () => ({ ok: false, status: 404 })];
+        const fetchImpl = async (url, init) => { asked.push(init.credentials); return answers.shift()(); };
+        const options = { fetchImpl, init: { credentials: 'same-origin' }, as: 'arrayBuffer', retryMs: 0, refused: (status) => `Could not fetch a.js (${status})` };
+        eq(Array.from(new Uint8Array(await FetchPool.fetchBody('/raw/a.js', options))), [7, 8]);
+        let message = '';
+        try { await FetchPool.fetchBody('/raw/a.js', options); } catch (error) { message = error.message; }
+        eq([message, asked], ['Could not fetch a.js (404)', ['same-origin', 'same-origin', 'same-origin']]);
     });
 
     // ------------------------------------------------- the conversation tree
@@ -8326,6 +8337,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         for (const name of ['manifest.json', 'manifest.firefox.json']) {
             const entry = JSON.parse(readRepo(name)).content_scripts.find((one) => one.js.includes('src/content/youtube-ui.js'));
             const at = (file) => entry.js.indexOf(file);
+            assert(at('src/shared/fetch-pool.js') > -1 && at('src/shared/fetch-pool.js') < at('src/content/video-download.js'), name);
             assert(at('src/shared/mp4-mux.js') > -1 && at('src/shared/mp4-mux.js') < at('src/content/video-download.js'), name);
             assert(at('src/content/video-download.js') < at('src/content/youtube-download.js') && at('src/content/youtube-download.js') < at('src/content/main.js'), name);
         }

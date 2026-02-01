@@ -18,7 +18,7 @@
 (function (root) {
     'use strict';
 
-    const { Mp4Mux, Dom } = root.BB;
+    const { FetchPool, Mp4Mux, Dom } = root.BB;
 
     /**
      * A stream is fetched in pieces of this much, as yt-dlp does: googlevideo
@@ -28,7 +28,6 @@
     const CHUNK = 10 << 20;
     /** Pieces in flight per stream. */
     const PARALLEL = 3;
-    const TRIES = 3;
     /** How long a progress toast stays up between two updates. */
     const SHOWN_MS = 120 * 1000;
 
@@ -86,57 +85,6 @@
 
     const blobSource = (blob) => ({ size: blob.size, read: async (at, length) => new Uint8Array(await blob.slice(at, at + length).arrayBuffer()) });
 
-    const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
-
-    /**
-     * One request, tried again on a dropped connection or a busy server. A
-     * refusal (403, 404) is not tried again: the address has expired or was
-     * never good, and asking twice more only looks worse.
-     */
-    async function fetchBlob(url, { fetchImpl, signal, expect, retryMs = 1000 }) {
-        let lastError = null;
-        for (let attempt = 0; attempt < TRIES; attempt++) {
-            if (attempt) await sleep(retryMs * attempt);
-            if (signal && signal.aborted) throw new DOMException('Cancelled', 'AbortError');
-            let response;
-            try {
-                response = await fetchImpl(url, { credentials: 'omit', signal });
-            } catch (error) {
-                if (error && error.name === 'AbortError') throw error;
-                lastError = new Error('The connection dropped');
-                continue;
-            }
-            if (response.status === 429 || response.status >= 500) {
-                lastError = new Error(`The server is busy (${response.status})`);
-                continue;
-            }
-            if (!response.ok) throw new Error(`The stream was refused (${response.status}) — reload the page and try again`);
-            const blob = await response.blob();
-            if (expect != null && blob.size !== expect) {
-                lastError = new Error('A piece of the stream came back short');
-                continue;
-            }
-            return blob;
-        }
-        throw lastError;
-    }
-
-    /** `worker` over `items`, `limit` at a time, in order; the first failure ends it. */
-    async function mapLimit(items, limit, worker) {
-        const results = new Array(items.length);
-        let next = 0;
-        let failed = null;
-        const run = async () => {
-            while (next < items.length && !failed) {
-                const index = next++;
-                try { results[index] = await worker(items[index], index); } catch (error) { failed = failed || error; }
-            }
-        };
-        await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
-        if (failed) throw failed;
-        return results;
-    }
-
     /**
      * A stream as one Blob. Either `{ url, size, rangeParam }` — one file,
      * fetched in pieces named in its query, as googlevideo takes them — or
@@ -145,18 +93,19 @@
      * `onPiece(bytes)` hears of each piece as it lands.
      */
     async function fetchStream(stream, { fetchImpl, signal, onPiece = () => {}, chunk = CHUNK, retryMs }) {
+        const refused = (status) => `The stream was refused (${status}) — reload the page and try again`;
         if (stream.urls) {
-            const blobs = await mapLimit(stream.urls, PARALLEL + 1, async (url) => {
-                const blob = await fetchBlob(url, { fetchImpl, signal, retryMs });
+            const blobs = await FetchPool.mapLimit(stream.urls, PARALLEL + 1, async (url) => {
+                const blob = await FetchPool.fetchBody(url, { fetchImpl, signal, retryMs, refused });
                 onPiece(blob.size);
                 return blob;
             });
             return new Blob(stream.head ? [stream.head, ...blobs] : blobs);
         }
         const join = stream.url.includes('?') ? '&' : '?';
-        const blobs = await mapLimit(chunks(stream.size, chunk), PARALLEL, async ([start, end]) => {
-            const blob = await fetchBlob(`${stream.url}${join}${stream.rangeParam || 'range'}=${start}-${end}`,
-                { fetchImpl, signal, expect: end - start + 1, retryMs });
+        const blobs = await FetchPool.mapLimit(chunks(stream.size, chunk), PARALLEL, async ([start, end]) => {
+            const blob = await FetchPool.fetchBody(`${stream.url}${join}${stream.rangeParam || 'range'}=${start}-${end}`,
+                { fetchImpl, signal, expect: end - start + 1, retryMs, refused });
             onPiece(blob.size);
             return blob;
         });
@@ -304,7 +253,7 @@
         return { info, start, cancel };
     }
 
-    const VideoDownload = { CHUNK, wanted, pick, chunks, fileName, fetchBlob, fetchStream, mapLimit, savePath, createSaver, createDownloader };
+    const VideoDownload = { CHUNK, wanted, pick, chunks, fileName, fetchStream, savePath, createSaver, createDownloader };
 
     root.BB = root.BB || {};
     root.BB.VideoDownload = VideoDownload;

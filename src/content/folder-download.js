@@ -11,7 +11,7 @@
 (function (root) {
     'use strict';
 
-    const { ForgeSites, Zip, Dom } = root.BB;
+    const { ForgeSites, FetchPool, Zip, Dom } = root.BB;
 
     const BUTTON_ID = 'bb-folder-download';
     /** Files fetched at once: enough to hide each one's latency, few enough not to look like a scraper. */
@@ -22,30 +22,6 @@
      * the files are.
      */
     const MAX_FILES = 2000;
-
-    /**
-     * `worker` over `items`, `limit` at a time, results in order. The first
-     * failure ends it: a zip missing a file it says nothing about is worse
-     * than no zip.
-     */
-    async function mapLimit(items, limit, worker) {
-        const results = new Array(items.length);
-        let next = 0;
-        let failed = null;
-        const run = async () => {
-            while (next < items.length && !failed) {
-                const index = next++;
-                try {
-                    results[index] = await worker(items[index], index);
-                } catch (error) {
-                    failed = failed || error;
-                }
-            }
-        };
-        await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
-        if (failed) throw failed;
-        return results;
-    }
 
     /** "src/shared/zip.js" under "src/shared" as "shared/zip.js": the zip opens to the folder itself. */
     function entryName(folderPath, path) {
@@ -81,10 +57,10 @@
                 if (paths.length > MAX_FILES) throw new Error(`${paths.length} files is more than a zip built in the browser should hold — clone it instead`);
 
                 let done = 0;
-                const files = await mapLimit(paths, PARALLEL, async (path) => {
-                    const response = await fetchImpl(adapter.folder.rawUrl(here, at, path), { credentials: 'same-origin' });
-                    if (!response.ok) throw new Error(`Could not fetch ${path} (${response.status})`);
-                    const data = new Uint8Array(await response.arrayBuffer());
+                const files = await FetchPool.mapLimit(paths, PARALLEL, async (path) => {
+                    const data = new Uint8Array(await FetchPool.fetchBody(adapter.folder.rawUrl(here, at, path), {
+                        fetchImpl, init: { credentials: 'same-origin' }, as: 'arrayBuffer', refused: (status) => `Could not fetch ${path} (${status})`,
+                    }));
                     render(`Zipping ${++done}/${paths.length}`);
                     return { name: entryName(at.path, path), data };
                 });
@@ -132,7 +108,7 @@
         return { install: onNavigate, onNavigate, refreshSurfaces: onNavigate, download };
     }
 
-    const FolderDownload = { BUTTON_ID, MAX_FILES, mapLimit, entryName, createFolderDownload };
+    const FolderDownload = { BUTTON_ID, MAX_FILES, entryName, createFolderDownload };
 
     root.BB.FolderDownload = FolderDownload;
     if (typeof module !== 'undefined' && module.exports) module.exports = FolderDownload;
