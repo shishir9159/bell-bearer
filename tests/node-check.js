@@ -8011,7 +8011,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
      * `absolute` writes each base offset as a position in the file instead
      * of leaving it to the moof.
      */
-    function dashStream({ marker, handler, scale, media, starts, absolute = false, edit = 0, unsaid = false }) {
+    function dashStream({ marker, handler, scale, media, starts, absolute = false, edit = 0, unsaid = false, pad = 0 }) {
         const duration = unsaid ? 0 : Math.round((starts[starts.length - 1] + 1) * scale);
         const tkhd = fullBox('tkhd', 0, 3, u32s(0, 0, 1, 0, duration), new Uint8Array(60));
         const mdia = Mp4Mux.box('mdia', fullBox('mdhd', 0, 0, u32s(0, 0, media, Math.round(duration * media / scale)), new Uint8Array(4)),
@@ -8022,7 +8022,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const parts = [Mp4Mux.box('ftyp', ascii4('dash'), u32s(0), ascii4('iso6')), moov, fullBox('sidx', 0, 0, u32s(1, scale, 0, 0, 0))];
         let at = parts.reduce((sum, part) => sum + part.length, 0);
         starts.forEach((start, n) => {
-            const sample = ascii4(`${marker}${n}`);
+            const sample = new Uint8Array(2 + pad);
+            sample.set(ascii4(`${marker}${n}`));
             const moofOf = (dataOffset) => Mp4Mux.box('moof', fullBox('mfhd', 0, 0, u32s(n + 1)), Mp4Mux.box('traf',
                 absolute ? fullBox('tfhd', 0, 0x000001, u32s(1, 0, at)) : fullBox('tfhd', 0, 0x020000, u32s(1)),
                 fullBox('tfdt', 0, 0, u32s(Math.round(start * media))), fullBox('trun', 0, 0x000001, u32s(1, dataOffset))));
@@ -8113,6 +8114,16 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([dv.getUint32(inMoov[0].at + 24), merged.seconds], [Math.round(11.25 * 15360), 11.25]);
         const tkhds = inMoov.filter((one) => one.type === 'trak').map((trak) => Mp4Mux.boxesIn(bytes, trak.at + 8, trak.at + trak.size)[0]);
         eq(tkhds.map((tkhd) => dv.getUint32(tkhd.at + 28)), [Math.round(9.5 * 15360), Math.round(11.25 * 15360)]);
+    });
+    await checkAsync('each fragment is one read — its header, its moof and the next header together — however large its mdat', async () => {
+        const sources = [videoStream({ pad: 100 << 10 }), audioStream({ pad: 100 << 10 })];
+        let reads = 0;
+        const counted = sources.map((bytes) => {
+            const source = Mp4Mux.bytesSource(bytes);
+            return { size: source.size, read: (at, length) => { reads += 1; return source.read(at, length); } };
+        });
+        const { fragments } = readMerged(await Mp4Mux.merge(counted), sources);
+        eq([fragments.map((one) => one.sample), reads], [['V0', 'A0', 'V1', 'V2', 'A1'], 5], 'twenty-three, read box by box');
     });
     await checkAsync('one stream on its own comes through as a file of its own', async () => {
         const sources = [videoStream()];
