@@ -8237,10 +8237,24 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([blobs.map((blob) => blob.size), going.mostVideo, going.most], [[120, 10], 6, 6]);
     });
 
-    /** An adapter with nothing to say about any site: two streams, served by `server`. */
+    /** An adapter with nothing to say about any site: a 720p picture and its sound, served by `server`. */
     function fakeVideoSite(streams, more = {}) {
-        return { site: 'test', onVideo: () => true, storedQuality: () => 0, plan: async () => ({ label: '720p', fileName: 'A video (720p).mp4', streams }), ...more };
+        const offer = async () => ({ title: 'A video', video: [{ ...rendition(1280, 720), ...streams[0] }], audio: streams.slice(1) });
+        return { site: 'test', name: 'Test', onVideo: () => true, storedQuality: () => 0, offer, ...more };
     }
+
+    check('a film cropped to its size is what was asked for, a quality not there is said, and only a silent clip goes without sound', () => {
+        const scope = rendition(1920, 800, { label: '1080p', p: 1080, url: 'https://v.example/scope' });
+        const sound = { url: 'https://v.example/sound' };
+        const offer = { title: 'Film', video: [scope], audio: [sound] };
+        eq(VideoDownload.choose(offer, { width: 1920, height: 800, p: 800 }, 'YouTube').note, '', 'an 800-line picture saved as the 1080p it is called');
+        eq(VideoDownload.choose(offer, { p: 1440 }, 'YouTube').note, '1440p is not offered as MP4 here — saving 1080p');
+        eq(VideoDownload.choose(offer, null, 'YouTube').streams, [scope, sound]);
+        eq(VideoDownload.choose({ title: 'Beeps', video: [scope], audio: [], silent: true }, null, 'Vimeo').streams, [scope]);
+        let message = '';
+        try { VideoDownload.choose({ title: 'Beeps', video: [scope], audio: [] }, null, 'Vimeo'); } catch (error) { message = error.message; }
+        eq(message, 'Vimeo offered no MP4 streams for this video');
+    });
 
     await checkAsync('a download fetches both streams, merges them, and saves one playable file', async () => {
         const video = videoStream();
@@ -8268,7 +8282,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         await off.start();
         const notes = [];
         const failing = VideoDownload.createDownloader({
-            adapter: fakeVideoSite([], { plan: async () => { throw new Error('YouTube would not give the streams: Sign in'); } }),
+            adapter: fakeVideoSite([], { offer: async () => { throw new Error('YouTube would not give the streams: Sign in'); } }),
             notify: (text, type) => notes.push([text, type]), getVideoElement: () => null, save: () => assert(false, 'saved'),
         });
         await failing.start();
@@ -8331,18 +8345,16 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([YoutubeDownload.visitorData(doc), YoutubeDownload.visitorData({ scripts: [] })], ['CgtaWnp%3D%3D', '']);
     });
     await checkAsync('the plan is the rendition the player shows, as MP4, with the best original sound', async () => {
-        globalThis.BB.VideoDownload = VideoDownload;
         const answering = (answer) => async () => ({ ok: true, json: async () => answer });
-        const plan = (want) => YoutubeDownload.adapter.plan({ videoId: 'aqz-KE-bpKQ', want, doc: { scripts: [] }, fetchImpl: answering(ytAnswer(BUNNY)) });
+        const offered = (formats) => YoutubeDownload.adapter.offer({ videoId: 'aqz-KE-bpKQ', doc: { scripts: [] }, fetchImpl: answering(ytAnswer(formats)) });
+        const plan = async (want, formats = BUNNY) => VideoDownload.choose(await offered(formats), want, YoutubeDownload.adapter.name);
         const hd = await plan({ width: 1920, height: 1080, p: 1080 });
         eq([hd.label, hd.streams.map((one) => /itag=(\d+)/.exec(one.url)[1]), hd.note], ['1080p60', ['299', '140'], '']);
         eq(hd.fileName, 'Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film (1080p60).mp4');
         eq((await plan({ width: 2560, height: 1440, p: 1440 })).streams[0].url, BUNNY[2].url, 'above 1080p the MP4 is AV1');
-        const noMp4 = YoutubeDownload.adapter.plan({ videoId: 'x', want: { p: 2160 }, doc: { scripts: [] },
-            fetchImpl: answering(ytAnswer(BUNNY.filter((one) => one.itag !== 401))) });
-        eq((await noMp4).note, '2160p is not offered as MP4 here — saving 1440p60');
+        eq((await plan({ p: 2160 }, BUNNY.filter((one) => one.itag !== 401))).note, '2160p is not offered as MP4 here — saving 1440p60');
         let message = '';
-        try { await YoutubeDownload.adapter.plan({ videoId: 'x', want: null, doc: { scripts: [] }, fetchImpl: async () => ({ ok: false, status: 429 }) }); } catch (error) { message = error.message; }
+        try { await YoutubeDownload.adapter.offer({ videoId: 'x', doc: { scripts: [] }, fetchImpl: async () => ({ ok: false, status: 429 }) }); } catch (error) { message = error.message; }
         eq(message, 'YouTube refused to list the streams (429)');
     });
     check('a watch page, a short or a live page has a video to save, and the home page does not', () => {
@@ -8565,7 +8577,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             'https://vod-adaptive-ak.vimeocdn.com/exp=1~hmac=x/62fd/psid=1/v2/range/prot/cmFuZ2U9Mi0z/avf/v1080.mp4?pathsig=b',
         ]);
         eq(new TextDecoder().decode(read.video[1].head), 'init-v1080');
-        eq([read.audio.map((one) => one.codecs), read.audio[0].seconds], [['mp4a.40.2', 'opus'], 907.82]);
+        eq([read.audio.map((one) => one.codecs), read.audio[0].seconds, read.silent], [['mp4a.40.2', 'opus'], 907.82, false]);
+        eq(VimeoDownload.readPlaylist({ ...vimeoPlaylist, audio: [] }, VIMEO_PLAYLIST_URL).silent, true);
     });
 
     /** vimeo.com as a download sees it, in the order it is asked. */
@@ -8587,8 +8600,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     await checkAsync('the plan asks as the page does — its token, the API with the page\'s signature, the signed config — and picks the size playing', async () => {
         const site = fakeVimeo({ config: vimeoConfig() });
-        const plan = await VimeoDownload.adapter.plan({ want: { width: 1920, height: 1080, p: 1080 }, win: { location: { href: 'https://vimeo.com/1231817291' } },
-            doc: vimeoPage, fetchImpl: site.fetchImpl });
+        const offer = await VimeoDownload.adapter.offer({ win: { location: { href: 'https://vimeo.com/1231817291' } }, doc: vimeoPage, fetchImpl: site.fetchImpl });
+        const plan = VideoDownload.choose(offer, { width: 1920, height: 1080, p: 1080 }, VimeoDownload.adapter.name);
         eq([plan.label, plan.fileName, plan.streams.length], ['1080p', 'Beeps (1080p).mp4', 2]);
         eq(new TextDecoder().decode(plan.streams[1].head), 'init-aac');
         eq(plan.streams[0].seconds, 907.82);
@@ -8601,7 +8614,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const site = fakeVimeo({ config: vimeoConfig({ drm: { asset: 'x' } }) });
         let message = '';
         try {
-            await VimeoDownload.adapter.plan({ want: null, win: { location: { href: 'https://vimeo.com/1231817291' } }, doc: vimeoPage, fetchImpl: site.fetchImpl });
+            await VimeoDownload.adapter.offer({ win: { location: { href: 'https://vimeo.com/1231817291' } }, doc: vimeoPage, fetchImpl: site.fetchImpl });
         } catch (error) { message = error.message; }
         eq(message, VimeoDownload.DRM_REFUSAL);
         assert(!site.asked.some((one) => one.url === VIMEO_PLAYLIST_URL), 'the playlist was fetched');

@@ -1,6 +1,6 @@
 /**
- * vimeo.com, for src/content/video-download.js: where a clip's streams are
- * and which of them to save.
+ * vimeo.com, for src/content/video-download.js: where a clip's streams are,
+ * and what each of them is.
  *
  * Found the way the page itself finds them (October 2026):
  *   1. the clip's id, from the address, and the signature vimeo.com writes
@@ -112,10 +112,13 @@
         // AAC first, as the codec every player has; Opus in MP4 after it.
         const audio = (playlist.audio || []).filter((one) => /^audio\/mp4/.test(one.mime_type)).map(stream)
             .sort((a, b) => (b.codecs.startsWith('mp4a') - a.codecs.startsWith('mp4a')) || b.bitrate - a.bitrate);
-        return { video, audio };
+        // Silent only when the playlist has no sound at all: sound that is
+        // there but not as MP4 is an error, not a file saved without it.
+        return { video, audio, silent: !(playlist.audio || []).length };
     }
 
-    async function plan({ want, win, doc, fetchImpl, signal }) {
+    /** What the clip is offered as, for VideoDownload.choose. */
+    async function offer({ win, doc, fetchImpl, signal }) {
         const clip = clipOf(win.location.href);
         if (!clip) throw new Error('Open a Vimeo video first');
         const config = readConfig(await fetchConfig(clip, { doc, fetchImpl, signal }));
@@ -123,15 +126,10 @@
         if (!config.playlist) throw new Error('Vimeo listed no streams for this video');
         const response = await fetchImpl(config.playlist, { credentials: 'omit', signal });
         if (!response.ok) throw new Error(`Vimeo refused the list of streams (${response.status})`);
-        const { video: videos, audio } = readPlaylist(await response.json(), config.playlist);
-        const { pick, fileName } = root.BB.VideoDownload;
-        const video = pick(videos, want);
-        if (!video) throw new Error('Vimeo offered no MP4 streams for this video');
-        const streams = [video, ...audio.slice(0, 1)].map(({ head, urls, seconds }) => ({ head, urls, seconds }));
-        return { label: video.label, fileName: fileName(config.title, video.label), streams };
+        return { title: config.title, ...readPlaylist(await response.json(), config.playlist) };
     }
 
-    const adapter = { site: 'vimeo', onVideo, plan };
+    const adapter = { site: 'vimeo', name: 'Vimeo', onVideo, offer };
 
     const VimeoDownload = { DRM_REFUSAL, clipOf, readConfig, readPlaylist, adapter };
 

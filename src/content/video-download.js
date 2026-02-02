@@ -1,9 +1,9 @@
 /**
  * Saving the video on the page as one .mp4, at the quality it is playing at.
  * The site is the adapter's business — src/content/youtube-download.js and
- * the Vimeo one beside it say where the streams are and which is which;
- * this file fetches them, merges them with src/shared/mp4-mux.js and hands
- * the file over. Nothing here names a site.
+ * the Vimeo one beside it say what a video is offered as; this file chooses
+ * from that, fetches it, merges it with src/shared/mp4-mux.js and hands the
+ * file over. Nothing here names a site.
  *
  * It all happens in the video's own tab, for three reasons. The streams'
  * hosts answer that tab's origin and no other (googlevideo.com sends
@@ -71,6 +71,27 @@
         }
         const bottom = Math.min(...list.map((one) => one.p));
         return best(list.filter((one) => one.p === bottom));
+    }
+
+    /**
+     * What to save of what a site offers — `{ title, video, audio, silent }`:
+     * renditions as `pick` takes them, each one its own stream, and the
+     * sound best first — as a plan: the rendition, the best sound beside it,
+     * the file's name, and a word when the quality wanted is not to be had.
+     * No sound is an error unless the site says the video has none.
+     */
+    function choose({ title, video: renditions, audio = [], silent = false }, want, site) {
+        const video = pick(renditions, want);
+        if (!video || !(audio.length || silent)) throw new Error(`${site} offered no MP4 streams for this video`);
+        // The size drawn is matched first: a film cropped to 1920×800, which
+        // YouTube calls 1080p, is what an 800-line picture asked for.
+        const exact = !!want && want.width === video.width && want.height === video.height;
+        return {
+            label: video.label,
+            fileName: fileName(title, video.label),
+            note: want && !exact && video.p !== want.p ? `${want.p}p is not offered as MP4 here — saving ${video.label}` : '',
+            streams: [video, ...audio.slice(0, 1)],
+        };
     }
 
     /** [start, end] byte ranges, both ends included, covering `size`. */
@@ -226,7 +247,8 @@
             controller = new AbortController();
             const { signal } = controller;
             notify('Finding the video\'s streams…', 'info', SHOWN_MS);
-            const plan = await adapter.plan({ videoId: getVideoId(), want: want(), win, doc, fetchImpl, signal });
+            const offer = await adapter.offer({ videoId: getVideoId(), win, doc, fetchImpl, signal });
+            const plan = choose(offer, want(), adapter.name);
             if (plan.note) notify(plan.note, 'info', 4000);
 
             // Progress by bytes when every size is known, by pieces when not.
@@ -273,7 +295,7 @@
         return { info, start, cancel };
     }
 
-    const VideoDownload = { CHUNK, wanted, pick, chunks, fileName, piecesOf, fetchStreams, assemble, savePath, createSaver, createDownloader };
+    const VideoDownload = { CHUNK, wanted, pick, choose, chunks, fileName, piecesOf, fetchStreams, assemble, savePath, createSaver, createDownloader };
 
     root.BB = root.BB || {};
     root.BB.VideoDownload = VideoDownload;

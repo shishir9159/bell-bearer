@@ -1,6 +1,6 @@
 /**
  * youtube.com, for src/content/video-download.js: where a video's streams
- * are and which of them to save. Everything that will break when YouTube
+ * are, and what each of them is. Everything that will break when YouTube
  * changes is in this file; `node tools/yt-check.js` says which part broke,
  * and its header how each has been mended before.
  *
@@ -119,26 +119,17 @@
     /** A watch page, or a short: a video to save. */
     const onVideo = (win, videoId) => !!videoId && /^\/(watch|shorts\/|live\/)/.test(win.location.pathname);
 
-    async function plan({ videoId, want, doc, fetchImpl, signal }) {
+    /** What the video is offered as, for VideoDownload.choose. */
+    async function offer({ videoId, doc, fetchImpl, signal }) {
         const { url, init } = playerRequest(videoId, visitorData(doc));
         const response = await fetchImpl(url, { ...init, signal });
         if (!response.ok) throw new Error(`YouTube refused to list the streams (${response.status})`);
         const player = readPlayer(await response.json());
         if (!player.ok) throw new Error(`YouTube would not give the streams: ${player.reason}`);
-        const { pick, fileName } = root.BB.VideoDownload;
-        const video = pick(player.video, want);
-        const [audio] = player.audio;
-        if (!video || !audio) throw new Error('YouTube offered no MP4 streams for this video');
-        const asked = want ? `${want.p}p` : '';
-        return {
-            label: video.label,
-            fileName: fileName(player.title, video.label),
-            note: asked && !video.label.startsWith(asked) ? `${asked} is not offered as MP4 here — saving ${video.label}` : '',
-            streams: [{ url: video.url, size: video.size }, { url: audio.url, size: audio.size }],
-        };
+        return player;
     }
 
-    const adapter = { site: 'youtube', onVideo, storedQuality, plan };
+    const adapter = { site: 'youtube', name: 'YouTube', onVideo, storedQuality, offer };
 
     const YoutubeDownload = { CLIENT, playerRequest, readPlayer, visitorData, storedQuality, adapter };
 
