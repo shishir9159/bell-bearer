@@ -250,7 +250,7 @@
     /** Saving the video on the page as an .mp4, on a site with an adapter for it. */
     let downloader = null;
     /** Where it is saved, as Settings › YouTube asks, for YouTube and Vimeo alike. */
-    const saver = BB.VideoDownload ? BB.VideoDownload.createSaver({
+    const saver = BB.FileSaver ? BB.FileSaver.createSaver({
         options: () => ({ ask: settings.downloadAskWhere === true, folder: settings.downloadFolder || '' }),
         send: askWorker,
     }) : { ended: () => {} };

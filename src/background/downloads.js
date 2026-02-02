@@ -1,7 +1,8 @@
 /**
- * Saving a file a tab has built — a video, from src/content/video-download.js
- * — through the browser's downloads: the only way an extension can put a
- * file in a folder inside Downloads, or open Save As for it.
+ * Saving a file a tab has built — a video, handed over by
+ * src/content/file-saver.js — through the browser's downloads: the only
+ * way an extension can put a file in a folder inside Downloads, or open
+ * Save As for it.
  *
  * The file stays the tab's. Its blob: address belongs to the page, and the
  * browser reads it from there (a blob made in a content script saves this

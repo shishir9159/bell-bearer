@@ -8403,15 +8403,17 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     section('saving a video — where it goes');
 
+    const FileSaver = require('../src/content/file-saver.js');
+
     check('the folder setting stays inside Downloads, and keeps nothing the browser would refuse', () => {
         const name = 'Big Buck Bunny (480p).mp4';
-        eq(VideoDownload.savePath('', name), name);
-        eq(VideoDownload.savePath('  YouTube ', name), `YouTube/${name}`);
-        eq(VideoDownload.savePath('Videos\\YouTube\\', name), `Videos/YouTube/${name}`);
-        eq(VideoDownload.savePath('../../Windows', name), `Windows/${name}`);
-        eq(VideoDownload.savePath('C:\\Users\\me', name), `C/Users/me/${name}`);
-        eq(VideoDownload.savePath('/etc/ talks. ', name), `etc/talks/${name}`);
-        eq(VideoDownload.savePath('a<b>|c?', name), `abc/${name}`);
+        eq(FileSaver.savePath('', name), name);
+        eq(FileSaver.savePath('  YouTube ', name), `YouTube/${name}`);
+        eq(FileSaver.savePath('Videos\\YouTube\\', name), `Videos/YouTube/${name}`);
+        eq(FileSaver.savePath('../../Windows', name), `Windows/${name}`);
+        eq(FileSaver.savePath('C:\\Users\\me', name), `C/Users/me/${name}`);
+        eq(FileSaver.savePath('/etc/ talks. ', name), `etc/talks/${name}`);
+        eq(FileSaver.savePath('a<b>|c?', name), `abc/${name}`);
     });
 
     /** A saver over a worker that answers `answer`, with what it was sent and what the link saved. */
@@ -8419,7 +8421,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const sent = [];
         const linked = [];
         const urls = { made: 0, types: [], revoked: [], createObjectURL(blob) { this.made += 1; this.types.push(blob.type); return `blob:https://www.youtube.com/${this.made}`; }, revokeObjectURL(url) { this.revoked.push(url); } };
-        const saver = VideoDownload.createSaver({
+        const saver = FileSaver.createSaver({
             options: () => options, urls,
             send: async (message) => { sent.push(message); return typeof answer === 'function' ? answer(message) : answer; },
             link: (name) => linked.push(name),
@@ -8513,6 +8515,11 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([globalThis.BB.Settings.DEFAULTS.downloadAskWhere, globalThis.BB.Settings.DEFAULTS.downloadFolder], [false, '']);
         for (const name of ['manifest.json', 'manifest.firefox.json']) assert(JSON.parse(readRepo(name)).permissions.includes('downloads'), name);
         const main = readRepo('src/content/main.js');
+        for (const name of ['manifest.json', 'manifest.firefox.json']) {
+            for (const entry of JSON.parse(readRepo(name)).content_scripts.filter((one) => one.js.includes('src/content/video-download.js'))) {
+                assert(entry.js.includes('src/content/file-saver.js'), `${name}: a site that downloads videos has no saver`);
+            }
+        }
         assert(/youtubeDownload === true,\s*save: saver\.save/.test(main), 'youtube saves without the settings');
         assert(/VimeoDownload\.adapter[^\n]*save: saver\.save/.test(main), 'vimeo saves without the settings');
     });
