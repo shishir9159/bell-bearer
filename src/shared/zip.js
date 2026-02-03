@@ -1,6 +1,7 @@
 /**
  * A zip file, stored rather than compressed: the container the bulk chat
- * export hands over, so forty chats are one download instead of forty.
+ * export hands over, so forty chats are one download instead of forty, and
+ * the one a forge's folder is saved as (src/content/folder-download.js).
  *
  * Stored (method 0) because the whole of the win is the one file. Compressing
  * text would make it smaller, and would need a deflate implementation this
@@ -45,56 +46,82 @@
         };
     }
 
-    /** `files` is [{ name, data (string or bytes), at }]. Returns the archive's bytes. */
-    function build(files) {
-        const entries = (files || []).map((file) => {
-            const name = encode(String(file.name));
-            const data = encode(file.data);
-            return { name, data, crc: crc32(data), ...dosTime(file.at) };
-        });
-        if (entries.length > 0xFFFF) throw new Error('Too many files for a zip without zip64');
+    /** One file as the archive keeps it: its name as UTF-8, its data with that data's size and CRC, and a DOS time. */
+    function entry(file) {
+        const data = encode(file.data);
+        return { name: encode(String(file.name)), data, size: data.length, crc: crc32(data), ...dosTime(file.at) };
+    }
 
-        const localSize = entries.reduce((sum, e) => sum + 30 + e.name.length + e.data.length, 0);
-        const centralSize = entries.reduce((sum, e) => sum + 46 + e.name.length, 0);
-        if (localSize + centralSize + 22 > LIMIT) throw new Error('Too large for a zip without zip64');
-
-        const out = new Uint8Array(localSize + centralSize + 22);
+    /** `size` bytes, written by `write` through little-endian writers. */
+    function record(size, write) {
+        const out = new Uint8Array(size);
         const view = new DataView(out.buffer);
         let at = 0;
-        const u16 = (value) => { view.setUint16(at, value, true); at += 2; };
-        const u32 = (value) => { view.setUint32(at, value, true); at += 4; };
-        const bytes = (value) => { out.set(value, at); at += value.length; };
-
-        // Version 2.0, and general-purpose bit 11: the name is UTF-8.
-        const head = (e) => { u16(20); u16(0x0800); u16(0); u16(e.time); u16(e.date); u32(e.crc); u32(e.data.length); u32(e.data.length); u16(e.name.length); u16(0); };
-
-        const offsets = [];
-        for (const e of entries) {
-            offsets.push(at);
-            u32(0x04034B50);
-            head(e);
-            bytes(e.name);
-            bytes(e.data);
-        }
-        const central = at;
-        entries.forEach((e, index) => {
-            u32(0x02014B50);
-            u16(20);
-            head(e);
-            u16(0); u16(0); u16(0); u32(0);
-            u32(offsets[index]);
-            bytes(e.name);
+        write({
+            u16: (value) => { view.setUint16(at, value, true); at += 2; },
+            u32: (value) => { view.setUint32(at, value, true); at += 4; },
+            bytes: (value) => { out.set(value, at); at += value.length; },
         });
-        u32(0x06054B50);
-        u16(0); u16(0);
-        u16(entries.length); u16(entries.length);
-        u32(centralSize);
-        u32(central);
-        u16(0);
         return out;
     }
 
-    const Zip = { build, crc32, dosTime };
+    /**
+     * The archive as its parts, in file order: each header as bytes, and
+     * each entry's data as the entry holds it. That may be a Blob — the
+     * headers need only its size and CRC — so an archive joined as a Blob
+     * is never one more copy of every file in memory.
+     */
+    function parts(entries) {
+        if (entries.length > 0xFFFF) throw new Error('Too many files for a zip without zip64');
+        const localSize = entries.reduce((sum, e) => sum + 30 + e.name.length + e.size, 0);
+        const centralSize = entries.reduce((sum, e) => sum + 46 + e.name.length, 0);
+        if (localSize + centralSize + 22 > LIMIT) throw new Error('Too large for a zip without zip64');
+
+        // Version 2.0, and general-purpose bit 11: the name is UTF-8.
+        const head = (w, e) => {
+            w.u16(20); w.u16(0x0800); w.u16(0); w.u16(e.time); w.u16(e.date); w.u32(e.crc); w.u32(e.size); w.u32(e.size); w.u16(e.name.length); w.u16(0);
+        };
+
+        const out = [];
+        const offsets = [];
+        let offset = 0;
+        for (const e of entries) {
+            offsets.push(offset);
+            out.push(record(30 + e.name.length, (w) => { w.u32(0x04034B50); head(w, e); w.bytes(e.name); }), e.data);
+            offset += 30 + e.name.length + e.size;
+        }
+        out.push(record(centralSize + 22, (w) => {
+            entries.forEach((e, index) => {
+                w.u32(0x02014B50);
+                w.u16(20);
+                head(w, e);
+                w.u16(0); w.u16(0); w.u16(0); w.u32(0);
+                w.u32(offsets[index]);
+                w.bytes(e.name);
+            });
+            w.u32(0x06054B50);
+            w.u16(0); w.u16(0);
+            w.u16(entries.length); w.u16(entries.length);
+            w.u32(centralSize);
+            w.u32(offset);
+            w.u16(0);
+        }));
+        return out;
+    }
+
+    /** `files` is [{ name, data (string or bytes), at }]. Returns the archive's bytes. */
+    function build(files) {
+        const all = parts((files || []).map(entry));
+        const out = new Uint8Array(all.reduce((sum, part) => sum + part.length, 0));
+        let at = 0;
+        for (const part of all) {
+            out.set(part, at);
+            at += part.length;
+        }
+        return out;
+    }
+
+    const Zip = { build, entry, parts, crc32, dosTime };
 
     root.BB = root.BB || {};
     root.BB.Zip = Zip;

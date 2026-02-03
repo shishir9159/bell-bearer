@@ -57,16 +57,20 @@
                 if (paths.length > MAX_FILES) throw new Error(`${paths.length} files is more than a zip built in the browser should hold — clone it instead`);
 
                 let done = 0;
-                const files = await FetchPool.mapLimit(paths, PARALLEL, async (path) => {
+                const entries = await FetchPool.mapLimit(paths, PARALLEL, async (path) => {
                     const data = new Uint8Array(await FetchPool.fetchBody(adapter.folder.rawUrl(here, at, path), {
                         fetchImpl, init: { credentials: 'same-origin' }, as: 'arrayBuffer', refused: (status) => `Could not fetch ${path} (${status})`,
                     }));
                     render(`Zipping ${++done}/${paths.length}`);
-                    return { name: entryName(at.path, path), data };
+                    // Summed as it lands, and kept as a Blob from then on. The
+                    // whole folder summed at the end held the page still, and
+                    // the files, the archive and the Blob made of it were the
+                    // folder three times over in memory at once.
+                    return { ...Zip.entry({ name: entryName(at.path, path), data }), data: new Blob([data]) };
                 });
                 const name = `${at.path.split('/').pop()}.zip`;
-                save(name, Zip.build(files), 'application/zip');
-                notify(`Saved ${name} — ${files.length} file${files.length === 1 ? '' : 's'}`, 'success');
+                save(name, new Blob(Zip.parts(entries), { type: 'application/zip' }), 'application/zip');
+                notify(`Saved ${name} — ${entries.length} file${entries.length === 1 ? '' : 's'}`, 'success');
             } catch (error) {
                 notify(error && error.message ? error.message : 'Could not download this folder', 'error', 6000);
             } finally {

@@ -7984,6 +7984,14 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Array.from(read[2].data), [0, 255, 7]);
         eq(read[0].crc, Zip.crc32(new TextEncoder().encode('# Chats\n')));
     });
+    await checkAsync('a file kept as a Blob once it is summed gives the same archive, byte for byte', async () => {
+        const at = new Date(2025, 10, 13, 10, 5, 8).getTime();
+        const files = [{ name: 'lib/a.js', data: 'export const a = 1;', at }, { name: 'lib/b.bin', data: new Uint8Array([0, 255, 7]), at }];
+        const entries = files.map((file) => ({ ...Zip.entry(file), data: new Blob([file.data]) }));
+        const joined = new Uint8Array(await new Blob(Zip.parts(entries)).arrayBuffer());
+        eq(Array.from(joined), Array.from(Zip.build(files)));
+        eq(readZip(joined).map((one) => one.name), ['lib/a.js', 'lib/b.bin']);
+    });
     check('a DOS time stamp keeps the local time, to the two seconds it can', () => {
         const { time, date } = Zip.dosTime(new Date(2025, 10, 13, 10, 5, 9).getTime());
         eq([time >> 11, (time >> 5) & 63, (time & 31) * 2], [10, 5, 8]);

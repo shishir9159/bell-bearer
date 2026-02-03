@@ -597,7 +597,8 @@
         const win = { location: { pathname: path } };
         const ui = BB().FolderDownload.createFolderDownload({
             adapter: BB().GithubRead.adapter, watcher: nowWatcher(), notify: (text, type) => notes.push([text, type]),
-            getSettings: () => settings, fetchImpl: github.fetchImpl, save: (name, bytes) => saved.push({ name, files: unzip(bytes) }), win,
+            getSettings: () => settings, fetchImpl: github.fetchImpl, win,
+            save: async (name, blob) => saved.push({ name, type: blob.type, files: unzip(new Uint8Array(await blob.arrayBuffer())) }),
         });
         const button = () => document.getElementById(BB().FolderDownload.BUTTON_ID);
         return { ui, settings, notes, saved, github, win, button };
@@ -635,6 +636,7 @@
             button().click();
             await waitFor(() => saved.length, 'the zip to be saved');
             assertEqual(saved[0].name, 'lib.zip');
+            assertEqual(saved[0].type, 'application/zip');
             assertDeepEqual(saved[0].files, { 'lib/a.js': 'export const a = 1;', 'lib/deep/b.txt': 'bé' });
             assertDeepEqual(notes.pop(), ['Saved lib.zip — 2 files', 'success']);
             assert(!github.asked.some((url) => /libx/.test(url)), 'a sibling that shares the name\'s start was fetched');
