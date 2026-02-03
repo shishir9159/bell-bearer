@@ -7970,6 +7970,22 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Zip.crc32(new TextEncoder().encode('The quick brown fox jumps over the lazy dog')).toString(16), '414fa339');
         eq(Zip.crc32(new Uint8Array(0)), 0);
     });
+    check('eight bytes a step sums the same as one at a time, at every length and offset around the step', () => {
+        const table = Array.from({ length: 256 }, (_, n) => {
+            let c = n;
+            for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+            return c >>> 0;
+        });
+        const slow = (bytes) => {
+            let crc = 0xFFFFFFFF;
+            for (const byte of bytes) crc = table[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+            return (crc ^ 0xFFFFFFFF) >>> 0;
+        };
+        const data = Uint8Array.from({ length: 64 }, (_, i) => (i * 2654435761 >>> 13) & 255);
+        for (let offset = 0; offset < 8; offset++) {
+            for (let length = 0; length <= 40; length++) eq(Zip.crc32(data.subarray(offset, offset + length)), slow(data.subarray(offset, offset + length)), `${length} from ${offset}`);
+        }
+    });
     check('an archive reads back with the same names, sizes and bytes', () => {
         const files = [
             { name: 'index.md', data: '# Chats\n', at: new Date(2025, 10, 13, 10, 5, 8).getTime() },
