@@ -413,7 +413,8 @@ checkAsync('a transcript asked for by language is its own fetch, and tracks are 
         globalThis.BB.TranscriptApi = real;
     }
 });
-checkAsync('the transcript api key is read off the page it runs in, not fetched in a second copy of it', async () => {
+// Both of these swap the global fetch, so the second waits for the first.
+const keyFromPage = checkAsync('the transcript api key is read off the page it runs in, not fetched in a second copy of it', async () => {
     // Every YouTube tab fetched a whole watch page — about a megabyte — to
     // read one string its own document already carried.
     const { YouTubeTranscriptApi } = require('../src/shared/transcript.js');
@@ -440,6 +441,35 @@ checkAsync('the transcript api key is read off the page it runs in, not fetched 
         YouTubeTranscriptApi._apiKey = saved.key;
     }
 });
+keyFromPage.then(() => checkAsync('a translated transcript is labelled with what was fetched, and an untranslatable one is refused', async () => {
+    // A track YouTube cannot translate came back in its own language under
+    // the target's label, so a second subtitle line repeated the first.
+    const { YouTubeTranscriptApi, TranscriptError } = require('../src/shared/transcript.js');
+    const api = new YouTubeTranscriptApi();
+    const urls = [];
+    const saved = globalThis.fetch;
+    globalThis.fetch = async (url) => { urls.push(url); return { ok: true, text: async () => '<text start="1" dur="2">hola</text>' }; };
+    const track = (languageCode, isTranslatable, translationLanguages) => ({
+        languageCode, language: languageCode, baseUrl: `https://yt/${languageCode}?v=1`, isTranslatable, translationLanguages,
+    });
+    const rejection = (promise) => promise.then(() => null, (error) => [error.code, error.expected]);
+    try {
+        api.listTranscripts = async () => [track('en', false, [])];
+        eq(await rejection(api.fetch('v', { translateTo: 'es' })), [TranscriptError.NO_LANGUAGE, true]);
+        eq(urls, [], 'the untranslated track was fetched anyway');
+
+        api.listTranscripts = async () => [track('en', true, [{ languageCode: 'es', language: 'Spanish' }])];
+        const translated = await api.fetch('v', { translateTo: 'es' });
+        eq([translated.language, translated.languageCode, urls.pop()], ['Spanish', 'es', 'https://yt/en?v=1&tlang=es']);
+        eq(await rejection(api.fetch('v', { translateTo: 'de' })), [TranscriptError.NO_LANGUAGE, true], 'a language it does not offer');
+
+        api.listTranscripts = async () => [track('es', false, [])];
+        const own = await api.fetch('v', { languages: ['es'], translateTo: 'es' });
+        eq([own.languageCode, urls.pop()], ['es', 'https://yt/es?v=1'], 'already in the language asked for');
+    } finally {
+        globalThis.fetch = saved;
+    }
+}));
 check('checkpoints copy out as a timestamped markdown list', () => {
     globalThis.BB.YouTube = globalThis.BB.YouTube || require('../src/shared/youtube.js');
     const Markdown = require('../src/content/markdown.js');

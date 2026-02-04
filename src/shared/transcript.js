@@ -299,7 +299,9 @@
          * @param {Object} options - Options
          * @param {string} [options.language='en'] - Preferred transcript language (deprecated, use languages)
          * @param {string[]} [options.languages=['en']] - Preferred transcript languages in order of preference
-         * @param {string} [options.translateTo] - Target language code for translation
+         * @param {string} [options.translateTo] - Target language code for translation. A track
+         *   that cannot be put into it rejects with an expected NO_LANGUAGE rather than
+         *   coming back untranslated.
          * @returns {Promise<FetchedTranscript>}
          */
         async fetch(videoId, options = {}) {
@@ -326,10 +328,26 @@
                 );
             }
 
-            // Build URL with optional translation
+            // The label is what was fetched, not what was asked for. A track
+            // YouTube cannot translate used to come back in its own language
+            // labelled as the target, so a second subtitle line asked for in
+            // Spanish would repeat the first and call itself Spanish.
             let url = track.baseUrl;
-            if (translateTo && track.isTranslatable) {
+            let label = { language: track.language, languageCode: track.languageCode };
+            if (translateTo && translateTo !== track.languageCode) {
+                const targets = track.translationLanguages || [];
+                const target = targets.find((one) => one.languageCode === translateTo);
+                // An empty list is a response that left it out, not one that
+                // offers nothing; isTranslatable still speaks for the track.
+                if (!track.isTranslatable || (targets.length && !target)) {
+                    throw new TranscriptError(
+                        TranscriptError.NO_LANGUAGE,
+                        `The ${track.languageCode} transcript of ${videoId} cannot be translated to ${translateTo}`,
+                        true,
+                    );
+                }
                 url += `&tlang=${encodeURIComponent(translateTo)}`;
+                label = { language: (target && target.language) || translateTo, languageCode: translateTo };
             }
 
             // Fetch and parse transcript XML
@@ -347,8 +365,7 @@
             return new FetchedTranscript({
                 snippets,
                 videoId,
-                language: translateTo || track.language,
-                languageCode: translateTo || track.languageCode,
+                ...label,
                 isGenerated: track.isGenerated
             });
         }
