@@ -7013,9 +7013,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         for (const site of SiteIcons.list()) {
             assert(site && site.id, 'an id in ORDER with no entry in SITES');
             assert(site.name && site.description, `${site.id} is missing its plate`);
-            // A path from Simple Icons, or for a site that has no vector mark
-            // at all, its favicon.
-            assert(/^[Mm]/.test(site.path) || /^data:image\/png;base64,/.test(site.image), `${site.id} has no mark`);
+            // A path from Simple Icons, or a mark of several colours whole, as an svg.
+            assert(/^[Mm]/.test(site.path) || /^data:image\/svg\+xml,/.test(site.image), `${site.id} has no mark`);
         }
     });
     check('typeracer is one site, whichever subdomain a race is on', () => {
@@ -7048,7 +7047,9 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(SiteIcons.get('typeracer').name, 'TypeRacer');
         assert(SiteIcons.list().some((site) => site.id === 'typeracer'), 'not in ORDER');
         assert(SiteIcons.svg('typeracer').includes('<svg'), 'draws nothing');
-        assert(/<image [^>]*image-rendering:pixelated/.test(SiteIcons.svg('typeracer')), 'its 16px favicon, not smoothed to mud');
+        // It was the site's 16px favicon, sixteen squares wide at card size.
+        assert(/<image href="data:image\/svg\+xml,/.test(SiteIcons.svg('typeracer')), 'not the vector logo');
+        assert(!SiteIcons.get('typeracer').image.includes('"'), 'a double quote would end the href it is put in');
     });
     check('the typeracer workspace has a panel behind every tab', () => {
         const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
