@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const Zip = require('../src/shared/zip.js');
+const SiteScripts = require('../src/background/site-scripts.js');
 
 const ROOT = path.join(__dirname, '..');
 const PAGES = ['popup.html', 'dashboard.html', 'offscreen.html'];
@@ -51,13 +52,18 @@ function files({ firefox = false } = {}) {
 }
 
 /**
- * Every file the manifest names and every script and stylesheet the pages
- * load, by path. Globs in web_accessible_resources are left out: they name
- * a kind of file, and the folders they point into are packed whole.
+ * Every file the manifest names or the worker registers for a site, and
+ * every script and stylesheet the pages load, by path. Globs in
+ * web_accessible_resources are left out: they name a kind of file, and the
+ * folders they point into are packed whole.
  */
 function named(manifest) {
     const out = new Set();
-    for (const entry of manifest.content_scripts || []) [...(entry.js || []), ...(entry.css || [])].forEach((file) => out.add(file));
+    // A site's content scripts are registered by the worker, not listed here.
+    const registered = SiteScripts.scripts(SiteScripts.genericOf(manifest));
+    for (const entry of [...(manifest.content_scripts || []), ...registered]) {
+        [...(entry.js || []), ...(entry.css || [])].forEach((file) => out.add(file));
+    }
     const background = manifest.background || {};
     [background.service_worker, background.page, ...(background.scripts || [])].filter(Boolean).forEach((file) => out.add(file));
     Object.values(manifest.icons || {}).forEach((file) => out.add(file));

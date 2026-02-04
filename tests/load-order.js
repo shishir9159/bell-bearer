@@ -91,6 +91,12 @@ function lists() {
             out[`${name} content_scripts[${i}]${entry.world === 'MAIN' ? ' (MAIN)' : ''}`] = entry.js;
         });
     }
+    // Each site's entry is registered by the worker, built on the generic one.
+    const SiteScripts = require('../src/background/site-scripts.js');
+    const registered = SiteScripts.scripts(SiteScripts.genericOf(manifest));
+    for (const script of registered) {
+        out[`site-scripts.js ${script.id}${script.world === 'MAIN' ? ' (MAIN)' : ''}`] = script.js;
+    }
     out['manifest.firefox.json background.scripts'] = firefox.background.scripts;
     out['background.js importScripts'] = [.../importScripts\(([\s\S]*?)\);/.exec(read('background.js'))[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
 
@@ -110,12 +116,16 @@ function lists() {
     // the background page, after everything already there.
     out['firefox background, then offscreen.html'] = [...firefox.background.scripts, ...out['offscreen.html']];
 
-    // The party lands in the isolated world a manifest entry already filled.
+    // The party lands in the isolated world a content script already filled.
     const Loader = require('../src/background/party-loader.js');
     manifest.content_scripts.forEach((entry, i) => {
         if (entry.world === 'MAIN') return;
         out[`content_scripts[${i}], then PartyLoader.CONTENT_FILES`] = [...entry.js, ...Loader.CONTENT_FILES];
     });
+    for (const script of registered) {
+        if (script.world === 'MAIN') continue;
+        out[`site-scripts.js ${script.id}, then PartyLoader.CONTENT_FILES`] = [...script.js, ...Loader.CONTENT_FILES];
+    }
     for (const [site, files] of Object.entries(Loader.PAGE_FILES)) out[`PartyLoader.PAGE_FILES.${site}`] = [...files];
 
     for (const page of fs.readdirSync(__dirname).filter((name) => name.endsWith('.html'))) {

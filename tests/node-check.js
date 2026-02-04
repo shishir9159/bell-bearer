@@ -3203,6 +3203,18 @@ check('the surfaces main.js repaints cover every typeracer setting that changes 
 section('the lists that have to move together');
 
 const readRepo = (name) => require('fs').readFileSync(`${__dirname}/../${name}`, 'utf8');
+const SiteScripts = require('../src/background/site-scripts.js');
+
+/**
+ * Every content-script entry a page can get, in the manifest's own shape:
+ * the manifest's one, then each site's, which the worker registers.
+ */
+function contentScripts(name = 'manifest.json') {
+    const doc = JSON.parse(readRepo(name));
+    const registered = SiteScripts.scripts(SiteScripts.genericOf(doc)).map(({ matches, js, css, world, runAt }) =>
+        ({ matches, js, css, world, run_at: runAt }));
+    return [...doc.content_scripts, ...registered];
+}
 
 check('the two manifests load exactly the same content scripts', () => {
     // They are byte-identical today and the point is to keep them so: a
@@ -3225,7 +3237,7 @@ function patternTakes(pattern, url) {
 }
 const entryTakes = (entry, url) => entry.matches.some((one) => patternTakes(one, url)) &&
     !(entry.exclude_matches || []).some((one) => patternTakes(one, url));
-const isolatedEntries = () => JSON.parse(readRepo('manifest.json')).content_scripts.filter((entry) => entry.world !== 'MAIN');
+const isolatedEntries = () => contentScripts().filter((entry) => entry.world !== 'MAIN');
 
 check('every page gets exactly one isolated-world entry, and it is the one for its site', () => {
     // Each entry repeats the core list, so a page that matched two would run
@@ -3276,6 +3288,50 @@ check('each site entry is the core list, then its own files, then main.js', () =
     eq([...generic.exclude_matches].sort(), sites.flatMap((entry) => entry.matches).sort(),
         'the generic entry steps aside for exactly the sites that have one');
 });
+check('the manifests list only the generic entry, and the worker registers every site\'s', () => {
+    // A manifest entry cannot be switched off, so a site's is not one.
+    for (const name of ['manifest.json', 'manifest.firefox.json']) {
+        eq(JSON.parse(readRepo(name)).content_scripts.map((entry) => entry.matches), [['<all_urls>']], name);
+    }
+    const worker = [.../importScripts\(([\s\S]*?)\);/.exec(readRepo('background.js'))[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    assert(worker.indexOf('src/background/site-scripts.js') > worker.indexOf('src/background/router.js'), 'it registers on Router.started');
+    const ids = SiteScripts.scripts(SiteScripts.genericOf(JSON.parse(readRepo('manifest.json')))).map((one) => one.id);
+    eq(ids.length, new Set(ids).size, 'two scripts under one id');
+    assert(ids.every((id) => id.startsWith('bb-')), 'an id the worker would not know as its own');
+});
+checkAsync('registering brings the browser in line in as few calls as it can, one script at a time', async () => {
+    const calls = [];
+    const registry = new Map([['someone-else', { id: 'someone-else', matches: ['*://a/*'], js: ['a.js'] }],
+        ['bb-gone', { id: 'bb-gone', matches: ['*://b/*'], js: ['b.js'] }]]);
+    const scripting = {
+        // As Chrome answers: defaults filled in, and the patterns sorted.
+        getRegisteredContentScripts: async () => [...registry.values()].map((one) => ({
+            runAt: 'document_idle', world: 'ISOLATED', ...one, matches: [...one.matches].sort(),
+        })),
+        unregisterContentScripts: async ({ ids }) => { calls.push(['unregister', ...ids]); ids.forEach((id) => registry.delete(id)); },
+        updateContentScripts: async (list) => { calls.push(['update', ...list.map((one) => one.id)]); list.forEach((one) => registry.set(one.id, one)); },
+        registerContentScripts: async (list) => {
+            calls.push(['register', ...list.map((one) => one.id)]);
+            if (list.some((one) => one.id === 'bb-refused')) throw new Error('no MAIN world here');
+            list.forEach((one) => registry.set(one.id, one));
+        },
+    };
+    const want = [
+        { id: 'bb-one', matches: ['*://one/*'], js: ['one.js'] },
+        { id: 'bb-refused', matches: ['*://two/*'], js: ['two.js'], world: 'MAIN' },
+        { id: 'bb-three', matches: ['*://three/*', '*://drei/*'], js: ['three.js'], css: ['three.css'] },
+    ];
+    const refused = await SiteScripts.apply(scripting, want);
+    eq(calls, [['unregister', 'bb-gone'], ['register', 'bb-one'], ['register', 'bb-refused'], ['register', 'bb-three']]);
+    eq(refused.map(({ id, error }) => [id, error.message]), [['bb-refused', 'no MAIN world here']]);
+    assert(registry.has('someone-else') && registry.has('bb-three'), 'one refusal took the next script down, or a script not ours went');
+
+    calls.length = 0;
+    await SiteScripts.apply(scripting, want.filter((one) => one.id !== 'bb-refused'));
+    eq(calls, [], 'what was registered already, defaults and all, was registered again');
+    await SiteScripts.apply(scripting, [{ ...want[0], matches: ['*://one/*', '*://uno/*'] }, want[2]]);
+    eq(calls, [['update', 'bb-one']]);
+});
 check('the page every other entry is built on carries no site\'s own module', () => {
     const [generic] = isolatedEntries();
     for (const file of generic.js) {
@@ -3286,7 +3342,7 @@ check('the skins\' faces are not a content-script stylesheet, and the injected U
     // Listed beside content.css, skin-fonts.css's url('fonts/…') resolved
     // against the page: https://x.com/fonts/Cardo-Regular.woff2, a network
     // error, and the system stack on every skinned surface.
-    for (const entry of JSON.parse(readRepo('manifest.json')).content_scripts) {
+    for (const entry of contentScripts()) {
         assert(!(entry.css || []).includes('skin-fonts.css'), (entry.matches || [])[0]);
     }
     const declared = [...readRepo('skin-fonts.css').matchAll(/@font-face\s*\{([^}]*)\}/g)].map(([, body]) => ({
@@ -3309,7 +3365,7 @@ check('typeracer needs no page-world script, and has not grown one', () => {
     // chess.com and LeetCode each need one because the board object and
     // window.fetch only exist in the page's world. Keystrokes are DOM events,
     // which a capture listener in the isolated world sees in full.
-    const worlds = JSON.parse(readRepo('manifest.json')).content_scripts
+    const worlds = contentScripts()
         .filter((entry) => entry.world === 'MAIN');
     for (const entry of worlds) {
         assert(!entry.matches.some((match) => /typeracer/.test(match)),
@@ -3317,7 +3373,7 @@ check('typeracer needs no page-world script, and has not grown one', () => {
     }
 });
 check('every typeracer source the manifest loads is in the browser suite too', () => {
-    const manifest = JSON.parse(readRepo('manifest.json')).content_scripts.flatMap((entry) => entry.js);
+    const manifest = contentScripts().flatMap((entry) => entry.js);
     const suite = readRepo('tests/index.html');
     for (const src of manifest.filter((one) => /typeracer|sfx/.test(one))) {
         assert(suite.includes(`../${src}`), `${src} is shipped but never loaded by the suite`);
@@ -6988,7 +7044,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const main = readRepo('src/content/main.js');
         assert(/CHAT_ADAPTERS = \{ chatgpt: /.test(main), 'chatgpt has no adapter in main.js');
         assert(/claude: \(\) => BB\.ClaudeRead\.adapter/.test(main), 'claude has no adapter in main.js');
-        const js = JSON.parse(readRepo('manifest.json')).content_scripts.find((entry) => entry.js.includes('src/content/claude-read.js')).js;
+        const js = contentScripts().find((entry) => entry.js.includes('src/content/claude-read.js')).js;
         assert(js.indexOf('src/content/claude-read.js') > -1 && js.indexOf('src/content/claude-read.js') < js.indexOf('src/content/main.js'),
             'main.js would get undefined for ClaudeRead at load');
         assert(/return youtubeUi \|\| twitterUi \|\| leetUi \|\| chatUi;/.test(main), 'Shift+P would not reach the chat panel');
@@ -7271,7 +7327,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     check('each forge that is detected has its entry and its adapter, and its switch reaches an open page', () => {
         const Site = require('../src/content/site.js');
         const main = readRepo('src/content/main.js');
-        const entry = JSON.parse(readRepo('manifest.json')).content_scripts.find((one) => (one.js || []).includes('src/content/ci-watch.js'));
+        const entry = contentScripts().find((one) => (one.js || []).includes('src/content/ci-watch.js'));
         const detected = ForgeSites.list().filter((forge) => Site.detectSite(forge.hosts[0]) === forge.id);
         assert(detected.length, 'no forge is detected at all');
         for (const forge of detected) {
@@ -8430,7 +8486,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
     check('the youtube entry loads the merge, the core and the adapter before main.js', () => {
         for (const name of ['manifest.json', 'manifest.firefox.json']) {
-            const entry = JSON.parse(readRepo(name)).content_scripts.find((one) => one.js.includes('src/content/youtube-ui.js'));
+            const entry = contentScripts(name).find((one) => one.js.includes('src/content/youtube-ui.js'));
             const at = (file) => entry.js.indexOf(file);
             assert(at('src/shared/fetch-pool.js') > -1 && at('src/shared/fetch-pool.js') < at('src/content/video-download.js'), name);
             assert(at('src/shared/mp4-mux.js') > -1 && at('src/shared/mp4-mux.js') < at('src/content/video-download.js'), name);
@@ -8582,7 +8638,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         for (const name of ['manifest.json', 'manifest.firefox.json']) assert(JSON.parse(readRepo(name)).permissions.includes('downloads'), name);
         const main = readRepo('src/content/main.js');
         for (const name of ['manifest.json', 'manifest.firefox.json']) {
-            for (const entry of JSON.parse(readRepo(name)).content_scripts.filter((one) => one.js.includes('src/content/video-download.js'))) {
+            for (const entry of contentScripts(name).filter((one) => one.js.includes('src/content/video-download.js'))) {
                 assert(entry.js.includes('src/content/file-saver.js'), `${name}: a site that downloads videos has no saver`);
             }
         }
@@ -9317,7 +9373,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(heard, []);
     });
     check('the bridge runs in the page’s world on claude.ai alone, before the page takes its fetch', () => {
-        const entry = JSON.parse(readRepo('manifest.json')).content_scripts.find((one) => one.js.includes('src/content/claude-page.js'));
+        const entry = contentScripts().find((one) => one.js.includes('src/content/claude-page.js'));
         eq([entry.world, entry.run_at, entry.matches], ['MAIN', 'document_start', ['*://claude.ai/*']]);
         const source = readRepo('src/content/claude-page.js');
         assert(!/chrome\./.test(source.replace(/\/\*[\s\S]*?\*\//g, '')), 'a MAIN-world script cannot use chrome.*');
@@ -9396,7 +9452,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     check('no manifest loads party code into a page', () => {
         for (const name of ['manifest.json', 'manifest.firefox.json']) {
             const manifest = JSON.parse(fs.readFileSync(`${__dirname}/../${name}`, 'utf8'));
-            const listed = manifest.content_scripts.flatMap((one) => one.js || []);
+            const listed = [...manifest.content_scripts, ...SiteScripts.scripts(SiteScripts.genericOf(manifest))].flatMap((one) => one.js || []);
             eq(listed.filter((file) => /party/.test(file)), [], name);
         }
     });
