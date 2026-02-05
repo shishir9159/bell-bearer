@@ -3332,6 +3332,51 @@ checkAsync('registering brings the browser in line in as few calls as it can, on
     await SiteScripts.apply(scripting, [{ ...want[0], matches: ['*://one/*', '*://uno/*'] }, want[2]]);
     eq(calls, [['update', 'bb-one']]);
 });
+check('a site switched off registers none of its own code, and its pages get what any other page does', () => {
+    eq(globalThis.BB.Settings.DEFAULTS.sitesOff, []);
+    const [generic] = JSON.parse(readRepo('manifest.json')).content_scripts;
+    const off = SiteScripts.scripts(generic, ['youtube', 'chess', 'claude']);
+    const byId = Object.fromEntries(off.map((one) => [one.id, one]));
+    eq(['bb-youtube', 'bb-chess-page', 'bb-claude-page'].filter((id) => id in byId), [], 'still registered');
+    eq(byId['bb-chess'].matches, ['*://*.lichess.org/*'], 'lichess went with chess.com');
+    eq(byId['bb-chat'].matches, ['*://*.chatgpt.com/*', '*://*.chat.openai.com/*']);
+    eq(byId['bb-plain'].js, generic.js);
+    eq(byId['bb-plain'].css, generic.css);
+    assert(!('bb-plain' in Object.fromEntries(SiteScripts.scripts(generic).map((one) => [one.id, 1]))), 'a plain entry with every site on');
+
+    // Still exactly one isolated entry for every page, and the plain one for a site that is off.
+    const entries = [generic, ...off.filter((one) => one.world !== 'MAIN')];
+    for (const [url, js] of [
+        ['https://www.youtube.com/watch?v=x', generic.js], ['https://youtu.be/x', generic.js],
+        ['https://www.chess.com/play', generic.js], ['https://claude.ai/chat/1', generic.js],
+        ['https://lichess.org/abc', byId['bb-chess'].js], ['https://chatgpt.com/c/1', byId['bb-chat'].js],
+        ['https://example.com/', generic.js],
+    ]) {
+        const taking = entries.filter((entry) => entryTakes(entry, url));
+        eq(taking.length, 1, url);
+        eq(taking[0].js, js, url);
+    }
+    // A switch named something that is not a site changes nothing.
+    eq(SiteScripts.scripts(generic, ['nope']), SiteScripts.scripts(generic));
+});
+check('main.js knows a site by a module only that site\'s entry loads', () => {
+    // Off, a site gets the core list and main.js alone; the host still says
+    // youtube, so main.js has to tell from what loaded.
+    const { provides } = require('./load-order.js');
+    const main = readRepo('src/content/main.js');
+    const own = Function(`return ${/const OWN = (\{[\s\S]*?\});/.exec(main)[1]}`)();
+    const [generic] = JSON.parse(readRepo('manifest.json')).content_scripts;
+    const core = new Set(generic.js.flatMap((file) => [...provides(readRepo(file))]));
+    for (const entry of SiteScripts.ENTRIES) {
+        const theirs = new Set(entry.js.flatMap((file) => [...provides(readRepo(file))]));
+        for (const site of Object.keys(entry.sites)) {
+            assert(own[site], `${site} has no module in main.js's OWN`);
+            assert(theirs.has(own[site]) && !core.has(own[site]), `${own[site]} does not tell ${site}'s entry from the plain one`);
+        }
+    }
+    assert(/const site = !OWN\[host\] \|\| BB\[OWN\[host\]\] \? host : 'other';/.test(main), 'main.js goes by the host alone');
+    assert(/sitesOff\.includes\(this\.site\)\) this\.site = 'other'/.test(readRepo('popup.js')), 'the popup shows a switched-off site\'s tools');
+});
 check('the page every other entry is built on carries no site\'s own module', () => {
     const [generic] = isolatedEntries();
     for (const file of generic.js) {

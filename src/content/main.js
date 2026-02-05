@@ -29,13 +29,27 @@
     root.__bellBearerInstalled = true;
 
     // What every page loads. A site's own modules are loaded on that site
-    // alone — the manifest has one entry per site, each the core list plus
-    // its own files and then this one — so they are taken off BB inside that
-    // site's block below, and are simply not there anywhere else.
+    // alone — the worker registers one entry per site, each the core list
+    // plus its own files and then this one — so they are taken off BB inside
+    // that site's block below, and are simply not there anywhere else.
     const { Settings, Speed, Site, Notify, Player, Shortcuts, Markdown, PageInfo, DomWatch, Theme,
         CookieSites, CookieBanner, Keybindings, SkimContent, LinkHints, TimeLimitContent } = BB;
 
-    const site = Site.detectSite();
+    /**
+     * One module only each site's own entry loads. A site switched off in
+     * Settings gets the core list and this file alone (see
+     * src/background/site-scripts.js), so the host no longer says by itself
+     * whether the site's code is here — and a block run on the host alone
+     * would reach for a module that never came. Without its own module, a
+     * site is any other site.
+     */
+    const OWN = {
+        youtube: 'YouTubeUi', twitter: 'TwitterUi', reddit: 'RosterContent', chess: 'ChessContent', lichess: 'ChessContent',
+        leetcode: 'LeetUi', typeracer: 'TyperUi', chatgpt: 'ChatUi', claude: 'ChatUi',
+        github: 'CiWatchContent', gitlab: 'CiWatchContent', forgejo: 'CiWatchContent', vimeo: 'VimeoDownload',
+    };
+    const host = Site.detectSite();
+    const site = !OWN[host] || BB[OWN[host]] ? host : 'other';
     const getVideoElement = Site.createPlayerLocator(site);
     const notify = (message, type, durationMs) => Notify.show(message, type, durationMs);
 

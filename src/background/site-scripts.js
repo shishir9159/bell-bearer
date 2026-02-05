@@ -6,11 +6,12 @@
  * core list, then main.js, stepping aside (exclude_matches) for each site
  * below. A site's entry is that same core list, its own files, then main.js
  * — and since a manifest entry cannot be switched off, a site's lives here,
- * where the worker can leave it out.
+ * where the worker can leave it out: a site in the `sitesOff` setting loads
+ * none of its own files, not even to find out that it should do nothing.
  *
  * Registered scripts persist across browser restarts in Chrome and Firefox
  * both, so this only has to run when the extension is installed or updated,
- * or on a browser start in case a registration was lost.
+ * when a site is switched, or on a browser start in case one was lost.
  */
 (function (root) {
     'use strict';
@@ -194,21 +195,35 @@
 
     /**
      * Everything to register, in scripting.registerContentScripts' shape,
-     * built on `generic`, the manifest's own entry.
+     * built on `generic`, the manifest's own entry, for every site but those
+     * in `off`. An entry serving two sites keeps the one still on.
      */
-    function scripts(generic) {
+    function scripts(generic, off = []) {
+        const on = (site) => !off.includes(site);
         const core = generic.js.filter((file) => file !== MAIN);
-        const out = ENTRIES.map((entry) => ({
-            id: PREFIX + entry.id,
-            matches: Object.values(entry.sites).flat(),
-            js: [...core, ...entry.js, MAIN],
-            css: [...(generic.css || []), ...(entry.css || [])],
-        }));
-        for (const page of PAGE) {
+        const out = [];
+        const plain = [];
+        for (const entry of ENTRIES) {
+            const sites = Object.entries(entry.sites);
+            sites.filter(([site]) => !on(site)).forEach(([, matches]) => plain.push(...matches));
+            const matches = sites.filter(([site]) => on(site)).flatMap(([, patterns]) => patterns);
+            if (!matches.length) continue;
+            out.push({
+                id: PREFIX + entry.id,
+                matches,
+                js: [...core, ...entry.js, MAIN],
+                css: [...(generic.css || []), ...(entry.css || [])],
+            });
+        }
+        for (const page of PAGE.filter((one) => on(one.site))) {
             const script = { id: PREFIX + page.id, matches: page.matches, js: page.js, world: 'MAIN' };
             if (page.runAt) script.runAt = page.runAt;
             out.push(script);
         }
+        // A site switched off is any other page, and gets what every other
+        // page does. The generic entry steps aside for its hosts in the
+        // manifest, where that cannot be undone, so it is registered here.
+        if (plain.length) out.push({ id: `${PREFIX}plain`, matches: plain, js: [...generic.js], css: [...(generic.css || [])] });
         return out;
     }
 
@@ -247,19 +262,27 @@
     }
 
     function install(api) {
-        const { Router } = root.BB || {};
-        if (!Router || !api || !api.scripting || !api.scripting.getRegisteredContentScripts) return;
+        const { Router, Settings } = root.BB || {};
+        if (!Router || !Settings || !api || !api.scripting || !api.scripting.getRegisteredContentScripts) return;
+        const wanted = async () => {
+            const { sitesOff } = await Settings.get(['sitesOff']);
+            return scripts(genericOf(api.runtime.getManifest()), Array.isArray(sitesOff) ? sitesOff : []);
+        };
         // One at a time: two overlapping runs would both see a script
         // missing, and the second registration of it would fail.
         let queue = Promise.resolve();
         const sync = () => {
             queue = queue
-                .then(() => apply(api.scripting, scripts(genericOf(api.runtime.getManifest()))))
+                .then(wanted)
+                .then((want) => apply(api.scripting, want))
                 .then((refused) => refused.forEach(({ id, error }) => console.error(`Bell Bearer: ${id} could not be registered`, error)))
                 .catch((error) => console.error('Bell Bearer: the site scripts were not registered', error));
             return queue;
         };
         Router.started(sync);
+        // A tab already open keeps what it loaded with; the switch reaches
+        // a site's pages as they are next loaded.
+        Settings.watch(['sitesOff'], sync);
     }
 
     install(root.chrome);

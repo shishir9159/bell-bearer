@@ -41,6 +41,12 @@
         // site this does not name yet is shown after the ones it does.
         siteOrder: [],
 
+        // The sites switched off from their cards in Settings, by SiteIcons
+        // id. A site off has no card on the dashboard and none of its own
+        // code on its pages — the worker does not register it at all (see
+        // src/background/site-scripts.js) — so it is any other site there.
+        sitesOff: [],
+
         // The pouch sheet's "All" rail row covers the channels in the pouch.
         // Turning this on widens it to every channel the account subscribes
         // to; it is remembered so the sheet reopens the way it was left.

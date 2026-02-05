@@ -158,6 +158,10 @@
                 // alone: just "Dashboard", no playback controls.
                 this.isWebPage = !!url && (url.protocol === 'http:' || url.protocol === 'https:');
                 this.site = url && Site ? Site.detectSite(url.hostname) : 'other';
+                // A site switched off in Settings has none of its tools on
+                // the page, and none here either.
+                const { sitesOff } = await Settings.get(['sitesOff']);
+                if (sitesOff.includes(this.site)) this.site = 'other';
 
                 // Read straight off the tab rather than asked of the content
                 // script. The popup must be able to say "add this one" even on
