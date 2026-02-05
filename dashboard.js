@@ -291,15 +291,51 @@
          * in both the moment it is added to that one file.
          */
         async renderSiteGrids() {
-            const { siteOrder } = await Settings.get(['siteOrder']);
+            const { siteOrder, sitesOff } = await Settings.get(['siteOrder', 'sitesOff']);
             // A drag in progress owns its grid; the order it lands on comes
             // back through the watch below and redraws both then.
             if (window.BB.SiteSort && window.BB.SiteSort.dragging()) return;
-            const html = SiteIcons.list(siteOrder).map(siteCardHtml).join('');
+            const sites = SiteIcons.list(siteOrder);
+            const off = new Set(sitesOff);
+            this.siteIds = sites.map((site) => site.id);
+
+            // A site switched off has no card here; Settings keeps it, to
+            // be switched back on.
             const dashboardGrid = document.getElementById('sitesGrid');
+            if (dashboardGrid) {
+                const shown = sites.filter((site) => !off.has(site.id));
+                dashboardGrid.innerHTML = shown.length ? shown.map(siteCardHtml).join('') : `
+                    <div class="empty-state sites-empty">
+                        <div class="empty-icon">${EMPTY_ICON}</div>
+                        <h3 class="bb-proper">Every site is switched off in Settings</h3>
+                    </div>`;
+            }
             const settingsGrid = document.getElementById('settingsSitesGrid');
-            if (dashboardGrid) dashboardGrid.innerHTML = html;
-            if (settingsGrid) settingsGrid.innerHTML = html;
+            if (settingsGrid) {
+                // Drawn afresh on every switch, which would take the focus
+                // off the switch someone is working from the keyboard.
+                const focused = document.activeElement && document.activeElement.dataset
+                    ? document.activeElement.dataset.siteSwitch : null;
+                settingsGrid.innerHTML = sites.map((site) => siteSlotHtml(site, !off.has(site.id))).join('');
+                const again = focused && settingsGrid.querySelector(`[data-site-switch="${CSS.escape(focused)}"]`);
+                if (again) again.focus();
+            }
+        }
+
+        /**
+         * Read off the switches rather than storage, so two flipped in quick
+         * succession cannot each save a list missing the other.
+         */
+        switchSite(siteId, on) {
+            const site = SiteIcons.get(siteId);
+            const grid = document.getElementById('settingsSitesGrid');
+            const sitesOff = Array.from(grid.querySelectorAll('[data-site-switch]'))
+                .filter((input) => !input.checked)
+                .map((input) => input.dataset.siteSwitch);
+            Settings.set({ sitesOff });
+            // Its scripts are registered for pages yet to load; a tab
+            // already open keeps what it loaded with.
+            if (site) Ui.toast(`${site.name} ${on ? 'on' : 'off'} — tabs already open change when reloaded`, 'info');
         }
 
         /**
@@ -311,12 +347,16 @@
         wireSiteSorting() {
             const SiteSort = window.BB.SiteSort;
             if (!SiteSort) return;
-            const save = (ids) => Settings.set({ siteOrder: ids });
-            for (const id of ['sitesGrid', 'settingsSitesGrid']) {
-                const grid = document.getElementById(id);
-                if (grid) SiteSort.attach(grid, { onOrder: save });
-            }
-            Settings.watch(['siteOrder'], () => this.renderSiteGrids());
+            // The dashboard leaves out the sites switched off, and they keep
+            // their places among the ones it shows.
+            const save = (ids) => Settings.set({ siteOrder: SiteSort.within(this.siteIds || ids, ids) });
+            const dashboardGrid = document.getElementById('sitesGrid');
+            if (dashboardGrid) SiteSort.attach(dashboardGrid, { onOrder: save });
+            // Settings' cards each stand in a slot beside their switch, and
+            // the slot is what moves.
+            const settingsGrid = document.getElementById('settingsSitesGrid');
+            if (settingsGrid) SiteSort.attach(settingsGrid, { selector: '.site-slot', onOrder: save });
+            Settings.watch(['siteOrder', 'sitesOff'], () => this.renderSiteGrids());
         }
 
         /**
@@ -355,6 +395,10 @@
                 settingsGrid.addEventListener('click', (event) => {
                     const card = event.target.closest('.site-card');
                     if (card) this.openSettingsSite(card.dataset.site);
+                });
+                settingsGrid.addEventListener('change', (event) => {
+                    const input = event.target.closest('[data-site-switch]');
+                    if (input) this.switchSite(input.dataset.siteSwitch, input.checked);
                 });
             }
             on('siteSettingsBackBtn', 'click', () => this.closeSettingsSite());
@@ -892,6 +936,23 @@
                     aria-label="${Dom.escapeAttr(site.name)}" title="${Dom.escapeAttr(site.name)}">
                 <span class="site-card-icon">${SiteIcons.svg(site.id, { size: 84 })}</span>
             </button>`;
+    }
+
+    /**
+     * Settings' card, and its switch at the corner. The switch stands beside
+     * the card rather than in it: a card is a <button>, and a control inside
+     * a button is one nobody can reach.
+     */
+    function siteSlotHtml(site, on) {
+        const name = Dom.escapeAttr(site.name);
+        return `
+            <div class="site-slot${on ? '' : ' is-off'}" data-site="${Dom.escapeAttr(site.id)}">
+                ${siteCardHtml(site)}
+                <label class="toggle-switch toggle-sm site-switch" title="${on ? 'Switch off' : 'Switch on'} ${name}">
+                    <input type="checkbox" role="switch" data-site-switch="${Dom.escapeAttr(site.id)}" aria-label="${name}"${on ? ' checked' : ''}>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>`;
     }
 
     function renderBookmarkRow(bookmark) {

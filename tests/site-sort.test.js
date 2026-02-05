@@ -193,5 +193,50 @@
                 assert(document.activeElement === grid.children[2], 'focus did not travel with the card');
             } finally { await clear(detach); }
         });
+
+        /** Settings' grid: each card in a slot beside its switch, and the slot dragged. */
+        function stageSlots(ids = ['youtube', 'chess', 'lichess', 'twitter']) {
+            const grid = stageGrid(ids);
+            grid.innerHTML = ids.map((id) => `
+                <div class="site-slot" data-site="${id}" style="position:relative;display:flex">
+                    <button class="site-card" type="button" data-site="${id}" style="height:80px;flex:1">${id}</button>
+                    <label class="site-switch" style="position:absolute;top:4px;right:4px"><input type="checkbox" data-site-switch="${id}" checked></label>
+                </div>`).join('');
+            return grid;
+        }
+
+        test('in slots, Alt and an arrow keep the focus on the card that moved', async () => {
+            const grid = stageSlots();
+            const told = [];
+            const detach = SiteSort().attach(grid, { selector: '.site-slot', onOrder: (ids) => told.push(ids) });
+            try {
+                const card = grid.children[1].querySelector('.site-card');
+                card.focus();
+                card.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true }));
+                assertDeepEqual(order(grid), ['youtube', 'lichess', 'chess', 'twitter']);
+                assertDeepEqual(told, [['youtube', 'lichess', 'chess', 'twitter']]);
+                // The slot is not focusable, so focusing it dropped the focus to the page.
+                assert(document.activeElement === card, 'focus did not stay on the card');
+            } finally { await clear(detach); }
+        });
+
+        test('in slots, a press on the switch is a click and the slot moves whole', async () => {
+            const grid = stageSlots();
+            const told = [];
+            const detach = SiteSort().attach(grid, { selector: '.site-slot', onOrder: (ids) => told.push(ids) });
+            try {
+                const input = grid.querySelector('[data-site-switch="chess"]');
+                const [x, y] = middleOf(input);
+                at(input, 'pointerdown', x, y);
+                at(window, 'pointerup', x, y);
+                input.click();
+                assertEqual(input.checked, false, 'the switch did not take the click');
+                assertDeepEqual(told, []);
+
+                await drag(grid.children[0].querySelector('.site-card'), ...middleOf(grid.children[2]));
+                assertDeepEqual(order(grid), ['chess', 'lichess', 'youtube', 'twitter']);
+                assert(grid.children[2].querySelector('[data-site-switch="youtube"]'), 'the switch was left behind');
+            } finally { await clear(detach); }
+        });
     });
 })();

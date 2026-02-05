@@ -7152,6 +7152,18 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/<image href="data:image\/svg\+xml,/.test(SiteIcons.svg('typeracer')), 'not the vector logo');
         assert(!SiteIcons.get('typeracer').image.includes('"'), 'a double quote would end the href it is put in');
     });
+    check('a site switched off leaves the dashboard and keeps its place in the order', () => {
+        const SiteSort = require('../src/page/site-sort.js');
+        eq(SiteSort.within(['a', 'b', 'c', 'd'], ['d', 'a', 'c']), ['d', 'b', 'a', 'c'], 'b was hidden, and moved');
+        eq(SiteSort.within(['a', 'b', 'c'], ['c', 'b', 'a']), ['c', 'b', 'a']);
+        eq(SiteSort.within(['a', 'b'], []), ['a', 'b']);
+        const dashboard = readRepo('dashboard.js');
+        assert(/SiteSort\.within\(this\.siteIds \|\| ids, ids\)/.test(dashboard), 'a drag on the dashboard sends the hidden sites to the end');
+        assert(/attach\(settingsGrid, \{ selector: '\.site-slot'/.test(dashboard), 'settings drags a card and leaves its switch behind');
+        assert(/Settings\.watch\(\['siteOrder', 'sitesOff'\]/.test(dashboard), 'a switch does not redraw the grids');
+        assert(/shown = sites\.filter\(\(site\) => !off\.has\(site\.id\)\)/.test(dashboard), 'the dashboard draws a site switched off');
+        assert(/role="switch" data-site-switch=/.test(dashboard));
+    });
     check('the typeracer workspace has a panel behind every tab', () => {
         const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
         const dashboard = require('fs').readFileSync(`${__dirname}/../dashboard.js`, 'utf8');

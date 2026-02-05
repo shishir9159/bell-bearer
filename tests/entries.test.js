@@ -1,11 +1,14 @@
 /**
- * Each of the manifest's isolated-world entries boots on its own.
+ * Each isolated-world entry boots on its own: the manifest's, and each one
+ * the worker registers for a site (src/background/site-scripts.js).
  *
  * A page gets exactly one entry: the core list, that site's own files, then
  * main.js. So main.js runs with the core and one site's modules and nothing
  * else, and a site block that reached for another site's module — or a core
  * module that leaned on a site's — throws at load on that site alone, where
  * none of the other specs would ever see it: they load everything at once.
+ * A site switched off gets the core list alone while its host still names
+ * it, the case most likely to reach for a module that is not there.
  *
  * This loads each entry's files, and only those, into a frame of their own,
  * tells Site which site it is on, and lets main.js boot there. Over file://
@@ -31,11 +34,19 @@
         typeracer: 'src/content/typeracer-ui.js', chatgpt: 'src/content/chat-ui.js', claude: 'src/content/chat-ui.js',
     };
 
+    /** Every isolated-world entry, with the sites in `off` switched off. */
+    async function entries(off = []) {
+        const doc = await readManifest();
+        const { SiteScripts } = window.BB;
+        return [...doc.content_scripts, ...SiteScripts.scripts(SiteScripts.genericOf(doc), off)]
+            .filter((entry) => entry.world !== 'MAIN');
+    }
+
     /** The entry a page of `site` gets: the one carrying its mark, or the generic one. */
     async function entryFor(site) {
-        const entries = (await readManifest()).content_scripts.filter((entry) => entry.world !== 'MAIN');
+        const all = await entries();
         const mark = MARKS[site];
-        return mark ? entries.find((entry) => entry.js.includes(mark)) : entries.find((entry) => entry.matches.includes('<all_urls>'));
+        return mark ? all.find((entry) => entry.js.includes(mark)) : all.find((entry) => entry.matches.includes('<all_urls>'));
     }
 
     /** Load `entry` into a frame as `site`; resolves to { booted, errors }. */
@@ -71,12 +82,25 @@
         });
     }
 
-    suite('manifest entries — each boots on its own', () => {
+    suite('content script entries — each boots on its own', () => {
         for (const site of ['other', 'netflix', ...Object.keys(MARKS)]) {
             test(`a ${site} page`, async () => {
                 if (location.protocol === 'file:') return; // reading ../manifest.json needs http
                 const entry = await entryFor(site);
                 assert(entry, `no entry loads ${MARKS[site]}`);
+                const { booted, errors } = await boot(entry, site);
+                assertDeepEqual(errors, [], 'errors while it loaded');
+                assert(booted, 'main.js did not finish');
+            });
+        }
+    });
+
+    suite('a site switched off — boots as any other page', () => {
+        for (const site of Object.keys(MARKS)) {
+            test(`a ${site} page, switched off`, async () => {
+                if (location.protocol === 'file:') return; // reading ../manifest.json needs http
+                const entry = (await entries([site])).find((one) => one.id === 'bb-plain');
+                assert(entry && !entry.js.includes(MARKS[site]), 'its own files are still registered');
                 const { booted, errors } = await boot(entry, site);
                 assertDeepEqual(errors, [], 'errors while it loaded');
                 assert(booted, 'main.js did not finish');

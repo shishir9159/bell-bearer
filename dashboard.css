@@ -212,7 +212,8 @@ header h1 {
 /* ---- Dragging a card into place (src/page/site-sort.js). */
 
 /* The slot the lifted card will land in: its outline, left behind. */
-.site-card.is-drag-origin {
+.site-card.is-drag-origin,
+.site-slot.is-drag-origin > .site-card {
     background: transparent;
     border-style: dashed;
     border-color: var(--border);
@@ -220,7 +221,9 @@ header h1 {
     transform: none;
 }
 
-.site-card.is-drag-origin > * { opacity: 0; }
+.site-card.is-drag-origin > *,
+.site-slot.is-drag-origin > .site-card > *,
+.site-slot.is-drag-origin > .site-switch { opacity: 0; }
 
 /* The copy that follows the pointer. The outer box only moves; the card
    inside it lifts and tilts, so the two never fight over one transform. */
@@ -258,6 +261,42 @@ html.is-dragging-site .site-card:hover { transform: none; box-shadow: var(--card
     .site-card-ghost .site-card-lifted,
     .site-card-ghost .site-card-lifted.is-up { transition: none; transform: none; }
 }
+
+/* ---- Switching a site off, from its card in Settings. */
+
+/* The card and its switch, side by side in one slot: the switch cannot go
+   inside a card, which is a <button>. Settings drags the slot. */
+.site-slot {
+    position: relative;
+    display: flex;
+}
+
+.site-slot > .site-card { flex: 1; min-width: 0; }
+
+/* Through the slot: .toggle-switch, further down, is position: relative at
+   the same weight, and won — the switch sat in the row and squeezed the card. */
+.site-slot > .site-switch {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    transition: transform .12s ease;
+}
+
+/* The switch rides the card's hover lift, so the two move as one piece. */
+.site-slot:has(> .site-card:hover) > .site-switch { transform: translateY(-2px); }
+html.is-dragging-site .site-slot > .site-switch { transform: none; }
+
+/* Off, the card stays to be switched back on and to reach its settings,
+   but its mark is greyed: the site is not one Bell Bearer works on now. */
+.site-slot.is-off .site-card-icon { filter: grayscale(1); opacity: .4; }
+
+/* A lifted slot carries the card's rounding and lift: the shadow is the
+   slot's, the accent border the card's. */
+.site-card-ghost .site-slot.site-card-lifted { border-radius: var(--card-radius); }
+.site-card-ghost .site-slot.site-card-lifted.is-up > .site-card { border-color: var(--accent); }
+
+/* Every site switched off: the dashboard says where they went. */
+.sites-empty { grid-column: 1 / -1; }
 
 .site-card-icon {
     display: flex;

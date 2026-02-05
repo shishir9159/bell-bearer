@@ -66,6 +66,18 @@
     }
 
     /**
+     * `order` with the ids of `shown` put in the order `shown` has them, and
+     * every other id left in its place. A grid that hides some sites can only
+     * say where the ones it shows go; saving that alone sent every hidden
+     * site to the end of the order.
+     */
+    function within(order, shown) {
+        const showing = new Set(shown);
+        let next = 0;
+        return order.map((id) => (showing.has(id) ? shown[next++] : id));
+    }
+
+    /**
      * Make `grid`'s cards draggable. `onOrder(ids)` is told the new order
      * once a drag lands somewhere different from where it began. Returns a
      * function that takes it all off again.
@@ -323,7 +335,9 @@
             const next = moved(ids, ids.indexOf(card.dataset.site), step);
             if (next.join() === ids.join()) return;
             glide(() => next.forEach((id) => grid.appendChild(grid.querySelector(`${selector}[data-site="${CSS.escape(id)}"]`))));
-            card.focus();
+            // What had focus, not the card: where the card is a slot around
+            // a button, the slot is not focusable and the move would drop it.
+            event.target.focus();
             onOrder(next);
         }
 
@@ -351,7 +365,7 @@
     /** Whether a drag is under way anywhere on this page. */
     const dragging = () => document.documentElement.classList.contains('is-dragging-site');
 
-    const SiteSort = { attach, moved, dragging, DRAG_PX };
+    const SiteSort = { attach, moved, within, dragging, DRAG_PX };
 
     root.BB = root.BB || {};
     root.BB.SiteSort = SiteSort;
