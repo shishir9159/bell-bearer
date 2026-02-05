@@ -25,6 +25,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **X pouch**: People and posts filed into two independent sets of topics, from x.com and managed on the dashboard
 - **Skim**: A launcher over any page — find within it, reach a tab, your history or a browser action, and label every link for the keyboard
 - **Skins**: Default, Riso Paint, Medieval and Art Deco, each with its own day and night
+- **Site switches**: Each site's card in Settings has a switch at its corner. Off, the site leaves the dashboard and none of Bell Bearer's code for it loads on its pages — they get only what every other page does
 - **Activity**: Opt-in, on-device record of where your screen time goes
 - **Daily time limit**: A budget, or a window of hours, on any site you name — counted while you are actually looking at it, snoozable ten minutes at a time
 - **Rosters**: Who you follow on Twitter and the subreddits you have joined, out to a text file and back in again, slowly
@@ -944,7 +945,8 @@ fails if the manifest or a page names a file the zip would not have.
 
 No build step, by design: every file is a classic script that attaches its
 exports to a shared `BB` namespace, and the load order is the order in
-`manifest.json` (or in the `<script>` tags of `popup.html` / `dashboard.html`).
+`manifest.json` and `src/background/site-scripts.js` (or in the `<script>`
+tags of `popup.html` / `dashboard.html`).
 The watch party is the exception: none of it is listed anywhere a page would
 load it, and its load orders are the lists named below.
 
@@ -1000,8 +1002,10 @@ src/shared/     pure logic, used by every surface
 
 src/content/    injected into pages: a core on every page (main.js, player, shortcuts,
                 skim, link hints, the time limit, the cookie banner, markdown), and
-                each site's own files on that site alone — manifest.json has one
-                entry per site, each the core list, its own files, then main.js
+                each site's own files on that site alone — the worker registers
+                one entry per site (src/background/site-scripts.js), each the
+                core list, its own files, then main.js, and none for a site
+                switched off
   main.js          bootstrap — decides what runs where
   player.js        speed, skipping, seeking, the temporary boost
   shortcuts.js     the keybinding table
@@ -1057,6 +1061,7 @@ src/content/    injected into pages: a core on every page (main.js, player, shor
 
 src/background/ the service worker, pulled in by background.js
   router.js        one listener each for messages, alarms and startup, handed out by name
+  site-scripts.js  each site's content scripts, registered unless it is switched off
   proto.js         the sowon wire format
   sowon.js         focus reporting
   context-menus.js "Copy as Markdown"
