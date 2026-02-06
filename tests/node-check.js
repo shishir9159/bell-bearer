@@ -376,6 +376,93 @@ check('an old whole-second checkpoint and a point in time both shade sensibly', 
     eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ time: 7 }]), [0, 0, 1, 0], 'a point shades the line playing then');
     eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ note: 'no time at all' }]), [0, 0, 0, 0]);
 });
+section('reader — paragraphs and words');
+
+/** A talk in lines the way a caption track has them, with a full stop now and then. */
+function talkEntries() {
+    const lines = [
+        'So here is the idea.', 'Solve each part once,', 'write the answer down,', 'and look it up.',
+        'That is memoization.', 'The other way', 'is to fill a table', 'from the bottom up.',
+        'Both are linear', 'for Fibonacci.', 'Now the hard part', 'is the subproblem.',
+    ];
+    return lines.map((text, i) => ({ start: i * 4, end: i * 4 + 3.5, text }));
+}
+
+check('lines are gathered into paragraphs at a sentence end once one has run long enough', () => {
+    const model = ReaderTranscript.build(talkEntries());
+    // The line before 16s ends a sentence, and by 16s the first paragraph has run 15.
+    eq(model.paras.map((p) => p.start), [0, 16, 32]);
+    eq(ReaderTranscript.textOf(model, model.paras[1].from, model.paras[1].to),
+        'That is memoization. The other way is to fill a table from the bottom up.');
+    eq(model.paras.every((p, i) => !i || p.from === model.paras[i - 1].to + 1), true, 'a word fell between two paragraphs');
+});
+check('a track with no full stops still breaks, and a chapter starts a paragraph', () => {
+    const plain = Array.from({ length: 30 }, (_, i) => ({ start: i * 3, end: i * 3 + 3, text: 'and so on we go' }));
+    const model = ReaderTranscript.build(plain);
+    assert(model.paras.length >= 2, 'one paragraph for ninety seconds');
+    assert(model.paras.every((p) => model.words[p.to].time - p.start <= ReaderTranscript.PARA_MAX + 3), 'a paragraph ran on');
+    const chaptered = ReaderTranscript.build(talkEntries(), { chapters: [{ start: 0 }, { start: 8 }] });
+    eq(chaptered.paras.map((p) => p.start).slice(0, 2), [0, 8], 'the chapter at 8s did not open a paragraph');
+});
+check('sentences end at their stop, and an unpunctuated one at a line once it runs long', () => {
+    const model = ReaderTranscript.build(talkEntries());
+    eq(ReaderTranscript.textOf(model, model.sentences[1].from, model.sentences[1].to),
+        'Solve each part once, write the answer down, and look it up.');
+    const plain = Array.from({ length: 12 }, (_, i) => ({ start: i * 3, end: i * 3 + 3, text: 'one two three four five six seven' }));
+    const long = ReaderTranscript.build(plain);
+    assert(long.sentences.every((x) => x.to - x.from + 1 <= ReaderTranscript.SENTENCE_HARD), 'a sentence too long for the band');
+    assert(long.sentences.length > 1, 'an unpunctuated track was one sentence');
+});
+check('words are spread over their line by length, and each ends where the next begins', () => {
+    const model = ReaderTranscript.build([{ start: 10, end: 14, text: 'a bb' }]);
+    // "bb" starts two characters into four: halfway through the line.
+    eq(model.words.map((w) => w.time), [10, 12]);
+    eq(model.words.map((w) => w.end), [12, 14], 'the last word did not end with its line');
+    eq(ReaderTranscript.wordAt(model, 9), -1);
+    eq(ReaderTranscript.wordAt(model, 10.5), 0);
+    eq(ReaderTranscript.wordAt(model, 13), 1);
+});
+check('a highlight saved from some words maps back onto exactly those words', () => {
+    const model = ReaderTranscript.build(talkEntries());
+    for (const [from, to] of [[0, 0], [3, 9], [10, 11], [5, model.words.length - 1]]) {
+        eq(ReaderTranscript.rangeOf(model, ReaderTranscript.spanOf(model, from, to)), { from, to }, `${from}-${to}`);
+    }
+});
+check('an older checkpoint covers what was said while it ran', () => {
+    const model = ReaderTranscript.build(talkEntries());
+    // Ctrl+B held from 4.6s to 12.2s, floored to the second as it was saved.
+    const held = ReaderTranscript.rangeOf(model, { time: 4, start: 4, end: 12 });
+    eq(ReaderTranscript.textOf(model, held.from, held.to), 'Solve each part once, write the answer down,');
+    const point = ReaderTranscript.rangeOf(model, { time: 9 });
+    eq(ReaderTranscript.textOf(model, point.from, point.to), 'write the answer down,', 'a point covers its line');
+    eq(ReaderTranscript.rangeOf(model, { start: 200, end: 210 }), null, 'past the end of the talk');
+    eq(ReaderTranscript.rangeOf(model, { note: 'no time' }), null);
+    const tiny = ReaderTranscript.rangeOf(model, { start: 4.1, end: 4.2 });
+    eq(tiny.from, tiny.to, 'a span between two words is the word it began in');
+});
+check('a range folds in every highlight it touches, and only those', () => {
+    const marks = [{ id: 'a', from: 2, to: 4, note: 'first' }, { id: 'b', from: 6, to: 7, note: '' },
+        { id: 'c', from: 12, to: 14, note: 'third' }];
+    eq(ReaderTranscript.merge(marks, { from: 9, to: 10 }), { from: 9, to: 10, note: '', keep: null, absorbed: [], merged: false });
+    // 5 sits between a and b: touching both, so all three become one.
+    eq(ReaderTranscript.merge(marks, { from: 5, to: 5 }), { from: 2, to: 7, note: 'first', keep: 'a', absorbed: ['b'], merged: true });
+    eq(ReaderTranscript.merge(marks, { from: 8, to: 11 }).absorbed, ['c'], 'a word apart on either side is touching');
+    const trimmed = ReaderTranscript.merge(marks, { from: 13, to: 14 }, 'c');
+    eq([trimmed.from, trimmed.to, trimmed.keep, trimmed.note, trimmed.merged], [13, 14, 'c', 'third', false], 'a trim grew back');
+});
+check('a note Bell Bearer wrote is not shown as the user’s', () => {
+    eq(ReaderTranscript.ownNote('Checkpoint 1:02 - 1:15'), '');
+    eq(ReaderTranscript.ownNote('Segment: 0:10 - 0:20'), '');
+    eq(ReaderTranscript.ownNote('  Name the subproblem first. '), 'Name the subproblem first.');
+    eq(ReaderTranscript.ownNote(undefined), '');
+});
+check('the paragraphs are escaped, and a space carries the word before it', () => {
+    const model = ReaderTranscript.build([{ start: 0, end: 2, text: 'say <b>hi</b>' }]);
+    const html = ReaderTranscript.paragraphsHtml(model);
+    assert(html.includes('&lt;b&gt;hi&lt;/b&gt;'), 'a caption could inject markup');
+    assert(html.includes('<span class="rd-sp" data-w="0"> </span>'), 'the space lost its word');
+    assert(/data-t="0"/.test(html) && html.includes('0:00'), 'no time in the gutter');
+});
 checkAsync('a transcript asked for by language is its own fetch, and tracks are listed once', async () => {
     const asked = [];
     let listed = 0;
