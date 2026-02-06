@@ -968,6 +968,9 @@
 
         // Older saves recorded a missing subtitle as the string "null".
         const subtitle = bookmark.subtitle && bookmark.subtitle !== 'null' ? bookmark.subtitle : '';
+        // The note comes after the passage, the way the reader puts it at the
+        // end of the highlight: it is written about what was said, and above
+        // it the note read as a heading the passage hung from.
 
         return `
             <div class="bookmark-item" data-key="${Dom.escapeAttr(Bookmarks.bookmarkKey(bookmark))}">
@@ -976,8 +979,8 @@
                     <input type="text" class="bookmark-title-input" placeholder="Add title…"
                            value="${Dom.escapeAttr(bookmark.title || '')}">
                 </div>
-                ${bookmark.note ? `<div class="bookmark-note">${Dom.escapeHtml(bookmark.note)}</div>` : ''}
                 ${subtitle ? `<div class="bookmark-subtitle">"${Dom.escapeHtml(subtitle)}"</div>` : ''}
+                ${bookmark.note ? `<div class="bookmark-note">${Dom.escapeHtml(bookmark.note)}</div>` : ''}
                 <div class="bookmark-actions">
                     ${subtitle ? '<button class="btn-small copy-bookmark-subtitle" title="Copy subtitle">📋</button>' : ''}
                     <button class="btn-small seek-btn" data-time="${time}">Go to time</button>

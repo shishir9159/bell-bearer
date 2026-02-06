@@ -4890,6 +4890,10 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
     const order = (videos, by) => Bookmarks.sortVideos(videos, by).map((v) => v.id);
 
+    check('a checkpoint’s note is listed after the passage it was written on', () => {
+        const row = /function renderBookmarkRow[\s\S]*?\n    }\n/.exec(readRepo('dashboard.js'))[0];
+        assert(row.indexOf('bookmark-subtitle">') < row.indexOf('bookmark-note">'), 'the note sits above the passage');
+    });
     check('newest first, which is not the order the store keeps', () => {
         // The store appends, so an unsorted list opens on the first video ever
         // saved — which is what the popup was showing.
