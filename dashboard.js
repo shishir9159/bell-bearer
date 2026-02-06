@@ -81,6 +81,10 @@
         github: [{ id: 'watching', label: 'Watching', panel: 'githubWatchingPanel' }],
         gitlab: [{ id: 'watching', label: 'Watching', panel: 'gitlabWatchingPanel' }],
         forgejo: [{ id: 'watching', label: 'Watching', panel: 'forgejoWatchingPanel' }],
+        // One panel each, saying what Bell Bearer does there, until either
+        // has a view of its own.
+        vimeo: [{ id: 'home', label: 'Vimeo', panel: 'vimeoHomePanel' }],
+        netflix: [{ id: 'home', label: 'Netflix', panel: 'netflixHomePanel' }],
     };
 
     /**

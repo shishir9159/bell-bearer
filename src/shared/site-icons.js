@@ -131,9 +131,29 @@
             viewBox: '0 0 24 24',
             path: 'M11.999.747A11.974 11.974 0 0 0 0 12.75c0 2.254.635 4.465 1.833 6.376L11.837 6.19c.072-.092.251-.092.323 0l4.178 5.402h-2.992l.065.239h3.113l.882 1.138h-3.674l.103.374h3.86l.777 1.003h-4.358l.135.483h4.593l.695.894h-5.038l.165.589h5.326l.609.785h-5.717l.182.65h6.038l.562.727h-6.397l.183.65h6.717A12.003 12.003 0 0 0 24 12.75 11.977 11.977 0 0 0 11.999.747zm3.654 19.104.182.65h5.326c.173-.204.353-.433.513-.65zm.385 1.377.18.65h3.563c.233-.198.485-.428.712-.65zm.383 1.377.182.648h1.203c.356-.204.685-.412 1.042-.648zz',
         },
+        vimeo: {
+            id: 'vimeo',
+            name: 'Vimeo',
+            description: 'A Download button in the popup that saves a video as one .mp4, picture and sound together',
+            color: '#1AB7EA',
+            viewBox: '0 0 24 24',
+            path: 'M23.9765 6.4168c-.105 2.338-1.739 5.5429-4.894 9.6088-3.2679 4.247-6.0258 6.3699-8.2898 6.3699-1.409 0-2.578-1.294-3.553-3.881l-1.9179-7.1138c-.719-2.584-1.488-3.878-2.312-3.878-.179 0-.806.378-1.8809 1.132l-1.129-1.457a315.06 315.06 0 003.501-3.1279c1.579-1.368 2.765-2.085 3.5539-2.159 1.867-.18 3.016 1.1 3.447 3.838.465 2.953.789 4.789.971 5.5069.5389 2.45 1.1309 3.674 1.7759 3.674.502 0 1.256-.796 2.265-2.385 1.004-1.589 1.54-2.797 1.612-3.628.144-1.371-.395-2.061-1.614-2.061-.574 0-1.167.121-1.777.391 1.186-3.8679 3.434-5.7568 6.7619-5.6368 2.4729.06 3.6279 1.664 3.4929 4.7969z',
+        },
+        netflix: {
+            id: 'netflix',
+            name: 'Netflix',
+            description: 'A watch party: an episode in sync with other people, each on their own account',
+            // The N as Netflix draws it: two dark legs and the bright ribbon
+            // laid over them, each leg shading off where it runs under the
+            // ribbon. Simple Icons' N is one flat red with gaps cut where the
+            // ribbon crosses, which at card size reads as three loose strips;
+            // its outline is kept, the legs carried on under the ribbon.
+            viewBox: '0 0 24 24',
+            image: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='l' gradientUnits='userSpaceOnUse' x1='0' y1='24' x2='0' y2='0'%3E%3Cstop offset='0' stop-color='%23B1060F'/%3E%3Cstop offset='.45' stop-color='%23B1060F'/%3E%3Cstop offset='.9' stop-color='%23650409'/%3E%3C/linearGradient%3E%3ClinearGradient id='r' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='0' y2='24'%3E%3Cstop offset='0' stop-color='%23B1060F'/%3E%3Cstop offset='.45' stop-color='%23B1060F'/%3E%3Cstop offset='.9' stop-color='%23650409'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath fill='url(%23l)' d='M5.398 0h4.715v23.602c-1.905.086-2.842.173-4.715.398z'/%3E%3Cpath fill='url(%23r)' d='M13.887 0h4.715v24l-4.856-.398z'/%3E%3Cpath fill='%23E50914' d='m5.398 0 8.348 23.602c2.346.059 4.856.398 4.856.398L10.113 0z'/%3E%3C/svg%3E",
+        },
     };
 
-    const ORDER = ['youtube', 'chess', 'lichess', 'twitter', 'reddit', 'leetcode', 'typeracer', 'chatgpt', 'claude', 'github', 'gitlab', 'forgejo'];
+    const ORDER = ['youtube', 'chess', 'lichess', 'twitter', 'reddit', 'leetcode', 'typeracer', 'chatgpt', 'claude', 'github', 'gitlab', 'forgejo', 'vimeo', 'netflix'];
 
     /**
      * The sites in the order they are shown: the user's own, dragged into

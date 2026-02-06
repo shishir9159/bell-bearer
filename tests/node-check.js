@@ -7152,6 +7152,21 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/<image href="data:image\/svg\+xml,/.test(SiteIcons.svg('typeracer')), 'not the vector logo');
         assert(!SiteIcons.get('typeracer').image.includes('"'), 'a double quote would end the href it is put in');
     });
+    check('vimeo and netflix have a card under the id they are detected by, and a page behind each', () => {
+        const html = readRepo('dashboard.html');
+        const dashboard = readRepo('dashboard.js');
+        eq(SiteIcons.ORDER.slice(-2), ['vimeo', 'netflix'], 'after every site a saved order already names');
+        for (const [id, host, name] of [['vimeo', 'vimeo.com', 'Vimeo'], ['netflix', 'www.netflix.com', 'Netflix']]) {
+            eq(Site.detectSite(host), id);
+            eq(SiteIcons.get(id).name, name);
+            assert(html.includes(`id="${id}HomePanel" class="site-panel" data-site="${id}"`) && dashboard.includes(`'${id}HomePanel'`), `${id} opens on nothing`);
+            assert(html.includes(`data-site-settings="${id}"`), `${id} has no settings panel`);
+        }
+        eq(SiteIcons.get('vimeo').color, '#1AB7EA');
+        // Netflix's N is three shapes in three reds, so it is carried whole.
+        assert(/<image href="data:image\/svg\+xml,/.test(SiteIcons.svg('netflix')), 'not the vector logo');
+        assert(!SiteIcons.get('netflix').image.includes('"'), 'a double quote would end the href it is put in');
+    });
     check('a site switched off leaves the dashboard and keeps its place in the order', () => {
         const SiteSort = require('../src/page/site-sort.js');
         eq(SiteSort.within(['a', 'b', 'c', 'd'], ['d', 'a', 'c']), ['d', 'b', 'a', 'c'], 'b was hidden, and moved');
@@ -7339,7 +7354,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             eq(SiteIcons.get(site.id) && SiteIcons.get(site.id).name, site.name, site.id);
             assert(html.includes(`id="${site.id}WatchingPanel"`) && dashboard.includes(`'${site.id}WatchingPanel'`), `${site.id} opens on nothing`);
         }
-        eq(SiteIcons.ORDER.slice(-3), ['github', 'gitlab', 'forgejo'], 'after every site a saved order already names');
+        eq(SiteIcons.ORDER.slice(-5, -2), ['github', 'gitlab', 'forgejo'], 'after every site a saved order already names');
     });
     check('a github run is the same run on any of its tabs, and a pull request on any of its', () => {
         const run = ForgeSites.pageOfUrl('https://github.com/microsoft/vscode/actions/runs/37600934749');

@@ -131,6 +131,22 @@
                 <div id="githubWatchingPanel" class="site-panel" data-site="github" data-ci-watches="github"></div>
                 <div id="gitlabWatchingPanel" class="site-panel" data-site="gitlab" data-ci-watches="gitlab"></div>
                 <div id="forgejoWatchingPanel" class="site-panel" data-site="forgejo" data-ci-watches="forgejo"></div>
+
+                <!-- Vimeo and Netflix have their cards ahead of any view of
+                     their own: one panel each, saying what Bell Bearer does
+                     there today. -->
+                <div id="vimeoHomePanel" class="site-panel" data-site="vimeo">
+                    <div class="empty-state">
+                        <h3>Save a video from the popup</h3>
+                        <p>Open the popup on a Vimeo video and press Download: it is saved as one .mp4, picture and sound together.<br>Where it goes is set with YouTube's download, under Settings.</p>
+                    </div>
+                </div>
+                <div id="netflixHomePanel" class="site-panel" data-site="netflix">
+                    <div class="empty-state">
+                        <h3>Watch together from the popup</h3>
+                        <p>Open the popup on an episode to start a watch party, or to join one from an invite —<br>each of you on your own account, kept in step.</p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -374,6 +390,14 @@
                     <div class="settings-section" id="githubSettingsPanel" data-site-settings="github" data-forge-settings="github" hidden></div>
                     <div class="settings-section" id="gitlabSettingsPanel" data-site-settings="gitlab" data-forge-settings="gitlab" hidden></div>
                     <div class="settings-section" id="forgejoSettingsPanel" data-site-settings="forgejo" data-forge-settings="forgejo" hidden></div>
+                    <div class="settings-section" id="vimeoSettingsPanel" data-site-settings="vimeo"
+                         data-plate="Vimeo" data-plate-proper hidden>
+                        <p class="settings-hint">A <strong>Download</strong> button in the popup on a Vimeo video saves it as one .mp4, picture and sound together, at the quality the player is on. It is always there — on Vimeo it is the only thing Bell Bearer adds, and it does nothing until pressed. Where a download is saved, a folder inside Downloads or asked every time, is set with YouTube's, under YouTube.</p>
+                    </div>
+                    <div class="settings-section" id="netflixSettingsPanel" data-site-settings="netflix"
+                         data-plate="Netflix" data-plate-proper hidden>
+                        <p class="settings-hint">A watch party plays an episode in sync for everyone in it, each on their own Netflix account. Start or join one from the popup on the episode. Your name in the room and how a party connects are set in Settings, under Watch party.</p>
+                    </div>
                     <div class="settings-section" id="chessSettingsPanel" data-site-settings="chess" data-chess-settings="chess" hidden></div>
                     <div class="settings-section" id="lichessSettingsPanel" data-site-settings="lichess" data-chess-settings="lichess" hidden></div>
 
