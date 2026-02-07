@@ -637,9 +637,12 @@ check('checkpoints copy out as a timestamped markdown list', () => {
     eq(text.split('\n'), [
         '## [A \\[talk\\]](https://www.youtube.com/watch?v=abcdefghijk)',
         '',
-        '- [1:02](https://www.youtube.com/watch?v=abcdefghijk&t=62s) “the point” — worth rewatching',
-        '- [1:30](https://www.youtube.com/watch?v=abcdefghijk&t=90s) “later”',
+        '- [1:02–1:15](https://www.youtube.com/watch?v=abcdefghijk&t=62s) the point',
+        '  - worth rewatching',
+        '- [1:30–1:35](https://www.youtube.com/watch?v=abcdefghijk&t=90s) later',
     ], 'the generated "Checkpoint 1:30" note only repeats the time beside it');
+    eq(Markdown.checkpointList({ id: 'abcdefghijk', title: 'T' }, [{ time: 5 }], Time.formatTime).split('\n')[2],
+        '- [0:05](https://www.youtube.com/watch?v=abcdefghijk&t=5s)', 'a point in time is one time');
 });
 check('a link\'s address cannot end the link early, and a balanced pair is left as it is', () => {
     const Markdown = require('../src/content/markdown.js');

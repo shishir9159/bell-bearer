@@ -42,26 +42,31 @@
     }
 
     /**
-     * A video's checkpoints as a timestamped Markdown list, the shape these
-     * notes were always meant to be exported in:
+     * A video's checkpoints as a timestamped Markdown list:
      *
      *     ## [Title](watch url)
-     *     - [1:02](watch url at 1:02) “what was said” — your note
      *
-     * The note Ctrl+B used to write by itself ("Checkpoint 1:02 - 1:15") is
-     * left out: it only repeats the timestamp beside it.
+     *     - [1:02–1:15](watch url at 1:02) what was said
+     *       - your note
+     *
+     * The note goes under the passage, the way the reader sets it at the end
+     * of the highlight; on the same line it read as part of the quote. The
+     * note Ctrl+B used to write by itself ("Checkpoint 1:02 - 1:15") is left
+     * out: it only repeats the times beside it.
      */
     function checkpointList(video, bookmarks, formatTime) {
         const lines = [`## ${link(video.title || video.id, YouTube.watchUrl(video.id, 0))}`, ''];
         for (const bookmark of bookmarks || []) {
             const at = typeof bookmark.start === 'number' ? bookmark.start : bookmark.time;
+            const span = typeof bookmark.end === 'number' && bookmark.end > at
+                ? `${formatTime(at)}–${formatTime(bookmark.end)}` : formatTime(at);
             const said = String(bookmark.subtitle || '').replace(/\s+/g, ' ').trim();
             const note = String(bookmark.note || '').replace(/\s+/g, ' ').trim();
             const own = note && !/^(Checkpoint|Segment:) \d/.test(note) ? note : '';
-            let line = `- ${link(formatTime(at), YouTube.watchUrl(video.id, at))}`;
-            if (said && said !== 'null') line += ` “${said}”`;
-            if (own) line += ` — ${own}`;
+            let line = `- ${link(span, YouTube.watchUrl(video.id, at))}`;
+            if (said && said !== 'null') line += ` ${said}`;
             lines.push(line);
+            if (own) lines.push(`  - ${own}`);
         }
         return lines.join('\n');
     }
