@@ -463,6 +463,59 @@ check('the paragraphs are escaped, and a space carries the word before it', () =
     assert(html.includes('<span class="rd-sp" data-w="0"> </span>'), 'the space lost its word');
     assert(/data-t="0"/.test(html) && html.includes('0:00'), 'no time in the gutter');
 });
+section('reader — the five layouts');
+
+const ReaderLayout = require('../src/content/reader-layout.js');
+
+check('at 1280 by 760 each layout puts the player and the transcript where the design does', () => {
+    const at = (layout, state) => ReaderLayout.geometry(layout, 1280, 760, state);
+    eq(at('dock').video, { left: 16, top: 48, width: 797, height: 448 });
+    eq(at('dock').panel, { left: 829, top: 48, width: 435, height: 696 });
+    eq(at('dock').under.top, 512, 'the title and chapters are not under the video');
+    eq(at('float').panel, { left: 887, top: 70, width: 371, height: 598 });
+    eq(at('glass').panel.left, 973);
+    eq(at('glass').bar, { left: 973, top: 0, width: 307, height: 52 }, 'glass keeps its tools over the column');
+    eq(at('band').video, { left: 166, top: 54, width: 949, height: 534 });
+    eq(at('band').panel, { left: 166, top: 600, width: 949, height: 144 });
+    eq(at('band', { bandOpen: true }).panel.height, 456, 'the band does not open to two thirds');
+    eq(at('focus').video, { left: 800, top: 480, width: 458, height: 258 });
+    eq(at('focus').panel, { left: 27, top: 48, width: 730, height: 712 });
+    eq(['dock', 'float', 'glass', 'band', 'focus'].map((id) => at(id).tabs), [true, true, false, false, false]);
+    eq(at('glass').barTitle, false);
+});
+check('at any size the player is 16:9 and every piece is on the screen', () => {
+    for (const [W, H] of [[800, 500], [1280, 760], [1440, 900], [1920, 1080], [2560, 1300]]) {
+        for (const id of ReaderLayout.LAYOUT_IDS) {
+            const g = ReaderLayout.geometry(id, W, H);
+            const where = `${id} at ${W}x${H}`;
+            assert(Math.abs(g.video.width / g.video.height - 16 / 9) < 0.02, `${where}: the player is not 16:9`);
+            for (const piece of [g.video, g.panel, g.under, g.side].filter(Boolean)) {
+                assert(piece.left >= 0 && piece.top >= 0 && piece.left + piece.width <= W && piece.top + piece.height <= H,
+                    `${where}: ${JSON.stringify(piece)} is off the screen`);
+            }
+        }
+    }
+});
+check('a card or a pinned player dragged past the edge stops at it', () => {
+    const far = { dx: 5000, dy: -5000 };
+    const card = ReaderLayout.geometry('float', 1280, 760, { card: far }).panel;
+    eq([card.left + card.width, card.top], [1280, ReaderLayout.BAR]);
+    const pinned = ReaderLayout.geometry('focus', 1280, 760, { vcard: { dx: -5000, dy: 5000 } }).video;
+    eq([pinned.left, pinned.top + pinned.height], [0, 760]);
+});
+check('an old layout opens in the one nearest it, and an unknown one in dock', () => {
+    eq(['split', 'stacked', 'theatre', 'focus', 'band', 'nope', undefined].map(ReaderLayout.layoutOf),
+        ['dock', 'band', 'glass', 'focus', 'band', 'dock', 'dock']);
+});
+check('the typography settings scale each layout’s type, and the measure narrows focus', () => {
+    const plain = ReaderLayout.geometry('focus', 1600, 900);
+    const set = ReaderLayout.geometry('focus', 1600, 900, { scale: 18 / 16, leadScale: 1.8 / 1.6, measure: 30 });
+    eq([plain.type.size, plain.type.lead], [19, 1.72]);
+    eq([set.type.size, set.type.lead], [21.4, 1.94]);
+    assert(set.panel.width < plain.panel.width, 'a shorter line did not narrow the column');
+    eq(ReaderLayout.geometry('dock', 1280, 760, { scale: 0.75 }).type.size, 12);
+});
+
 checkAsync('a transcript asked for by language is its own fetch, and tracks are listed once', async () => {
     const asked = [];
     let listed = 0;
