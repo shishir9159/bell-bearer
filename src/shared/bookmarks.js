@@ -162,6 +162,25 @@
         return changed ? withBookmarks(videos, index, bookmarks) : videos;
     }
 
+    /**
+     * Swap some of one video's checkpoints for others, in one write. The
+     * reader joins a new highlight with every one it touches — those go and
+     * the one they became comes in — and its Undo is the same swap the other
+     * way round. As two writes, another tab's save could land between them,
+     * and a merge half done is two highlights over the same words.
+     */
+    function replaceBookmarks(videos, video, keys, records) {
+        const gone = new Set((keys || []).filter(Boolean));
+        const index = videos.findIndex((v) => v.id === video.id);
+        const kept = index === -1 ? [] : videos[index].bookmarks.filter((bookmark) => !gone.has(bookmarkKey(bookmark)));
+        const fresh = (records || []).filter(isBookmark)
+            .filter((record) => !kept.some((existing) => sameCheckpoint(existing, record)));
+        const bookmarks = kept.concat(fresh).sort(byTime);
+        if (index !== -1) return withBookmarks(videos, index, bookmarks);
+        if (!bookmarks.length) return videos;
+        return videos.concat([{ id: video.id, title: video.title, url: video.url, bookmarks }]);
+    }
+
     /** `videos` with one entry's list replaced, and the entry gone when it is empty. */
     function withBookmarks(videos, index, bookmarks) {
         const next = videos.slice();
@@ -317,7 +336,7 @@
         KEY, EXPORT_VERSION,
         load, save, update,
         normalizeVideos, bookmarkTime, addBookmarks,
-        newId, sameCheckpoint, bookmarkKey, removeBookmarkById, editBookmark,
+        newId, sameCheckpoint, bookmarkKey, removeBookmarkById, editBookmark, replaceBookmarks,
         lastSaved, sortVideos, SORTS,
         buildExport, validateImport, mergeImported, parseTimestampLinks,
     };

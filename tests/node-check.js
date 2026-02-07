@@ -248,6 +248,22 @@ check('removing the last checkpoint drops the video entry', () => {
     const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [{ id: 'a', time: 5 }] }];
     eq(Bookmarks.removeBookmarkById(videos, 'v', 'a').length, 0);
 });
+check('a merge swaps several checkpoints for one in a single write, and its undo swaps them back', () => {
+    const before = [{ id: 'v', title: 'V', url: 'u', bookmarks: [
+        { id: 'a', time: 5, start: 5, end: 6 }, { id: 'b', time: 7, start: 7, end: 8 }, { id: 'c', time: 30 }] }];
+    const joined = { id: 'a', time: 5, start: 5, end: 8, note: 'one passage' };
+    const merged = Bookmarks.replaceBookmarks(before, { id: 'v' }, ['a', 'b'], [joined]);
+    eq(merged[0].bookmarks.map((b) => [b.id, b.end]), [['a', 8], ['c', undefined]]);
+    eq(before[0].bookmarks.length, 3, 'the list it was given was changed in place');
+    const undone = Bookmarks.replaceBookmarks(merged, { id: 'v' }, ['a'], before[0].bookmarks.slice(0, 2));
+    eq(undone[0].bookmarks.map((b) => b.id), ['a', 'b', 'c']);
+    eq(Bookmarks.replaceBookmarks(merged, { id: 'v' }, ['a', 'c'], []).length, 0, 'an emptied video stayed');
+    const fresh = Bookmarks.replaceBookmarks([], { id: 'w', title: 'W', url: 'uw' }, [], [{ id: 'n', time: 1 }]);
+    eq([fresh[0].id, fresh[0].title, fresh[0].bookmarks.length], ['w', 'W', 1]);
+    eq(Bookmarks.replaceBookmarks([], { id: 'w' }, ['x'], []), [], 'nothing to swap made an entry');
+    eq(Bookmarks.replaceBookmarks(merged, { id: 'v' }, [], [{ id: 'c', time: 30 }])[0].bookmarks.length, 2,
+        'a record already there was added twice');
+});
 check('the popup and the dashboard edit checkpoints by key, through update, never by index', () => {
     // Both used to change the list they had loaded, by index, and save the
     // whole of it back — erasing a checkpoint a YouTube tab saved meanwhile.
