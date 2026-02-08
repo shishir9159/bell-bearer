@@ -47,6 +47,7 @@
                 'src/content/youtube-ui.js',
                 'src/content/reader-transcript.js',
                 'src/content/reader-layout.js',
+                'src/content/reader-highlights.js',
                 'src/content/reader.js',
                 'src/content/file-saver.js',
                 'src/content/video-download.js',

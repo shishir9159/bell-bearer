@@ -479,6 +479,28 @@ check('the paragraphs are escaped, and a space carries the word before it', () =
     assert(html.includes('<span class="rd-sp" data-w="0"> </span>'), 'the space lost its word');
     assert(/data-t="0"/.test(html) && html.includes('0:00'), 'no time in the gutter');
 });
+section('reader — the pen');
+
+const ReaderHighlights = require('../src/content/reader-highlights.js');
+
+check('a highlight is named by its span, and a point by its one time', () => {
+    eq(ReaderHighlights.spanLabel({ start: 62.4, end: 75 }), '1:02–1:15');
+    eq(ReaderHighlights.spanLabel({ time: 90 }), '1:30');
+    eq(ReaderHighlights.spanLabel({ time: 90, start: 90, end: 90 }), '1:30', 'a span of nothing is a point');
+});
+check('a highlight’s title is its opening words, cut at sixty', () => {
+    eq(ReaderHighlights.autoTitle('short'), 'short');
+    const long = 'x'.repeat(80);
+    eq(ReaderHighlights.autoTitle(long), `${'x'.repeat(59)}…`);
+    eq(ReaderHighlights.autoTitle(long).length, 60);
+});
+check('the pen is drawn in the skin’s ink, and both cursors fall back to the browser’s', () => {
+    const { pen, eraser } = ReaderHighlights.cursors('#ff48b0');
+    assert(decodeURIComponent(pen).includes('#ff48b0'), 'the pen is not in the ink');
+    assert(/\) 8 20, text$/.test(pen) && /\) 8 20, default$/.test(eraser), 'no fallback cursor');
+    eq([pen.match(/"/g).length, eraser.match(/"/g).length], [2, 2], 'a quote inside the svg would end the url');
+});
+
 section('reader — the five layouts');
 
 const ReaderLayout = require('../src/content/reader-layout.js');
