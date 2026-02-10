@@ -1029,3 +1029,330 @@ html.bb-reader-open body { overflow: hidden !important; }
     .rd-panel,
     .rd-side { transition: none; }
 }
+
+/* =====================================================================
+   The other three skins. Each block is the skin's shape — radii, faces,
+   case, the paper and the band under the bar — and its light palette; the
+   dark rule after it repaints the palette only. Every value is the design's.
+   ===================================================================== */
+
+/* Riso: printed in two inks on newsprint, hard edges, offset shadows. */
+.bb-reader[data-bb-skin="riso"] {
+    --rd-r: 0px;
+    --rd-r-sm: 0px;
+    --rd-r-chip: 0px;
+    --rd-r-mark: 0px;
+    --rd-r-video: 0px;
+    --rd-r-knob: 0;
+    --rd-font: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+    --rd-font-head: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+    --rd-font-tab: 'Space Grotesk', 'Helvetica Neue', Arial, sans-serif;
+    --rd-head-weight: 700;
+    --rd-head-case: uppercase;
+    --rd-head-track: .06em;
+    --rd-title-size: 14px;
+    --rd-tab-case: uppercase;
+    --rd-tab-track: .04em;
+    --rd-tex: var(--rd-tex-newsprint, none);
+    --rd-tex-size: 120px 120px;
+    --rd-bar-band: repeating-linear-gradient(90deg, #ff48b0 0 14px, #ffc60b 14px 28px, #1f5fd0 28px 42px);
+    --rd-bar-band-h: 3px;
+    --rd-size-adj: -0.5px;
+
+    --rd-page: #efece0;
+    --rd-panel: #f7f4e9;
+    --rd-card: #f7f4e9;
+    --rd-chip: #ece8da;
+    --rd-chip-2: #d9d3bf;
+    --rd-text: #17161a;
+    --rd-muted: #4c4a52;
+    --rd-faint: #86828c;
+    --rd-past: #56535c;
+    --rd-divider: rgba(23, 22, 26, .2);
+    --rd-panel-border: 1.5px solid #17161a;
+    --rd-card-border: 1.5px solid #17161a;
+    --rd-panel-shadow: 4px 4px 0 #1f5fd0;
+    --rd-card-shadow: 6px 6px 0 #1f5fd0;
+    --rd-band-shadow: 4px 4px 0 #ff48b0;
+    --rd-accent-ink: #d1157f;
+    --rd-now: #1f5fd0;
+    --rd-knob: #1f5fd0;
+    --rd-mark: rgba(255, 72, 176, .26);
+    --rd-mark-hot: rgba(255, 72, 176, .44);
+    --rd-mark-wet: rgba(255, 72, 176, .52);
+    --rd-mark-erase: rgba(255, 72, 176, .08);
+    --rd-ink: #ff48b0;
+    --rd-tb-bg: #17161a;
+    --rd-tb-fg: #fffdf6;
+    --rd-tb-border: 1.5px solid #17161a;
+    --rd-tb-hover: rgba(255, 253, 246, .16);
+    --rd-tb-shadow: 3px 3px 0 #ff48b0;
+    --rd-toast-bg: #1f5fd0;
+    --rd-toast-fg: #fffdf6;
+    --rd-toast-act: #ffc60b;
+    --rd-tab-on-bg: #1f5fd0;
+    --rd-tab-on-fg: #fffdf6;
+    --rd-tab-bg: transparent;
+    --rd-tab-fg: #17161a;
+    --rd-tab-border: 1.5px solid #17161a;
+    --rd-tex-blend: multiply;
+    --rd-tex-opacity: .55;
+    --rd-title-shadow: 1.4px .5px 0 rgba(255, 72, 176, .92), -1.4px -.5px 0 rgba(31, 95, 208, .8);
+    --rd-stage: #17161a;
+}
+
+.bb-reader[data-bb-skin="riso"][data-bb-theme="dark"] {
+    --rd-page: #121115;
+    --rd-panel: #1b1a20;
+    --rd-card: #1b1a20;
+    --rd-chip: #232128;
+    --rd-chip-2: #34313c;
+    --rd-text: #f4f1e8;
+    --rd-muted: #b3aec2;
+    --rd-faint: #7d7890;
+    --rd-past: #bab5c6;
+    --rd-divider: rgba(244, 241, 232, .16);
+    --rd-panel-border: 1.5px solid #f4f1e8;
+    --rd-card-border: 1.5px solid #f4f1e8;
+    --rd-panel-shadow: 4px 4px 0 #ffc60b;
+    --rd-card-shadow: 6px 6px 0 #ffc60b;
+    --rd-band-shadow: 4px 4px 0 #ff5cbb;
+    --rd-accent-ink: #ff85cc;
+    --rd-now: #6c9bff;
+    --rd-knob: #6c9bff;
+    --rd-mark: rgba(255, 92, 187, .30);
+    --rd-mark-hot: rgba(255, 92, 187, .46);
+    --rd-mark-wet: rgba(255, 92, 187, .54);
+    --rd-mark-erase: rgba(255, 92, 187, .1);
+    --rd-ink: #ff5cbb;
+    --rd-tb-bg: #f4f1e8;
+    --rd-tb-fg: #121115;
+    --rd-tb-border: 1.5px solid #f4f1e8;
+    --rd-tb-hover: rgba(18, 17, 21, .1);
+    --rd-tb-shadow: 3px 3px 0 #ff5cbb;
+    --rd-toast-bg: #ffc60b;
+    --rd-toast-fg: #121115;
+    --rd-toast-act: #121115;
+    --rd-tab-on-bg: #ff5cbb;
+    --rd-tab-on-fg: #121115;
+    --rd-tab-bg: transparent;
+    --rd-tab-fg: #f4f1e8;
+    --rd-tab-border: 1.5px solid #f4f1e8;
+    --rd-tex-blend: screen;
+    --rd-tex-opacity: .22;
+    --rd-title-shadow: 1.4px .5px 0 rgba(255, 92, 187, .95), -1.4px -.5px 0 rgba(90, 150, 255, .85);
+    --rd-stage: #0d0c10;
+}
+
+/* Medieval: a manuscript. Cardo set a little larger, Grenze for headings,
+   a pilcrow before each paragraph's time, rubricated ink as a wash under
+   the lower half of the line, and ruled lines for the bar's band. */
+.bb-reader[data-bb-skin="medieval"] {
+    --rd-r: 3px;
+    --rd-r-sm: 3px;
+    --rd-r-chip: 3px;
+    --rd-r-mark: 1px;
+    --rd-r-video: 3px;
+    --rd-font: Cardo, 'Iowan Old Style', Palatino, Georgia, serif;
+    --rd-font-head: Grenze, Cardo, Georgia, serif;
+    --rd-font-tab: Grenze, Cardo, Georgia, serif;
+    --rd-head-weight: 600;
+    --rd-head-track: .01em;
+    --rd-title-size: 18px;
+    --rd-tab-track: .01em;
+    --rd-tex: var(--rd-tex-parchment, none);
+    --rd-tex-size: 160px 160px;
+    --rd-para-mark: '¶';
+    --rd-size-adj: 1.5px;
+    --rd-note-style: italic;
+    --rd-bar-band-h: 4px;
+    --rd-tab-on-bg: transparent;
+    --rd-tab-bg: transparent;
+    --rd-tab-border: 1px solid transparent;
+
+    --rd-page: #ddcda6;
+    --rd-panel: #ecdcb8;
+    --rd-card: #ecdcb8;
+    --rd-chip: #e4d3ac;
+    --rd-chip-2: #cdb98d;
+    --rd-text: #3b2a17;
+    --rd-muted: #6b543a;
+    --rd-faint: #8d7757;
+    --rd-past: #6b543a;
+    --rd-divider: rgba(59, 42, 23, .18);
+    --rd-panel-border: 1px solid #a68d5e;
+    --rd-card-border: 1px solid #a68d5e;
+    --rd-panel-shadow: inset 0 0 0 3px #ecdcb8, inset 0 0 0 4px #c3ab7c;
+    --rd-card-shadow: inset 0 0 0 3px #ecdcb8, inset 0 0 0 4px #c3ab7c, 0 20px 46px rgba(40, 28, 14, .42);
+    --rd-band-shadow: inset 0 0 0 3px #ecdcb8, inset 0 0 0 4px #c3ab7c, 0 6px 16px rgba(59, 42, 23, .22);
+    --rd-accent-ink: #8a2413;
+    --rd-now: rgba(156, 43, 22, .7);
+    --rd-knob: #9c2b16;
+    --rd-mark: linear-gradient(transparent 42%, rgba(156, 43, 22, .22) 42%);
+    --rd-mark-hot: linear-gradient(transparent 42%, rgba(156, 43, 22, .36) 42%);
+    --rd-mark-wet: linear-gradient(transparent 42%, rgba(156, 43, 22, .42) 42%);
+    --rd-mark-erase: linear-gradient(transparent 42%, rgba(156, 43, 22, .07) 42%);
+    --rd-ink: #9c2b16;
+    --rd-tb-bg: #3b2a17;
+    --rd-tb-fg: #f2e4c3;
+    --rd-tb-border: 1px solid #2b2016;
+    --rd-tb-hover: rgba(242, 228, 195, .14);
+    --rd-tb-shadow: 0 6px 16px rgba(59, 42, 23, .32);
+    --rd-toast-bg: #4a3418;
+    --rd-toast-fg: #f2e4c3;
+    --rd-toast-act: #e2b860;
+    --rd-tab-on-fg: #8a2413;
+    --rd-tab-fg: #6b543a;
+    --rd-tab-on-under: inset 0 -2px 0 #9c2b16;
+    --rd-tex-blend: multiply;
+    --rd-tex-opacity: .75;
+    --rd-bar-band: linear-gradient(#a68d5e, #a68d5e) 0 0 / 100% 1px no-repeat, linear-gradient(#a68d5e, #a68d5e) 0 100% / 100% 1px no-repeat;
+    --rd-stage: #2b2016;
+}
+
+.bb-reader[data-bb-skin="medieval"][data-bb-theme="dark"] {
+    --rd-page: #1b140c;
+    --rd-panel: #241c12;
+    --rd-card: #241c12;
+    --rd-chip: #2c2216;
+    --rd-chip-2: #3d2f1e;
+    --rd-text: #e8d5a3;
+    --rd-muted: #bda67a;
+    --rd-faint: #8d7a56;
+    --rd-past: #bda67a;
+    --rd-divider: rgba(232, 213, 163, .14);
+    --rd-panel-border: 1px solid #57422a;
+    --rd-card-border: 1px solid #57422a;
+    --rd-panel-shadow: inset 0 0 0 3px #241c12, inset 0 0 0 4px #443320;
+    --rd-card-shadow: inset 0 0 0 3px #241c12, inset 0 0 0 4px #443320, 0 24px 56px rgba(0, 0, 0, .75);
+    --rd-band-shadow: inset 0 0 0 3px #241c12, inset 0 0 0 4px #443320, 0 8px 22px rgba(0, 0, 0, .6);
+    --rd-accent-ink: #d8663f;
+    --rd-now: rgba(216, 102, 63, .8);
+    --rd-knob: #d8ac52;
+    --rd-mark: linear-gradient(transparent 42%, rgba(216, 102, 63, .28) 42%);
+    --rd-mark-hot: linear-gradient(transparent 42%, rgba(216, 102, 63, .42) 42%);
+    --rd-mark-wet: linear-gradient(transparent 42%, rgba(216, 102, 63, .48) 42%);
+    --rd-mark-erase: linear-gradient(transparent 42%, rgba(216, 102, 63, .08) 42%);
+    --rd-ink: #d8663f;
+    --rd-tb-bg: #e8d5a3;
+    --rd-tb-fg: #2b2016;
+    --rd-tb-border: 1px solid #e8d5a3;
+    --rd-tb-hover: rgba(43, 32, 22, .1);
+    --rd-tb-shadow: 0 8px 22px rgba(0, 0, 0, .6);
+    --rd-toast-bg: #e8d5a3;
+    --rd-toast-fg: #2b2016;
+    --rd-toast-act: #9c2b16;
+    --rd-tab-on-fg: #d8663f;
+    --rd-tab-fg: #bda67a;
+    --rd-tab-on-under: inset 0 -2px 0 #c4482c;
+    --rd-tex-blend: overlay;
+    --rd-tex-opacity: .28;
+    --rd-bar-band: linear-gradient(#57422a, #57422a) 0 0 / 100% 1px no-repeat, linear-gradient(#57422a, #57422a) 0 100% / 100% 1px no-repeat;
+    --rd-stage: #120d07;
+}
+
+/* Deco: gilt on black or cream. Poiret One for headings, wide-tracked
+   capitals, a gold bar under the lower part of the line for ink, and the
+   corner ornament on every framed panel. */
+.bb-reader[data-bb-skin="deco"] {
+    --rd-r: 0px;
+    --rd-r-sm: 0px;
+    --rd-r-chip: 0px;
+    --rd-r-mark: 0px;
+    --rd-r-video: 0px;
+    --rd-r-knob: 0;
+    --rd-font: 'Josefin Sans', Futura, 'Century Gothic', sans-serif;
+    --rd-font-head: 'Poiret One', 'Josefin Sans', sans-serif;
+    --rd-font-tab: 'Josefin Sans', Futura, sans-serif;
+    --rd-head-weight: 400;
+    --rd-head-case: uppercase;
+    --rd-head-track: .18em;
+    --rd-title-size: 15px;
+    --rd-tab-case: uppercase;
+    --rd-tab-track: .14em;
+    --rd-corner: block;
+    --rd-size-adj: .5px;
+    --rd-stamp-track: .06em;
+    --rd-bar-band-h: 4px;
+    --rd-tab-on-bg: transparent;
+    --rd-tab-bg: transparent;
+    --rd-tab-border: 1px solid transparent;
+
+    --rd-page: #ece7db;
+    --rd-panel: #f7f3e8;
+    --rd-card: #f7f3e8;
+    --rd-chip: #ede7d6;
+    --rd-chip-2: #ddd5bf;
+    --rd-text: #14110d;
+    --rd-muted: #5a5142;
+    --rd-faint: #8e836f;
+    --rd-past: #5a5142;
+    --rd-divider: rgba(20, 17, 13, .14);
+    --rd-panel-border: 1px solid #d5cdb6;
+    --rd-card-border: 1px solid #14110d;
+    --rd-panel-shadow: none;
+    --rd-card-shadow: 0 24px 60px rgba(20, 17, 13, .3);
+    --rd-band-shadow: 0 8px 24px rgba(20, 17, 13, .14);
+    --rd-accent-ink: #8c6621;
+    --rd-now: rgba(166, 124, 46, .9);
+    --rd-knob: #a67c2e;
+    --rd-mark: linear-gradient(transparent 56%, rgba(185, 148, 71, .55) 56%, rgba(185, 148, 71, .55) 94%, transparent 94%);
+    --rd-mark-hot: linear-gradient(transparent 56%, rgba(185, 148, 71, .8) 56%, rgba(185, 148, 71, .8) 94%, transparent 94%);
+    --rd-mark-wet: linear-gradient(transparent 56%, rgba(185, 148, 71, .85) 56%, rgba(185, 148, 71, .85) 94%, transparent 94%);
+    --rd-mark-erase: linear-gradient(transparent 56%, rgba(185, 148, 71, .16) 56%, rgba(185, 148, 71, .16) 94%, transparent 94%);
+    --rd-ink: #b99447;
+    --rd-tb-bg: #14110d;
+    --rd-tb-fg: #e8dcbb;
+    --rd-tb-border: 1px solid #14110d;
+    --rd-tb-hover: rgba(224, 194, 116, .16);
+    --rd-tb-shadow: 0 8px 24px rgba(20, 17, 13, .28);
+    --rd-toast-bg: #14110d;
+    --rd-toast-fg: #e8dcbb;
+    --rd-toast-act: #e0c274;
+    --rd-tab-on-fg: #8c6621;
+    --rd-tab-fg: #5a5142;
+    --rd-tab-on-under: inset 0 -1px 0 #a67c2e;
+    --rd-bar-band: linear-gradient(90deg, transparent, #b99447 18%, #e0c274 50%, #b99447 82%, transparent) 0 0 / 100% 1px no-repeat, linear-gradient(90deg, transparent, #b99447 18%, #e0c274 50%, #b99447 82%, transparent) 0 100% / 100% 1px no-repeat;
+    --rd-stage: #14110d;
+    --rd-corner-color: #a67c2e;
+}
+
+.bb-reader[data-bb-skin="deco"][data-bb-theme="dark"] {
+    --rd-page: #0e0d0c;
+    --rd-panel: #161513;
+    --rd-card: #161513;
+    --rd-chip: #1d1b18;
+    --rd-chip-2: #2e2a24;
+    --rd-text: #efe7d4;
+    --rd-muted: #b3a88d;
+    --rd-faint: #7e755f;
+    --rd-past: #b3a88d;
+    --rd-divider: rgba(239, 231, 212, .12);
+    --rd-panel-border: 1px solid #332f28;
+    --rd-card-border: 1px solid #c9a227;
+    --rd-panel-shadow: none;
+    --rd-card-shadow: 0 24px 60px rgba(0, 0, 0, .75);
+    --rd-band-shadow: 0 8px 24px rgba(0, 0, 0, .55);
+    --rd-accent-ink: #dcbc55;
+    --rd-now: rgba(201, 162, 39, .9);
+    --rd-knob: #e0c274;
+    --rd-mark: linear-gradient(transparent 56%, rgba(214, 178, 98, .42) 56%, rgba(214, 178, 98, .42) 94%, transparent 94%);
+    --rd-mark-hot: linear-gradient(transparent 56%, rgba(214, 178, 98, .66) 56%, rgba(214, 178, 98, .66) 94%, transparent 94%);
+    --rd-mark-wet: linear-gradient(transparent 56%, rgba(214, 178, 98, .72) 56%, rgba(214, 178, 98, .72) 94%, transparent 94%);
+    --rd-mark-erase: linear-gradient(transparent 56%, rgba(214, 178, 98, .12) 56%, rgba(214, 178, 98, .12) 94%, transparent 94%);
+    --rd-ink: #c9a227;
+    --rd-tb-bg: #0a0908;
+    --rd-tb-fg: #dcbc55;
+    --rd-tb-border: 1px solid #c9a227;
+    --rd-tb-hover: rgba(201, 162, 39, .16);
+    --rd-tb-shadow: 0 8px 24px rgba(0, 0, 0, .6);
+    --rd-toast-bg: #dcbc55;
+    --rd-toast-fg: #0e0d0c;
+    --rd-toast-act: #0e0d0c;
+    --rd-tab-on-fg: #dcbc55;
+    --rd-tab-fg: #b3a88d;
+    --rd-tab-on-under: inset 0 -1px 0 #c9a227;
+    --rd-bar-band: linear-gradient(90deg, transparent, #c9a227 18%, #e0c274 50%, #c9a227 82%, transparent) 0 0 / 100% 1px no-repeat, linear-gradient(90deg, transparent, #c9a227 18%, #e0c274 50%, #c9a227 82%, transparent) 0 100% / 100% 1px no-repeat;
+    --rd-stage: #0a0908;
+    --rd-corner-color: #c9a227;
+}

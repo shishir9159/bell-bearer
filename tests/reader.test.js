@@ -727,12 +727,19 @@
     });
 
     suite('reader — skins', () => {
-        test('the reader is dressed in each skin', async () => {
+        test('the reader is dressed in each skin, with the skin’s own shape', async () => {
             for (const skin of ['default', 'riso', 'medieval', 'deco']) {
                 MockChrome.reset({ localStore: { skin } });
                 const { reader } = await openReady();
                 await waitFor(() => reader.element.dataset.bbSkin === skin, `the ${skin} skin`);
                 assert(['light', 'dark'].includes(reader.element.dataset.bbTheme), 'no light or dark');
+                const radius = getComputedStyle(reader.element.querySelector('.rd-panel')).borderTopLeftRadius;
+                if (skin === 'riso' || skin === 'deco') assertEqual(radius, '0px', `${skin} kept round corners`);
+                else assert(radius !== '0px', `${skin} lost its corners`);
+                const mark = getComputedStyle(reader.element.querySelector('.rd-paras .rd-stamp'), '::before').content;
+                assertEqual(mark.includes('¶'), skin === 'medieval', `${skin}'s paragraph mark is ${mark}`);
+                const corners = getComputedStyle(reader.element.querySelector('.rd-corners')).display;
+                assertEqual(corners !== 'none', skin === 'deco', `${skin}'s corner ornament`);
                 assert(reader.element.style.getPropertyValue('--rd-cursor-pen').includes('svg'), 'the pen is not the cursor');
                 reader.close();
                 teardown();
