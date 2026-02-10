@@ -1,15 +1,16 @@
 /*
  * the YouTube reader.
  *
- * Loaded after content.css, and only by this site's manifest entry: the
- * rules were the tail of content.css, every one of them scoped to this
- * site's own classes, so they keep their place in the cascade and are no
- * longer parsed on every other page. The palette and the skins they draw
- * on are content.css's.
+ * Loaded after content.css, and only by this site's entry. The reader keeps
+ * its own palette, --rd-*, rather than content.css's --bb-*: it is a whole
+ * page rather than a panel over one, and its design names colours the panels
+ * have no use for — the stage behind a letterboxed video, the highlighter's
+ * wet ink, the toolbar's ground. The skins are the same four, read off the
+ * same data-bb-skin and data-bb-theme every injected surface carries.
  */
 
 /* =====================================================================
-   The YouTube reader
+   The page, and the reader over it
    ===================================================================== */
 
 /* The page underneath stops scrolling while the reader is up. It is still
@@ -25,12 +26,16 @@ html.bb-reader-open body { overflow: hidden !important; }
     position: fixed;
     inset: 0;
     z-index: 999990;
-    display: flex;
-    flex-direction: column;
-    background: var(--bb-surface);
-    color: var(--bb-text);
-    font-family: var(--bb-font);
+    overflow: hidden;
+    isolation: isolate;
+    background: var(--rd-page);
+    color: var(--rd-text);
+    font-family: var(--rd-font);
     font-size: 14px;
+    line-height: 1.45;
+    text-align: left;
+    -webkit-font-smoothing: antialiased;
+    --rd-size: calc(var(--rd-base-size, 16px) + var(--rd-size-adj, 0px));
 }
 
 /* Under YouTube's header rather than over it. The top is set in script to
@@ -39,345 +44,280 @@ html.bb-reader-open body { overflow: hidden !important; }
    behind it. */
 .bb-reader.is-under-masthead { z-index: 2019; }
 
-.bb-reader-bar {
+.bb-reader *,
+.bb-reader *::before,
+.bb-reader *::after { box-sizing: border-box; }
+
+/* Several pieces are flex boxes, which would otherwise show through their
+   hidden attribute. */
+.bb-reader [hidden] { display: none !important; }
+
+/* Every button the reader draws starts from nothing. Scoped to the reader's
+   own pieces: the player sits in here too, and its controls are YouTube's.
+   :where() keeps this at the weight of one class, so any rule styling a
+   button below outweighs it. */
+.bb-reader :where(.rd-bar, .rd-under, .rd-panel, .rd-side) button {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+.bb-reader :where(.rd-bar, .rd-under, .rd-panel, .rd-side) button:focus-visible {
+    outline: 2px solid var(--rd-knob);
+    outline-offset: 2px;
+}
+
+/* =====================================================================
+   The palette: YouTube's own, light and dark. The other skins follow.
+   ===================================================================== */
+
+.bb-reader {
+    --rd-page: #ffffff;
+    --rd-panel: #ffffff;
+    --rd-card: #ffffff;
+    --rd-chip: rgba(0, 0, 0, .05);
+    --rd-chip-2: rgba(0, 0, 0, .12);
+    --rd-text: #0f0f0f;
+    --rd-muted: #606060;
+    --rd-faint: #8a8a8a;
+    --rd-past: #5f5f5f;
+    --rd-divider: rgba(0, 0, 0, .1);
+    --rd-panel-border: 1px solid rgba(0, 0, 0, .1);
+    --rd-card-border: 1px solid rgba(0, 0, 0, .06);
+    --rd-panel-shadow: none;
+    --rd-card-shadow: 0 12px 40px rgba(0, 0, 0, .16), 0 2px 8px rgba(0, 0, 0, .06);
+    --rd-band-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+    --rd-accent-ink: #cc0000;
+    --rd-now: rgba(255, 0, 51, .7);
+    --rd-knob: #065fd4;
+    --rd-mark: rgba(255, 212, 0, .36);
+    --rd-mark-hot: rgba(255, 196, 0, .58);
+    --rd-mark-wet: rgba(255, 196, 0, .66);
+    --rd-mark-erase: rgba(255, 212, 0, .12);
+    --rd-ink: #f2c200;
+    --rd-tb-bg: #ffffff;
+    --rd-tb-fg: #0f0f0f;
+    --rd-tb-border: 1px solid rgba(0, 0, 0, .08);
+    --rd-tb-hover: rgba(0, 0, 0, .06);
+    --rd-tb-shadow: 0 4px 18px rgba(0, 0, 0, .16);
+    --rd-toast-bg: #0f0f0f;
+    --rd-toast-fg: #ffffff;
+    --rd-toast-act: #3ea6ff;
+    --rd-r: 12px;
+    --rd-r-sm: 8px;
+    --rd-r-chip: 8px;
+    --rd-r-mark: 3px;
+    --rd-r-video: 12px;
+    --rd-r-knob: 50%;
+    --rd-font: Roboto, Arial, sans-serif;
+    --rd-font-head: Roboto, Arial, sans-serif;
+    --rd-font-tab: Roboto, Arial, sans-serif;
+    --rd-head-weight: 500;
+    --rd-head-case: none;
+    --rd-head-track: 0;
+    --rd-title-size: 15px;
+    --rd-title-shadow: none;
+    --rd-tab-on-bg: #0f0f0f;
+    --rd-tab-on-fg: #ffffff;
+    --rd-tab-bg: rgba(0, 0, 0, .05);
+    --rd-tab-fg: #0f0f0f;
+    --rd-tab-border: 1px solid transparent;
+    --rd-tab-on-under: none;
+    --rd-tab-case: none;
+    --rd-tab-track: 0;
+    --rd-tex: none;
+    --rd-tex-size: auto;
+    --rd-tex-blend: normal;
+    --rd-tex-opacity: 0;
+    --rd-bar-band: transparent;
+    --rd-bar-band-h: 0px;
+    --rd-para-mark: '';
+    --rd-size-adj: 0px;
+    --rd-stage: #000000;
+    --rd-corner: none;
+    --rd-corner-color: transparent;
+    --rd-stamp-track: 0;
+    --rd-note-style: normal;
+}
+
+.bb-reader[data-bb-theme="dark"] {
+    --rd-page: #0f0f0f;
+    --rd-panel: #0f0f0f;
+    --rd-card: #212121;
+    --rd-chip: rgba(255, 255, 255, .1);
+    --rd-chip-2: rgba(255, 255, 255, .22);
+    --rd-text: #f1f1f1;
+    --rd-muted: #aaaaaa;
+    --rd-faint: #7c7c7c;
+    --rd-past: #a3a3a3;
+    --rd-divider: rgba(255, 255, 255, .1);
+    --rd-panel-border: 1px solid rgba(255, 255, 255, .14);
+    --rd-card-border: 1px solid rgba(255, 255, 255, .08);
+    --rd-card-shadow: 0 16px 48px rgba(0, 0, 0, .6);
+    --rd-band-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+    --rd-accent-ink: #ff4e45;
+    --rd-now: rgba(255, 78, 69, .85);
+    --rd-knob: #3ea6ff;
+    --rd-mark: rgba(255, 214, 90, .24);
+    --rd-mark-hot: rgba(255, 214, 90, .42);
+    --rd-mark-wet: rgba(255, 214, 90, .5);
+    --rd-mark-erase: rgba(255, 214, 90, .08);
+    --rd-ink: #ffd65a;
+    --rd-tb-bg: #282828;
+    --rd-tb-fg: #f1f1f1;
+    --rd-tb-border: 1px solid rgba(255, 255, 255, .06);
+    --rd-tb-hover: rgba(255, 255, 255, .12);
+    --rd-tb-shadow: 0 8px 28px rgba(0, 0, 0, .55);
+    --rd-toast-bg: #f1f1f1;
+    --rd-toast-fg: #0f0f0f;
+    --rd-toast-act: #065fd4;
+    --rd-tab-on-bg: #f1f1f1;
+    --rd-tab-on-fg: #0f0f0f;
+    --rd-tab-bg: rgba(255, 255, 255, .1);
+    --rd-tab-fg: #f1f1f1;
+}
+
+/* =====================================================================
+   The pieces. Each is placed by reader.js from ReaderLayout.geometry —
+   left, top, width and height — so a change of layout is a change of four
+   numbers, and these transitions are what make it a move.
+   ===================================================================== */
+
+.rd-bar,
+.rd-stage,
+.rd-video,
+.rd-under,
+.rd-panel,
+.rd-side {
+    position: absolute;
+    transition: left .3s ease, top .3s ease, width .3s ease, height .3s ease;
+}
+
+/* Not on the first frame, which would fly every piece in from the corner,
+   and not while a card is dragged, which would trail the pointer. */
+.bb-reader.is-still *,
+.bb-reader.is-moving * { transition: none !important; }
+
+/* The skin's paper, over everything and under nothing: it never takes a click. */
+.rd-tex {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--rd-tex);
+    background-size: var(--rd-tex-size);
+    mix-blend-mode: var(--rd-tex-blend);
+    opacity: var(--rd-tex-opacity);
+}
+
+.rd-panel > .rd-tex { z-index: 45; }
+
+.rd-stage { z-index: 1; background: var(--rd-stage); }
+.bb-reader[data-layout="glass"] .rd-stage { background: #000; }
+
+/* ---- The bar */
+
+.rd-bar {
+    z-index: 6;
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--bb-border);
-    flex: none;
+    padding: 0 12px 0 20px;
 }
 
-.bb-reader-title {
-    flex: 1;
+.bb-reader[data-layout="glass"] .rd-bar {
+    gap: 8px;
+    padding: 0 8px 0 16px;
+    background: var(--rd-panel);
+    border-left: 1px solid var(--rd-divider);
+    border-bottom: 1px solid var(--rd-divider);
+    --rd-bar-band-h: 0px;
+}
+
+.rd-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
     min-width: 0;
-    margin: 0;
-    font: 600 15px/1.3 var(--bb-font-head);
-    text-transform: var(--bb-head-case);
-    letter-spacing: var(--bb-head-track);
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+.bb-reader[data-layout="glass"] .rd-title { display: none; }
+
+.rd-title-text {
+    font-family: var(--rd-font-head);
+    font-weight: var(--rd-head-weight);
+    text-transform: var(--rd-head-case);
+    letter-spacing: var(--rd-head-track);
+    font-size: var(--rd-title-size);
+    color: var(--rd-text);
+    text-shadow: var(--rd-title-shadow);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.bb-reader-tools { display: flex; align-items: center; gap: 8px; }
+.rd-channel { font-size: 12.5px; color: var(--rd-muted); white-space: nowrap; }
 
-.bb-reader-close {
-    width: 32px;
-    height: 32px;
-    border: 1px solid var(--bb-border);
-    border-radius: var(--bb-r-sm);
-    background: var(--bb-chip);
-    color: var(--bb-text);
-    font-size: 20px;
-    line-height: 1;
-    cursor: pointer;
-}
+.rd-flex { flex: 1 1 auto; }
 
+.rd-layouts { display: flex; align-items: center; gap: 2px; }
 
-.bb-reader-lang {
-    max-width: 180px;
-    padding: 5px 8px;
-    border: 1px solid var(--bb-border);
-    border-radius: var(--bb-r-sm);
-    background: var(--bb-input-bg);
-    color: var(--bb-text);
-    font: inherit;
-    font-size: 12px;
-}
-
-.bb-reader-lang[hidden] { display: none; }
-
-.bb-reader-layouts {
-    display: flex;
-    border: 1px solid var(--bb-border);
-    border-radius: var(--bb-r-sm);
-    overflow: hidden;
-}
-
-.bb-reader-layout {
-    padding: 5px 10px;
-    border: 0;
-    border-left: 1px solid var(--bb-border);
-    background: transparent;
-    color: var(--bb-sub);
-    font: inherit;
-    font-size: 12px;
-    cursor: pointer;
-}
-
-.bb-reader-layout:first-child { border-left: 0; }
-.bb-reader-layout:hover { color: var(--bb-text); background: var(--bb-chip); }
-.bb-reader-layout[aria-checked="true"] { background: var(--bb-accent-soft); color: var(--bb-accent); font-weight: 600; }
-
-/* ---- The four layouts. One grid each, chosen by data-layout, and nothing
-   worked out in script. --bb-reader-share is the one number each layout
-   lets you drag: the video's width in split, its height in stacked, the
-   drawer's width in theatre and the corner player's width in focus — a
-   percentage every time, so a window resized between sessions can never
-   put the video off the edge. */
-
-.bb-reader-body {
-    position: relative;
-    flex: 1;
-    min-height: 0;
-    display: grid;
-    grid-template-columns: minmax(0, calc(var(--bb-reader-share, 62) * 1%)) minmax(0, 1fr);
-}
-
-/* Stacked: the video centred on top, transcript and notes in one column
-   under it. Best on a laptop, and for wide video. */
-.bb-reader[data-layout="stacked"] .bb-reader-body {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, calc(var(--bb-reader-share, 55) * 1%)) minmax(0, 1fr);
-}
-
-.bb-reader[data-layout="stacked"] .bb-reader-side {
-    border-left: 0;
-    border-top: 1px solid var(--bb-border);
-}
-
-/* Theatre: the video takes the whole body and the transcript is a drawer
-   over it from the right. A sliver of the drawer stays on screen as the
-   thing to reach for, and it slides out while it is hovered or holds focus
-   — so it stays out while you select in it, and hides itself after. */
-.bb-reader[data-layout="theatre"] .bb-reader-body { grid-template-columns: minmax(0, 1fr); }
-
-.bb-reader[data-layout="theatre"] .bb-reader-side {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: calc(var(--bb-reader-share, 34) * 1%);
-    background: var(--bb-panel-solid);
-    box-shadow: var(--bb-shadow);
-    transform: translateX(calc(100% - 14px));
-    transition: transform .22s ease;
-    z-index: 2;
-}
-
-.bb-reader[data-layout="theatre"] .bb-reader-side::before {
-    content: '';
-    position: absolute;
-    left: 5px;
-    top: 50%;
-    width: 4px;
-    height: 48px;
-    margin-top: -24px;
-    border-radius: 2px;
-    background: var(--bb-border-strong);
-}
-
-.bb-reader[data-layout="theatre"] .bb-reader-side:hover,
-.bb-reader[data-layout="theatre"] .bb-reader-side:focus-within { transform: none; }
-
-/* Focus: the transcript leads, set for reading, and the video is pinned in
-   the corner. 30% of the viewport by default — deliberately bigger than a
-   thumbnail, because a corner player you cannot see is the complaint that
-   started this feature. */
-.bb-reader[data-layout="focus"] .bb-reader-body { grid-template-columns: minmax(0, 1fr); }
-
-.bb-reader[data-layout="focus"] .bb-reader-side { border-left: 0; }
-
-.bb-reader[data-layout="focus"] .bb-reader-stage {
-    position: absolute;
-    right: 20px;
-    bottom: 20px;
-    width: calc(var(--bb-reader-share, 30) * 1%);
-    aspect-ratio: 16 / 9;
-    padding: 0;
-    border-radius: var(--bb-r);
-    overflow: hidden;
-    box-shadow: var(--bb-shadow);
-    z-index: 2;
-}
-
-/* The notes would sit under the corner player, so in focus they stop short
-   of it. */
-.bb-reader[data-layout="focus"] .bb-reader-notes {
-    margin-right: calc(var(--bb-reader-share, 30) * 1% + 20px);
-}
-
-/* ---- Resizing. The divider sits on the edge each layout lets you drag,
-   placed off the same --bb-reader-share the grid is sized from, so the two
-   cannot disagree. Wider than it looks, because an edge you have to hunt
-   for with the pointer is one nobody drags. */
-.bb-reader-divider {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: calc(var(--bb-reader-share, 62) * 1%);
-    width: 12px;
-    margin-left: -6px;
-    cursor: col-resize;
-    touch-action: none;
-    z-index: 3;
-}
-
-.bb-reader-divider::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 4px;
-    width: 4px;
-    height: 44px;
-    margin-top: -22px;
-    border-radius: 2px;
-    background: var(--bb-border-strong);
-    opacity: .55;
-    transition: opacity .12s;
-}
-
-.bb-reader-divider:hover::after,
-.bb-reader-divider:focus-visible::after,
-.bb-reader.is-resizing .bb-reader-divider::after { opacity: 1; background: var(--bb-accent); }
-
-.bb-reader-divider:focus-visible { outline: none; }
-
-.bb-reader[data-layout="stacked"] .bb-reader-divider {
-    top: calc(var(--bb-reader-share, 55) * 1%);
-    bottom: auto;
-    left: 0;
-    right: 0;
-    width: auto;
-    height: 12px;
-    margin: -6px 0 0;
-    cursor: row-resize;
-}
-
-.bb-reader[data-layout="stacked"] .bb-reader-divider::after {
-    top: 4px;
-    left: 50%;
-    width: 44px;
-    height: 4px;
-    margin: 0 0 0 -22px;
-}
-
-/* In theatre the handle is the drawer's left edge, so it is only there
-   while the drawer is out — and holding it keeps the drawer out. */
-.bb-reader[data-layout="theatre"] .bb-reader-divider {
-    left: auto;
-    right: calc(var(--bb-reader-share, 34) * 1%);
-    margin: 0 -6px 0 0;
-    display: none;
-}
-
-.bb-reader[data-layout="theatre"] .bb-reader-body:has(.bb-reader-side:hover, .bb-reader-side:focus-within, .bb-reader-divider:hover) .bb-reader-divider,
-.bb-reader[data-layout="theatre"].is-resizing .bb-reader-divider { display: block; }
-
-.bb-reader[data-layout="theatre"] .bb-reader-body:has(.bb-reader-divider:hover) .bb-reader-side,
-.bb-reader[data-layout="theatre"].is-resizing .bb-reader-side { transform: none; }
-
-/* In focus the divider gives way to a grip on the corner player itself. */
-.bb-reader[data-layout="focus"] .bb-reader-divider { display: none; }
-
-.bb-reader-grip { display: none; }
-
-.bb-reader[data-layout="focus"] .bb-reader-grip {
-    display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 22px;
-    height: 22px;
-    cursor: nwse-resize;
-    touch-action: none;
-    z-index: 3;
-    background: linear-gradient(135deg, var(--bb-accent) 0 30%, transparent 30%);
-    opacity: .7;
-}
-
-.bb-reader[data-layout="focus"] .bb-reader-grip:hover { opacity: 1; }
-
-/* While dragging, nothing animates and nothing gets selected, and the page
-   under the pointer — the video included — cannot take the drag away. */
-.bb-reader.is-resizing,
-.bb-reader.is-resizing * { user-select: none; transition: none !important; }
-.bb-reader.is-resizing .bb-reader-screen { pointer-events: none; }
-
-/* ---- The skins. Everything above is tokens, so the palette and the type
-   already follow the skin; what is left is the shape and the one colour
-   that is not a token — the checkpoint wash, which is highlighter yellow on
-   the default skin and has to be something else wherever yellow would clash
-   or vanish. Each light rule is paired with its night state, the way the X
-   panel's are. */
-
-/* Night on the default skin: the same yellow reads muddy over a dark page,
-   so it is lighter and thinner. */
-.bb-reader.bb-themed[data-bb-theme="dark"] { --bb-reader-mark-1: rgba(255, 214, 90, .10); --bb-reader-mark-2: rgba(255, 214, 90, .17); --bb-reader-mark-3: rgba(255, 214, 90, .24); }
-
-/* Riso prints in its two inks, so the wash is the pink and the playing line
-   the blue. */
-.bb-reader.bb-themed[data-bb-skin="riso"] { --bb-reader-mark-1: rgba(255, 72, 176, .12); --bb-reader-mark-2: rgba(255, 72, 176, .20); --bb-reader-mark-3: rgba(255, 72, 176, .30); }
-.bb-reader.bb-themed[data-bb-skin="riso"][data-bb-theme="dark"] { --bb-reader-mark-1: rgba(255, 92, 187, .14); --bb-reader-mark-2: rgba(255, 92, 187, .22); --bb-reader-mark-3: rgba(255, 92, 187, .32); }
-.bb-reader.bb-themed[data-bb-skin="riso"] .bb-rt-row.is-active { background-color: rgba(31, 95, 208, .12); }
-.bb-reader.bb-themed[data-bb-skin="riso"][data-bb-theme="dark"] .bb-rt-row.is-active { background-color: rgba(96, 150, 255, .18); }
-
-/* Medieval rubricates: the wash is the red ink, faint, on the parchment. */
-.bb-reader.bb-themed[data-bb-skin="medieval"] { --bb-reader-mark-1: rgba(156, 43, 22, .08); --bb-reader-mark-2: rgba(156, 43, 22, .14); --bb-reader-mark-3: rgba(156, 43, 22, .21); }
-.bb-reader.bb-themed[data-bb-skin="medieval"][data-bb-theme="dark"] { --bb-reader-mark-1: rgba(216, 102, 63, .12); --bb-reader-mark-2: rgba(216, 102, 63, .19); --bb-reader-mark-3: rgba(216, 102, 63, .27); }
-
-/* Deco is gilt: the wash is the gold. */
-.bb-reader.bb-themed[data-bb-skin="deco"] { --bb-reader-mark-1: rgba(185, 148, 71, .14); --bb-reader-mark-2: rgba(185, 148, 71, .23); --bb-reader-mark-3: rgba(185, 148, 71, .33); }
-.bb-reader.bb-themed[data-bb-skin="deco"][data-bb-theme="dark"] { --bb-reader-mark-1: rgba(214, 178, 98, .12); --bb-reader-mark-2: rgba(214, 178, 98, .20); --bb-reader-mark-3: rgba(214, 178, 98, .28); }
-
-/* Medieval sets the transcript as a manuscript would: the serif, and a
-   touch more leading than the setting asks for, which Cardo needs. */
-.bb-reader.bb-themed[data-bb-skin="medieval"] .bb-rt-rows { line-height: calc(var(--bb-reader-leading, 1.6) + .1); }
-
-/* The two square-cornered skins square these off too, the way they do
-   every other surface we inject. */
-.bb-reader.bb-themed[data-bb-skin="riso"] :is(.bb-reader-close, .bb-reader-layouts, .bb-reader-lang, .bb-rt-row,
-    .bb-reader-toast, .bb-reader-toast-act, .bb-rn-copy, .bb-rn-time, .bb-rn-delete, .bb-rn-note),
-.bb-reader.bb-themed[data-bb-skin="deco"] :is(.bb-reader-close, .bb-reader-layouts, .bb-reader-lang, .bb-rt-row,
-    .bb-reader-toast, .bb-reader-toast-act, .bb-rn-copy, .bb-rn-time, .bb-rn-delete, .bb-rn-note),
-.bb-reader.bb-themed[data-bb-skin="riso"][data-layout="focus"] .bb-reader-stage,
-.bb-reader.bb-themed[data-bb-skin="deco"][data-layout="focus"] .bb-reader-stage { border-radius: 0; }
-
-.bb-reader.bb-themed[data-bb-skin="medieval"] :is(.bb-reader-close, .bb-reader-layouts, .bb-reader-lang, .bb-rt-row,
-    .bb-reader-toast, .bb-reader-toast-act, .bb-rn-copy, .bb-rn-time, .bb-rn-delete, .bb-rn-note),
-.bb-reader.bb-themed[data-bb-skin="medieval"][data-layout="focus"] .bb-reader-stage { border-radius: 3px; }
-
-/* Riso draws its borders as hard ink rather than as a tint, and the toast
-   is the one surface here that floats, so it gets the heavier one. */
-.bb-reader.bb-themed[data-bb-skin="riso"] .bb-reader-toast { border: 2px solid var(--bb-border-strong); }
-
-@media (prefers-reduced-motion: reduce) {
-    .bb-reader[data-layout="theatre"] .bb-reader-side { transition: none; }
-    .bb-reader-toast { animation: none; }
-}
-
-/* The stage gets a soft vignette rather than a flat black slab, so the
-   player sits in the page instead of being punched through it. */
-.bb-reader-stage {
-    position: relative;
-    min-width: 0;
-    min-height: 0;
+.bb-reader .rd-layout {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 16px;
-    background: radial-gradient(ellipse at center, rgba(0, 0, 0, .5) 0%, rgba(0, 0, 0, .82) 100%);
-    /* So the screen can be sized off whichever of the stage's two sides
-       runs out first — see below. */
-    container-type: size;
+    width: 34px;
+    height: 28px;
+    border-radius: var(--rd-r-sm);
+    color: var(--rd-muted);
 }
 
-/* As large as the stage allows at 16:9, whichever side limits it. A plain
-   width of 100% with a max-height broke the ratio on a short stage, and the
-   control bar ran wider than the picture. */
-.bb-reader-screen {
-    position: relative;
-    width: min(100cqw, 100cqh * 16 / 9);
-    aspect-ratio: 16 / 9;
+.bb-reader .rd-layout:hover { color: var(--rd-text); }
+.bb-reader .rd-layout[aria-checked="true"] { background: var(--rd-chip); color: var(--rd-text); }
+
+.rd-rule { width: 1px; height: 18px; margin: 0 4px; background: var(--rd-divider); flex: none; }
+
+.bb-reader .rd-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--rd-r-sm);
+    color: var(--rd-muted);
 }
 
+.bb-reader .rd-close:hover { background: var(--rd-chip); color: var(--rd-text); }
 
-/* YouTube writes the player's size, and the video box's, as inline styles
-   worked out for wherever it last laid itself out. The screen is the size
-   now, so both are told to fill it; the resize event reader.js sends lets
-   YouTube catch its control bar up. */
-.bb-reader-screen #movie_player {
+.rd-bar-band {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--rd-bar-band-h);
+    background: var(--rd-bar-band);
+    pointer-events: none;
+}
+
+/* ---- The player. YouTube writes the player's size, and the video box's,
+   as inline styles worked out for wherever it last laid itself out; both
+   are told to fill the box the layout gives it, and the resize event
+   reader.js sends lets YouTube catch its control bar up. */
+
+.rd-video {
+    z-index: 2;
+    overflow: hidden;
+    background: #000;
+}
+
+.bb-reader:is([data-layout="dock"], [data-layout="band"], [data-layout="focus"]) .rd-video { border-radius: var(--rd-r-video); }
+.bb-reader[data-layout="focus"] .rd-video { z-index: 7; box-shadow: var(--rd-card-shadow); }
+
+.rd-screen { position: absolute; inset: 0; }
+
+.rd-screen #movie_player {
     position: absolute !important;
     inset: 0 !important;
     width: 100% !important;
@@ -388,14 +328,14 @@ html.bb-reader-open body { overflow: hidden !important; }
    is the video's containing block — and it holds nothing but the absolutely
    placed video, so it had no height of its own, the video's 100% came to 0,
    and the reader played sound over a black screen. */
-.bb-reader-screen #movie_player .html5-video-container {
+.rd-screen #movie_player .html5-video-container {
     position: absolute !important;
     inset: 0 !important;
     width: 100% !important;
     height: 100% !important;
 }
 
-.bb-reader-screen #movie_player video.html5-main-video {
+.rd-screen #movie_player video.html5-main-video {
     width: 100% !important;
     height: 100% !important;
     left: 0 !important;
@@ -406,234 +346,686 @@ html.bb-reader-open body { overflow: hidden !important; }
 /* The slot left where the player was: nothing, and it takes up nothing. */
 #bb-reader-slot { display: none; }
 
-.bb-reader-side {
-    min-width: 0;
-    min-height: 0;
+/* The pinned player's handle: a strip along its top, light on dark video
+   and dark on light, because a lecture slide is as likely as a film. */
+.rd-vgrip {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 26px;
+    z-index: 5;
+    justify-content: center;
+    padding-top: 7px;
+    cursor: grab;
+    touch-action: none;
+}
+
+.bb-reader[data-layout="focus"] .rd-vgrip { display: flex; }
+
+.rd-vgrip span,
+.rd-grip span {
+    width: 38px;
+    height: 4px;
+    border-radius: 2px;
+}
+
+.rd-vgrip span { background: rgba(255, 255, 255, .6); box-shadow: 0 0 0 1px rgba(0, 0, 0, .28); }
+
+/* ---- Under the docked player */
+
+.rd-under { z-index: 2; overflow: hidden; }
+
+.rd-under-title {
+    margin: 0;
+    font-family: var(--rd-font-head);
+    font-weight: var(--rd-head-weight);
+    text-transform: var(--rd-head-case);
+    letter-spacing: var(--rd-head-track);
+    font-size: 19px;
+    line-height: 1.3;
+    color: var(--rd-text);
+    text-shadow: var(--rd-title-shadow);
+}
+
+.rd-under-meta { margin-top: 4px; font-size: 13px; color: var(--rd-muted); }
+
+.rd-chapters { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+
+.rd-chapters:empty { display: none; }
+
+.bb-reader .rd-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 30px;
+    padding: 0 12px;
+    border-radius: var(--rd-r-chip);
+    border: var(--rd-tab-border);
+    font-family: var(--rd-font-tab);
+    font-size: 13px;
+    text-transform: var(--rd-tab-case);
+    letter-spacing: var(--rd-tab-track);
+    background: var(--rd-chip);
+    color: var(--rd-text);
+}
+
+.bb-reader .rd-chip.is-on { background: var(--rd-tab-on-bg); color: var(--rd-tab-on-fg); box-shadow: var(--rd-tab-on-under); }
+
+.rd-chip-time { font-variant-numeric: tabular-nums; opacity: .7; }
+
+/* =====================================================================
+   The transcript panel — a docked column, a floating card, a slim strip,
+   a band, or in focus the page itself.
+   ===================================================================== */
+
+.rd-panel {
+    z-index: 3;
     display: flex;
     flex-direction: column;
-    border-left: 1px solid var(--bb-border);
+    overflow: hidden;
+    --rd-surface: var(--rd-panel);
 }
 
-/* Positioned so it is every row's offsetParent: follow-along scrolls this
-   column by a row's offsetTop, and against any other ancestor the number
-   would be off by everything above the column. */
-.bb-reader-transcript {
+.bb-reader[data-layout="dock"] .rd-panel {
+    background: var(--rd-panel);
+    border: var(--rd-panel-border);
+    border-radius: var(--rd-r);
+    box-shadow: var(--rd-panel-shadow);
+}
+
+.bb-reader:is([data-layout="float"], [data-layout="band"]) .rd-panel {
+    z-index: 5;
+    background: var(--rd-card);
+    border: var(--rd-card-border);
+    border-radius: var(--rd-r);
+    box-shadow: var(--rd-card-shadow);
+    --rd-surface: var(--rd-card);
+}
+
+.bb-reader[data-layout="band"]:not(.is-band-open) .rd-panel { box-shadow: var(--rd-band-shadow); }
+
+.bb-reader[data-layout="glass"] .rd-panel {
+    z-index: 4;
+    background: var(--rd-panel);
+    border-left: 1px solid var(--rd-divider);
+}
+
+.bb-reader[data-layout="focus"] .rd-panel { --rd-surface: var(--rd-page); }
+
+/* The float card's handle. */
+.rd-grip {
+    display: none;
+    flex: none;
+    height: 16px;
+    align-items: flex-end;
+    justify-content: center;
+    cursor: grab;
+    touch-action: none;
+}
+
+.bb-reader[data-layout="float"] .rd-grip { display: flex; }
+.rd-grip span { background: var(--rd-chip-2); }
+
+/* ---- Transcript and Highlights, in the two layouts with room for both */
+
+.rd-tabs {
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px 10px 16px;
+}
+
+.bb-reader:is([data-layout="dock"], [data-layout="float"]) .rd-tabs { display: flex; }
+
+.bb-reader .rd-tab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 30px;
+    padding: 0 12px;
+    font-family: var(--rd-font-tab);
+    font-size: 13.5px;
+    font-weight: 500;
+    text-transform: var(--rd-tab-case);
+    letter-spacing: var(--rd-tab-track);
+    border-radius: var(--rd-r-chip);
+    border: var(--rd-tab-border);
+    background: var(--rd-tab-bg);
+    color: var(--rd-tab-fg);
+}
+
+.bb-reader .rd-tab[aria-selected="true"] {
+    background: var(--rd-tab-on-bg);
+    color: var(--rd-tab-on-fg);
+    box-shadow: var(--rd-tab-on-under);
+}
+
+.rd-tab-count { font-variant-numeric: tabular-nums; opacity: .65; }
+
+/* The language picker, drawn as the word it says. The select is laid over
+   the word, so the list it opens is the browser's own. */
+.rd-lang {
     position: relative;
-    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    border-radius: var(--rd-r-sm);
+    font-size: 12.5px;
+    color: var(--rd-muted);
+}
+
+.rd-lang:hover { background: var(--rd-chip); }
+
+.rd-lang select {
+    appearance: none;
+    max-width: 150px;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    outline: none;
+}
+
+.rd-lang select option { color: #0f0f0f; background: #ffffff; }
+
+/* ---- The column */
+
+.rd-scroll {
+    position: relative;
+    flex: 1 1 auto;
     min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rd-chip-2) transparent;
 }
 
-/* Real measure and leading rather than a wall of 13px text. The three are
-   custom properties so the typography settings can move them without a
-   redraw. */
-.bb-rt-rows {
-    max-width: var(--bb-reader-measure, 44em);
-    margin: 0 auto;
-    padding: 20px 24px 40vh;
-    font-size: var(--bb-reader-size, 16px);
-    line-height: var(--bb-reader-leading, 1.6);
-}
-
-.bb-rt-row {
+/* The pen is the cursor, and nothing here is selectable: a highlight is
+   drawn word by word by reader-highlights.js, and the browser's selection
+   would only fight it. */
+.rd-content {
     position: relative;
-    margin: 0;
-    padding: 2px 8px 2px 4.2em;
-    border-radius: var(--bb-r-sm);
+    min-height: 100%;
+    padding: var(--rd-pad, 6px 22px 80px 8px);
+    cursor: var(--rd-cursor-pen, text);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.bb-reader.is-erasing .rd-content { cursor: var(--rd-cursor-eraser, default); }
+
+/* The band, closed: three sentences, centred in a box that does not scroll. */
+.bb-reader[data-layout="band"]:not(.is-band-open) .rd-scroll {
+    overflow-y: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.bb-reader[data-layout="band"]:not(.is-band-open) .rd-content { min-height: 0; }
+
+.rd-empty { margin: 24px; color: var(--rd-muted); }
+
+/* ---- A paragraph: its time hanging in the gutter, the prose beside it */
+
+.rd-p {
+    display: grid;
+    grid-template-columns: var(--rd-gutter, 48px) minmax(0, 1fr);
+    margin: 0 0 calc(var(--rd-size) * .9);
+}
+
+.bb-reader .rd-stamp {
+    align-self: start;
+    justify-self: end;
+    padding-right: 12px;
+    font-family: var(--rd-font);
+    font-size: 12px;
+    line-height: calc(var(--rd-size) * var(--rd-lead, 1.6));
+    font-variant-numeric: tabular-nums;
+    letter-spacing: var(--rd-stamp-track);
+    white-space: nowrap;
+    color: var(--rd-faint);
     cursor: pointer;
 }
 
-.bb-rt-row:hover { background: var(--bb-chip); }
+.bb-reader .rd-stamp::before {
+    content: var(--rd-para-mark);
+    margin-right: 3px;
+    color: var(--rd-accent-ink);
+}
 
-/* The time hangs in the margin so the text reads as prose, and it is not
-   selectable, so highlighting a passage never drags "1:02" in with it. */
-.bb-rt-time {
+.bb-reader .rd-p.is-now > .rd-stamp { color: var(--rd-accent-ink); font-weight: 600; }
+
+.rd-pbody { min-width: 0; }
+
+.bb-reader .rd-text {
+    margin: 0;
+    font-size: var(--rd-size);
+    line-height: var(--rd-lead, 1.6);
+    text-wrap: pretty;
+    color: var(--rd-text);
+}
+
+.rd-w,
+.rd-sp { padding: 2px 0; }
+
+/* What has been said greys, so the eye finds the playing paragraph; ink
+   keeps its colour, since a highlight is never "read". */
+.rd-p.is-past .rd-w:not(.m) { color: var(--rd-past); }
+
+/* The playing sentence, underlined word by word and across the spaces
+   between them — but not the space after its last word, which sits outside
+   the sentence's span. */
+.rd-s.is-now > .rd-w,
+.rd-s.is-now > .rd-sp {
+    text-decoration-line: underline;
+    text-decoration-color: var(--rd-now);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 5px;
+}
+
+/* ---- Ink. A highlight is a run of marked words and the spaces between
+   them; its ends are rounded. A hovered or picked one darkens, the stroke
+   being drawn is wet, and one under the eraser fades and is struck. */
+
+.rd-w.m,
+.rd-sp.m { background: var(--rd-mark); }
+
+.rd-w.m.hot,
+.rd-sp.m.hot { background: var(--rd-mark-hot); }
+
+.rd-w.m.wet,
+.rd-sp.m.wet { background: var(--rd-mark-wet); }
+
+.rd-w.m.erase,
+.rd-sp.m.erase { background: var(--rd-mark-erase); }
+
+.rd-w.m.erase {
+    text-decoration-line: line-through;
+    text-decoration-color: var(--rd-now);
+    text-decoration-thickness: 2px;
+}
+
+.rd-w.ms { border-top-left-radius: var(--rd-r-mark); border-bottom-left-radius: var(--rd-r-mark); }
+.rd-w.me { border-top-right-radius: var(--rd-r-mark); border-bottom-right-radius: var(--rd-r-mark); }
+
+/* ---- A note, at the end of its highlight */
+
+.rd-note {
+    margin: 8px 0 2px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    font-size: 13.5px;
+    line-height: 1.45;
+    color: var(--rd-muted);
+    font-style: var(--rd-note-style);
+    cursor: pointer;
+}
+
+.rd-note svg { flex: none; margin-top: 3px; color: var(--rd-accent-ink); }
+
+.rd-edit { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; cursor: auto; }
+
+.rd-edit textarea,
+.rd-li textarea {
+    width: 100%;
+    resize: none;
+    outline: none;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.rd-edit textarea {
+    font: 14px/1.5 var(--rd-font);
+    color: var(--rd-text);
+    background: var(--rd-chip);
+    border: 1px solid var(--rd-divider);
+    border-radius: var(--rd-r-sm);
+    padding: 8px 10px;
+}
+
+.rd-edit span { font-size: 11.5px; color: var(--rd-faint); }
+
+/* ---- The toolbar over a highlight, and the knobs at its ends */
+
+.rd-tb {
     position: absolute;
-    left: 8px;
-    top: 2px;
-    width: 3.4em;
-    color: var(--bb-faint);
-    font-size: .75em;
-    line-height: calc(var(--bb-reader-leading, 1.6) * 1em / .75);
-    font-variant-numeric: tabular-nums;
-    user-select: none;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    background: var(--rd-tb-bg);
+    color: var(--rd-tb-fg);
+    border: var(--rd-tb-border);
+    border-radius: var(--rd-r-sm);
+    box-shadow: var(--rd-tb-shadow);
+    font-family: var(--rd-font);
+    white-space: nowrap;
+    cursor: default;
 }
 
-.bb-rt-row.is-active { background: var(--bb-accent-soft); }
-
-/* A line inside a checkpoint: a rule in the margin and a wash that deepens
-   with each checkpoint over it, up to three, rather than one colour for any
-   number. The wash sits under the playing line's, so the two read together. */
-.bb-reader {
-    --bb-reader-mark-1: rgba(255, 196, 0, .16);
-    --bb-reader-mark-2: rgba(255, 196, 0, .26);
-    --bb-reader-mark-3: rgba(255, 196, 0, .36);
+.bb-reader .rd-tb button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 28px;
+    height: 28px;
+    border-radius: var(--rd-r-sm);
 }
 
-.bb-rt-row[data-bb-marks] {
-    --bb-reader-mark: var(--bb-reader-mark-1);
-    box-shadow: inset 3px 0 0 var(--bb-accent);
-    background-image: linear-gradient(var(--bb-reader-mark), var(--bb-reader-mark));
-}
+.bb-reader .rd-tb .rd-tb-play { padding: 0 9px 0 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.bb-reader .rd-tb button:hover { background: var(--rd-tb-hover); }
 
-.bb-rt-row[data-bb-marks="2"] { --bb-reader-mark: var(--bb-reader-mark-2); }
-.bb-rt-row[data-bb-marks="3"] { --bb-reader-mark: var(--bb-reader-mark-3); }
+.rd-tb-rule { width: 1px; height: 16px; margin: 0 2px; background: currentColor; opacity: .2; }
 
-/* The notes pane: docked under the transcript, never more than two fifths
-   of the column, and scrolling on its own so a long list does not push the
-   transcript off the screen. */
-.bb-reader-notes {
-    flex: 0 1 auto;
-    max-height: 40%;
-    min-height: 0;
+.rd-knob {
+    position: absolute;
+    z-index: 16;
+    width: 16px;
+    margin-left: -8px;
     display: flex;
     flex-direction: column;
-    border-top: 1px solid var(--bb-border);
-    background: var(--bb-card);
+    align-items: center;
+    cursor: ew-resize;
+    touch-action: none;
 }
 
-.bb-rn-head {
+.rd-knob::before,
+.rd-knob::after { content: ''; }
+
+/* The start's dot is on top, the end's at the bottom, like a text caret's. */
+.rd-knob-start::before,
+.rd-knob-end::after {
+    flex: none;
+    width: 11px;
+    height: 11px;
+    border-radius: var(--rd-r-knob);
+    background: var(--rd-knob);
+    box-shadow: 0 0 0 2px var(--rd-surface);
+}
+
+.rd-knob-start::after,
+.rd-knob-end::before { flex: 1; width: 2px; background: var(--rd-knob); }
+
+/* ---- The highlights: a tab of the panel, or focus's side column */
+
+.rd-list-pane {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 52px;
+    bottom: 0;
+    z-index: 8;
+    overflow-y: auto;
+    padding: 4px 18px 20px;
+    background: var(--rd-surface);
+}
+
+.bb-reader.is-listing:is([data-layout="dock"], [data-layout="float"]) .rd-list-pane { display: block; }
+
+/* Right under the tabs, and in float under the card's handle as well. */
+.bb-reader[data-layout="float"] .rd-list-pane { top: 68px; }
+
+.rd-side {
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rd-chip-2) transparent;
+}
+
+.rd-list-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 16px 6px;
+    padding: 2px 0 12px;
 }
 
-.bb-rn-title {
+.rd-list-pane .rd-list-count { font-size: 12.5px; color: var(--rd-muted); }
+
+.rd-side-title {
     margin: 0;
-    font: 600 13px/1.3 var(--bb-font-head);
-    text-transform: var(--bb-head-case);
-    letter-spacing: var(--bb-head-track);
+    font-family: var(--rd-font-head);
+    font-weight: var(--rd-head-weight);
+    text-transform: var(--rd-head-case);
+    letter-spacing: var(--rd-head-track);
+    font-size: 16px;
+    color: var(--rd-text);
 }
 
-.bb-rn-count { color: var(--bb-faint); font-weight: 400; }
-
-.bb-rn-copy,
-.bb-rn-time,
-.bb-rn-delete {
-    border: 1px solid var(--bb-border);
-    border-radius: var(--bb-r-sm);
-    background: var(--bb-chip);
-    color: var(--bb-text);
-    font: inherit;
-    cursor: pointer;
+.rd-side-title .rd-list-count {
+    color: var(--rd-muted);
+    font-family: var(--rd-font);
+    font-size: 13px;
+    letter-spacing: 0;
+    text-transform: none;
 }
 
-.bb-rn-copy { padding: 4px 10px; font-size: 12px; }
-.bb-rn-copy:hover,
-.bb-rn-time:hover { border-color: var(--bb-border-strong); }
-
-.bb-rn-list {
-    margin: 0;
-    padding: 0 16px 12px;
-    list-style: none;
-    overflow-y: auto;
-    overscroll-behavior: contain;
+.bb-reader .rd-copy {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--rd-text);
+    padding: 5px 10px;
+    border-radius: var(--rd-r-chip);
+    background: var(--rd-chip);
 }
 
-.bb-rn-item {
-    padding: 10px 0;
-    border-bottom: 1px solid var(--bb-border);
+.rd-list-empty { margin: 4px 0; font-size: 13px; color: var(--rd-muted); }
+
+.rd-li {
+    padding: 12px 0 10px;
+    border-top: 1px solid var(--rd-divider);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-.bb-rn-item:last-child { border-bottom: 0; }
+.rd-li-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
-.bb-rn-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-
-.bb-rn-time {
-    padding: 2px 8px;
-    color: var(--bb-accent);
+.bb-reader .rd-li-play {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
+    color: var(--rd-accent-ink);
+    font-weight: 500;
 }
 
-.bb-rn-delete {
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border-color: transparent;
+.bb-reader .rd-li-remove {
+    display: flex;
+    width: 26px;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--rd-r-sm);
+    color: var(--rd-muted);
+}
+
+.bb-reader .rd-li-remove:hover { background: var(--rd-chip); color: var(--rd-text); }
+
+.rd-li-text {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--rd-text);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.rd-li-text span {
+    background: var(--rd-mark);
+    border-radius: var(--rd-r-mark);
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    padding: 2px 1px;
+}
+
+.rd-li textarea {
+    field-sizing: content;
+    min-height: calc(1.45em + 10px);
+    font: 13px/1.45 var(--rd-font);
+    color: var(--rd-muted);
+    font-style: var(--rd-note-style);
     background: transparent;
-    color: var(--bb-faint);
-    font-size: 16px;
-    line-height: 1;
+    border: 1px solid transparent;
+    border-radius: var(--rd-r-sm);
+    padding: 4px 6px;
+    margin-left: -6px;
+    overflow: hidden;
 }
 
-.bb-rn-delete:hover { color: var(--bb-danger); border-color: var(--bb-danger-border); background: var(--bb-danger-bg); }
+.rd-li textarea:focus { background: var(--rd-chip); border-color: var(--rd-divider); color: var(--rd-text); }
 
-.bb-rn-quote {
-    margin: 6px 0;
-    padding-left: 10px;
-    border-left: 2px solid var(--bb-border-strong);
-    color: var(--bb-sub);
-    font-style: italic;
-}
+/* ---- The band: its count and its way to the whole transcript */
 
-.bb-rn-note {
-    display: block;
-    box-sizing: border-box;
-    width: 100%;
-    min-height: 2.6em;
-    padding: 6px 8px;
-    border: 1px dashed var(--bb-border);
-    border-radius: var(--bb-r-sm);
-    background: transparent;
-    color: var(--bb-text);
-    font: inherit;
-    resize: vertical;
-}
-
-.bb-rn-note:focus {
-    outline: none;
-    border-style: solid;
-    border-color: var(--bb-accent);
-    background: var(--bb-input-bg);
-}
-
-.bb-rn-empty { padding: 8px 0; color: var(--bb-sub); }
-
-/* Inside the reader rather than our page-wide toast, because it carries a
-   button: Undo has to be where the selection was just made. */
-.bb-reader-toast {
+.rd-band-ctl {
+    display: none;
     position: absolute;
-    left: 50%;
-    bottom: 24px;
-    transform: translateX(-50%);
+    top: 10px;
+    right: 10px;
+    z-index: 12;
+    align-items: center;
+    gap: 6px;
+}
+
+.bb-reader[data-layout="band"] .rd-band-ctl { display: flex; }
+
+.rd-band-count { font-size: 12px; color: var(--rd-muted); padding: 0 4px; }
+
+.bb-reader .rd-band-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    font-family: var(--rd-font-tab);
+    font-size: 12.5px;
+    font-weight: 500;
+    text-transform: var(--rd-tab-case);
+    letter-spacing: var(--rd-tab-track);
+    border-radius: var(--rd-r-chip);
+    border: var(--rd-tab-border);
+    background: var(--rd-chip);
+    color: var(--rd-text);
+}
+
+.bb-reader.is-band-open .rd-band-toggle svg { transform: rotate(180deg); }
+
+.rd-brow {
+    display: grid;
+    grid-template-columns: var(--rd-gutter, 58px) minmax(0, 1fr);
+    margin: 0 0 6px;
+}
+
+.rd-brow .rd-stamp { line-height: 21px; }
+
+.bb-reader .rd-brow .rd-text {
+    font-size: 15px;
+    line-height: 1.42;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bb-reader .rd-brow.is-cur .rd-text { font-size: 21px; white-space: normal; }
+.bb-reader .rd-brow.is-cur .rd-stamp { line-height: 30px; color: var(--rd-accent-ink); font-weight: 600; }
+.rd-brow:not(.is-cur) .rd-w:not(.m) { color: var(--rd-muted); }
+
+/* ---- The toast and the way back to the playing line */
+
+.rd-toast {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 40;
     display: flex;
     align-items: center;
     gap: 14px;
-    max-width: min(560px, calc(100% - 32px));
-    padding: 10px 12px 10px 16px;
-    border: 1px solid var(--bb-border);
-    border-radius: var(--bb-r);
-    background: var(--bb-panel-solid);
-    box-shadow: var(--bb-shadow);
-    animation: bb-fade .16s ease-out;
-}
-
-.bb-reader-toast[hidden] { display: none; }
-
-.bb-reader-toast-text {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: calc(100% - 24px);
+    padding: 8px 8px 8px 14px;
+    background: var(--rd-toast-bg);
+    color: var(--rd-toast-fg);
+    border-radius: var(--rd-r-sm);
+    box-shadow: var(--rd-tb-shadow);
+    font-size: 13px;
     white-space: nowrap;
 }
 
-.bb-reader-toast-act {
-    flex: none;
-    padding: 6px 12px;
-    border: 0;
-    border-radius: var(--bb-r-sm);
-    background: var(--bb-btn-fill);
-    color: var(--bb-btn-text);
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
+.rd-toast-text { overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; min-width: 0; }
+
+.bb-reader .rd-toast-undo {
+    padding: 4px 8px;
+    border-radius: var(--rd-r-sm);
+    font-weight: 700;
+    color: var(--rd-toast-act);
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
-.bb-reader-toast-act:hover { background: var(--bb-btn-fill-hover); }
-.bb-reader-toast-act[hidden] { display: none; }
-.bb-rt-row.is-active .bb-rt-time { color: var(--bb-accent); }
+.bb-reader .rd-now {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    z-index: 39;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 12px;
+    border-radius: var(--rd-r-chip);
+    background: var(--rd-tb-bg);
+    color: var(--rd-tb-fg);
+    border: var(--rd-tb-border);
+    box-shadow: var(--rd-tb-shadow);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+}
 
-.bb-reader-empty { margin: 24px; color: var(--bb-sub); }
+/* ---- Deco's corner ornament, on the panels that are framed */
+
+.rd-corners {
+    display: var(--rd-corner);
+    position: absolute;
+    inset: 0;
+    z-index: 44;
+    pointer-events: none;
+}
+
+.bb-reader:is([data-layout="glass"], [data-layout="focus"]) .rd-corners { display: none; }
+
+.rd-corners span { position: absolute; width: 16px; height: 16px; border: 0 solid var(--rd-corner-color); }
+.rd-corners span:nth-child(even) { width: 7px; height: 7px; }
+.rd-corners span:nth-child(1) { left: 6px; top: 6px; border-left-width: 1px; border-top-width: 1px; }
+.rd-corners span:nth-child(2) { left: 10px; top: 10px; border-left-width: 1px; border-top-width: 1px; }
+.rd-corners span:nth-child(3) { right: 6px; top: 6px; border-right-width: 1px; border-top-width: 1px; }
+.rd-corners span:nth-child(4) { right: 10px; top: 10px; border-right-width: 1px; border-top-width: 1px; }
+.rd-corners span:nth-child(5) { left: 6px; bottom: 6px; border-left-width: 1px; border-bottom-width: 1px; }
+.rd-corners span:nth-child(6) { left: 10px; bottom: 10px; border-left-width: 1px; border-bottom-width: 1px; }
+.rd-corners span:nth-child(7) { right: 6px; bottom: 6px; border-right-width: 1px; border-bottom-width: 1px; }
+.rd-corners span:nth-child(8) { right: 10px; bottom: 10px; border-right-width: 1px; border-bottom-width: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .rd-bar,
+    .rd-stage,
+    .rd-video,
+    .rd-under,
+    .rd-panel,
+    .rd-side { transition: none; }
+}

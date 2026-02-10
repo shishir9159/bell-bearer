@@ -232,23 +232,22 @@
         // mean worth the name — one slow morning is the whole figure.
         typerMinSamples: 8,
 
-        // The YouTube reader (src/content/reader.js). What it opens in and
-        // how its transcript column reads; the player's size in each layout
-        // is set by dragging, so it lives in DATA.readerSizes rather than
-        // here, where a control would have nothing to bind to.
+        // The YouTube reader (src/content/reader.js): what it opens in and
+        // how its transcript reads.
         //
-        // Whether the transcript scrolls itself to the line being spoken.
-        // Scrolling it yourself still pauses this for a few seconds.
+        // Whether the transcript scrolls itself to the paragraph being
+        // spoken. Scrolling away from it stops this until it is scrolled
+        // back, or the reader's Now button is pressed.
         readerFollow: true,
-        // Selecting transcript text saves it as a checkpoint straight away,
-        // with an Undo. Off, the same selection offers a Save button instead.
-        readerAutoCheckpoint: true,
         // The layout a new reader opens in; switching in the reader itself
-        // updates it. One of Reader.LAYOUT_IDS.
-        readerLayout: 'split', // 'split' | 'stacked' | 'theatre' | 'focus'
-        // The transcript column's type: size in px, leading as a multiple,
-        // and measure — the width of a line — in em. The ranges the controls
-        // offer are the ones Reader.TYPE clamps to.
+        // updates it. One of ReaderLayout.LAYOUT_IDS — an id from the four
+        // layouts before these opens in the one nearest it.
+        readerLayout: 'dock', // 'dock' | 'float' | 'glass' | 'band' | 'focus'
+        // The transcript's type: size in px, leading as a multiple, and
+        // measure — the width of a line — in em. Each layout sets its own
+        // type, and these scale it from the defaults; the measure narrows
+        // focus's column. The ranges the controls offer are the ones
+        // Reader.TYPE clamps to.
         readerFontSize: 16,
         readerLineHeight: 1.6,
         readerLineWidth: 44,
@@ -449,11 +448,6 @@
         typerRaces: 'bbTyperRaces',
         typerGrams: 'bbTyperGrams',
         typerDays: 'bbTyperDays',
-
-        // The YouTube reader's player size, one percentage per layout, set
-        // by dragging and so not a setting a control could bind to. Shape
-        // owned by src/content/reader.js — see readSizes there.
-        readerSizes: 'bbReaderSizes',
 
         // The chat panel on ChatGPT and Claude: whether it was left open and
         // which tab it was on, so a reload puts it back the way it was.

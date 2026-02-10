@@ -304,94 +304,24 @@ check('blank snippets are left out and the text is tidied', () => {
     eq(entries[2], { start: 6, end: 9, text: 'third line' });
     eq(ReaderTranscript.entriesOf(null), []);
 });
-check('the playing row is the last one started, gaps included', () => {
-    const entries = ReaderTranscript.entriesOf({ snippets: SNIPPETS });
-    eq(ReaderTranscript.activeIndex(entries, -1), -1);
-    eq(ReaderTranscript.activeIndex(entries, 0), 0);
-    eq(ReaderTranscript.activeIndex(entries, 5.5), 1, 'a pause in speech lost the row');
-    eq(ReaderTranscript.activeIndex(entries, 6), 2);
-    eq(ReaderTranscript.activeIndex(entries, 6), ReaderTranscript.activeIndex(entries, 6), 'unstable at one time');
+check('the word playing is the last one started, pauses included', () => {
+    const model = ReaderTranscript.build(ReaderTranscript.entriesOf({ snippets: SNIPPETS }));
+    eq(ReaderTranscript.wordAt(model, -1), -1);
+    eq(ReaderTranscript.wordAt(model, 0), 0);
+    eq(model.words[ReaderTranscript.wordAt(model, 5.5)].t, '<line>', 'a pause in speech lost the word');
+    eq(model.words[ReaderTranscript.wordAt(model, 6)].t, 'third');
+    eq(ReaderTranscript.wordAt(model, 6), ReaderTranscript.wordAt(model, 6), 'unstable at one time');
 });
-check('at a snippet boundary it agrees with the transcript’s own lookup', () => {
-    const snippets = SNIPPETS.filter((s) => s.text);
+check('at a line boundary it agrees with the transcript’s own lookup', () => {
+    const snippets = SNIPPETS.filter((one) => one.text);
     const transcript = new FetchedTranscript({ snippets, videoId: 'v', language: 'en', languageCode: 'en' });
-    const entries = ReaderTranscript.entriesOf(transcript);
+    const model = ReaderTranscript.build(ReaderTranscript.entriesOf(transcript));
     for (const t of [0, 3, 6]) {
-        eq(entries[ReaderTranscript.activeIndex(entries, t)].text,
-            transcript.getSnippetAtTime(t).text.replace(/\s+/g, ' '), `at ${t}`);
+        const word = model.words[ReaderTranscript.wordAt(model, t)];
+        eq(transcript.getSnippetAtTime(t).text.replace(/\s+/g, ' ').startsWith(word.t), true, `at ${t}`);
     }
 });
-check('row text is escaped', () => {
-    const html = ReaderTranscript.rowsHtml(ReaderTranscript.entriesOf({ snippets: SNIPPETS }));
-    assert(html.includes('second &lt;line&gt;'), 'a caption could inject markup');
-    assert(/data-i="2" data-start="6"/.test(html));
-});
-/**
- * Rows shaped the way rowsHtml draws them — a container of <p>s with the
- * markup's whitespace between them — as bare objects, so a range can be
- * pointed at any node in it.
- */
-function fakeRows(count) {
-    const container = { nodeType: 1, classList: { contains: () => false }, childNodes: [] };
-    container.querySelectorAll = () => container.childNodes.filter((n) => n.row);
-    const rows = [];
-    for (let i = 0; i < count; i++) {
-        const row = { nodeType: 1, row: true, parentNode: container, dataset: { i: String(i) },
-            classList: { contains: (c) => c === ReaderTranscript.ROW_CLASS } };
-        row.text = { nodeType: 3, parentNode: { nodeType: 1, classList: { contains: () => false }, parentNode: row } };
-        container.childNodes.push({ nodeType: 3, parentNode: container }, row);
-        rows.push(row);
-    }
-    container.childNodes.push({ nodeType: 3, parentNode: container });
-    return { container, rows };
-}
 
-const RANGE_ENTRIES = [
-    { start: 0, end: 3, text: 'a' }, { start: 3, end: 6.5, text: 'b' },
-    { start: 6, end: 9, text: 'c' }, { start: 9, end: 12, text: 'd' },
-];
-
-check('a selection inside one line covers that line', () => {
-    const { rows } = fakeRows(4);
-    const range = { collapsed: false, startContainer: rows[1].text, startOffset: 2, endContainer: rows[1].text, endOffset: 5 };
-    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES), { first: 1, last: 1, start: 3, end: 6 },
-        'the overlap into the next caption was kept as part of this one');
-});
-check('a selection across three lines runs from the first start to the last end', () => {
-    const { rows } = fakeRows(4);
-    const range = { collapsed: false, startContainer: rows[0].text, startOffset: 4, endContainer: rows[2].text, endOffset: 1 };
-    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES), { first: 0, last: 2, start: 0, end: 9 });
-});
-check('a drag let go in the whitespace past the last line ends on that line', () => {
-    const { container, rows } = fakeRows(4);
-    const range = { collapsed: false, startContainer: rows[2].text, startOffset: 0,
-        endContainer: container, endOffset: container.childNodes.length };
-    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES).last, 3);
-});
-check('a triple-click does not take the next line with it', () => {
-    // Chrome ends a triple-clicked paragraph at offset 0 of the one after.
-    const { rows } = fakeRows(4);
-    const range = { collapsed: false, startContainer: rows[1].text, startOffset: 0, endContainer: rows[2].text, endOffset: 0 };
-    eq(ReaderTranscript.selectionToRange(range, RANGE_ENTRIES).last, 1);
-});
-check('a collapsed or foreign selection is no range at all', () => {
-    const { rows } = fakeRows(2);
-    eq(ReaderTranscript.selectionToRange({ collapsed: true, startContainer: rows[0].text }, RANGE_ENTRIES), null);
-    const elsewhere = { nodeType: 3, parentNode: null };
-    eq(ReaderTranscript.selectionToRange({ collapsed: false, startContainer: elsewhere, startOffset: 0,
-        endContainer: elsewhere, endOffset: 1 }, RANGE_ENTRIES), null);
-});
-check('a checkpoint shades the lines that start inside it', () => {
-    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ start: 3, end: 9 }]), [0, 1, 1, 0]);
-    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ start: 3, end: 9 }, { start: 6, end: 12 }]), [0, 1, 2, 1],
-        'overlapping checkpoints deepen rather than fight');
-});
-check('an old whole-second checkpoint and a point in time both shade sensibly', () => {
-    // Ctrl+B checkpoints were floored to the second: 3.4 is stored as 3.
-    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ time: 3, start: 3, end: 5 }]), [0, 1, 0, 0]);
-    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ time: 7 }]), [0, 0, 1, 0], 'a point shades the line playing then');
-    eq(ReaderTranscript.marksFor(RANGE_ENTRIES, [{ note: 'no time at all' }]), [0, 0, 0, 0]);
-});
 section('reader — paragraphs and words');
 
 /** A talk in lines the way a caption track has them, with a full stop now and then. */
@@ -417,8 +347,14 @@ check('a track with no full stops still breaks, and a chapter starts a paragraph
     const model = ReaderTranscript.build(plain);
     assert(model.paras.length >= 2, 'one paragraph for ninety seconds');
     assert(model.paras.every((p) => model.words[p.to].time - p.start <= ReaderTranscript.PARA_MAX + 3), 'a paragraph ran on');
-    const chaptered = ReaderTranscript.build(talkEntries(), { chapters: [{ start: 0 }, { start: 8 }] });
-    eq(chaptered.paras.map((p) => p.start).slice(0, 2), [0, 8], 'the chapter at 8s did not open a paragraph');
+    const chaptered = ReaderTranscript.build(talkEntries(), { chapters: [{ start: 0 }, { start: 4 }] });
+    eq(chaptered.paras.map((p) => p.start).slice(0, 2), [0, 4], 'the chapter at 4s did not open a paragraph');
+    // 8s is mid-sentence: the paragraph waits for the sentence to end at 16s
+    // rather than opening on "write the answer down,".
+    const waited = ReaderTranscript.build(talkEntries(), { chapters: [{ start: 8 }] });
+    eq(waited.paras.map((p) => p.start).slice(0, 2), [0, 16]);
+    const unstopped = ReaderTranscript.build(plain, { chapters: [{ start: 10 }] });
+    eq(unstopped.paras[1].start, 18, 'with no stop in sight it waits only CHAPTER_SLACK');
 });
 check('sentences end at their stop, and an unpunctuated one at a line once it runs long', () => {
     const model = ReaderTranscript.build(talkEntries());
@@ -673,14 +609,6 @@ check('a link\'s address cannot end the link early, and a balanced pair is left 
     eq(Markdown.escapeUrl('https://example.com/(a'), 'https://example.com/%28a');
     eq(Markdown.escapeUrl('https://example.com/)('), 'https://example.com/%29%28', 'closed before it opened');
     eq(Markdown.escapeUrl('file:///C:/my notes.txt'), 'file:///C:/my%20notes.txt');
-});
-check('a text node is walked up to its row', () => {
-    const row = { nodeType: 1, classList: { contains: (c) => c === ReaderTranscript.ROW_CLASS }, dataset: { i: '4' } };
-    const span = { nodeType: 1, classList: { contains: () => false }, parentNode: row };
-    const text = { nodeType: 3, parentNode: span };
-    eq(ReaderTranscript.rowAt(text) === row, true);
-    eq(ReaderTranscript.indexOf(ReaderTranscript.rowAt(text)), 4);
-    eq(ReaderTranscript.rowAt({ nodeType: 3, parentNode: null }), null);
 });
 
 // ---------------------------------------------------------------- time
@@ -3266,33 +3194,15 @@ check('the reader layout list offers exactly the layouts the reader draws', () =
     const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
     const select = /<select id="readerLayout">([\s\S]*?)<\/select>/.exec(html)[1];
     const offered = [...select.matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
-    eq(offered, require('../src/content/reader.js').LAYOUT_IDS.slice());
-    eq(globalThis.BB.Settings.DEFAULTS.readerLayout, 'split');
+    eq(offered, require('../src/content/reader-layout.js').LAYOUT_IDS.slice());
+    eq(globalThis.BB.Settings.DEFAULTS.readerLayout, 'dock');
 });
-check('reader sizes are clamped on the way in, whatever the store holds', () => {
+check('the reader type is clamped to the ranges its controls offer, and the defaults change nothing', () => {
     const Reader = require('../src/content/reader.js');
-    eq(Reader.readSizes({ split: 2 }).split, 25, 'a two-percent video');
-    eq(Reader.readSizes({ focus: 400 }).focus, 85);
-    eq(Reader.readSizes({ stacked: 'wide' }).stacked, Reader.SIZE_DEFAULTS.stacked);
-    eq(Reader.readSizes(null), Reader.SIZE_DEFAULTS, 'an empty store is every default');
-    eq(Object.keys(Reader.readSizes({ sideways: 50 })), Reader.LAYOUT_IDS.slice(), 'an unknown layout was kept');
-    eq(Reader.clampSize(50, 'nope'), 50);
-    eq(Reader.clampSize(undefined, 'nope'), Reader.SIZE_DEFAULTS.split, 'an unknown layout has no default of its own');
-});
-check('a drag is read off the edge each layout sizes from', () => {
-    const Reader = require('../src/content/reader.js');
-    const box = { left: 0, top: 100, right: 1000, width: 1000, height: 500 };
-    eq(Reader.sizeAt('split', box, 600, 0), 60);
-    eq(Reader.sizeAt('stacked', box, 0, 350), 50);
-    eq(Reader.sizeAt('theatre', box, 700, 0), 30, 'the drawer grows toward the left');
-    eq(Reader.sizeAt('focus', box, 580, 0), 40, 'the corner player sits 20px in from the edge');
-});
-check('the reader type is clamped to the ranges its controls offer', () => {
-    const Reader = require('../src/content/reader.js');
-    eq(Reader.typeStyle(globalThis.BB.Settings.DEFAULTS),
-        { '--bb-reader-size': '16px', '--bb-reader-leading': '1.6', '--bb-reader-measure': '44em' });
-    eq(Reader.typeStyle({ readerFontSize: 90, readerLineHeight: 0.5, readerLineWidth: 'x' }),
-        { '--bb-reader-size': '24px', '--bb-reader-leading': '1.2', '--bb-reader-measure': '44em' });
+    eq(Reader.typeScale(globalThis.BB.Settings.DEFAULTS), { scale: 1, leadScale: 1, measure: 44 },
+        'the defaults would move the design’s own type');
+    const clamped = Reader.typeScale({ readerFontSize: 90, readerLineHeight: 0.5, readerLineWidth: 'x' });
+    eq([clamped.scale, clamped.leadScale.toFixed(4), clamped.measure], [1.5, '0.7500', 44]);
 
     const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
     for (const [key, { min, max }] of Object.entries(Reader.TYPE)) {

@@ -298,7 +298,7 @@
         Theme.installYouTubeSync(() => settings.syncThemeWithYouTube);
 
         reader = Reader.createReader({
-            player, watcher, getVideo, getSettings: () => settings, transcripts, recorder,
+            player, watcher, getVideo, getSettings: () => settings, transcripts,
             copyText: (text) => markdown.copy(text),
         });
 

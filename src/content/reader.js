@@ -1,23 +1,25 @@
 /**
- * The distraction-free reader: YouTube's own player at a size you pick, the
- * transcript beside it, and your checkpoints under that.
+ * The distraction-free reader: YouTube's own player, the video's transcript
+ * set as prose, and a pen to highlight it with.
  *
  * **The player is moved, never re-embedded.** `#movie_player` is adopted into
- * the reader's stage and put back on close. Playback position, quality,
- * volume, captions and the rate Bell Bearer keeps all survive, because it is
- * the same element — which is the one thing an iframe of the video could never
- * do, and why the player here can be any size at all. Moving a playing
- * <video> does not pause it: the element is back in a document before the
- * browser gets round to asking whether it left.
+ * the reader and put back on close. Playback position, quality, volume,
+ * captions and the rate Bell Bearer keeps all survive, because it is the same
+ * element — which is the one thing an iframe of the video could never do,
+ * and why the player here can be any size at all. Moving a playing <video>
+ * does not pause it: the element is back in a document before the browser
+ * gets round to asking whether it left.
  *
  * YouTube does not know it has been moved, so two of its habits are answered
  * here rather than fought. It sizes its controls off a resize event, so one
- * is sent whenever the stage changes size. And it fullscreens its own
+ * is sent whenever the player changes size. And it fullscreens its own
  * container rather than the player, so for the length of a fullscreen the
  * player goes home and comes back after.
  *
- * Nothing on YouTube's page is removed or rebuilt. One class on <html> and
- * content.css do all of the hiding — the bb-leet-mock rule.
+ * Five layouts (src/content/reader-layout.js), the transcript as paragraphs
+ * of timed words (reader-transcript.js), and the pen and everything a
+ * highlight carries (reader-highlights.js). Nothing on YouTube's page is
+ * removed or rebuilt: one class on <html> and the stylesheet do the hiding.
  */
 (function (root) {
     'use strict';
@@ -27,6 +29,8 @@
     const Dom = ns.Dom || req('../shared/dom.js');
     const Theme = ns.Theme || req('./theme.js');
     const ReaderTranscript = ns.ReaderTranscript || req('./reader-transcript.js');
+    const ReaderLayout = ns.ReaderLayout || req('./reader-layout.js');
+    const ReaderHighlights = ns.ReaderHighlights || req('./reader-highlights.js');
     const Bookmarks = ns.Bookmarks || req('../shared/bookmarks.js');
     const Settings = ns.Settings || req('../shared/settings.js');
     const Time = ns.Time || req('../shared/time.js');
@@ -35,184 +39,163 @@
     const ROOT_ID = 'bb-reader';
     const SLOT_ID = 'bb-reader-slot';
     const PLAYER_ID = 'movie_player';
-    /** On <html> while the reader is up; content.css keys everything off it. */
+    /** On <html> while the reader is up; the stylesheet keys everything off it. */
     const OPEN_CLASS = 'bb-reader-open';
 
-    /**
-     * How long the transcript leaves you alone after you scroll it yourself.
-     * A column that yanks itself back to the playing line while you are
-     * reading ahead of it is unusable, and four seconds is long enough to
-     * find your place and short enough that it catches up again on its own.
-     */
-    const HANDS_OFF_MS = 4000;
-
-    /** How long the checkpoint toast, and its Undo, stays up. */
-    const TOAST_MS = 6000;
-
-    /** A note is written this long after the last keystroke, not on every one. */
-    const NOTE_DEBOUNCE_MS = 400;
+    /** How long a toast, and its Undo, stays up. */
+    const TOAST_MS = 5000;
+    /** How long Copy says Copied. */
+    const COPIED_MS = 1600;
 
     /**
-     * The four shapes the reader takes. The layout itself is all CSS — one
-     * grid per id, chosen by `data-layout` — and there is no layout maths
-     * in this file at all.
-     */
-    const LAYOUTS = Object.freeze([
-        Object.freeze({ id: 'split', label: 'Split', hint: 'Video beside the transcript' }),
-        Object.freeze({ id: 'stacked', label: 'Stacked', hint: 'Video above the transcript' }),
-        Object.freeze({ id: 'theatre', label: 'Theatre', hint: 'Video first, transcript in a drawer' }),
-        Object.freeze({ id: 'focus', label: 'Focus', hint: 'Transcript first, video in the corner' }),
-    ]);
-    const LAYOUT_IDS = Object.freeze(LAYOUTS.map((layout) => layout.id));
-
-    const layoutOf = (id) => (LAYOUT_IDS.includes(id) ? id : 'split');
-
-    /**
-     * The transcript's type — size, leading and measure, the three things
-     * that decide whether a column reads as prose or as a wall. Each is a
-     * setting with the range its control offers, clamped here too, since a
-     * number field will hold whatever is typed into it.
+     * The typography settings, each clamped to what its control offers —
+     * a number field holds whatever is typed into it. They scale each
+     * layout's own type rather than replace it: focus is set larger than the
+     * float card on purpose, and a size setting that flattened the two would
+     * undo the design.
      */
     const TYPE = Object.freeze({
-        readerFontSize: Object.freeze({ prop: '--bb-reader-size', unit: 'px', min: 12, max: 24 }),
-        readerLineHeight: Object.freeze({ prop: '--bb-reader-leading', unit: '', min: 1.2, max: 2 }),
-        readerLineWidth: Object.freeze({ prop: '--bb-reader-measure', unit: 'em', min: 30, max: 60 }),
+        readerFontSize: Object.freeze({ min: 12, max: 24, base: 16 }),
+        readerLineHeight: Object.freeze({ min: 1.2, max: 2, base: 1.6 }),
+        readerLineWidth: Object.freeze({ min: 30, max: 60, base: 44 }),
     });
 
-    /** The three as CSS custom properties, `{ '--bb-reader-size': '16px', … }`. */
-    function typeStyle(settings) {
-        const out = {};
-        for (const [key, { prop, unit, min, max }] of Object.entries(TYPE)) {
+    /** The settings as `{ scale, leadScale, measure }`, for ReaderLayout.geometry. */
+    function typeScale(settings) {
+        const value = (key) => {
+            const { min, max } = TYPE[key];
             const number = Number(settings && settings[key]);
-            const value = Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : Settings.DEFAULTS[key];
-            out[prop] = `${value}${unit}`;
-        }
-        return out;
+            return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : Settings.DEFAULTS[key];
+        };
+        return {
+            scale: value('readerFontSize') / TYPE.readerFontSize.base,
+            leadScale: value('readerLineHeight') / TYPE.readerLineHeight.base,
+            measure: value('readerLineWidth'),
+        };
     }
 
-    /**
-     * What each layout lets you drag, as a percentage: the video's width in
-     * split, its height in stacked, the drawer's width in theatre, the corner
-     * player's width in focus. Each layout keeps its own, because the width
-     * that is right beside a transcript is wrong for a pinned corner.
-     *
-     * Percentages and never pixels, so a window resized between sessions
-     * cannot put the video off the screen.
-     */
-    const SIZE_DEFAULTS = Object.freeze({ split: 62, stacked: 55, theatre: 34, focus: 30 });
-    const SIZE_RANGE = Object.freeze([25, 85]);
+    const svg = (size, body, width = 1.75) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="${width}" stroke-linecap="round" aria-hidden="true">${body}</svg>`;
+    const ICON = Object.freeze({
+        close: svg(18, '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>'),
+        chevron: svg(14, '<path d="m6 9 6 6 6-6"></path>'),
+        up: svg(14, '<path d="m18 15-6-6-6 6"></path>'),
+        down: svg(14, '<path d="M12 5v14"></path><path d="m19 12-7 7-7-7"></path>'),
+    });
 
-    /** One layout's size, clamped — on read as well as on write. */
-    function clampSize(value, layout) {
-        const number = Number(value);
-        if (!Number.isFinite(number)) return SIZE_DEFAULTS[layoutOf(layout)];
-        return Math.round(Math.min(SIZE_RANGE[1], Math.max(SIZE_RANGE[0], number)) * 10) / 10;
+    function listHtml(kind) {
+        const copy = `<button type="button" class="rd-copy" title="Copy as a timestamped Markdown list">${ReaderHighlights.ICON.copy}<span>Copy as Markdown</span></button>`;
+        const head = kind === 'side'
+            ? `<div class="rd-list-head"><h3 class="rd-side-title">Highlights <span class="rd-list-count"></span></h3>${copy}</div>`
+            : `<div class="rd-list-head"><span class="rd-list-count"></span>${copy}</div>`;
+        return `${head}<p class="rd-list-empty">Drag across the transcript to highlight a passage.</p><div class="rd-list-items"></div>`;
     }
 
-    /**
-     * The stored sizes, every layout present and in range. A hand-edited
-     * store holding `{ split: 2 }` reads back at the floor, not as a video
-     * two percent wide.
-     */
-    function readSizes(raw) {
-        const stored = raw && typeof raw === 'object' ? raw : {};
-        const out = {};
-        for (const id of LAYOUT_IDS) out[id] = id in stored ? clampSize(stored[id], id) : SIZE_DEFAULTS[id];
-        return out;
-    }
-
-    /**
-     * The size a pointer at (x, y) asks for, against the reader body's box.
-     * Read once when the drag starts: nothing here measures during it.
-     */
-    function sizeAt(layout, box, x, y) {
-        const across = (at) => (at / box.width) * 100;
-        switch (layout) {
-            case 'stacked': return ((y - box.top) / box.height) * 100;
-            case 'theatre': return across(box.right - x);
-            // The grip is the corner player's left edge, 20px in from the side.
-            case 'focus': return across(box.right - 20 - x);
-            default: return across(x - box.left);
-        }
-    }
-
-    async function loadSizes() {
-        try {
-            const stored = await chrome.storage.local.get([Settings.DATA.readerSizes]);
-            return readSizes(stored[Settings.DATA.readerSizes]);
-        } catch (_) {
-            // The extension reloaded under this page; the defaults still draw.
-            return readSizes(null);
-        }
-    }
-
-    async function saveSize(layout, value) {
-        const sizes = await loadSizes();
-        sizes[layoutOf(layout)] = clampSize(value, layout);
-        try { await chrome.storage.local.set({ [Settings.DATA.readerSizes]: sizes }); } catch (_) { /* context gone */ }
-        return sizes;
-    }
-
-    function layoutsHtml(current) {
-        return `<div class="bb-reader-layouts" role="radiogroup" aria-label="Layout">${LAYOUTS.map((layout) => `
-            <button type="button" role="radio" class="bb-reader-layout" data-layout="${layout.id}"
-                    aria-checked="${layout.id === current}" title="${layout.hint}">${layout.label}</button>`).join('')}
-        </div>`;
-    }
-
-    /** Keys that scroll the column, which count as the user scrolling it. */
-    const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' ']);
-
-    function shellHtml(title) {
-        const esc = Dom.escapeHtml;
+    function shellHtml() {
+        const corners = '<span></span>'.repeat(8);
         return `
-            <header class="bb-reader-bar">
-                <h2 class="bb-reader-title">${esc(title || 'Reader')}</h2>
-                <div class="bb-reader-tools"></div>
-                <button type="button" class="bb-reader-close" aria-label="Close the reader" title="Close (Esc)">&times;</button>
-            </header>
-            <div class="bb-reader-body">
-                <div class="bb-reader-stage"><div class="bb-reader-screen"></div><div class="bb-reader-grip"
-                     title="Drag to resize"></div></div>
-                <div class="bb-reader-divider" role="separator" tabindex="0" aria-label="Resize the video"
-                     title="Drag to resize"></div>
-                <aside class="bb-reader-side">
-                    <section class="bb-reader-transcript" aria-label="Transcript">
-                        <p class="bb-reader-empty">Loading the transcript…</p>
-                    </section>
-                    <section class="bb-reader-notes" aria-label="Checkpoints">
-                        <header class="bb-rn-head">
-                            <h3 class="bb-rn-title">Checkpoints <span class="bb-rn-count"></span></h3>
-                            <button type="button" class="bb-rn-copy" title="Copy every checkpoint as a Markdown list">Copy</button>
-                        </header>
-                        <ol class="bb-rn-list"></ol>
-                    </section>
-                </aside>
-            </div>
-            <div class="bb-reader-toast" role="status" aria-live="polite" hidden><span
-                 class="bb-reader-toast-text"></span><button type="button" class="bb-reader-toast-act"></button></div>`;
-    }
-
-    const spanText = (bookmark) => (typeof bookmark.start === 'number' && typeof bookmark.end === 'number'
-        ? `${Time.formatTime(bookmark.start)} – ${Time.formatTime(bookmark.end)}`
-        : Time.formatTime(Bookmarks.bookmarkTime(bookmark)));
-
-    function noteHtml(bookmark) {
-        const esc = Dom.escapeHtml;
-        const said = bookmark.subtitle && bookmark.subtitle !== 'null' ? bookmark.subtitle : '';
-        return `
-            <li class="bb-rn-item" data-key="${Dom.escapeAttr(Bookmarks.bookmarkKey(bookmark))}">
-                <div class="bb-rn-row">
-                    <button type="button" class="bb-rn-time" title="Play from here">${esc(spanText(bookmark))}</button>
-                    <button type="button" class="bb-rn-delete" aria-label="Delete this checkpoint" title="Delete">&times;</button>
+            <div class="rd-tex"></div>
+            <div class="rd-stage"></div>
+            <header class="rd-bar">
+                <div class="rd-title"><span class="rd-title-text"></span><span class="rd-channel"></span></div>
+                <span class="rd-flex"></span>
+                <div class="rd-layouts" role="radiogroup" aria-label="Layout">${ReaderLayout.LAYOUTS.map((layout) => `
+                    <button type="button" role="radio" class="rd-layout" data-layout="${layout.id}" title="${layout.title}"
+                            aria-label="${layout.title}">${layout.icon}</button>`).join('')}
                 </div>
-                ${said ? `<blockquote class="bb-rn-quote">${esc(said)}</blockquote>` : ''}
-                <textarea class="bb-rn-note" rows="2" placeholder="Add a note…"
-                          aria-label="Note">${esc(bookmark.note || '')}</textarea>
-            </li>`;
+                <span class="rd-rule"></span>
+                <button type="button" class="rd-close" title="Close the reader (Esc)" aria-label="Close the reader">${ICON.close}</button>
+                <span class="rd-bar-band"></span>
+            </header>
+            <div class="rd-video"><div class="rd-screen"></div><div class="rd-vgrip" title="Drag to move the player"><span></span></div></div>
+            <div class="rd-under">
+                <h2 class="rd-under-title"></h2>
+                <div class="rd-under-meta"></div>
+                <div class="rd-chapters"></div>
+            </div>
+            <section class="rd-panel" aria-label="Transcript">
+                <div class="rd-grip" title="Drag to move"><span></span></div>
+                <div class="rd-tabs" role="tablist">
+                    <button type="button" role="tab" class="rd-tab" data-tab="transcript" aria-selected="true">Transcript</button>
+                    <button type="button" role="tab" class="rd-tab" data-tab="highlights" aria-selected="false">Highlights<span class="rd-tab-count"></span></button>
+                    <span class="rd-flex"></span>
+                    <label class="rd-lang" hidden><select aria-label="Transcript language"></select>${ICON.chevron}</label>
+                </div>
+                <div class="rd-scroll">
+                    <div class="rd-content">
+                        <div class="rd-paras"><p class="rd-empty">Loading the transcript…</p></div>
+                        <div class="rd-bandrows"></div>
+                    </div>
+                </div>
+                <div class="rd-list rd-list-pane">${listHtml('pane')}</div>
+                <div class="rd-band-ctl"><span class="rd-band-count"></span><button type="button" class="rd-band-toggle"
+                     title="Show the whole transcript"><span>Transcript</span>${ICON.up}</button></div>
+                <div class="rd-toast" role="status" aria-live="polite" hidden><span class="rd-toast-text"></span><button
+                     type="button" class="rd-toast-undo">Undo</button></div>
+                <button type="button" class="rd-now" title="Follow the video again" hidden>${ICON.down}<span></span></button>
+                <div class="rd-corners" aria-hidden="true">${corners}</div>
+                <div class="rd-tex"></div>
+            </section>
+            <aside class="rd-side rd-list" data-count-style="number" aria-label="Highlights">${listHtml('side')}</aside>`;
     }
 
-    function createReader({ player, watcher, getVideo, getSettings, transcripts, recorder, copyText }) {
+    /** "1:02:03" or "2:03" as seconds; null for anything else. */
+    function clock(text) {
+        const match = /^(?:(\d+):)?(\d{1,2}):(\d{2})$/.exec(String(text || '').trim());
+        return match ? (Number(match[1] || 0) * 3600) + (Number(match[2]) * 60) + Number(match[3]) : null;
+    }
+
+    /**
+     * The chapters YouTube lists for the video, as `[{ start, label }]`.
+     *
+     * Read off the page: the chapters panel and the description's chapter
+     * cards are both `ytd-macro-markers-list-item-renderer`s, each with the
+     * time and the title. An item whose link names another video is a
+     * leftover from the last one — YouTube keeps the old panel for a moment
+     * after a navigation. Failing those, the description's own list of
+     * timestamps, which is what YouTube makes chapters from: a line per
+     * chapter, the first at 0:00, at least three.
+     */
+    function chaptersOnPage(videoId, doc = document) {
+        const found = new Map();
+        for (const item of doc.querySelectorAll('ytd-macro-markers-list-item-renderer')) {
+            const link = item.querySelector('a[href]');
+            const href = link ? link.getAttribute('href') : '';
+            const owner = /[?&]v=([\w-]{11})/.exec(href);
+            if (owner && owner[1] !== videoId) continue;
+            const heading = item.querySelector('h4');
+            const label = String((heading && (heading.getAttribute('title') || heading.textContent)) || '').trim();
+            const time = item.querySelector('#time');
+            let start = time ? clock(time.textContent) : null;
+            if (start === null) {
+                const t = /[?&]t=(\d+)/.exec(href);
+                start = t ? Number(t[1]) : null;
+            }
+            if (label && typeof start === 'number' && !found.has(start)) found.set(start, { start, label });
+        }
+        if (found.size) return Array.from(found.values()).sort((a, b) => a.start - b.start);
+        return chaptersInText(descriptionText(doc));
+    }
+
+    function descriptionText(doc) {
+        const node = doc.querySelector('ytd-watch-metadata #description-inline-expander, ytd-watch-metadata #description');
+        return node ? node.textContent || '' : '';
+    }
+
+    /** YouTube's own rule for a description's chapter list. */
+    function chaptersInText(text) {
+        const out = [];
+        for (const line of String(text || '').split(/\n/)) {
+            const match = /^\s*[([]?((?:\d{1,2}:)?\d{1,2}:\d{2})[)\]]?\s*[-–—:|]?\s*(.+?)\s*$/.exec(line);
+            if (!match) continue;
+            const start = clock(match[1]);
+            if (start === null || (out.length && start <= out[out.length - 1].start)) continue;
+            out.push({ start, label: match[2] });
+        }
+        return out.length >= 3 && out[0].start === 0 ? out : [];
+    }
+
+    function createReader({ player, watcher, getVideo, getSettings, transcripts, copyText }) {
         /**
          * The open reader, or null. A fresh object per open, so an answer that
          * arrives after a close — the transcript fetch, the skin read — can
@@ -230,23 +213,23 @@
          * had is not the index it should go back to. The slot is only the
          * fallback for a sibling YouTube has since thrown away.
          */
-        function rememberHome(player) {
+        function rememberHome(node) {
             let slot = document.getElementById(SLOT_ID);
             if (!slot) {
                 slot = document.createElement('div');
                 slot.id = SLOT_ID;
             }
-            player.parentNode.insertBefore(slot, player);
-            session.home = { parent: player.parentNode, next: player.nextSibling, slot };
+            node.parentNode.insertBefore(slot, node);
+            session.home = { parent: node.parentNode, next: node.nextSibling, slot };
         }
 
         function adopt() {
-            const player = document.getElementById(PLAYER_ID);
-            if (!session || !player || !player.parentNode) return false;
-            if (player.parentNode === session.screen) return true;
-            rememberHome(player);
-            session.screen.appendChild(player);
-            session.player = player;
+            const node = document.getElementById(PLAYER_ID);
+            if (!session || !node || !node.parentNode) return false;
+            if (node.parentNode === session.screen) return true;
+            rememberHome(node);
+            session.screen.appendChild(node);
+            session.player = node;
             nudge();
             return true;
         }
@@ -254,17 +237,17 @@
         /** Put the player back where YouTube had it. Safe with no player at all. */
         function restore() {
             const home = session && session.home;
-            const player = session && session.player;
-            if (!home || !player) return;
+            const node = session && session.player;
+            if (!home || !node) return;
             const { parent, next, slot } = home;
             session.home = null;
             // YouTube threw ours away and built another: putting the old one
             // back would leave two players answering to one id.
-            const replaced = !player.isConnected && document.getElementById(PLAYER_ID);
+            const replaced = !node.isConnected && document.getElementById(PLAYER_ID);
             if (parent.isConnected && !replaced) {
-                if (next && next.parentNode === parent) parent.insertBefore(player, next);
-                else if (slot.parentNode === parent) parent.insertBefore(player, slot);
-                else parent.appendChild(player);
+                if (next && next.parentNode === parent) parent.insertBefore(node, next);
+                else if (slot.parentNode === parent) parent.insertBefore(node, slot);
+                else parent.appendChild(node);
             }
             slot.remove();
             nudge();
@@ -306,104 +289,133 @@
 
             const element = document.createElement('div');
             element.id = ROOT_ID;
-            element.className = 'bb-reader';
+            element.className = 'bb-reader is-still';
             element.setAttribute('role', 'dialog');
             element.setAttribute('aria-label', 'Reader');
-            element.innerHTML = shellHtml(video.title);
-            const layout = layoutOf(getSettings().readerLayout);
-            element.dataset.layout = layout;
-            applyType(element);
-            applyChrome(element);
-            element.querySelector('.bb-reader-tools').innerHTML =
-                '<select class="bb-reader-lang" aria-label="Transcript language" hidden></select>' + layoutsHtml(layout);
+            element.innerHTML = shellHtml();
             // Dressed for the page's light or dark from the first frame, and
             // for the skin as soon as storage answers.
             Theme.dress(element, { theme: Theme.pageTheme(), skin: 'default' });
+            const part = (selector) => element.querySelector(selector);
 
             session = {
                 alive: true,
                 videoId: video.id,
                 element,
-                screen: element.querySelector('.bb-reader-screen'),
+                screen: part('.rd-screen'),
+                scroll: part('.rd-scroll'),
                 player: null,
                 home: null,
                 lent: false,
-                entries: [],
-                rows: [],
-                checkpoints: [],
+                layout: ReaderLayout.layoutOf(getSettings().readerLayout),
+                tab: 'transcript',
+                bandOpen: false,
+                card: { dx: 0, dy: 0 },
+                vcard: { dx: 0, dy: 0 },
+                model: null,
+                transcript: null,
+                chapters: chaptersOnPage(video.id),
+                paraNodes: [],
+                sentenceNodes: [],
+                nowS: -1,
+                nowP: -1,
+                now: 0,
+                following: true,
+                auto: false,
                 unwatch: null,
-                notesShape: null,
-                pending: new Map(),
-                sizes: null,
-                active: -1,
-                handsOffAt: 0,
+                highlights: null,
             };
             const mine = session;
 
+            mine.highlights = ReaderHighlights.createHighlights({
+                element,
+                content: part('.rd-content'),
+                lists: () => element.querySelectorAll('.rd-list'),
+                getVideo,
+                videoId: video.id,
+                seek: (t) => player.seekTo(t),
+                toast: (text, undo) => showToast(mine, text, undo),
+                onChange: (count) => showCount(mine, count),
+                onCopy: () => copyAll(mine),
+            });
+
             document.body.appendChild(element);
             document.documentElement.classList.add(OPEN_CLASS);
+            applyChrome(element);
             adopt();
+            setLayout(mine.layout, { remember: false });
+            fillTitle(mine, video);
+            renderUnder(mine);
+            requestAnimationFrame(() => element.classList.remove('is-still'));
 
-            element.querySelector('.bb-reader-close').addEventListener('click', close);
-            element.querySelector('.bb-reader-layouts').addEventListener('click', (event) => {
-                const button = event.target.closest('.bb-reader-layout');
+            part('.rd-close').addEventListener('click', close);
+            part('.rd-layouts').addEventListener('click', (event) => {
+                const button = event.target.closest('.rd-layout');
                 if (button) setLayout(button.dataset.layout);
             });
-            for (const handle of element.querySelectorAll('.bb-reader-divider, .bb-reader-grip')) {
-                handle.addEventListener('pointerdown', onDragStart);
-                handle.addEventListener('keydown', onHandleKey);
-            }
-            loadSizes().then((sizes) => {
-                if (!mine.alive) return;
-                mine.sizes = sizes;
-                applySize();
+            part('.rd-tabs').addEventListener('click', (event) => {
+                const tab = event.target.closest('.rd-tab');
+                if (tab) setTab(mine, tab.dataset.tab);
+                if (tab) mine.highlights.fitNotes();
             });
-            document.addEventListener('keydown', onKey, true);
-            document.addEventListener('timeupdate', onTime, { capture: true, passive: true });
+            part('.rd-band-toggle').addEventListener('click', () => {
+                mine.bandOpen = !mine.bandOpen;
+                applyBand(mine);
+                layout();
+            });
+            part('.rd-now').addEventListener('click', () => {
+                mine.following = true;
+                scrollToNow(mine, true);
+            });
+            part('.rd-toast-undo').addEventListener('click', () => {
+                const undo = mine.undo;
+                hideToast(mine);
+                if (undo) undo();
+            });
+            part('.rd-chapters').addEventListener('click', (event) => {
+                const chip = event.target.closest('[data-t]');
+                if (chip) player.seekTo(Number(chip.dataset.t));
+            });
+            part('.rd-content').addEventListener('click', (event) => {
+                const stamp = event.target.closest('.rd-stamp');
+                if (stamp) player.seekTo(Number(stamp.dataset.t));
+            });
+            part('.rd-lang select').addEventListener('change', (event) => switchLanguage(mine, event.target.value));
+            mine.scroll.addEventListener('scroll', () => onScroll(mine), { passive: true });
+            mine.scroll.addEventListener('scrollend', () => { mine.auto = false; });
+            part('.rd-grip').addEventListener('pointerdown', (event) => startMove(mine, event, 'card'));
+            part('.rd-vgrip').addEventListener('pointerdown', (event) => startMove(mine, event, 'vcard'));
+            part('.rd-video').addEventListener('transitionend', (event) => {
+                if (event.target === event.currentTarget && event.propertyName === 'width') nudge();
+            });
 
-            const column = element.querySelector('.bb-reader-transcript');
-            column.addEventListener('click', onRowClick);
-            const handsOff = () => { mine.handsOffAt = Date.now(); };
-            column.addEventListener('wheel', handsOff, { passive: true });
-            column.addEventListener('touchmove', handsOff, { passive: true });
-            column.addEventListener('keydown', (event) => { if (SCROLL_KEYS.has(event.key)) handsOff(); });
-            // Let go of the mouse, or of Shift after selecting with the keys:
-            // the selection is finished, and only then is it read. Watching
-            // selectionchange for a quiet moment instead would save half a
-            // passage whenever the drag paused with the button still held.
-            column.addEventListener('pointerup', onSelectEnd);
-            column.addEventListener('keyup', (event) => { if (event.key === 'Shift') onSelectEnd(); });
-            const notes = element.querySelector('.bb-rn-list');
-            notes.addEventListener('click', onNotesClick);
-            notes.addEventListener('input', onNoteInput);
-            notes.addEventListener('focusout', (event) => {
-                if (event.target.classList.contains('bb-rn-note')) flushNote(mine, keyOf(event.target));
-            });
-            element.querySelector('.bb-rn-copy').addEventListener('click', copyNotes);
-            element.querySelector('.bb-reader-toast-act').addEventListener('click', () => {
-                const act = mine.toastAction;
-                hideToast();
-                if (act) act();
-            });
+            document.addEventListener('keydown', onKey, true);
+            document.addEventListener('keyup', onKeyUp, true);
+            window.addEventListener('blur', onBlur);
+            document.addEventListener('timeupdate', onTime, { capture: true, passive: true });
             document.addEventListener('fullscreenchange', onFullscreen);
+            mine.resize = new ResizeObserver(() => layout());
+            mine.resize.observe(element);
 
             // YouTube reparents its player on some navigations. The task takes
             // it back, and reports done once the reader has closed, which is
-            // DomWatch's cue to drop it.
+            // DomWatch's cue to drop it. It also picks the chapters up if
+            // YouTube had not drawn them yet when the reader opened.
             watcher.add('reader-player', () => {
                 if (!mine.alive) return true;
                 if (!mine.lent) adopt();
+                if (!mine.chapters.length) {
+                    mine.chapters = chaptersOnPage(mine.videoId);
+                    if (mine.chapters.length) renderUnder(mine);
+                }
                 return false;
             });
 
-            Theme.appearance().then((look) => { if (mine.alive) Theme.dress(element, look); }).catch(() => {});
+            dress(mine);
             transcripts.fetch(video.id).then((transcript) => {
                 if (!mine.alive) return;
-                hydrate(transcript);
+                hydrate(mine, transcript);
                 if (transcript) offerLanguages(mine, transcript.languageCode);
-            });
-            element.querySelector('.bb-reader-lang').addEventListener('change', (event) => {
-                switchLanguage(mine, event.target.value);
             });
             // A checkpoint saved, edited or deleted anywhere — this reader,
             // Ctrl+B, the dashboard in another tab — lands here.
@@ -412,325 +424,459 @@
             return true;
         }
 
-        // ---------------------------------------------------- checkpoints
+        /**
+         * The skin, read from storage, then everything drawn in its ink: the
+         * pen's cursor and the paper's texture. The texture is the extension's
+         * own file, so its address is the extension's, not the page's.
+         */
+        function dress(mine) {
+            Theme.appearance().then((look) => {
+                if (!mine.alive) return;
+                Theme.dress(mine.element, look);
+                const ink = getComputedStyle(mine.element).getPropertyValue('--rd-ink').trim() || '#ffd65a';
+                mine.highlights.setCursors(ink);
+                try {
+                    for (const name of ['newsprint', 'parchment']) {
+                        mine.element.style.setProperty(`--rd-tex-${name}`, `url("${chrome.runtime.getURL(`textures/${name}.png`)}")`);
+                    }
+                } catch (_) {
+                    // The extension reloaded under this page: plain paper it is.
+                }
+                layout();
+            }).catch(() => {});
+        }
 
         async function loadCheckpoints(mine) {
             const videos = await Bookmarks.load();
             if (!mine.alive) return;
-            const entry = videos.find((video) => video.id === mine.videoId);
-            mine.checkpoints = entry ? entry.bookmarks : [];
-            shade();
-            renderNotes();
+            const entry = videos.find((one) => one.id === mine.videoId);
+            mine.highlights.load(entry ? entry.bookmarks : []);
         }
 
-        // ---------------------------------------------------------- notes
-
-        const keyOf = (node) => {
-            const item = node && node.closest('.bb-rn-item');
-            return item ? item.dataset.key : '';
-        };
-
-        const findCheckpoint = (key) => session.checkpoints.find((b) => Bookmarks.bookmarkKey(b) === key);
+        // ----------------------------------------------- the transcript
 
         /**
-         * The list is rebuilt only when which checkpoints there are changes.
-         * A note saved — which is every pause in typing — only refreshes the
-         * boxes nobody is typing in; rebuilding under the one in focus would
-         * throw the caret out of it mid-word.
+         * Set the transcript. A video with no captions says so and carries
+         * on — the player, the highlights list and every layout work the same
+         * without one.
          */
-        function renderNotes() {
-            const list = session.element.querySelector('.bb-rn-list');
-            const shape = session.checkpoints.map((b) => Bookmarks.bookmarkKey(b)).join('|');
-            session.element.querySelector('.bb-rn-count').textContent =
-                session.checkpoints.length ? `(${session.checkpoints.length})` : '';
-
-            if (shape !== session.notesShape) {
-                session.notesShape = shape;
-                const focused = document.activeElement;
-                const keep = list.contains(focused) && focused.classList.contains('bb-rn-note')
-                    ? { key: keyOf(focused), at: focused.selectionStart } : null;
-                list.innerHTML = session.checkpoints.length
-                    ? session.checkpoints.map(noteHtml).join('')
-                    : '<li class="bb-rn-empty">Highlight a passage in the transcript to keep it here.</li>';
-                if (keep) {
-                    const box = list.querySelector(`.bb-rn-item[data-key="${CSS.escape(keep.key)}"] .bb-rn-note`);
-                    if (box) { box.focus(); box.setSelectionRange(keep.at, keep.at); }
-                }
+        function hydrate(mine, transcript) {
+            const paras = mine.element.querySelector('.rd-paras');
+            const entries = ReaderTranscript.entriesOf(transcript);
+            mine.transcript = transcript;
+            mine.nowS = mine.nowP = -1;
+            mine.model = entries.length ? ReaderTranscript.build(entries, { chapters: mine.chapters }) : null;
+            if (!mine.model) {
+                paras.innerHTML = '<p class="rd-empty">This video has no transcript.</p>';
+                mine.paraNodes = mine.sentenceNodes = [];
+                mine.highlights.setModel(null);
+                renderUnder(mine);
                 return;
             }
-            for (const box of list.querySelectorAll('.bb-rn-note')) {
-                const key = keyOf(box);
-                if (box === document.activeElement || session.pending.has(key)) continue;
-                const checkpoint = findCheckpoint(key);
-                if (checkpoint && box.value !== (checkpoint.note || '')) box.value = checkpoint.note || '';
-            }
+            paras.innerHTML = ReaderTranscript.paragraphsHtml(mine.model);
+            mine.paraNodes = Array.from(paras.querySelectorAll('.rd-p'));
+            mine.sentenceNodes = Array.from(paras.querySelectorAll('.rd-s'));
+            mine.highlights.setModel(mine.model);
+            renderUnder(mine);
+            track(mine, player.currentTime());
+            applyBand(mine);
+            requestAnimationFrame(() => scrollToNow(mine, false));
         }
-
-        function onNotesClick(event) {
-            const key = keyOf(event.target);
-            const checkpoint = key && findCheckpoint(key);
-            if (!checkpoint) return;
-            if (event.target.closest('.bb-rn-time')) {
-                player.seekTo(typeof checkpoint.start === 'number' ? checkpoint.start : checkpoint.time);
-            } else if (event.target.closest('.bb-rn-delete')) {
-                deleteCheckpoint(checkpoint);
-            }
-        }
-
-        /**
-         * Typing a note writes it once the typing stops, through the same
-         * serialised update every other writer uses — not once a keystroke.
-         */
-        function onNoteInput(event) {
-            if (!event.target.classList.contains('bb-rn-note')) return;
-            const mine = session;
-            const key = keyOf(event.target);
-            const pending = mine.pending.get(key);
-            if (pending) clearTimeout(pending.timer);
-            mine.pending.set(key, {
-                note: event.target.value,
-                timer: setTimeout(() => flushNote(mine, key), NOTE_DEBOUNCE_MS),
-            });
-        }
-
-        function flushNote(mine, key) {
-            const pending = mine.pending.get(key);
-            if (!pending) return;
-            clearTimeout(pending.timer);
-            mine.pending.delete(key);
-            Bookmarks.update((videos) => Bookmarks.editBookmark(videos, mine.videoId, key, { note: pending.note }));
-        }
-
-        async function deleteCheckpoint(checkpoint) {
-            const mine = session;
-            const key = Bookmarks.bookmarkKey(checkpoint);
-            await Bookmarks.update((videos) => Bookmarks.removeBookmarkById(videos, mine.videoId, key));
-            if (!mine.alive) return;
-            showToast('Checkpoint deleted', 'Undo', () => {
-                const video = getVideo() || { id: mine.videoId };
-                Bookmarks.update((videos) => Bookmarks.addBookmarks(videos, video, [checkpoint]).videos);
-            });
-        }
-
-        async function copyNotes() {
-            if (!session.checkpoints.length) {
-                showToast('No checkpoints to copy yet');
-                return;
-            }
-            const video = getVideo() || { id: session.videoId };
-            const text = Markdown.checkpointList(video, session.checkpoints, Time.formatTime);
-            const ok = await copyText(text);
-            if (session) showToast(ok ? 'Copied as Markdown' : 'Could not reach the clipboard');
-        }
-
-        /** Shade the rows each checkpoint covers — by time, never by DOM position. */
-        function shade() {
-            if (!session.rows.length) return;
-            const marks = ReaderTranscript.marksFor(session.entries, session.checkpoints);
-            session.rows.forEach((row, index) => {
-                if (marks[index]) row.dataset.bbMarks = String(Math.min(marks[index], 3));
-                else delete row.dataset.bbMarks;
-            });
-        }
-
-        /**
-         * Fill the transcript column. A video with no captions says so and
-         * carries on — the player and everything else in the reader work the
-         * same without one.
-         */
-        function hydrate(transcript) {
-            const column = session.element.querySelector('.bb-reader-transcript');
-            session.entries = ReaderTranscript.entriesOf(transcript);
-            session.active = -1;
-            if (!session.entries.length) {
-                column.innerHTML = '<p class="bb-reader-empty">This video has no transcript.</p>';
-                return;
-            }
-            column.innerHTML = `<div class="bb-rt-rows">${ReaderTranscript.rowsHtml(session.entries)}</div>`;
-            session.rows = Array.from(column.querySelectorAll(`.${ReaderTranscript.ROW_CLASS}`));
-            shade();
-            follow(player.currentTime());
-        }
-
-        // ------------------------------------------------------ languages
 
         /** A picker, but only for a video with more than one caption language. */
         async function offerLanguages(mine, current) {
             const found = transcripts.list ? await transcripts.list(mine.videoId) : [];
             if (!mine.alive || found.length < 2) return;
-            const picker = mine.element.querySelector('.bb-reader-lang');
+            const picker = mine.element.querySelector('.rd-lang select');
             picker.innerHTML = found.map((track) =>
                 `<option value="${Dom.escapeAttr(track.code)}">${Dom.escapeHtml(track.label)}</option>`).join('');
             picker.value = found.some((track) => track.code === current) ? current : found[0].code;
-            picker.hidden = false;
+            mine.element.querySelector('.rd-lang').hidden = false;
         }
 
         /**
-         * Draw the transcript in another language, through the same cached,
-         * one-fetch-at-a-time wrapper. The checkpoints stay on the right
-         * lines without anything being moved, because they are anchored by
-         * time and the new rows are shaded by theirs.
+         * The transcript in another language, through the same cached,
+         * one-fetch-at-a-time wrapper. The highlights stay on the right words
+         * without anything being moved: they are stored by time, and the new
+         * words are laid over the same times.
          */
         async function switchLanguage(mine, code) {
-            const column = mine.element.querySelector('.bb-reader-transcript');
-            column.innerHTML = '<p class="bb-reader-empty">Loading the transcript…</p>';
-            mine.rows = [];
+            mine.element.querySelector('.rd-paras').innerHTML = '<p class="rd-empty">Loading the transcript…</p>';
             const transcript = await transcripts.fetch(mine.videoId, { language: code });
-            if (mine.alive) hydrate(transcript);
+            if (mine.alive) hydrate(mine, transcript);
         }
 
-        // ------------------------------------------ seeking and following
-
-        /** A click on a row plays from it — unless it ended a selection. */
-        function onRowClick(event) {
-            const selection = window.getSelection();
-            if (selection && !selection.isCollapsed) return;
-            const row = ReaderTranscript.rowAt(event.target);
-            const entry = row && session.entries[ReaderTranscript.indexOf(row)];
-            if (entry) player.seekTo(entry.start);
-        }
+        // ------------------------------------------- following the video
 
         /**
-         * The one timeupdate listener, in the shape the watched-video tracker
-         * in main.js was fixed into: work out the row from the time alone — a
-         * binary search, no layout read — and return straight away unless it
-         * changed. Only a change touches the DOM, which is a few times a
-         * minute rather than four times a second.
+         * The one timeupdate listener. The word playing is a binary search
+         * over the words' times — no layout read — and the page is touched
+         * only when the sentence or the paragraph changes: a few times a
+         * minute, not four times a second.
          */
         function onTime(event) {
-            if (!session || !session.rows.length) return;
-            const video = event.target;
-            if (!session.player || !session.player.contains(video)) return;
-            follow(video.currentTime);
+            const mine = session;
+            if (!mine || !mine.player || !mine.player.contains(event.target)) return;
+            track(mine, event.target.currentTime);
         }
 
-        // ------------------------------------------ highlight to checkpoint
+        function track(mine, t) {
+            mine.now = t;
+            const now = mine.element.querySelector('.rd-now span');
+            if (!now.parentNode.hidden) now.textContent = `Now · ${Time.formatTime(t)}`;
+            markChapter(mine);
+            if (!mine.lengthKnown) renderUnderMeta(mine);
+            if (!mine.model) return;
+            const w = ReaderTranscript.wordAt(mine.model, t + 0.01);
+            const s = w < 0 ? -1 : mine.model.words[w].s;
+            const p = w < 0 ? -1 : mine.model.words[w].p;
+            if (s !== mine.nowS) {
+                if (mine.sentenceNodes[mine.nowS]) mine.sentenceNodes[mine.nowS].classList.remove('is-now');
+                if (mine.sentenceNodes[s]) mine.sentenceNodes[s].classList.add('is-now');
+                mine.nowS = s;
+                if (isBandClosed(mine)) renderBand(mine);
+            }
+            if (p !== mine.nowP) {
+                const was = mine.nowP;
+                if (mine.paraNodes[was]) mine.paraNodes[was].classList.remove('is-now');
+                if (mine.paraNodes[p]) mine.paraNodes[p].classList.add('is-now');
+                // Everything before the playing paragraph is read: it greys.
+                for (let i = Math.max(0, Math.min(was, p)); i < Math.max(was, p); i++) {
+                    if (mine.paraNodes[i]) mine.paraNodes[i].classList.toggle('is-past', i < p);
+                }
+                mine.nowP = p;
+                if (mine.following && getSettings().readerFollow !== false) scrollToNow(mine, true);
+                showNow(mine);
+            }
+        }
+
+        const isBandClosed = (mine) => mine.layout === 'band' && !mine.bandOpen;
 
         /**
-         * Deferred a turn, so the click that ended a drag has settled it. A
-         * timeout rather than a frame: a frame only comes when something on
-         * screen changes, and a finished selection changes nothing.
+         * The playing paragraph to a third of the way down the column. The
+         * column is scrolled, not the paragraph "into view": scrollIntoView
+         * also scrolls every ancestor that can be, and YouTube's page under
+         * the reader is one of them.
          */
-        function onSelectEnd() {
-            const mine = session;
-            setTimeout(() => { if (mine.alive) captureSelection(); }, 0);
-        }
-
-        function captureSelection() {
-            const selection = window.getSelection();
-            if (!selection || selection.isCollapsed || !selection.rangeCount) return;
-            const range = selection.getRangeAt(0);
-            const column = session.element.querySelector('.bb-reader-transcript');
-            if (!column.contains(range.commonAncestorContainer)) return;
-
-            const span = ReaderTranscript.selectionToRange(range, session.entries);
-            const text = ReaderTranscript.rangeText(range);
-            if (!span || !text) return;
-            const video = getVideo();
-            if (!video || video.id !== session.videoId) return;
-
-            const highlight = { video, start: span.start, end: span.end, text };
-            if (getSettings().readerAutoCheckpoint === false) {
-                showToast(`“${clip(text)}”`, 'Save as checkpoint', () => saveHighlight(highlight, selection));
-                return;
-            }
-            saveHighlight(highlight, selection);
-        }
-
-        /**
-         * Saved on the spot, with an Undo right there. The Undo is what makes
-         * saving without asking safe enough to be the default: without it the
-         * gesture is a commitment, and people stop using it.
-         */
-        async function saveHighlight(highlight, selection) {
-            const mine = session;
-            const saved = await recorder.saveHighlight(highlight);
-            if (!mine.alive) return;
-            if (!saved) {
-                showToast('Could not save the checkpoint');
-                return;
-            }
-            if (selection) selection.removeAllRanges();
-            if (saved.repeat) {
-                showToast('Already a checkpoint');
-                return;
-            }
-            const id = saved.record.id;
-            showToast(`Checkpoint saved: “${clip(highlight.text)}”`, 'Undo', () => {
-                Bookmarks.update((videos) => Bookmarks.removeBookmarkById(videos, mine.videoId, id));
-            });
-        }
-
-        const clip = (text) => (text.length > 48 ? `${text.slice(0, 47)}…` : text);
-
-        function showToast(message, actionLabel, action) {
-            const toast = session.element.querySelector('.bb-reader-toast');
-            const button = toast.querySelector('.bb-reader-toast-act');
-            toast.querySelector('.bb-reader-toast-text').textContent = message;
-            button.textContent = actionLabel || '';
-            button.hidden = !actionLabel;
-            session.toastAction = action || null;
-            toast.hidden = false;
-            clearTimeout(session.toastTimer);
-            session.toastTimer = setTimeout(hideToast, TOAST_MS);
-        }
-
-        function hideToast() {
-            if (!session) return;
-            clearTimeout(session.toastTimer);
-            session.toastAction = null;
-            session.element.querySelector('.bb-reader-toast').hidden = true;
-        }
-
-        function follow(t) {
-            const index = ReaderTranscript.activeIndex(session.entries, t);
-            if (index === session.active) return;
-            const before = session.rows[session.active];
-            const after = session.rows[index];
-            session.active = index;
-            if (before) before.classList.remove('is-active');
-            if (!after) return;
-            after.classList.add('is-active');
-            if (getSettings().readerFollow === false) return;
-            if (Date.now() - session.handsOffAt < HANDS_OFF_MS) return;
-            // The column is scrolled, not the row "into view": scrollIntoView
-            // also scrolls every ancestor that can be, and YouTube's page
-            // under the reader is one of them — it came back from the reader
-            // somewhere other than where it was left.
-            const column = after.offsetParent;
-            if (!column) return;
+        function scrollToNow(mine, smooth) {
+            const node = mine.paraNodes[mine.nowP];
+            if (!node || isBandClosed(mine)) return;
+            const scroll = mine.scroll;
+            const top = Math.max(0, node.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop - scroll.clientHeight * 0.3);
+            if (Math.abs(top - scroll.scrollTop) < 2) return;
             const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            column.scrollTo({
-                top: after.offsetTop - (column.clientHeight - after.offsetHeight) / 2,
-                behavior: still ? 'auto' : 'smooth',
-            });
+            // Scrolled by us, so the scroll it raises is not taken as the
+            // user scrolling away. scrollend clears it; the timer is for a
+            // browser without scrollend.
+            mine.auto = true;
+            clearTimeout(mine.autoTimer);
+            mine.autoTimer = setTimeout(() => { mine.auto = false; }, 1200);
+            scroll.scrollTo({ top, behavior: smooth && !still ? 'smooth' : 'auto' });
+        }
+
+        function nowVisible(mine) {
+            const node = mine.paraNodes[mine.nowP];
+            if (!node) return true;
+            const a = mine.scroll.getBoundingClientRect();
+            const b = node.getBoundingClientRect();
+            return b.bottom > a.top + 8 && b.top < a.bottom - 8;
         }
 
         /**
-         * Close from anywhere — Escape, the button, a navigation. Idempotent,
-         * and safe when YouTube has already destroyed the player.
+         * Scrolled away from the playing paragraph, the column stops following
+         * and offers the way back instead; scrolled back to it, it follows
+         * again. A transcript that yanked itself back while you read ahead
+         * would be unusable.
          */
-        function close() {
-            if (!session) return;
-            const done = session;
-            // A note typed a moment ago is written, not lost with the panel.
-            for (const key of Array.from(done.pending.keys())) flushNote(done, key);
-            done.alive = false;
-            clearTimeout(done.toastTimer);
-            if (done.unwatch) done.unwatch();
-            restore();
-            session = null;
-            document.removeEventListener('keydown', onKey, true);
-            document.removeEventListener('timeupdate', onTime, { capture: true });
-            document.removeEventListener('fullscreenchange', onFullscreen);
-            watcher.remove('reader-player');
-            done.element.remove();
-            document.documentElement.classList.remove(OPEN_CLASS);
+        function onScroll(mine) {
+            if (!mine.auto) mine.following = nowVisible(mine);
+            showNow(mine);
         }
 
-        function applyType(element) {
-            for (const [prop, value] of Object.entries(typeStyle(getSettings()))) element.style.setProperty(prop, value);
+        function showNow(mine) {
+            const button = mine.element.querySelector('.rd-now');
+            const listing = mine.tabs && mine.tab === 'highlights';
+            const hide = !mine.model || mine.nowP < 0 || isBandClosed(mine) || listing || nowVisible(mine);
+            button.hidden = hide;
+            if (!hide) button.querySelector('span').textContent = `Now · ${Time.formatTime(mine.now)}`;
         }
+
+        // ---------------------------------------------------- the band
+
+        /** The band: the sentence playing, set large, between the one before and the one after. */
+        function renderBand(mine) {
+            const rows = mine.element.querySelector('.rd-bandrows');
+            const model = mine.model;
+            if (!model || !isBandClosed(mine)) {
+                rows.textContent = '';
+                mine.highlights.setBand(false);
+                return;
+            }
+            const now = Math.max(0, mine.nowS);
+            const esc = Dom.escapeHtml;
+            rows.innerHTML = [[now - 1, 'prev'], [now, 'cur'], [now + 1, 'next']]
+                .filter(([s]) => model.sentences[s])
+                .map(([s, role]) => {
+                    const sentence = model.sentences[s];
+                    const start = model.words[sentence.from].time;
+                    let words = '';
+                    for (let w = sentence.from; w <= sentence.to; w++) {
+                        words += `<span class="rd-w" data-w="${w}">${esc(model.words[w].t)}</span>`;
+                        if (w < sentence.to) words += `<span class="rd-sp" data-w="${w}"> </span>`;
+                    }
+                    return `<div class="rd-brow is-${role}"><button type="button" class="rd-stamp" data-t="${start}"
+                        title="Play from here">${Time.formatTime(start)}</button><p class="rd-text">${words}</p></div>`;
+                }).join('');
+            mine.highlights.setBand(true);
+        }
+
+        function applyBand(mine) {
+            const closed = isBandClosed(mine);
+            mine.element.classList.toggle('is-band-open', mine.layout === 'band' && mine.bandOpen);
+            mine.element.querySelector('.rd-paras').hidden = closed;
+            const toggle = mine.element.querySelector('.rd-band-toggle');
+            toggle.querySelector('span').textContent = mine.bandOpen ? 'Collapse' : 'Transcript';
+            toggle.title = mine.bandOpen ? 'Back to three sentences' : 'Show the whole transcript';
+            renderBand(mine);
+            if (!closed) requestAnimationFrame(() => scrollToNow(mine, false));
+        }
+
+        // ------------------------------------------------------ layouts
+
+        /** Write the current layout's boxes onto the pieces. */
+        function layout() {
+            const mine = session;
+            if (!mine) return;
+            const W = mine.element.clientWidth;
+            const H = mine.element.clientHeight;
+            if (!W || !H) return;
+            const g = ReaderLayout.geometry(mine.layout, W, H, Object.assign({
+                card: mine.card, vcard: mine.vcard, bandOpen: mine.bandOpen,
+            }, typeScale(getSettings())));
+            const place = (selector, box) => {
+                const node = mine.element.querySelector(selector);
+                node.hidden = !box;
+                if (box) Object.assign(node.style, { left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` });
+            };
+            place('.rd-bar', g.bar);
+            place('.rd-stage', g.stage);
+            place('.rd-video', g.video);
+            place('.rd-under', g.under);
+            place('.rd-panel', g.panel);
+            place('.rd-side', g.side);
+            mine.tabs = g.tabs;
+            const style = mine.element.style;
+            style.setProperty('--rd-base-size', `${g.type.size}px`);
+            style.setProperty('--rd-lead', String(g.type.lead));
+            style.setProperty('--rd-gutter', `${g.type.gutter}px`);
+            style.setProperty('--rd-pad', g.type.pad);
+            if (!mine.element.classList.contains('is-moving')) {
+                clearTimeout(mine.settle);
+                // Once the move has finished: the toolbar is over a word that
+                // has only now stopped moving.
+                mine.settle = setTimeout(() => { if (mine.alive) mine.highlights.place(); }, 320);
+            }
+            mine.highlights.place();
+        }
+
+        /**
+         * Switch layout live, and remember it as the one the next reader opens
+         * in. The transcript is not fetched again and nothing is redrawn:
+         * the same pieces are moved.
+         */
+        function setLayout(id, { remember = true } = {}) {
+            const mine = session;
+            if (!mine) return;
+            mine.layout = ReaderLayout.layoutOf(id);
+            mine.element.dataset.layout = mine.layout;
+            for (const button of mine.element.querySelectorAll('.rd-layout')) {
+                button.setAttribute('aria-checked', String(button.dataset.layout === mine.layout));
+            }
+            mine.bandOpen = false;
+            mine.highlights.reset();
+            setTab(mine, 'transcript');
+            applyBand(mine);
+            if (remember) Settings.set({ readerLayout: mine.layout });
+            layout();
+            nudge();
+            mine.following = true;
+            setTimeout(() => { if (mine.alive) scrollToNow(mine, false); }, 340);
+        }
+
+        function setTab(mine, id) {
+            mine.tab = id === 'highlights' ? 'highlights' : 'transcript';
+            mine.element.classList.toggle('is-listing', mine.tab === 'highlights');
+            for (const tab of mine.element.querySelectorAll('.rd-tab')) {
+                tab.setAttribute('aria-selected', String(tab.dataset.tab === mine.tab));
+            }
+            showNow(mine);
+        }
+
+        /**
+         * Drag the float card, or the pinned player, by its grip. The move is
+         * an offset from where the layout puts it, kept on the screen by the
+         * layout, and it lasts as long as the reader is open.
+         *
+         * The pointer is followed on the window, not captured by the grip:
+         * the card moves under the pointer, and a capture that did not take
+         * — or a move the browser coalesced away — left it stranded short of
+         * where it was let go. The release point is where it ends up.
+         */
+        function startMove(mine, event, key) {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            const from = { x: event.clientX, y: event.clientY, dx: mine[key].dx, dy: mine[key].dy };
+            mine.element.classList.add('is-moving');
+            const move = (at) => {
+                mine[key] = { dx: from.dx + at.clientX - from.x, dy: from.dy + at.clientY - from.y };
+                layout();
+            };
+            const up = (at) => {
+                window.removeEventListener('pointermove', move, true);
+                window.removeEventListener('pointerup', up, true);
+                window.removeEventListener('pointercancel', up, true);
+                if (!mine.alive) return;
+                if (at.type === 'pointerup') move(at);
+                mine.element.classList.remove('is-moving');
+                // What the layout kept on the screen is where it is now, so
+                // a card dragged past the edge comes straight back off it.
+                const size = [mine.element.clientWidth, mine.element.clientHeight];
+                const scale = typeScale(getSettings());
+                const held = ReaderLayout.geometry(mine.layout, ...size, Object.assign({ card: mine.card, vcard: mine.vcard }, scale));
+                const home = ReaderLayout.geometry(mine.layout, ...size, scale);
+                const piece = key === 'card' ? 'panel' : 'video';
+                mine[key] = { dx: held[piece].left - home[piece].left, dy: held[piece].top - home[piece].top };
+                nudge();
+                mine.highlights.place();
+            };
+            window.addEventListener('pointermove', move, true);
+            window.addEventListener('pointerup', up, true);
+            window.addEventListener('pointercancel', up, true);
+        }
+
+        // ---------------------------------------- title, chapters, counts
+
+        function fillTitle(mine, video) {
+            const channel = ns.PageInfo && ns.PageInfo.getChannelInfo ? (ns.PageInfo.getChannelInfo() || {}).name || '' : '';
+            mine.channel = channel;
+            mine.element.querySelector('.rd-title-text').textContent = video.title || 'Reader';
+            mine.element.querySelector('.rd-channel').textContent = channel;
+            mine.element.querySelector('.rd-under-title').textContent = video.title || '';
+        }
+
+        /** Under the docked player: what it is, whose, how long, in what captions — and its chapters. */
+        function renderUnder(mine) {
+            renderUnderMeta(mine);
+            mine.element.querySelector('.rd-chapters').innerHTML = mine.chapters.map((chapter) => `
+                <button type="button" class="rd-chip" data-t="${chapter.start}" title="Play from here"><span
+                    class="rd-chip-time">${Time.formatTime(chapter.start)}</span>${Dom.escapeHtml(chapter.label)}</button>`).join('');
+            mine.chapterAt = -2;
+            markChapter(mine);
+        }
+
+        function markChapter(mine) {
+            let at = -1;
+            mine.chapters.forEach((chapter, i) => { if (chapter.start <= mine.now) at = i; });
+            if (at === mine.chapterAt) return;
+            mine.chapterAt = at;
+            mine.element.querySelectorAll('.rd-chip').forEach((chip, i) => chip.classList.toggle('is-on', i === at));
+        }
+
+        /**
+         * The channel, the length and the captions. The length is NaN until
+         * the video's metadata has loaded, so until it is known this is asked
+         * again as the video plays.
+         */
+        function renderUnderMeta(mine) {
+            const media = mine.player && mine.player.querySelector('video');
+            mine.lengthKnown = !!(media && Number.isFinite(media.duration) && media.duration > 0);
+            const length = mine.lengthKnown ? Time.formatTime(media.duration) : '';
+            const captions = mine.transcript && mine.transcript.language ? `${mine.transcript.language} captions` : '';
+            mine.element.querySelector('.rd-under-meta').textContent = [mine.channel, length, captions].filter(Boolean).join(' · ');
+        }
+
+        function showCount(mine, count) {
+            mine.element.querySelector('.rd-tab-count').textContent = String(count);
+            mine.element.querySelector('.rd-band-count').textContent = count === 1 ? '1 highlight' : `${count} highlights`;
+        }
+
+        async function copyAll(mine) {
+            const video = getVideo() || { id: mine.videoId };
+            const text = Markdown.checkpointList(video, mine.highlights.records, Time.formatTime);
+            const ok = await copyText(text);
+            if (!mine.alive) return;
+            if (!ok) {
+                showToast(mine, 'Could not reach the clipboard');
+                return;
+            }
+            mine.element.querySelectorAll('.rd-copy span').forEach((label) => { label.textContent = 'Copied'; });
+            clearTimeout(mine.copied);
+            mine.copied = setTimeout(() => {
+                mine.element.querySelectorAll('.rd-copy span').forEach((label) => { label.textContent = 'Copy as Markdown'; });
+            }, COPIED_MS);
+        }
+
+        // -------------------------------------------------------- toast
+
+        /**
+         * Inside the panel rather than our page-wide toast, because it carries
+         * an Undo, and the Undo has to be where the highlight was just made.
+         */
+        function showToast(mine, text, undo) {
+            const toast = mine.element.querySelector('.rd-toast');
+            toast.querySelector('.rd-toast-text').textContent = text;
+            toast.querySelector('.rd-toast-undo').hidden = !undo;
+            mine.undo = undo || null;
+            toast.hidden = false;
+            clearTimeout(mine.toastTimer);
+            mine.toastTimer = setTimeout(() => hideToast(mine), TOAST_MS);
+        }
+
+        function hideToast(mine) {
+            clearTimeout(mine.toastTimer);
+            mine.undo = null;
+            mine.element.querySelector('.rd-toast').hidden = true;
+        }
+
+        // --------------------------------------------------------- keys
+
+        /**
+         * Escape lets go of a highlight, then leaves a field, then closes the
+         * reader — a stray press mid-note does not throw the view away. In
+         * fullscreen it is YouTube's, for leaving fullscreen. Alt held turns
+         * the pen into an eraser; Backspace or Delete removes the highlight
+         * picked.
+         */
+        function onKey(event) {
+            const mine = session;
+            if (!mine || document.fullscreenElement) return;
+            if (event.key === 'Alt') {
+                mine.highlights.setAlt(true);
+                return;
+            }
+            const active = document.activeElement;
+            const typing = active && /^(TEXTAREA|INPUT|SELECT)$/.test(active.tagName);
+            if (event.key === 'Escape') {
+                event.stopPropagation();
+                if (typing && mine.element.contains(active)) active.blur();
+                else if (!mine.highlights.escape()) close();
+                return;
+            }
+            if ((event.key === 'Backspace' || event.key === 'Delete') && !typing && mine.highlights.removePicked()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        }
+
+        function onKeyUp(event) {
+            if (session && event.key === 'Alt') session.highlights.setAlt(false);
+        }
+
+        function onBlur() {
+            if (session) session.highlights.setAlt(false);
+        }
+
+        // ------------------------------------------------- the settings
 
         /**
          * Over YouTube's header, or under it. Kept, the reader starts where
@@ -755,124 +901,43 @@
          */
         function refresh() {
             if (!session) return;
-            const mine = session;
-            applyType(mine.element);
-            applyChrome(mine.element);
+            applyChrome(session.element);
+            layout();
             nudge();
-            Theme.appearance().then((look) => { if (mine.alive) Theme.dress(mine.element, look); }).catch(() => {});
-        }
-
-        // --------------------------------------------------------- sizing
-
-        /** The current layout's size, into the one custom property CSS reads. */
-        function applySize() {
-            const layout = session.element.dataset.layout;
-            const size = session.sizes ? session.sizes[layout] : SIZE_DEFAULTS[layout];
-            session.element.style.setProperty('--bb-reader-share', String(size));
-            const divider = session.element.querySelector('.bb-reader-divider');
-            divider.setAttribute('aria-valuenow', String(Math.round(size)));
-            divider.setAttribute('aria-orientation', layout === 'stacked' ? 'horizontal' : 'vertical');
+            dress(session);
         }
 
         /**
-         * Drag the divider: the pointer is captured, each move writes the
-         * custom property and nothing else, and the size is stored once, on
-         * release. The body's box is read at the start and not again.
+         * Close from anywhere — Escape, the button, a navigation. Idempotent,
+         * and safe when YouTube has already destroyed the player.
          */
-        function onDragStart(event) {
-            if (event.button !== 0 || !session) return;
-            event.preventDefault();
-            const mine = session;
-            const handle = event.currentTarget;
-            const layout = mine.element.dataset.layout;
-            const box = mine.element.querySelector('.bb-reader-body').getBoundingClientRect();
-            let size = mine.sizes ? mine.sizes[layout] : SIZE_DEFAULTS[layout];
-            // A pointer the browser no longer counts as down cannot be
-            // captured, and throwing here would leave a half-started drag.
-            try { handle.setPointerCapture(event.pointerId); } catch (_) { /* moves still reach the handle */ }
-            mine.element.classList.add('is-resizing');
-
-            const move = (at) => {
-                size = clampSize(sizeAt(layout, box, at.clientX, at.clientY), layout);
-                mine.element.style.setProperty('--bb-reader-share', String(size));
-            };
-            const up = () => {
-                handle.removeEventListener('pointermove', move);
-                handle.removeEventListener('pointerup', up);
-                handle.removeEventListener('pointercancel', up);
-                mine.element.classList.remove('is-resizing');
-                commitSize(mine, layout, size);
-            };
-            handle.addEventListener('pointermove', move);
-            handle.addEventListener('pointerup', up);
-            handle.addEventListener('pointercancel', up);
-        }
-
-        /**
-         * The arrow keys, for anyone not dragging: the one that moves the
-         * handle toward the transcript grows the video, and in theatre and
-         * focus — where what you size sits on the right — that is Left.
-         */
-        const ARROWS = Object.freeze({
-            split: { ArrowRight: 2, ArrowLeft: -2 },
-            stacked: { ArrowDown: 2, ArrowUp: -2 },
-            theatre: { ArrowLeft: 2, ArrowRight: -2 },
-            focus: { ArrowLeft: 2, ArrowRight: -2 },
-        });
-
-        function onHandleKey(event) {
-            if (!session || !session.sizes) return;
-            const layout = session.element.dataset.layout;
-            const step = ARROWS[layout][event.key];
-            if (!step) return;
-            event.preventDefault();
-            commitSize(session, layout, clampSize(session.sizes[layout] + step, layout));
-        }
-
-        function commitSize(mine, layout, size) {
-            if (mine.sizes) mine.sizes[layout] = size;
-            if (mine.alive) applySize();
-            nudge();
-            saveSize(layout, size);
-        }
-
-        /**
-         * Switch layout live, and remember it as the one the next reader opens
-         * in. The transcript is not fetched again and nothing is redrawn: the
-         * grid changes under the same elements.
-         */
-        function setLayout(id) {
+        function close() {
             if (!session) return;
-            const layout = layoutOf(id);
-            session.element.dataset.layout = layout;
-            for (const button of session.element.querySelectorAll('.bb-reader-layout')) {
-                button.setAttribute('aria-checked', String(button.dataset.layout === layout));
-            }
-            Settings.set({ readerLayout: layout });
-            applySize();
-            nudge();
+            const done = session;
+            done.alive = false;
+            // A note typed a moment ago is written, not lost with the panel.
+            done.highlights.destroy();
+            clearTimeout(done.toastTimer);
+            clearTimeout(done.copied);
+            clearTimeout(done.settle);
+            if (done.unwatch) done.unwatch();
+            if (done.resize) done.resize.disconnect();
+            restore();
+            session = null;
+            document.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('keyup', onKeyUp, true);
+            window.removeEventListener('blur', onBlur);
+            document.removeEventListener('timeupdate', onTime, { capture: true });
+            document.removeEventListener('fullscreenchange', onFullscreen);
+            watcher.remove('reader-player');
+            done.element.remove();
+            document.documentElement.classList.remove(OPEN_CLASS);
         }
 
         function toggle() {
             if (!session) return open();
             close();
             return false;
-        }
-
-        /**
-         * Escape leaves a field before it leaves the reader, so a stray press
-         * mid-note does not throw the whole view away. In fullscreen it is
-         * YouTube's, for leaving fullscreen.
-         */
-        function onKey(event) {
-            if (event.key !== 'Escape' || !session || document.fullscreenElement) return;
-            const active = document.activeElement;
-            if (active && session.element.contains(active) && /^(TEXTAREA|INPUT|SELECT)$/.test(active.tagName)) {
-                active.blur();
-                return;
-            }
-            event.stopPropagation();
-            close();
         }
 
         /**
@@ -889,12 +954,13 @@
             get isOpen() { return !!session; },
             /** For the specs. */
             get element() { return session ? session.element : null; },
+            get highlights() { return session ? session.highlights : null; },
         };
     }
 
     const Reader = {
-        createReader, ROOT_ID, SLOT_ID, PLAYER_ID, OPEN_CLASS, HANDS_OFF_MS, LAYOUTS, LAYOUT_IDS,
-        SIZE_DEFAULTS, SIZE_RANGE, clampSize, readSizes, sizeAt, TYPE, typeStyle,
+        createReader, ROOT_ID, SLOT_ID, PLAYER_ID, OPEN_CLASS, TOAST_MS, TYPE, typeScale,
+        chaptersOnPage, chaptersInText,
     };
 
     root.BB = root.BB || {};

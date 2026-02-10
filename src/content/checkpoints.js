@@ -133,49 +133,6 @@
             notify(`Segment saved: ${Time.formatTime(start)} - ${Time.formatTime(end)}`, 'success');
         }
 
-        /**
-         * A passage highlighted in the reader's transcript, saved as it is.
-         *
-         * MIN_SPAN_SECONDS does not apply: a one-word highlight is a
-         * deliberate act, not a slipped key. The subtitle is the selected
-         * text exactly, not the whole of the lines it touched. The times are
-         * kept to the hundredth, because the reader shades the lines a
-         * checkpoint covers by comparing them, and a start floored to the
-         * second would shade the line before the one you chose.
-         *
-         * Highlighting the very same passage twice is one checkpoint — ids
-         * mean de-duplication no longer catches that on its own. Resolves to
-         * `{ record, repeat }`, or null when nothing could be saved.
-         */
-        async function saveHighlight({ video, start, end, text }) {
-            const subtitle = String(text || '').trim();
-            if (!video || !video.id || !subtitle || !(end > start)) return null;
-            const hundredth = (value) => Math.round(value * 100) / 100;
-            const record = {
-                id: Bookmarks.newId(),
-                time: Math.floor(start),
-                start: hundredth(start),
-                end: hundredth(end),
-                timestamp: Date.now(),
-                note: '',
-                title: subtitle.length > 60 ? `${subtitle.slice(0, 59)}…` : subtitle,
-                subtitle,
-            };
-            let repeat = null;
-            try {
-                await Bookmarks.update((videos) => {
-                    const entry = videos.find((v) => v.id === video.id);
-                    repeat = entry && entry.bookmarks.find((b) =>
-                        b.start === record.start && b.end === record.end && b.subtitle === subtitle) || null;
-                    return repeat ? videos : Bookmarks.addBookmarks(videos, video, [record]).videos;
-                });
-            } catch (error) {
-                console.error('Bell Bearer: could not save highlight', error);
-                return null;
-            }
-            return repeat ? { record: repeat, repeat: true } : { record, repeat: false };
-        }
-
         function cancelSegment() {
             if (segmentStart === null) return;
             segmentStart = null;
@@ -209,7 +166,7 @@
 
         return {
             startRecording, stopRecording,
-            toggleSegment, cancelSegment, saveHighlight,
+            toggleSegment, cancelSegment,
             get isRecording() { return recording; },
             get hasOpenSegment() { return segmentStart !== null; },
         };
