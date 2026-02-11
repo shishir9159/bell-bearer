@@ -63,12 +63,13 @@
      * The transcript's type in each layout: size in px, leading, the gutter
      * the times hang in, and the column's padding. Focus is set for reading
      * — the transcript is the page there — and the float card is the
-     * smallest, because it sits over the picture.
+     * smallest, because it sits over the picture. The float card and the
+     * glass column have no gutter: their times sit between the paragraphs.
      */
     const TYPE = Object.freeze({
         dock: Object.freeze({ size: 16, lead: 1.62, gutter: 48, pad: '6px 22px 80px 8px' }),
-        float: Object.freeze({ size: 15, lead: 1.6, gutter: 44, pad: '2px 18px 72px 6px' }),
-        glass: Object.freeze({ size: 16, lead: 1.6, gutter: 44, pad: '22px 18px 64px 4px' }),
+        float: Object.freeze({ size: 15, lead: 1.6, gutter: 0, pad: '8px 18px 72px 18px' }),
+        glass: Object.freeze({ size: 16, lead: 1.6, gutter: 0, pad: '20px 18px 64px 18px' }),
         band: Object.freeze({ size: 16, lead: 1.6, gutter: 58, pad: '18px 150px 72px 10px' }),
         focus: Object.freeze({ size: 19, lead: 1.72, gutter: 64, pad: '26px 24px 140px 0' }),
     });

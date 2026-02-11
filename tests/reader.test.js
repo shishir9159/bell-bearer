@@ -587,6 +587,27 @@
             teardown();
         });
 
+        test('in the float card and the glass column a time stands over its paragraph, elsewhere beside it', async () => {
+            MockChrome.reset({ localStore: {} });
+            const { reader } = await openReady({ transcript: makeTranscript(20) });
+            for (const id of Layout().LAYOUT_IDS.filter((one) => one !== 'band')) {
+                reader.setLayout(id, { remember: false });
+                await pause(360);
+                const para = reader.element.querySelector('.rd-paras .rd-p');
+                const stamp = para.querySelector('.rd-stamp').getBoundingClientRect();
+                const text = para.querySelector('.rd-text').getBoundingClientRect();
+                if (id === 'float' || id === 'glass') {
+                    assert(stamp.bottom <= text.top + 0.5, `${id}: the time is not over its paragraph`);
+                    assert(Math.abs(stamp.left - text.left) < 1, `${id}: the time is ${stamp.left - text.left}px off the text’s edge`);
+                } else {
+                    assert(stamp.right <= text.left + 0.5 && Math.abs(stamp.top - text.top) < 2,
+                        `${id}: the time does not hang beside its paragraph`);
+                }
+            }
+            reader.close();
+            teardown();
+        });
+
         test('the band holds three sentences, the playing one in the middle, and opens to the whole transcript', async () => {
             MockChrome.reset({ localStore: {} });
             const { reader, page } = await openReady({ settings: { readerLayout: 'band' } });

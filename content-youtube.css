@@ -136,6 +136,9 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-bar-band: transparent;
     --rd-bar-band-h: 0px;
     --rd-para-mark: '';
+    /* Only with a mark to space: an empty one would push a time standing
+       over its paragraph off the text's edge. */
+    --rd-para-mark-gap: 0px;
     --rd-size-adj: 0px;
     --rd-stage: #000000;
     --rd-corner: none;
@@ -601,11 +604,27 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 .bb-reader .rd-stamp::before {
     content: var(--rd-para-mark);
-    margin-right: 3px;
+    margin-right: var(--rd-para-mark-gap);
     color: var(--rd-accent-ink);
 }
 
 .bb-reader .rd-p.is-now > .rd-stamp { color: var(--rd-accent-ink); font-weight: 600; }
+
+/* The float card and the glass column are too narrow to give a gutter: the
+   time sits between paragraphs, over the one it starts, and the prose has
+   the column's whole width. */
+.bb-reader:is([data-layout="float"], [data-layout="glass"]) .rd-p {
+    grid-template-columns: minmax(0, 1fr);
+    margin-bottom: calc(var(--rd-size) * .75);
+}
+
+.bb-reader:is([data-layout="float"], [data-layout="glass"]) .rd-stamp {
+    justify-self: start;
+    padding: 0;
+    margin-bottom: 2px;
+    font-size: 11.5px;
+    line-height: 18px;
+}
 
 .rd-pbody { min-width: 0; }
 
@@ -1167,6 +1186,7 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-tex: var(--rd-tex-parchment, none);
     --rd-tex-size: 160px 160px;
     --rd-para-mark: '¶';
+    --rd-para-mark-gap: 3px;
     --rd-size-adj: 1.5px;
     --rd-note-style: italic;
     --rd-bar-band-h: 4px;

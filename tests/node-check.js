@@ -470,6 +470,10 @@ check('at any size the player is 16:9 and every piece is on the screen', () => {
         }
     }
 });
+check('the float card and the glass column have no gutter: their times sit between paragraphs', () => {
+    eq(ReaderLayout.LAYOUT_IDS.map((id) => ReaderLayout.geometry(id, 1280, 760).type.gutter > 0),
+        [true, false, false, true, true]);
+});
 check('a card or a pinned player dragged past the edge stops at it', () => {
     const far = { dx: 5000, dy: -5000 };
     const card = ReaderLayout.geometry('float', 1280, 760, { card: far }).panel;
