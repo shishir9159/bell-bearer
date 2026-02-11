@@ -14,7 +14,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 ## Features
 
 - **Checkpoint Creation**: Hold Ctrl+B to create checkpoints while watching YouTube videos
-- **Reader**: YouTube's own player beside the video's transcript — highlight a passage to keep it, and write a note against it
+- **Reader**: YouTube's own player beside the video's transcript — draw over a passage to keep it, with your note at the end of it
 - **Visual Feedback**: Snappy notifications for bookmark duration
 - **Bookmark Management**: Clean interface to view and manage all bookmarks
 - **Quick Navigation**: Jump to the bookmarked timestamp with a single click
@@ -150,43 +150,49 @@ window resize, so the reader sends one when the player moves; and it fullscreens
 its own container rather than the player, so for the length of a fullscreen the
 player goes home and comes back after.
 
-**Highlight a passage to keep it.** Select transcript text and let go: that is a
-checkpoint, saved on the spot with an **Undo** in the corner — the Undo is what
-makes saving without asking safe. It keeps exactly what you selected, half a
-sentence if that is what you took, and spans the lines it touched. Highlighting
-the same passage twice is one checkpoint. Turn **Highlighting saves a
-checkpoint** off in Settings and the same selection offers a **Save** button
-instead.
+**The transcript reads as prose.** The caption lines are gathered into
+paragraphs, each with its time in the margin — at a sentence's end once one has
+run a while, and where the video's chapters begin — and the sentence being said
+is underlined as the video plays, with what has been said already greyed. Click
+any word to play from it, or a paragraph's time. The column follows the video;
+scroll away and it stops, and a **Now** button takes you back.
 
-**The checkpoints are anchored by time.** A checkpoint's start and end already
-say which lines it covers, so they are shaded on the transcript by time rather
-than by any position in the page — and stay on the right lines when you switch
-caption language, where the lines are cut differently. Overlapping checkpoints
-shade deeper rather than fighting.
+**Highlight with the pen.** Over the transcript the cursor is a highlighter:
+press on a word and drag, and the words under it are inked and saved as a
+checkpoint when you let go, with an **Undo** in the corner. A highlight that
+touches another becomes one passage with it, notes and all. Hover a highlight for
+its toolbar — play it, write a note, remove it — and drag the knobs at its ends
+to trim or extend it; with one picked, Shift-click reaches it to the word
+clicked and `Backspace` removes it. Hold `Alt` and the pen is an eraser:
+Alt-click a highlight to rub it out.
 
-**Notes.** Under the transcript is the video's checkpoints in time order: the
-time (click to play from it), what was said, and a note you can type straight
-into — written once you stop typing, not once a keystroke, and never lost by
-closing the reader mid-word. It is the first place in the extension that edits a
-checkpoint's note at all; the dashboard shows it. Deleting one has an Undo too,
-and **Copy** puts the lot on the clipboard as a timestamped Markdown list.
+**A note goes at the end of its highlight** — under the paragraph the highlight
+ends in, saved as you type, and kept on the checkpoint, so the dashboard lists
+it after the highlighted words. The **Highlights** tab is every checkpoint of the
+video in time order, each note editable in place, and **Copy as Markdown** puts
+the lot on the clipboard with each note under its passage.
 
-**Four layouts**, switched from the reader's own header and remembered:
+**Anchored by time.** A highlight is stored as a checkpoint's start and end,
+never as a position in the page, so it lands on the same words after a reload
+and on the same moment in another caption language, where the lines are cut
+differently. A checkpoint made with `Ctrl + B` is drawn over what was said
+while it was held.
+
+**Five layouts**, switched from the reader's bar and remembered:
 
 | Layout | Shape |
 | --- | --- |
-| Split | Video beside the transcript, notes docked under it. The default. |
-| Stacked | Video centred on top, transcript and notes in one column below. |
-| Theatre | Video fills the reader; the transcript is a drawer from the right that slides out on hover and hides itself after. |
-| Focus | Transcript first, set for reading, with the video pinned in the corner — at 30% of the width by default, deliberately bigger than a thumbnail. |
+| Dock | The video with its title and chapters under it, the transcript docked beside it, with Transcript and Highlights as tabs. The default. |
+| Float | The video fills the reader and the transcript is a card over it, moved by its handle. |
+| Glass | The video fills the screen beside a slim column of transcript. |
+| Band | The video over a band of three sentences, the one being said set large; it opens to the whole transcript. |
+| Focus | Transcript first, set for reading, the highlights beside it and the player pinned in the corner — moved by its top edge. |
 
-Drag the divider — or the grip on the corner player in Focus — to size the
-video, and each layout remembers its own size, as a percentage so a window
-resized in between can never push it off the screen. The transcript follows the
-video, and leaves you alone for a few seconds whenever you scroll it yourself;
-click any line to play from it. Its text size, line spacing and line length are
-in Settings, beside whether the reader covers YouTube's header or starts under
-it so search stays in reach.
+Each skin dresses the reader its own way: riso's two inks on newsprint,
+medieval's rubricated manuscript, deco's gilt. The transcript's text size, line
+spacing and line length are in Settings — each layout keeps its own proportions,
+and these scale them — beside whether the reader covers YouTube's header or
+starts under it so search stays in reach.
 
 ## Skim
 
@@ -1015,8 +1021,10 @@ src/content/    injected into pages: a core on every page (main.js, player, shor
   roster.js        reads a roster off the site's pages, and works through one
   checkpoints.js   recording and saving checkpoints
   transcripts.js   transcript fetching and caching, per video and per language
-  reader.js        the reader: the adopted player, layouts, sizing, highlights, notes
-  reader-transcript.js  the reader's transcript rows, and which rows a time or a selection covers
+  reader.js        the reader: the adopted player, its layouts, following the video, chapters
+  reader-layout.js  where each piece of the reader goes, in each of its five layouts
+  reader-highlights.js  the pen: highlights, their toolbar and knobs, notes, the list of them
+  reader-transcript.js  the transcript as paragraphs of timed words, and which words a checkpoint covers
   site.js          which site, and which <video> on it
   chess.js         in a chess game: clock warning, spoken moves, clear arrows
   youtube-ui.js    the pouch button, the drawer entry, the topics sheet, the pouch panel
@@ -1162,13 +1170,11 @@ Chrome's storage API is used with the following data structure format:
           timestamp: 1234567890,
           title: "the first sixty characters of what was said",
           subtitle: "what the transcript said over the span",
-          note: "your own note, edited in the reader"
+          note: "your own note, written at the end of the highlight"
         }
       ]
     }
-  ],
-  // The reader's player size in each layout, a percentage, set by dragging.
-  bbReaderSizes: { split: 62, stacked: 55, theatre: 34, focus: 30 }
+  ]
 }
 ```
 
