@@ -200,6 +200,21 @@
             teardown();
         });
 
+        test('the reader’s own styles stop at the player, whose controls are YouTube’s', async () => {
+            MockChrome.reset({ localStore: {} });
+            const { reader, page } = await openReady();
+            // REGRESSION: border-box reached into the player, and every icon in
+            // YouTube's control bar drew at 24px in a 40px button.
+            const control = document.createElement('div');
+            control.style.cssText = 'width: 40px; padding: 8px';
+            page.player.appendChild(control);
+            assertEqual(getComputedStyle(control).boxSizing, 'content-box', 'the reader restyled a control of YouTube’s');
+            assertEqual(control.getBoundingClientRect().width, 56);
+            assertEqual(getComputedStyle(reader.element.querySelector('.rd-panel')).boxSizing, 'border-box');
+            reader.close();
+            teardown();
+        });
+
         test('closing puts the player back against its sibling, not its index', () => {
             const page = stagePage();
             const { reader } = makeReader();

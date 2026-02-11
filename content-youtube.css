@@ -44,13 +44,17 @@ html.bb-reader-open body { overflow: hidden !important; }
    behind it. */
 .bb-reader.is-under-masthead { z-index: 2019; }
 
-.bb-reader *,
-.bb-reader *::before,
-.bb-reader *::after { box-sizing: border-box; }
+/* Everything that reaches inside the reader stops at the player: it is
+   YouTube's, styled by YouTube. Its controls are content boxes, and with
+   border-box forced on them every icon in the control bar drew at 24px in
+   a 40px button — or not at all. */
+.bb-reader :where(:not(.rd-screen *)),
+.bb-reader :where(:not(.rd-screen *))::before,
+.bb-reader :where(:not(.rd-screen *))::after { box-sizing: border-box; }
 
 /* Several pieces are flex boxes, which would otherwise show through their
    hidden attribute. */
-.bb-reader [hidden] { display: none !important; }
+.bb-reader :where(:not(.rd-screen *))[hidden] { display: none !important; }
 
 /* Every button the reader draws starts from nothing. Scoped to the reader's
    own pieces: the player sits in here too, and its controls are YouTube's.
@@ -195,8 +199,8 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 /* Not on the first frame, which would fly every piece in from the corner,
    and not while a card is dragged, which would trail the pointer. */
-.bb-reader.is-still *,
-.bb-reader.is-moving * { transition: none !important; }
+.bb-reader.is-still :where(:not(.rd-screen *)),
+.bb-reader.is-moving :where(:not(.rd-screen *)) { transition: none !important; }
 
 /* The skin's paper, over everything and under nothing: it never takes a click. */
 .rd-tex {
