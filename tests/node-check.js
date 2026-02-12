@@ -6115,6 +6115,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     section('the framed plate');
 
+    const Corners = require('../src/shared/corners.js');
     const Plate = require('../src/page/plate.js');
 
     check('each skin gets its own corner set, and the default none', () => {
@@ -6152,6 +6153,13 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(/fill="var\(--surface\)"/.test(html), true, 'the lozenge centre is punched out');
         eq(/fill="var\(--border-strong\)"/.test(Plate.cornersHtml('blocks')), true);
         eq(/#[0-9a-f]{3,6}/i.test(html), false, 'no literal colour anywhere');
+    });
+
+    check('the plate and the reader draw one set of corners, each in its own inks', () => {
+        eq(Plate.CORNERS, Corners.SETS);
+        eq(Corners.html('fan', { accent: 'var(--accent)', gold: 'var(--gold)' }, 'bb-plate-corner'), Plate.cornersHtml('fan'));
+        const reader = Corners.html('fan', { accent: 'var(--rd-corner-accent)', gold: 'var(--rd-corner-gold)' }, 'rd-corner');
+        eq((reader.match(/var\(--rd-corner-(accent|gold)\)/g) || []).length, Corners.SETS.fan.length * 4);
     });
 
     // -------------------------------------------------- the annotated board

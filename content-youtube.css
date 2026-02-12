@@ -142,7 +142,10 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-size-adj: 0px;
     --rd-stage: #000000;
     --rd-corner: none;
-    --rd-corner-color: transparent;
+    --rd-corner-accent: transparent;
+    --rd-corner-gold: transparent;
+    --rd-corner-rule: transparent;
+    --rd-frame-room: 0px;
     --rd-stamp-track: 0;
     --rd-note-style: normal;
 }
@@ -1021,7 +1024,9 @@ html.bb-reader-open body { overflow: hidden !important; }
     font-variant-numeric: tabular-nums;
 }
 
-/* ---- Deco's corner ornament, on the panels that are framed */
+/* ---- Deco's frame, on the panels that are framed: the settings plate's own
+   (.bb-plate in dashboard.css) — the fan in each corner, drawn by BB.Corners,
+   a gilt rule inside the edge and a hairline band inside that. */
 
 .rd-corners {
     display: var(--rd-corner);
@@ -1033,16 +1038,23 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 .bb-reader:is([data-layout="glass"], [data-layout="focus"]) .rd-corners { display: none; }
 
-.rd-corners span { position: absolute; width: 16px; height: 16px; border: 0 solid var(--rd-corner-color); }
-.rd-corners span:nth-child(even) { width: 7px; height: 7px; }
-.rd-corners span:nth-child(1) { left: 6px; top: 6px; border-left-width: 1px; border-top-width: 1px; }
-.rd-corners span:nth-child(2) { left: 10px; top: 10px; border-left-width: 1px; border-top-width: 1px; }
-.rd-corners span:nth-child(3) { right: 6px; top: 6px; border-right-width: 1px; border-top-width: 1px; }
-.rd-corners span:nth-child(4) { right: 10px; top: 10px; border-right-width: 1px; border-top-width: 1px; }
-.rd-corners span:nth-child(5) { left: 6px; bottom: 6px; border-left-width: 1px; border-bottom-width: 1px; }
-.rd-corners span:nth-child(6) { left: 10px; bottom: 10px; border-left-width: 1px; border-bottom-width: 1px; }
-.rd-corners span:nth-child(7) { right: 6px; bottom: 6px; border-right-width: 1px; border-bottom-width: 1px; }
-.rd-corners span:nth-child(8) { right: 10px; bottom: 10px; border-right-width: 1px; border-bottom-width: 1px; }
+.rd-corner,
+.rd-frame-rule { position: absolute; }
+
+.rd-frame-rule.is-second { inset: 5px; border: 1px solid var(--rd-corner-gold); }
+
+/* Only top and bottom: a band across the panel, not a box. */
+.rd-frame-rule.is-third {
+    inset: 9px;
+    border-top: 1px solid var(--rd-corner-rule);
+    border-bottom: 1px solid var(--rd-corner-rule);
+}
+
+/* The transcript and the list stop above the frame's bottom rules, as a
+   plate's body does, rather than scrolling under them struck through. The
+   band's three sentences are centred clear of them already. */
+.bb-reader:is([data-layout="dock"], [data-layout="float"]) .rd-panel { padding-bottom: var(--rd-frame-room); }
+.rd-list-pane { bottom: var(--rd-frame-room); }
 
 @media (prefers-reduced-motion: reduce) {
     .rd-bar,
@@ -1295,6 +1307,7 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-tab-case: uppercase;
     --rd-tab-track: .14em;
     --rd-corner: block;
+    --rd-frame-room: 12px;
     --rd-size-adj: .5px;
     --rd-stamp-track: .06em;
     --rd-bar-band-h: 4px;
@@ -1338,7 +1351,9 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-tab-on-under: inset 0 -1px 0 #a67c2e;
     --rd-bar-band: linear-gradient(90deg, transparent, #b99447 18%, #e0c274 50%, #b99447 82%, transparent) 0 0 / 100% 1px no-repeat, linear-gradient(90deg, transparent, #b99447 18%, #e0c274 50%, #b99447 82%, transparent) 0 100% / 100% 1px no-repeat;
     --rd-stage: #14110d;
-    --rd-corner-color: #a67c2e;
+    --rd-corner-accent: #a67c2e;
+    --rd-corner-gold: #b99447;
+    --rd-corner-rule: #d5cdb6;
 }
 
 .bb-reader[data-bb-skin="deco"][data-bb-theme="dark"] {
@@ -1378,5 +1393,7 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-tab-on-under: inset 0 -1px 0 #c9a227;
     --rd-bar-band: linear-gradient(90deg, transparent, #c9a227 18%, #e0c274 50%, #c9a227 82%, transparent) 0 0 / 100% 1px no-repeat, linear-gradient(90deg, transparent, #c9a227 18%, #e0c274 50%, #c9a227 82%, transparent) 0 100% / 100% 1px no-repeat;
     --rd-stage: #0a0908;
-    --rd-corner-color: #c9a227;
+    --rd-corner-accent: #c9a227;
+    --rd-corner-gold: #e0c274;
+    --rd-corner-rule: #332f28;
 }

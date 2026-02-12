@@ -45,6 +45,7 @@
                 'src/content/checkpoints.js',
                 'src/content/pouch-sheet.js',
                 'src/content/youtube-ui.js',
+                'src/shared/corners.js',
                 'src/content/reader-transcript.js',
                 'src/content/reader-layout.js',
                 'src/content/reader-highlights.js',

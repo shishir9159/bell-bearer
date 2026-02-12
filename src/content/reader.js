@@ -35,6 +35,7 @@
     const Settings = ns.Settings || req('../shared/settings.js');
     const Time = ns.Time || req('../shared/time.js');
     const Markdown = ns.Markdown || req('./markdown.js');
+    const Corners = ns.Corners || req('../shared/corners.js');
 
     const ROOT_ID = 'bb-reader';
     const SLOT_ID = 'bb-reader-slot';
@@ -91,8 +92,13 @@
         return `${head}<p class="rd-list-empty">Drag across the transcript to highlight a passage.</p><div class="rd-list-items"></div>`;
     }
 
+    /**
+     * Deco's frame is the settings plate's: the same fan from BB.Corners in
+     * each corner, painted from the reader's palette.
+     */
+    const FRAME_INK = Object.freeze({ accent: 'var(--rd-corner-accent)', gold: 'var(--rd-corner-gold)' });
+
     function shellHtml() {
-        const corners = '<span></span>'.repeat(8);
         return `
             <div class="rd-tex"></div>
             <div class="rd-stage"></div>
@@ -133,7 +139,8 @@
                 <div class="rd-toast" role="status" aria-live="polite" hidden><span class="rd-toast-text"></span><button
                      type="button" class="rd-toast-undo">Undo</button></div>
                 <button type="button" class="rd-now" title="Follow the video again" hidden>${ICON.down}<span></span></button>
-                <div class="rd-corners" aria-hidden="true">${corners}</div>
+                <div class="rd-corners" aria-hidden="true"><span class="rd-frame-rule is-second"></span><span
+                     class="rd-frame-rule is-third"></span>${Corners.html('fan', FRAME_INK, 'rd-corner')}</div>
                 <div class="rd-tex"></div>
             </section>
             <aside class="rd-side rd-list" data-count-style="number" aria-label="Highlights">${listHtml('side')}</aside>`;

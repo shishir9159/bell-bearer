@@ -776,6 +776,13 @@
                 assertEqual(mark.includes('¶'), skin === 'medieval', `${skin}'s paragraph mark is ${mark}`);
                 const corners = getComputedStyle(reader.element.querySelector('.rd-corners')).display;
                 assertEqual(corners !== 'none', skin === 'deco', `${skin}'s corner ornament`);
+                if (skin === 'deco') {
+                    const drawn = Array.from(reader.element.querySelectorAll('.rd-corners svg:first-of-type path'), (path) => path.getAttribute('d'));
+                    assertDeepEqual(drawn, window.BB.Corners.SETS.fan.map((path) => path.d), 'deco’s corner is not the settings plate’s');
+                    const panel = reader.element.querySelector('.rd-panel').getBoundingClientRect();
+                    const scroll = reader.element.querySelector('.rd-scroll').getBoundingClientRect();
+                    assert(panel.bottom - scroll.bottom >= 10, 'the transcript runs under deco’s frame');
+                }
                 assert(reader.element.style.getPropertyValue('--rd-cursor-pen').includes('svg'), 'the pen is not the cursor');
                 reader.close();
                 teardown();
