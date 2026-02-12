@@ -151,9 +151,10 @@ its own container rather than the player, so for the length of a fullscreen the
 player goes home and comes back after.
 
 **The transcript reads as prose.** The caption lines are gathered into
-paragraphs, each with its time in the margin — at a sentence's end once one has
-run a while, and where the video's chapters begin — and the sentence being said
-is underlined as the video plays, with what has been said already greyed. Click
+paragraphs — at a sentence's end once one has run a while, and where the video's
+chapters begin — each with its time in the margin, or over it in the float card
+and the glass column, which are too narrow for one. The sentence being said is
+underlined as the video plays, with what has been said already greyed. Click
 any word to play from it, or a paragraph's time. The column follows the video;
 scroll away and it stops, and a **Now** button takes you back.
 
@@ -189,7 +190,9 @@ while it was held.
 | Focus | Transcript first, set for reading, the highlights beside it and the player pinned in the corner — moved by its top edge. |
 
 Each skin dresses the reader its own way: riso's two inks on newsprint,
-medieval's rubricated manuscript, deco's gilt. The transcript's text size, line
+medieval's rubricated manuscript, deco's gilt, framed in the same fan corners as
+its settings. YouTube's player keeps its own look in all of them — the reader's
+styles stop at its edge. The transcript's text size, line
 spacing and line length are in Settings — each layout keeps its own proportions,
 and these scale them — beside whether the reader covers YouTube's header or
 starts under it so search stays in reach.
