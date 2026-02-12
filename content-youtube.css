@@ -515,12 +515,19 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 .rd-tab-count { font-variant-numeric: tabular-nums; opacity: .65; }
 
+/* Deco's wide-tracked capitals are 22px too wide for the float card at the
+   design's spacing, and its tabs are underlined rather than filled, so they
+   can stand closer. */
+.bb-reader[data-bb-skin="deco"][data-layout="float"] .rd-tabs { gap: 4px; }
+.bb-reader[data-bb-skin="deco"][data-layout="float"] .rd-tab { padding: 0 4px; }
+
 /* The language picker, drawn as the word it says. The select is laid over
    the word, so the list it opens is the browser's own. */
 .rd-lang {
     position: relative;
     display: flex;
     align-items: center;
+    min-width: 0;
     gap: 4px;
     padding: 4px 6px;
     border-radius: var(--rd-r-sm);
@@ -530,9 +537,13 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 .rd-lang:hover { background: var(--rd-chip); }
 
+/* It gives way before the tabs do: a long track name in the float card ran
+   the row out past the card's edge. */
 .rd-lang select {
     appearance: none;
+    min-width: 0;
     max-width: 150px;
+    text-overflow: ellipsis;
     border: 0;
     padding: 0;
     background: transparent;
