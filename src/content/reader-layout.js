@@ -54,6 +54,12 @@
 
     /** The bar along the top, in every layout but glass. */
     const BAR = 48;
+    /**
+     * What stands under the bar stands this far clear of it. The docked
+     * video and its column started on the bar's last pixel, which is where
+     * a skin rules the bar off: the column's frame ran into that rule.
+     */
+    const BAR_GAP = 6;
     /** Glass has no bar across the video: its tools sit over the slim column. */
     const GLASS_BAR = 52;
     /** The band's closed height: three sentences, the middle one large. */
@@ -133,9 +139,9 @@
             g.panel = rect(W - pw, GLASS_BAR, pw, H - GLASS_BAR);
             g.bar = rect(W - pw, 0, pw, GLASS_BAR);
         } else if (L === 'band') {
-            const v = fit(W * 0.84, H - BAR - 6 - 12 - BAND - 16);
+            const v = fit(W * 0.84, H - BAR - BAR_GAP - 12 - BAND - 16);
             const vx = (W - v.vw) / 2;
-            const vy = BAR + 6;
+            const vy = BAR + BAR_GAP;
             const open = Math.round((H - BAR) * 0.64);
             g.video = rect(vx, vy, v.vw, v.vh);
             g.panel = bandOpen ? rect(vx, H - 16 - open, v.vw, open) : rect(vx, vy + v.vh + 12, v.vw, BAND);
@@ -154,10 +160,11 @@
         } else {
             const pad = 16;
             const pw = Math.round(clamp(W * 0.34, 330, 440));
-            const v = fit(W - pw - pad * 3, H - BAR - pad - 150);
-            g.video = rect(pad, BAR, v.vw, v.vh);
-            g.under = rect(pad, BAR + v.vh + 16, v.vw, Math.max(0, H - BAR - v.vh - 16 - pad));
-            g.panel = rect(W - pw - pad, BAR, pw, H - BAR - pad);
+            const top = BAR + BAR_GAP;
+            const v = fit(W - pw - pad * 3, H - top - pad - 150);
+            g.video = rect(pad, top, v.vw, v.vh);
+            g.under = rect(pad, top + v.vh + 16, v.vw, Math.max(0, H - top - v.vh - 16 - pad));
+            g.panel = rect(W - pw - pad, top, pw, H - top - pad);
             Object.assign(g, { tabs: true, corner: true });
         }
 
@@ -166,7 +173,7 @@
         return g;
     }
 
-    const ReaderLayout = { LAYOUTS, LAYOUT_IDS, LEGACY, BAR, GLASS_BAR, BAND, TYPE, layoutOf, fit, geometry };
+    const ReaderLayout = { LAYOUTS, LAYOUT_IDS, LEGACY, BAR, BAR_GAP, GLASS_BAR, BAND, TYPE, layoutOf, fit, geometry };
 
     root.BB = root.BB || {};
     root.BB.ReaderLayout = ReaderLayout;

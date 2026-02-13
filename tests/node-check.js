@@ -443,9 +443,9 @@ const ReaderLayout = require('../src/content/reader-layout.js');
 
 check('at 1280 by 760 each layout puts the player and the transcript where the design does', () => {
     const at = (layout, state) => ReaderLayout.geometry(layout, 1280, 760, state);
-    eq(at('dock').video, { left: 16, top: 48, width: 797, height: 448 });
-    eq(at('dock').panel, { left: 829, top: 48, width: 435, height: 696 });
-    eq(at('dock').under.top, 512, 'the title and chapters are not under the video');
+    eq(at('dock').video, { left: 16, top: 54, width: 797, height: 448 });
+    eq(at('dock').panel, { left: 829, top: 54, width: 435, height: 690 });
+    eq(at('dock').under.top, 518, 'the title and chapters are not under the video');
     eq(at('float').panel, { left: 887, top: 70, width: 371, height: 598 });
     eq(at('glass').panel.left, 973);
     eq(at('glass').bar, { left: 973, top: 0, width: 307, height: 52 }, 'glass keeps its tools over the column');
@@ -469,6 +469,15 @@ check('at any size the player is 16:9 and every piece is on the screen', () => {
             }
         }
     }
+});
+check('a docked video and its column stand clear of the bar, and level with each other', () => {
+    // Both started on the bar's last pixel, where a skin rules the bar off.
+    for (const [W, H] of [[800, 500], [1280, 760], [1920, 1080]]) {
+        const g = ReaderLayout.geometry('dock', W, H);
+        eq([g.video.top, g.panel.top], [ReaderLayout.BAR + ReaderLayout.BAR_GAP, ReaderLayout.BAR + ReaderLayout.BAR_GAP]);
+        eq(g.panel.top + g.panel.height, H - 16, 'the gap came off the foot of the column, not its top');
+    }
+    assert(ReaderLayout.BAR_GAP > 0 && ReaderLayout.BAR_GAP <= 8, 'a breath, not a band');
 });
 check('the float card and the glass column have no gutter: their times sit between paragraphs', () => {
     eq(ReaderLayout.LAYOUT_IDS.map((id) => ReaderLayout.geometry(id, 1280, 760).type.gutter > 0),
