@@ -148,7 +148,9 @@
             Object.assign(g, { band: true, corner: true });
             if (!bandOpen) g.type.pad = '0 170px 0 10px';
         } else if (L === 'focus') {
-            const leftW = Math.round(W * 0.62);
+            // The pinned player is as wide as what the transcript's side
+            // leaves: at 62% for the transcript it was too small to follow.
+            const leftW = Math.round(W * 0.58);
             const size = g.type.size * (state.scale || 1);
             const colW = Math.max(240, Math.min(660, leftW - 120, state.measure ? state.measure * size : Infinity));
             const sw = W - leftW - 28;

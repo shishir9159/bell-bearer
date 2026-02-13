@@ -452,8 +452,8 @@ check('at 1280 by 760 each layout puts the player and the transcript where the d
     eq(at('band').video, { left: 166, top: 54, width: 949, height: 534 });
     eq(at('band').panel, { left: 166, top: 600, width: 949, height: 144 });
     eq(at('band', { bandOpen: true }).panel.height, 456, 'the band does not open to two thirds');
-    eq(at('focus').video, { left: 800, top: 480, width: 458, height: 258 });
-    eq(at('focus').panel, { left: 27, top: 48, width: 730, height: 712 });
+    eq(at('focus').video, { left: 748, top: 451, width: 510, height: 287 });
+    eq(at('focus').panel, { left: 20, top: 48, width: 692, height: 712 });
     eq(['dock', 'float', 'glass', 'band', 'focus'].map((id) => at(id).tabs), [true, true, false, false, false]);
     eq(at('glass').barTitle, false);
 });
@@ -478,6 +478,15 @@ check('a docked video and its column stand clear of the bar, and level with each
         eq(g.panel.top + g.panel.height, H - 16, 'the gap came off the foot of the column, not its top');
     }
     assert(ReaderLayout.BAR_GAP > 0 && ReaderLayout.BAR_GAP <= 8, 'a breath, not a band');
+});
+check('focus gives its pinned player two fifths of the reader, beside the transcript', () => {
+    // It had a third, and what was on the screen was too small to follow.
+    for (const [W, H] of [[1280, 760], [1440, 900], [1920, 1080]]) {
+        const g = ReaderLayout.geometry('focus', W, H);
+        assert(g.video.width / W >= 0.39, `${W}: the player is ${g.video.width} wide`);
+        assert(g.panel.left >= 0 && g.panel.left + g.panel.width < g.video.left, `${W}: the transcript runs under the player`);
+        eq([g.side.left, g.side.width], [g.video.left, g.video.width], 'the highlights and the player are not one column');
+    }
 });
 check('the float card and the glass column have no gutter: their times sit between paragraphs', () => {
     eq(ReaderLayout.LAYOUT_IDS.map((id) => ReaderLayout.geometry(id, 1280, 760).type.gutter > 0),
