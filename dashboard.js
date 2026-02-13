@@ -952,7 +952,7 @@
         return `
             <div class="site-slot${on ? '' : ' is-off'}" data-site="${Dom.escapeAttr(site.id)}">
                 ${siteCardHtml(site)}
-                <label class="toggle-switch toggle-sm site-switch" title="${on ? 'Switch off' : 'Switch on'} ${name}">
+                <label class="toggle-switch toggle-xs site-switch" title="${on ? 'Switch off' : 'Switch on'} ${name}">
                     <input type="checkbox" role="switch" data-site-switch="${Dom.escapeAttr(site.id)}" aria-label="${name}"${on ? ' checked' : ''}>
                     <span class="toggle-slider"></span>
                 </label>

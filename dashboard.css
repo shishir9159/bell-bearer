@@ -853,6 +853,10 @@ html.is-dragging-site .site-slot > .site-switch { transform: none; }
 
 /* The knob and its travel follow from these two; see .toggle-switch above. */
 .toggle-switch.toggle-sm { --track-w: 34px; --track-h: 20px; }
+/* A site card's. It marks the corner of a card that is otherwise all icon,
+   and at the size above it was the first thing on the card. The knob sits
+   a pixel nearer the edge, or at this height it would be a dot. */
+.toggle-switch.toggle-xs { --track-w: 28px; --track-h: 16px; --knob-gap: 2px; }
 
 /* ---------- the annotated keyboard (src/page/keyboard.js) ----------
 

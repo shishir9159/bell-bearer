@@ -7303,6 +7303,11 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/Settings\.watch\(\['siteOrder', 'sitesOff'\]/.test(dashboard), 'a switch does not redraw the grids');
         assert(/shown = sites\.filter\(\(site\) => !off\.has\(site\.id\)\)/.test(dashboard), 'the dashboard draws a site switched off');
         assert(/role="switch" data-site-switch=/.test(dashboard));
+        // The smallest switch: it is a mark at a card's corner, not a control in a row.
+        const track = (size) => readRepo('dashboard.css')
+            .match(new RegExp(`\\.toggle-switch\\.toggle-${size} \\{ --track-w: (\\d+)px; --track-h: (\\d+)px;`)).slice(1).map(Number);
+        assert(/class="toggle-switch toggle-xs site-switch"/.test(dashboard), 'a card’s switch is not the small one');
+        assert(track('xs')[0] < track('sm')[0] && track('xs')[1] < track('sm')[1], 'the card’s switch is no smaller than a row’s');
     });
     check('the typeracer workspace has a panel behind every tab', () => {
         const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
