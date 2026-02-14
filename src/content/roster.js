@@ -38,6 +38,39 @@
     /** This page, for the job's lease. A fresh one per load, which is right. */
     const PAGE_ID = Math.random().toString(36).slice(2, 10);
 
+    /**
+     * Where the job last sent this tab, carried over the navigation in the
+     * tab's own sessionStorage — which survives a same-origin load and is the
+     * tab's alone, so a page that finds it knows it is the one that was sent.
+     *
+     * That is what tells "the site sent us somewhere else" from "the user
+     * opened another page of the site". Old Reddit sends a signed-out visitor
+     * from /subreddits/mine to /login; the read job used to send the tab back
+     * to the listing from there, be sent to /login again, and go round once a
+     * second for as long as the tab stayed open.
+     */
+    const HOP_KEY = 'bb-roster-hop';
+
+    function markHop(path) {
+        try { sessionStorage.setItem(HOP_KEY, path.toLowerCase()); } catch (_) { /* storage blocked: no loop guard, the lease still holds */ }
+    }
+
+    const PAGE = Object.freeze({
+        path: () => location.pathname,
+        href: () => location.href,
+        assign: (url) => location.assign(url),
+    });
+
+    function takeHop() {
+        try {
+            const path = sessionStorage.getItem(HOP_KEY);
+            sessionStorage.removeItem(HOP_KEY);
+            return path || '';
+        } catch (_) {
+            return '';
+        }
+    }
+
     const SELECTORS = Object.freeze({
         twitter: Object.freeze({
             /** The signed-in account's own link in the left navigation. */
@@ -155,8 +188,10 @@
      * @param {object} deps
      * @param {string} deps.site      what detectSite() returned
      * @param {(message: string, type?: string) => void} deps.notify
+     * @param {object} [deps.page]  where this page is and how to leave it;
+     *   the browser suite's stand-in for `location`
      */
-    function createRoster({ site, notify }) {
+    function createRoster({ site, notify, page = PAGE }) {
         const rules = Roster.siteOf(site);
 
         // ------------------------------------------------------ bookkeeping
@@ -180,7 +215,23 @@
          */
         async function goTo(url) {
             await Roster.updateJob((job) => (job && job.site === site ? Roster.release(job) : job));
-            location.assign(url);
+            markHop(new URL(url, page.href()).pathname);
+            page.assign(url);
+        }
+
+        /**
+         * Take the job for this page, or say it is somebody else's. The check
+         * and the claim are one write, so two tabs arriving together cannot
+         * both come away holding it.
+         */
+        async function take() {
+            let ours = false;
+            await Roster.updateJob((current) => {
+                if (!current || current.site !== site || !Roster.canClaim(current, PAGE_ID)) return current;
+                ours = true;
+                return Roster.claim(current, PAGE_ID);
+            });
+            return ours;
         }
 
         /** The job as it stands, or null when there is nothing of ours to do. */
@@ -203,17 +254,6 @@
          * in has not thrown them away.
          */
         async function readTwitter(job) {
-            const me = first(site, 'me');
-            const handle = handleFromHref(me && me.getAttribute('href'));
-            const want = handle ? `/${handle}/following` : '';
-
-            if (!handle) {
-                return halt('paused', 'Could not tell which account is signed in — open x.com and try again.');
-            }
-            if (location.pathname.toLowerCase() !== want.toLowerCase()) {
-                return goTo(`https://x.com${want}`);
-            }
-
             const found = new Map((job.found || []).map((name) => [name.toLowerCase(), name]));
             let still = 0;
             let rounds = 0;
@@ -267,9 +307,6 @@
          * cookie either way.
          */
         async function readReddit(job) {
-            const listing = /\/subreddits\/mine/.test(location.pathname);
-            if (!listing) return goTo(START.reddit);
-
             const found = new Map((job.found || []).map((name) => [name.toLowerCase(), name]));
             for (const link of all(site, 'cell')) {
                 const name = subFromHref(link.getAttribute('href'));
@@ -301,9 +338,9 @@
         /** Is this page the one for `name`? */
         function onPageFor(name) {
             if (site === 'twitter') {
-                return location.pathname.toLowerCase() === `/${name}`.toLowerCase();
+                return page.path().toLowerCase() === `/${name}`.toLowerCase();
             }
-            return subFromHref(location.pathname).toLowerCase() === name.toLowerCase();
+            return subFromHref(page.path()).toLowerCase() === name.toLowerCase();
         }
 
         /**
@@ -324,8 +361,6 @@
                 return halt('waiting',
                     `That is today's ${rules.pace.cap}. Open this again tomorrow and it carries on from ${rules.prefix}${name}.`);
             }
-
-            if (!onPageFor(name)) return goTo(pageFor(name));
 
             if (first(site, 'trouble')) {
                 return halt('paused', `${rules.name} put something in the way at ${rules.prefix}${name}. Stopped rather than pressed on.`);
@@ -413,26 +448,81 @@
 
         // --------------------------------------------------------- wiring
 
+        /** The signed-in account's handle, waited for: X draws its navigation late. */
+        async function signedIn() {
+            const me = await waitFor(() => first(site, 'me'), 15000);
+            return handleFromHref(me && me.getAttribute('href'));
+        }
+
         /**
-         * Pick the job up, if there is one for this site and nothing else has
-         * it. Called once per page load and never on a timer: a job advances by
-         * navigating, so every step is a new load and a new call to this.
+         * Which page acts on a job, for each kind. Its own page does — the
+         * following list, the listing, the name's profile — and, for a moment
+         * after the dashboard opened a tab, any page, to find its way there.
+         * Any other page of the site leaves the job alone, and a tab the job
+         * sent somewhere that turned out to be somewhere else stops it.
+         */
+        async function enterTwitterRead(job, hop) {
+            const following = /^\/[A-Za-z0-9_]{1,15}\/following\/?$/.test(page.path());
+            if (!following && !hop && !Roster.isKicked(job)) return null;
+
+            // Read only after X has drawn its navigation. It used to be read
+            // as soon as the script ran, before X had, so no read ever found
+            // the account and every one stopped on its first page.
+            const handle = await signedIn();
+            const want = `/${handle}/following`;
+            if (handle && page.path().replace(/\/$/, '').toLowerCase() === want.toLowerCase()) {
+                return (await take()) ? readTwitter(job) : null;
+            }
+            if (hop) {
+                return halt('paused', `x.com sent the tab to ${page.path()} instead of your following list.`);
+            }
+            if (!Roster.isKicked(job) || !(await take())) return null;
+            if (!handle) return halt('paused', 'Could not tell which account is signed in — sign in to x.com, then start again.');
+            return goTo(`https://x.com${want}`);
+        }
+
+        async function enterRedditRead(job, hop) {
+            if (/^\/subreddits\/mine(?:\/|$)/.test(page.path())) {
+                return (await take()) ? readReddit(job) : null;
+            }
+            // Signed out, as a rule: old Reddit sends that to /login.
+            if (hop) {
+                return halt('paused', `Reddit sent the tab to ${page.path()} instead of your list of subreddits — sign in to Reddit, then start again.`);
+            }
+            if (!Roster.isKicked(job) || !(await take())) return null;
+            return goTo(START.reddit);
+        }
+
+        async function enterApply(job, hop) {
+            const name = Roster.currentName(job);
+            // No name left is a job to finish, which any page may do.
+            if (!name || onPageFor(name)) return (await take()) ? applyOne(job) : null;
+            if (hop) {
+                return halt('paused', `${rules.name} sent the tab to ${page.path()} instead of ${rules.prefix}${name}. Stopped rather than guessed.`);
+            }
+            return null;
+        }
+
+        /**
+         * Pick the job up, if there is one for this site and this page is
+         * one that may act on it. Called once per page load and never on a
+         * timer: a job advances by navigating, so every step is a new load
+         * and a new call to this.
          */
         async function install() {
             if (!rules) return;
 
+            // Taken whether or not there is a job, so a mark left by one that
+            // was stopped cannot be read by the next.
+            const hop = takeHop();
             const job = await mine();
             if (!job) return;
-            if (!Roster.canClaim(job, PAGE_ID)) return;
-
-            await Roster.updateJob((current) => (current && current.site === site
-                ? Roster.claim(current, PAGE_ID) : current));
 
             try {
                 if (job.action === 'read') {
-                    await (site === 'twitter' ? readTwitter(job) : readReddit(job));
+                    await (site === 'twitter' ? enterTwitterRead(job, hop) : enterRedditRead(job, hop));
                 } else {
-                    await applyOne(job);
+                    await enterApply(job, hop);
                 }
             } catch (error) {
                 // Including the extension being reloaded out from under this

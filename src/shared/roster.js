@@ -210,6 +210,10 @@
             status: 'running',       // running | waiting | done | stopped | paused
             note: '',
             startedAt: now,
+            // When the dashboard last opened a tab for it. Only for a short
+            // while after that may a page that is not the job's own take
+            // the job up — see isKicked.
+            kickedAt: now,
             actedAt: 0,              // when the last action was taken
             nextAt: 0,               // the earliest the next one may be
             // Which page of the site is working on this, and until when. Two
@@ -237,6 +241,22 @@
 
     /** Hand the job back before navigating, so the next page can take it up. */
     const release = (job) => ({ ...job, leaseBy: '', leaseUntil: 0 });
+
+    /** Is some page working on this job now? */
+    const isHeld = (job, now = Date.now()) => !!job && !!job.leaseBy && job.leaseUntil > now;
+
+    /**
+     * How long after the dashboard opens a tab for a job any page of the site
+     * may take it up, rather than only the job's own page.
+     *
+     * A job used to be taken up by every page of the site, for as long as it
+     * ran. A read of Twitter starts on x.com/home, because which account is
+     * signed in is only known there; but the same rule then took over any
+     * x.com tab opened later that day and sent it somewhere else. Two minutes
+     * covers a slow first load and nothing after it.
+     */
+    const KICK_MS = 120000;
+    const isKicked = (job, now = Date.now()) => !!job && now - (job.kickedAt || 0) < KICK_MS;
 
     /**
      * `job` with its daily count reset if the day turned over under it.
@@ -387,7 +407,7 @@
         SITES, ROSTERS_KEY, JOB_KEY, MAX_NAMES,
         siteOf, ids, parseName, parseList, toText, fileName, handleFromHref,
         dayKey, newJob, isRunning, forDay, atCap, currentName, nextDelay, plan, progress,
-        LEASE_MS, canClaim, claim, release,
+        LEASE_MS, canClaim, claim, release, isHeld, KICK_MS, isKicked,
         loadRosters, saveRoster, loadJob, saveJob, clearJob, updateJob,
     };
 

@@ -202,8 +202,10 @@
                     break;
 
                 case 'resume':
+                    // kickedAt: the tab opened below may not be the job's own
+                    // page yet, and only just after this may one take it up.
                     await Roster.updateJob((current) => (current
-                        ? { ...current, status: 'running', note: '', leaseBy: '', leaseUntil: 0 }
+                        ? { ...current, status: 'running', note: '', leaseBy: '', leaseUntil: 0, kickedAt: Date.now() }
                         : current));
                     if (job) {
                         const name = Roster.currentName(job);

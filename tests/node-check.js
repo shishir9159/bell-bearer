@@ -6580,6 +6580,18 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             'a tab closed mid-job cannot hold it forever');
         eq(Roster.canClaim(Roster.release(held), 'page2', 1000), true,
             'and it is handed back before navigating');
+
+        eq(Roster.isHeld(held, 1000), true);
+        eq(Roster.isHeld(held, 1000 + Roster.LEASE_MS + 1), false, 'a lease run out is nobody holding it');
+        eq(Roster.isHeld(Roster.release(held), 1000), false);
+    });
+
+    check('only just after a tab is opened for it may any page take a job up', () => {
+        const job = Roster.newJob({ site: 'twitter', action: 'read', now: noon });
+        eq(Roster.isKicked(job, noon), true);
+        eq(Roster.isKicked(job, noon + Roster.KICK_MS + 1), false,
+            'an x.com tab opened that evening is not sent to the following list');
+        eq(Roster.isKicked({ ...job, kickedAt: undefined }, noon), false, 'a job from before kickedAt existed');
     });
 
     check('the cap is a cap per day, because the job outlives the day', () => {

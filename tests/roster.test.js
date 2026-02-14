@@ -81,4 +81,83 @@
             teardown();
         });
     });
+
+    /**
+     * Which page may act on a job. A job used to be taken up by every page of
+     * its site for as long as it ran, which looped forever on a page the site
+     * redirected — and took over any tab of the site opened while it ran.
+     */
+    const Roster = () => window.BB.Roster;
+    const HOP = 'bb-roster-hop';
+
+    /** A stand-in for `location` at `path`, recording where it was sent. */
+    function pageAt(path) {
+        const sent = [];
+        return { sent, path: () => path, href: () => `https://example.test${path}`, assign: (url) => sent.push(url) };
+    }
+
+    async function enter(site, path, job, hop = '') {
+        await Roster().saveJob(job);
+        if (hop) sessionStorage.setItem(HOP, hop);
+        const page = pageAt(path);
+        await RosterContent().createRoster({ site, notify: () => {}, page }).install();
+        return { page, job: await Roster().loadJob() };
+    }
+
+    async function clean() {
+        sessionStorage.removeItem(HOP);
+        await Roster().clearJob();
+    }
+
+    suite('the roster — which page may take a job up', () => {
+        test('REGRESSION: a tab sent to the list and signed out stops, rather than going round', async () => {
+            try {
+                const job = Roster().newJob({ site: 'reddit', action: 'read' });
+                const { page, job: after } = await enter('reddit', '/login/', job, '/subreddits/mine/subscriber/');
+                assertEqual(page.sent.length, 0, 'sent back to the list, it is only sent to /login again');
+                assertEqual(after.status, 'paused');
+                assert(/sign in/i.test(after.note), after.note);
+            } finally { await clean(); }
+        });
+
+        test('just after the dashboard opened a tab, it finds its way to the list', async () => {
+            try {
+                const job = Roster().newJob({ site: 'reddit', action: 'read' });
+                const { page } = await enter('reddit', '/', job);
+                assertEqual(page.sent.length, 1);
+                assert(/\/subreddits\/mine\//.test(page.sent[0]), page.sent[0]);
+                assertEqual(sessionStorage.getItem(HOP), '/subreddits/mine/subscriber/', 'and marks the tab as sent');
+            } finally { await clean(); }
+        });
+
+        test('later on, another page of the site leaves the job alone', async () => {
+            try {
+                const job = Roster().newJob({ site: 'reddit', action: 'read', now: Date.now() - Roster().KICK_MS - 1000 });
+                const { page, job: after } = await enter('reddit', '/r/rust/', job);
+                assertEqual(page.sent.length, 0, 'an ordinary visit is not taken over');
+                assertEqual(after.status, 'running');
+                assertEqual(after.leaseBy, '', 'nor held');
+            } finally { await clean(); }
+        });
+
+        test('a profile that is not the name the job is on is left alone', async () => {
+            try {
+                const job = Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice'] });
+                const { page, job: after } = await enter('twitter', '/bob', job);
+                assertEqual(page.sent.length, 0);
+                assertEqual(after.status, 'running');
+                assertEqual(after.at, 0);
+            } finally { await clean(); }
+        });
+
+        test('a tab sent to a name and landing elsewhere stops the job', async () => {
+            try {
+                const job = Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice'] });
+                const { page, job: after } = await enter('twitter', '/i/flow/login', job, '/alice');
+                assertEqual(page.sent.length, 0);
+                assertEqual(after.status, 'paused');
+                assert(after.note.includes('@alice'), after.note);
+            } finally { await clean(); }
+        });
+    });
 })();
