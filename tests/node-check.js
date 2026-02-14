@@ -7288,9 +7288,14 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             assert(html.includes(`data-site-settings="${id}"`), `${id} has no settings panel`);
         }
         eq(SiteIcons.get('vimeo').color, '#1AB7EA');
-        // Netflix's N is three shapes in three reds, so it is carried whole.
-        assert(/<image href="data:image\/svg\+xml,/.test(SiteIcons.svg('netflix')), 'not the vector logo');
-        assert(!SiteIcons.get('netflix').image.includes('"'), 'a double quote would end the href it is put in');
+        // Netflix's N as Simple Icons carries it: one path in Netflix's red,
+        // the legs cut short of the ribbon. It was redrawn here once, shaded
+        // and with those gaps closed, which made it a mark of nobody's.
+        const netflix = SiteIcons.get('netflix');
+        eq([netflix.color, netflix.image], ['#E50914', undefined]);
+        assert(netflix.path.startsWith('m5.398 0 8.348 23.602c2.346.059 4.856.398 4.856.398L10.113 0H5.398z'), 'not the original ribbon');
+        eq(netflix.path.match(/z/g).length, 3, 'the ribbon and the two legs are one path of three shapes');
+        assert(/<path fill="#E50914" d="m5\.398 0 /.test(SiteIcons.svg('netflix')), 'not the vector logo');
     });
     check('a site switched off leaves the dashboard and keeps its place in the order', () => {
         const SiteSort = require('../src/page/site-sort.js');

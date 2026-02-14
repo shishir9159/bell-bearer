@@ -143,13 +143,13 @@
             id: 'netflix',
             name: 'Netflix',
             description: 'A watch party: an episode in sync with other people, each on their own account',
-            // The N as Netflix draws it: two dark legs and the bright ribbon
-            // laid over them, each leg shading off where it runs under the
-            // ribbon. Simple Icons' N is one flat red with gaps cut where the
-            // ribbon crosses, which at card size reads as three loose strips;
-            // its outline is kept, the legs carried on under the ribbon.
+            // Simple Icons' path as it comes, in Netflix's red. It was redrawn
+            // here once — the legs carried on under the ribbon and shaded —
+            // because the gaps where the ribbon crosses looked loose at card
+            // size. The gaps are the mark, and a redrawn one is not Netflix's.
+            color: '#E50914',
             viewBox: '0 0 24 24',
-            image: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='l' gradientUnits='userSpaceOnUse' x1='0' y1='24' x2='0' y2='0'%3E%3Cstop offset='0' stop-color='%23B1060F'/%3E%3Cstop offset='.45' stop-color='%23B1060F'/%3E%3Cstop offset='.9' stop-color='%23650409'/%3E%3C/linearGradient%3E%3ClinearGradient id='r' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='0' y2='24'%3E%3Cstop offset='0' stop-color='%23B1060F'/%3E%3Cstop offset='.45' stop-color='%23B1060F'/%3E%3Cstop offset='.9' stop-color='%23650409'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath fill='url(%23l)' d='M5.398 0h4.715v23.602c-1.905.086-2.842.173-4.715.398z'/%3E%3Cpath fill='url(%23r)' d='M13.887 0h4.715v24l-4.856-.398z'/%3E%3Cpath fill='%23E50914' d='m5.398 0 8.348 23.602c2.346.059 4.856.398 4.856.398L10.113 0z'/%3E%3C/svg%3E",
+            path: 'm5.398 0 8.348 23.602c2.346.059 4.856.398 4.856.398L10.113 0H5.398zm8.489 0v9.172l4.715 13.33V0h-4.715zM5.398 1.5V24c1.873-.225 2.81-.312 4.715-.398V14.83L5.398 1.5z',
         },
     };
 
