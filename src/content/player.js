@@ -37,7 +37,29 @@
     /** How long a rate we wrote may take to come back as its ratechange. */
     const OWN_RATE_MS = 1000;
 
-    function createPlayer({ getVideoElement, notify, shouldRemember = () => true }) {
+    function createPlayer({ getVideoElement: findVideo, notify, shouldRemember = () => true }) {
+        let attached = false;
+
+        /**
+         * Shadow roots listened in, besides `document`. Media events are not
+         * composed: one fired by a <video> inside a shadow root — Reddit's
+         * player — stops at that root, and the capture listeners on
+         * `document` never heard it. A rate could be set but was never kept,
+         * and a change made in Reddit's own menu was never adopted. So the
+         * root of whichever video is acted on is listened in as well.
+         */
+        const roots = new Set();
+
+        function listenIn(video) {
+            const rootNode = video && video.getRootNode ? video.getRootNode() : null;
+            if (!attached || !rootNode || !rootNode.host || roots.has(rootNode)) return video;
+            roots.add(rootNode);
+            listen(rootNode);
+            return video;
+        }
+
+        const getVideoElement = () => listenIn(findVideo());
+
         /** The rate the user asked for, or null while they have not asked. */
         let desiredRate = null;
 
@@ -242,20 +264,33 @@
          * both the 1s "is there a video yet" poll and the 500ms rate-enforcement
          * interval the old code ran on every site.
          */
-        function attach() {
+        function listen(target) {
             const options = { capture: true, passive: true };
-            document.addEventListener('loadstart', onSourceChanged, options);
-            document.addEventListener('emptied', onSourceChanged, options);
-            document.addEventListener('loadeddata', onSourceReady, options);
-            document.addEventListener('ratechange', onRateChange, options);
+            target.addEventListener('loadstart', onSourceChanged, options);
+            target.addEventListener('emptied', onSourceChanged, options);
+            target.addEventListener('loadeddata', onSourceReady, options);
+            target.addEventListener('ratechange', onRateChange, options);
+        }
+
+        function unlisten(target) {
+            const options = { capture: true };
+            target.removeEventListener('loadstart', onSourceChanged, options);
+            target.removeEventListener('emptied', onSourceChanged, options);
+            target.removeEventListener('loadeddata', onSourceReady, options);
+            target.removeEventListener('ratechange', onRateChange, options);
+        }
+
+        function attach() {
+            if (attached) return;
+            attached = true;
+            listen(document);
         }
 
         function detach() {
-            const options = { capture: true };
-            document.removeEventListener('loadstart', onSourceChanged, options);
-            document.removeEventListener('emptied', onSourceChanged, options);
-            document.removeEventListener('loadeddata', onSourceReady, options);
-            document.removeEventListener('ratechange', onRateChange, options);
+            attached = false;
+            unlisten(document);
+            roots.forEach(unlisten);
+            roots.clear();
             cancelBoost({ restore: false });
         }
 

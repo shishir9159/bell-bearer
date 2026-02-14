@@ -260,6 +260,86 @@ suite('player: temporary boost', () => {
     });
 });
 
+/**
+ * Reddit's player as Reddit draws it: a shreddit-player whose open shadow
+ * root holds the <video>, and no <video> in the page's own DOM. Larger than
+ * the harness's, so that it outranks any other video left on the page.
+ */
+function redditPlayer(top = 0) {
+    const host = document.createElement('shreddit-player');
+    host.style.cssText = `position:fixed;left:-9999px;top:${top}px;display:block;width:400px;height:225px;`;
+    const video = document.createElement('video');
+    video.width = 400;
+    video.height = 225;
+    host.attachShadow({ mode: 'open' }).appendChild(video);
+    document.body.appendChild(host);
+    return { host, video };
+}
+
+suite('player: Reddit, whose video is inside a shadow root', () => {
+    test('REGRESSION: the locator finds it', () => {
+        const { host, video } = redditPlayer();
+        try {
+            assertEqual(document.querySelector('shreddit-player video'), null,
+                'precondition: the selector Reddit used to have matches nothing');
+            assertEqual(window.BB.Site.createPlayerLocator('reddit')(), video);
+        } finally { host.remove(); }
+    });
+
+    test('on a feed, the player on screen wins over one scrolled past', () => {
+        const first = redditPlayer();
+        let second = null;
+        try {
+            const locate = window.BB.Site.createPlayerLocator('reddit');
+            assertEqual(locate(), first.video);
+            first.host.style.top = '-5000px';
+            second = redditPlayer();
+            assertEqual(locate(), second.video, 'the memoised one is still attached, but nobody can see it');
+        } finally {
+            first.host.remove();
+            if (second) second.host.remove();
+        }
+    });
+
+    test('REGRESSION: a reset while loading is put back, because the root is listened in', async () => {
+        // Media events are not composed, so a capture listener on document
+        // never heard this video's ratechange and the rate was not kept.
+        const { host, video } = redditPlayer();
+        const player = window.BB.Player.createPlayer({
+            getVideoElement: window.BB.Site.createPlayerLocator('reddit'), notify: () => {},
+        });
+        player.attach();
+        try {
+            player.setRate(2, { announce: false });
+            video.dispatchEvent(new Event('loadstart'));
+            await wait(20);
+            video.playbackRate = 1;
+            await wait(20);
+            assertEqual(video.playbackRate, 2);
+        } finally {
+            player.detach();
+            host.remove();
+        }
+    });
+
+    test('a change made in Reddit\'s own speed menu is adopted', async () => {
+        const { host, video } = redditPlayer();
+        const player = window.BB.Player.createPlayer({
+            getVideoElement: window.BB.Site.createPlayerLocator('reddit'), notify: () => {},
+        });
+        player.attach();
+        try {
+            player.setRate(2, { announce: false });
+            video.playbackRate = 0.75;
+            await wait(20);
+            assertEqual(player.desiredRate, 0.75);
+        } finally {
+            player.detach();
+            host.remove();
+        }
+    });
+});
+
 suite('player: skipping', () => {
     test('skips forward and back by the requested amount', async () => {
         const h = harness();

@@ -19,8 +19,24 @@
             'video.html5-main-video',
         ],
         netflix: ['.watch-video video', '#appMountPoint video'],
-        reddit: ['shreddit-player video', '.media-element video', '[data-testid="shreddit-player"] video'],
         twitter: ['[data-testid="videoPlayer"] video'],
+    };
+
+    /**
+     * Players that keep their <video> inside a shadow root of their own, so
+     * neither the selectors above nor the generic `querySelectorAll('video')`
+     * can reach it, newest spelling first.
+     *
+     * Reddit's is the one that made this necessary: a feed of shreddit-player
+     * elements, each with an open shadow root holding the <video>, and not
+     * one <video> in the page's own DOM (seen 2026-10-11). Reddit used to
+     * have `shreddit-player video` above, which never matched, so the locator
+     * found nothing and the speed keys did nothing on any Reddit video.
+     * Reddit is also a feed, so there is no "first one" to pick: every
+     * player found is ranked the way the generic fallback ranks.
+     */
+    const SHADOW_HOSTS = {
+        reddit: ['shreddit-player-2', 'shreddit-player'],
     };
 
     function detectSite(hostname = window.location.hostname) {
@@ -57,26 +73,43 @@
         return rect.width > 0 && rect.height > 0;
     }
 
+    const onScreen = (rect) => rect.bottom > 0 && rect.top < window.innerHeight;
+    const isOnScreen = (video) => onScreen(video.getBoundingClientRect());
+
     /** Rank candidates so a playing, on-screen, large player wins. */
     function score(video) {
         const rect = video.getBoundingClientRect();
         const area = rect.width * rect.height;
-        const onScreen = rect.bottom > 0 && rect.top < window.innerHeight;
-        return (video.paused ? 0 : 4e9) + (onScreen ? 2e9 : 0) + area;
+        return (video.paused ? 0 : 4e9) + (onScreen(rect) ? 2e9 : 0) + area;
+    }
+
+    /** Every <video> on the page, those inside `site`'s shadow hosts included. */
+    function allVideos(site) {
+        const found = Array.from(document.querySelectorAll('video'));
+        const hosts = SHADOW_HOSTS[site];
+        if (!hosts) return found;
+        for (const host of document.querySelectorAll(hosts.join(','))) {
+            if (host.shadowRoot) found.push(...host.shadowRoot.querySelectorAll('video'));
+        }
+        return found;
     }
 
     /**
      * The video element to act on, or null when the page has none.
      *
-     * Callers hit this on every keystroke, so the result is memoised until the
-     * element is detached — `querySelectorAll('video')` plus layout reads on a
-     * page as large as YouTube is not free.
+     * Callers hit this on every keystroke, so the result is memoised —
+     * `querySelectorAll('video')` plus layout reads on a page as large as
+     * YouTube is not free. Memoised while it is on screen, not only while it
+     * is attached: on a feed the first player found stays attached long after
+     * it is scrolled past, and the keys went on speeding up a video nobody
+     * could see. Off screen, it is looked for again, and a page with one
+     * player finds the same one.
      */
     function createPlayerLocator(site) {
         let cached = null;
 
         return function getVideoElement() {
-            if (isUsable(cached)) return cached;
+            if (isUsable(cached) && isOnScreen(cached)) return cached;
             cached = null;
 
             for (const selector of PLAYER_SELECTORS[site] || []) {
@@ -87,7 +120,7 @@
                 }
             }
 
-            const videos = Array.from(document.querySelectorAll('video')).filter(isUsable);
+            const videos = allVideos(site).filter(isUsable);
             if (videos.length === 0) return null;
             cached = videos.length === 1
                 ? videos[0]
@@ -134,7 +167,7 @@
     }
 
     const Site = {
-        detectSite, createPlayerLocator, PLAYER_SELECTORS,
+        detectSite, createPlayerLocator, PLAYER_SELECTORS, SHADOW_HOSTS,
         SHORTS_SELECTORS, isShortsPath, activeShortsVideo, shortsSeekTo,
     };
 
