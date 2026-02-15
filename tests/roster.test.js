@@ -82,6 +82,39 @@
         });
     });
 
+    suite('the roster — the bar on the site\'s page', () => {
+        const bar = () => window.BB.RosterBar.createBar({ appearance: async () => ({}), dress: () => {} });
+
+        test('says what it is doing, and hands its buttons back', async () => {
+            const one = bar();
+            const pressed = [];
+            try {
+                await one.show({ head: 'Follow @alice?', line: 'Press Follow', acts: [{ id: 'skip', label: 'Skip' }], onAct: (id) => pressed.push(id) });
+                const element = document.getElementById(window.BB.RosterBar.ID);
+                assertEqual(element.querySelector('.bb-roster-bar-head').textContent, 'Follow @alice?');
+                const skip = element.querySelector('[data-bb-roster-act="skip"]');
+                skip.click();
+                assertDeepEqual(pressed, ['skip']);
+
+                await one.show({ head: 'Follow @bob?', acts: [{ id: 'skip', label: 'Skip' }] });
+                assert(skip.isConnected, 'the same buttons are not drawn again under the pointer');
+                assertEqual(element.querySelector('.bb-roster-bar-line').textContent, '');
+            } finally { one.hide(); }
+            assertEqual(document.getElementById(window.BB.RosterBar.ID), null);
+        });
+
+        test('two shows at once draw one bar, and a hide before it is built wins', async () => {
+            const one = bar();
+            await Promise.all([one.show({ head: 'a' }), one.show({ head: 'b' })]);
+            assertEqual(document.querySelectorAll(`#${window.BB.RosterBar.ID}`).length, 1);
+            one.hide();
+            const shown = one.show({ head: 'c' });
+            one.hide();
+            await shown;
+            assertEqual(document.getElementById(window.BB.RosterBar.ID), null);
+        });
+    });
+
     /**
      * Which page may act on a job. A job used to be taken up by every page of
      * its site for as long as it ran, which looped forever on a page the site
@@ -148,6 +181,38 @@
                 assertEqual(after.status, 'running');
                 assertEqual(after.at, 0);
             } finally { await clean(); }
+        });
+
+        test('a page of old Reddit\'s list is read into the roster', async () => {
+            stage(`<div id="siteTable">
+                <div class="thing subreddit"><a class="title" href="https://old.reddit.com/r/rust/">rust</a></div>
+                <div class="thing subreddit"><a class="title" href="https://old.reddit.com/r/cpp/">cpp</a></div>
+                <div class="thing subreddit"><a class="title" href="https://old.reddit.com/user/someone/">a profile</a></div>
+            </div>`);
+            try {
+                const job = Roster().newJob({ site: 'reddit', action: 'read' });
+                const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', job);
+                assertEqual(after.status, 'done');
+                assertDeepEqual((await Roster().loadRosters()).reddit.names, ['rust', 'cpp']);
+                assertEqual(document.getElementById(window.BB.RosterBar.ID), null, 'and the bar is gone');
+            } finally {
+                teardown();
+                await clean();
+            }
+        });
+
+        test('an empty list is not saved over the last read', async () => {
+            stage('<div id="siteTable"></div>');
+            try {
+                await Roster().saveRoster('reddit', ['kept']);
+                const job = Roster().newJob({ site: 'reddit', action: 'read' });
+                const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', job);
+                assertEqual(after.status, 'paused');
+                assertDeepEqual((await Roster().loadRosters()).reddit.names, ['kept']);
+            } finally {
+                teardown();
+                await clean();
+            }
         });
 
         test('a tab sent to a name and landing elsewhere stops the job', async () => {

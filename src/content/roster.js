@@ -34,6 +34,7 @@
     const ns = root.BB || {};
     const Roster = ns.Roster || req('../shared/roster.js');
     const Selectors = ns.Selectors || req('../shared/selectors.js');
+    const RosterBar = ns.RosterBar || req('./roster-bar.js');
 
     /** This page, for the job's lease. A fresh one per load, which is right. */
     const PAGE_ID = Math.random().toString(36).slice(2, 10);
@@ -190,9 +191,12 @@
      * @param {(message: string, type?: string) => void} deps.notify
      * @param {object} [deps.page]  where this page is and how to leave it;
      *   the browser suite's stand-in for `location`
+     * @param {() => Promise<object>} [deps.appearance]  for the bar: Theme.appearance
+     * @param {(element: Element, look: object) => void} [deps.dress]  and Theme.dress
      */
-    function createRoster({ site, notify, page = PAGE }) {
+    function createRoster({ site, notify, page = PAGE, appearance = async () => ({}), dress = () => {} }) {
         const rules = Roster.siteOf(site);
+        const bar = RosterBar.createBar({ appearance, dress });
 
         // ------------------------------------------------------ bookkeeping
 
@@ -205,6 +209,13 @@
         }
 
         const finish = (note) => halt('done', note || '');
+
+        /** The bar's Stop: the dashboard's, from the page. */
+        async function stopHere() {
+            bar.hide();
+            await Roster.updateJob((job) => (job && job.site === site ? null : job));
+            notify('Stopped. What was done stays done.', 'info');
+        }
 
         /**
          * Leave for another page of the site, handing the job over first.
@@ -315,14 +326,28 @@
             await bank(found);
 
             const next = first(site, 'next');
-            if (next && next.href && found.size < Roster.MAX_NAMES) {
+            const more = !!(next && next.href) && found.size < Roster.MAX_NAMES;
+            bar.show({
+                head: `Reading your ${rules.many}`,
+                line: `${found.size} so far${more ? ', and another page to go' : ''}. Nothing is joined or changed.`,
+                acts: [{ id: 'stop', label: 'Stop', danger: true }],
+                onAct: stopHere,
+            });
+            if (more) {
                 // A page every few seconds, which is slower than clicking
                 // "next" yourself and well inside what Reddit asks for.
                 await sleep(2500 + Math.round(Math.random() * 2000));
-                if (!(await mine())) return null;
+                if (!(await mine())) return void bar.hide();
                 return goTo(next.href);
             }
+            bar.hide();
 
+            // Never written down empty: it would replace the last read, and a
+            // page that drew no list is far likelier than an account with no
+            // subreddits.
+            if (!found.size) {
+                return halt('paused', `Found no ${rules.many} on old Reddit's list of yours, so the last read was kept.`);
+            }
             await Roster.saveRoster(site, [...found.values()]);
             notify(`Read ${found.size} ${found.size === 1 ? rules.one : rules.many} — the list is in the dashboard`, 'success');
             return finish(`${found.size} ${rules.many}`);
@@ -529,6 +554,7 @@
                 // page, which throws from every chrome.* call. A job left
                 // running with a live lease would be stuck; halting is the
                 // recoverable end.
+                bar.hide();
                 await halt('paused', `Stopped on an error: ${error && error.message ? error.message : 'unknown'}`);
             }
         }

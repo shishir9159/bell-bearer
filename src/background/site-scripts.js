@@ -64,6 +64,7 @@
                 'src/shared/roster.js',
                 'src/shared/x-pouch.js',
                 'src/shared/pouch-button.js',
+                'src/content/roster-bar.js',
                 'src/content/roster.js',
                 'src/content/twitter-page.js',
                 'src/content/twitter-panel.js',
@@ -77,6 +78,7 @@
             js: [
                 'src/shared/selectors.js',
                 'src/shared/roster.js',
+                'src/content/roster-bar.js',
                 'src/content/roster.js',
             ],
         },

@@ -1670,6 +1670,70 @@
    anything. Nothing here refuses a fourth one; it just says it is the fourth. */
 .bb-limit-tally { margin: 10px 0 0; font-size: 11.5px; color: var(--bb-faint); }
 
+/* ------------------------------------------------- a roster job's bar */
+
+/* What a roster job on x.com or reddit.com is doing, and the user's part in
+   it (src/content/roster-bar.js). Pinned to the foot of the page rather than
+   over it: the page is the thing being read or acted on, and the site's own
+   Follow button has to stay where the user can press it. */
+.bb-roster-bar {
+    position: fixed;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    z-index: 2147483000;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: max-content;
+    max-width: calc(100vw - 32px);
+    padding: 12px 14px 12px 18px;
+    background: var(--bb-panel-solid);
+    border: 1px solid var(--bb-border-strong);
+    border-radius: var(--bb-r);
+    box-shadow: var(--bb-shadow);
+    font-family: var(--bb-font);
+    color: var(--bb-text);
+    animation: bb-fade .2s ease-out;
+}
+
+.bb-roster-bar-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.bb-roster-bar-head { font-family: var(--bb-font-head); font-size: 14px; font-weight: 600; }
+.bb-roster-bar-line { max-width: 52ch; font-size: 12.5px; line-height: 1.45; color: var(--bb-sub); }
+.bb-roster-bar-line:empty { display: none; }
+
+.bb-roster-bar-acts { display: flex; gap: 8px; flex-shrink: 0; }
+
+.bb-roster-bar-btn {
+    padding: 8px 15px;
+    border: 1px solid var(--bb-btn-fill);
+    border-radius: 999px;
+    background: var(--bb-btn-fill);
+    color: var(--bb-btn-text);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.bb-roster-bar-btn:hover { background: var(--bb-btn-fill-hover); }
+.bb-roster-bar-btn:focus-visible { outline: 2px solid var(--bb-accent); outline-offset: 2px; }
+
+.bb-roster-bar-quiet { border-color: var(--bb-border-strong); background: transparent; color: var(--bb-sub); }
+.bb-roster-bar-quiet:hover { border-color: var(--bb-accent); background: var(--bb-accent-soft); color: var(--bb-accent); }
+
+@media (max-width: 560px) {
+    .bb-roster-bar { flex-direction: column; align-items: stretch; width: auto; left: 16px; right: 16px; transform: none; }
+}
+
+/* The site's own Follow or Join button, rung so it can be found: the job asks
+   for the click and never makes it. Drawn on the site's element, so nothing
+   of ours is laid over the thing to press. */
+[data-bb-roster-target] {
+    outline: 3px solid #e0331a !important;
+    outline-offset: 3px !important;
+}
+
 /* ============================================================
    The pouch button, shared by YouTube and X.
 

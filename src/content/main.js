@@ -670,7 +670,7 @@
      * storage for this site, so on an ordinary visit this is one storage read.
      */
     if (site === 'twitter' || site === 'reddit') {
-        BB.RosterContent.createRoster({ site, notify }).install();
+        BB.RosterContent.createRoster({ site, notify, appearance: () => Theme.appearance(), dress: Theme.dress }).install();
     }
 
     // ------------------------------------------------------ cookie banners
