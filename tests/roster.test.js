@@ -75,9 +75,18 @@
             teardown();
         });
 
-        test('reddit is scoped to the page, because its toggle is unambiguous', () => {
-            stage('<div class="fancy-toggle-button"><a class="option add">subscribe</a></div>');
-            assertEqual(RosterContent().actionScope('reddit'), document);
+        test('REGRESSION: on old Reddit, a subreddit not joined reads as not joined', () => {
+            // Old Reddit's toggle is both links, always; `.active` is the one drawn.
+            stage(`<div class="side"><div class="titlebox"><span class="fancy-toggle-button subscribe-button toggle">
+                <a class="option active add login-required" href="#">subscribe</a><a class="option remove" href="#">unsubscribe</a>
+            </span></div></div>`);
+            const scope = RosterContent().actionScope('reddit');
+            const table = RosterContent().SELECTORS.reddit;
+            assertEqual(scope.className, 'titlebox', 'the sidebar\'s own box');
+            assert(scope.querySelector('.fancy-toggle-button a.option.remove:not(.hidden)'),
+                'precondition: the old spelling matched a subreddit nobody had joined');
+            assertEqual(scope.querySelector(table.followed[0]), null);
+            assert(scope.querySelector(table.follow[0]), 'and its subscribe is the one to press');
             teardown();
         });
     });

@@ -122,14 +122,18 @@
             ],
             /** The link to the next page of that listing. */
             next: ['.nextprev a[rel~="next"]', 'span.next-button > a', '.next-button a'],
-            /** Old Reddit's subscribe toggle, and new Reddit's Join button. */
-            follow: [
-                '.fancy-toggle-button a.option.add',
-                '.side .fancy-toggle-button a.add',
-                'button[data-testid="join-or-leave-button"]',
-                'shreddit-join-button button',
-            ],
-            followed: ['.fancy-toggle-button a.option.remove:not(.hidden)'],
+            /** The sidebar box the subreddit's own toggle sits in. */
+            scope: ['.side .titlebox', '.side'],
+            /**
+             * Old Reddit's subscribe toggle, by `.active`. The toggle is two
+             * links, subscribe and unsubscribe, both always in the page, and
+             * `.active` is the one drawn (r2's printablebuttons.html). This
+             * was `.remove:not(.hidden)`, which nothing ever hides, so every
+             * subreddit read as joined and a whole list was skipped. New
+             * Reddit's Join is not here: the job's pages are old Reddit's.
+             */
+            follow: ['.fancy-toggle-button a.option.add.active'],
+            followed: ['.fancy-toggle-button a.option.remove.active'],
             // Pointedly not a bare `.error`: old Reddit puts that class on
             // every inline form complaint on the page, and halting the job
             // because a comment box was unhappy would be a bug that looked
@@ -158,12 +162,12 @@
      * on a null, and stopping is the right answer — a profile page with no
      * action row is not a page this understands.
      *
-     * On reddit.com the subscribe toggle is the subreddit's own and there is
-     * nothing else on the page it could be confused with, so the scope is the
-     * document.
+     * On old Reddit it is the sidebar's title box, where the subreddit's own
+     * toggle is — the listing pages draw one toggle per row, and a subreddit's
+     * sidebar can link others.
      */
     function actionScope(site) {
-        if (site !== 'twitter') return document;
+        if (site !== 'twitter') return first(site, 'scope');
         const more = first(site, 'actions');
         return (more && more.parentElement) || null;
     }
