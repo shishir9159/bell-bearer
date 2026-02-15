@@ -41,6 +41,13 @@
         return `${Math.round(hours / 24)}d ago`;
     }
 
+    /** What reading does on each site, said before it is started. */
+    const READ_HOW = {
+        twitter: 'Opens your following list on x.com. Scroll it to the end and press Done on the bar there — ' +
+            'Bell Bearer reads what you scroll past and scrolls nothing itself.',
+        reddit: 'Opens old Reddit\'s list of your subreddits in a new tab and pages through it, a few seconds a page.',
+    };
+
     function mountPanel(host, site) {
         const rules = Roster.siteOf(site);
         if (!rules) return { reload: () => {} };
@@ -68,8 +75,7 @@
                         <button class="btn-primary" data-act="read">Read from ${esc(rules.host)}</button>
                         <button class="btn-secondary" data-act="download" disabled>Download .txt</button>
                     </div>
-                    <p class="roster-small">Opens ${esc(rules.host)} in a new tab and walks the list.
-                       Keep that tab in front — a background tab is throttled and the walk stalls.</p>
+                    <p class="roster-small">${esc(READ_HOW[site])}</p>
                 </div>
 
                 <div class="roster-card" data-roster-apply>
@@ -94,6 +100,7 @@
                 <div class="limit-bar"><span style="width:0%"></span></div>
                 <p class="roster-job-note"></p>
                 <div class="roster-acts">
+                    <button class="btn-secondary" data-act="save" hidden>Save what was read</button>
                     <button class="btn-secondary" data-act="resume" hidden>Carry on</button>
                     <button class="btn-secondary btn-danger" data-act="stop">Stop</button>
                 </div>
@@ -137,6 +144,9 @@
             // one resumes by itself the next time the site is open, and a
             // button here would only walk it into the same halt.
             panel.querySelector('[data-act="resume"]').hidden = ours.status !== 'paused';
+            // A read keeps what it has found on the job, so a tab closed
+            // before Done has not thrown it away.
+            panel.querySelector('[data-act="save"]').hidden = ours.action !== 'read' || !(ours.found || []).length;
             panel.querySelector('[data-act="stop"]').textContent =
                 Roster.isRunning(ours) ? 'Stop' : 'Clear';
             panel.querySelector('.roster-job-foot').textContent = ours.status === 'waiting'
@@ -193,6 +203,17 @@
                     if (!staged || !staged.length) return;
                     await start('apply', staged);
                     break;
+
+                case 'save': {
+                    const names = (job && job.action === 'read' && job.found) || [];
+                    if (!names.length) return;
+                    await Roster.saveRoster(site, names);
+                    await Roster.clearJob();
+                    job = null;
+                    render();
+                    Ui.toast(`Saved ${names.length} ${names.length === 1 ? rules.one : rules.many}`, 'success');
+                    break;
+                }
 
                 case 'stop':
                     await Roster.clearJob();

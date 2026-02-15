@@ -80,8 +80,14 @@
             // Hidden while it was being built.
             if (!wanted) return void hide();
             if (onAct) onAction = onAct;
-            bar.querySelector('.bb-roster-bar-head').textContent = head;
-            bar.querySelector('.bb-roster-bar-line').textContent = line;
+            // Only what changed is written: the bar is a live region, and a
+            // read redraws it twice a second.
+            const say = (selector, text) => {
+                const node = bar.querySelector(selector);
+                if (node.textContent !== text) node.textContent = text;
+            };
+            say('.bb-roster-bar-head', head);
+            say('.bb-roster-bar-line', line);
             const box = bar.querySelector('.bb-roster-bar-acts');
             const key = acts.map((act) => `${act.id}:${act.label}`).join('|');
             if (box.dataset.key === key) return;

@@ -215,6 +215,40 @@
             }
         });
 
+        test('REGRESSION: the following list is read from rows you follow, and nothing is scrolled', async () => {
+            const row = (name, testid) => `<div data-testid="UserCell"><a href="/${name}">${name}</a>
+                <button data-testid="1-${testid}"></button></div>`;
+            stage(`<a data-testid="AppTabBar_Profile_Link" href="/me"></a>
+                <div data-testid="sidebarColumn">${row('sidebarpick', 'unfollow')}</div>
+                <div data-testid="primaryColumn">${row('alice', 'unfollow')}${row('suggested', 'follow')}${row('bob', 'unfollow')}</div>`);
+            const scrollTo = window.scrollTo;
+            let scrolled = 0;
+            window.scrollTo = () => { scrolled++; };
+            try {
+                await Roster().saveJob(Roster().newJob({ site: 'twitter', action: 'read' }));
+                const reading = RosterContent().createRoster({ site: 'twitter', notify: () => {}, page: pageAt('/me/following') }).install();
+                const done = await (async () => {
+                    for (let i = 0; i < 40; i++) {
+                        const button = document.querySelector('#bb-roster-bar [data-bb-roster-act="done"]');
+                        if (button && /2 so far/.test(document.getElementById('bb-roster-bar').textContent)) return button;
+                        await new Promise((resolve) => setTimeout(resolve, 100));
+                    }
+                    return null;
+                })();
+                assert(done, 'the bar counts the two rows you follow');
+                done.click();
+                await reading;
+                assertDeepEqual((await Roster().loadRosters()).twitter.names, ['alice', 'bob'],
+                    'not the suggestion under the list, nor the sidebar');
+                assertEqual((await Roster().loadJob()).status, 'done');
+                assertEqual(scrolled, 0, 'scrolling x.com from a script is scripting the site');
+            } finally {
+                window.scrollTo = scrollTo;
+                teardown();
+                await clean();
+            }
+        });
+
         test('a tab sent to a name and landing elsewhere stops the job', async () => {
             try {
                 const job = Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice'] });

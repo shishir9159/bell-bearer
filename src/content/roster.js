@@ -78,10 +78,20 @@
             me: [
                 'a[data-testid="AppTabBar_Profile_Link"]',
                 'nav[role="navigation"] a[aria-label="Profile"]',
-                '[data-testid="SideNav_AccountSwitcher_Button"] [href^="/"]',
             ],
-            /** One row of a following list. */
-            cell: ['[data-testid="UserCell"]', '[data-testid="cellInnerDiv"] [data-testid="UserCell"]'],
+            /**
+             * The account switcher's avatar, whose testid ends in the handle —
+             * for a layout too narrow to draw the Profile link.
+             */
+            meAvatar: ['[data-testid="SideNav_AccountSwitcher_Button"] [data-testid^="UserAvatar-Container-"]'],
+            /**
+             * One row of the following list — in the main column only. The
+             * sidebar's "Who to follow" is drawn in the same rows, and the
+             * bare `[data-testid="UserCell"]` this used to be read those too.
+             */
+            cell: ['[data-testid="primaryColumn"] [data-testid="UserCell"]', 'main [data-testid="UserCell"]'],
+            /** X fetching the next stretch of a list. */
+            loading: ['[data-testid="primaryColumn"] [role="progressbar"]'],
             /**
              * The profile header's action row — More, notify, message, Follow.
              * Everything the job clicks is looked for inside this and nowhere
@@ -255,49 +265,95 @@
 
         // ------------------------------------------------------- reading
 
+        /** The handles of the rows on screen that say you follow them. */
+        function followedRows() {
+            const names = [];
+            for (const cell of all(site, 'cell')) {
+                // A row counts only when its own button says you follow the
+                // account. X draws suggestions in exactly these rows — beside
+                // the list, and sometimes under it — and a read that took
+                // every row, applied later, would have followed strangers.
+                if (!first(site, 'followed', cell)) continue;
+                const link = cell.querySelector('a[href^="/"]');
+                const name = handleFromHref(link && link.getAttribute('href'));
+                if (name) names.push(name);
+            }
+            return names;
+        }
+
+        /** The bottom of the list, with nothing more on its way. */
+        const atEnd = (quietMs) => quietMs > 3000 && !first(site, 'loading') &&
+            window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 300;
+
         /**
-         * Twitter: scroll the following list and write down who is in it.
+         * Twitter: write down the accounts on your following list as you
+         * scroll it.
          *
-         * One page, not a walk — X pages that list by fetching as you scroll,
-         * so the whole of it arrives in this one script. The gap between
-         * scrolls is the same order as a person flicking a trackpad, and the
-         * list is banked every so often so a tab closed two thousand accounts
-         * in has not thrown them away.
+         * Nothing is scrolled for you. This used to scroll the list itself,
+         * and scrolling x.com from a script is scripting the site, which X's
+         * automation rules give as a reason to suspend an account — read-only
+         * or not. So the page reads what you scroll past and the bar asks you
+         * to scroll; holding End is as quick as the script was. The list is
+         * banked every few seconds, so a tab closed two thousand accounts in
+         * has not thrown them away, and the dashboard can save what it holds.
          */
         async function readTwitter(job) {
             const found = new Map((job.found || []).map((name) => [name.toLowerCase(), name]));
-            let still = 0;
-            let rounds = 0;
+            const list = page.path().replace(/\/$/, '').toLowerCase();
+            let ended = '';
+            let grewAt = Date.now();
+            let bankedAt = Date.now();
+            let banked = found.size;
+            let checkedAt = Date.now();
 
-            // Four quiet rounds is the end of the list; 600 is a list longer
-            // than anyone has and a runaway loop either way.
-            while (still < 4 && rounds < 600) {
-                rounds++;
-                const before = found.size;
-                for (const cell of all(site, 'cell')) {
-                    const link = cell.querySelector('a[href^="/"]');
-                    const name = handleFromHref(link && link.getAttribute('href'));
-                    if (name) found.set(name.toLowerCase(), name);
+            while (!ended) {
+                // Somewhere else in X's own app, for now: the bar waits there.
+                if (page.path().replace(/\/$/, '').toLowerCase() !== list) {
+                    bar.hide();
+                    await sleep(500);
+                    continue;
                 }
-                still = found.size > before ? 0 : still + 1;
-
+                for (const name of followedRows()) {
+                    if (found.has(name.toLowerCase())) continue;
+                    found.set(name.toLowerCase(), name);
+                    grewAt = Date.now();
+                }
                 if (first(site, 'trouble')) {
                     await bank(found);
+                    bar.hide();
                     return halt('paused', `Twitter stopped answering after ${found.size} ${rules.many}. Leave it a while and start again.`);
                 }
-
-                // Every twentieth round, so a closed tab does not cost the lot.
-                if (rounds % 20 === 0) {
+                // Banked when it grew, and once a minute regardless: a bank
+                // is also what keeps the lease, and a list read slowly must
+                // not lose it to another tab.
+                if ((found.size !== banked && Date.now() - bankedAt > 3000) || Date.now() - bankedAt > 60000) {
                     await bank(found);
-                    const still_ours = await mine();
-                    if (!still_ours) return null;
+                    banked = found.size;
+                    bankedAt = Date.now();
                 }
-
-                window.scrollTo(0, document.documentElement.scrollHeight);
-                await sleep(900 + Math.round(Math.random() * 700));
+                // The dashboard's Stop is a write to the job.
+                if (Date.now() - checkedAt > 2000) {
+                    if (!(await mine())) return void bar.hide();
+                    checkedAt = Date.now();
+                }
+                bar.show({
+                    head: `Reading the ${rules.many} you follow — ${found.size} so far`,
+                    line: atEnd(Date.now() - grewAt)
+                        ? 'That looks like the end of the list. Press Done to save it.'
+                        : 'Scroll down to the end of the list; holding End works. This only reads what you scroll past — nothing is followed or changed.',
+                    acts: [{ id: 'done', label: 'Done' }, { id: 'stop', label: 'Cancel', danger: true }],
+                    onAct: (id) => { ended = id; },
+                });
+                await sleep(400);
             }
 
+            if (ended === 'stop') return stopHere();
             await bank(found);
+            bar.hide();
+            // Not written down empty, for the reason Reddit's is not.
+            if (!found.size) {
+                return halt('paused', `No ${rules.many} were read, so the last read was kept. Scroll the list before pressing Done.`);
+            }
             await Roster.saveRoster(site, [...found.values()]);
             notify(`Read ${found.size} ${found.size === 1 ? rules.one : rules.many} — the list is in the dashboard`, 'success');
             return finish(`${found.size} ${rules.many}`);
@@ -475,8 +531,10 @@
 
         /** The signed-in account's handle, waited for: X draws its navigation late. */
         async function signedIn() {
-            const me = await waitFor(() => first(site, 'me'), 15000);
-            return handleFromHref(me && me.getAttribute('href'));
+            const me = await waitFor(() => first(site, 'me') || first(site, 'meAvatar'), 15000);
+            if (!me) return '';
+            const avatar = /^UserAvatar-Container-([A-Za-z0-9_]{1,15})$/.exec(me.getAttribute('data-testid') || '');
+            return avatar ? avatar[1] : handleFromHref(me.getAttribute('href'));
         }
 
         /**
