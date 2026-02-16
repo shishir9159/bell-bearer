@@ -342,5 +342,23 @@
                 await clean();
             }
         });
+
+        test('with no Follow button, Skip is yours to press', async () => {
+            stage('<div data-testid="primaryColumn"><div><button data-testid="userActions"></button></div></div>');
+            try {
+                const { page, running } = await onAlice();
+                const skip = () => document.querySelector(`#${window.BB.RosterBar.ID} [data-bb-roster-act="skip"]`);
+                assert(await until(skip), 'the bar offers Skip');
+                assertEqual((await Roster().loadJob()).status, 'running', 'a missing button is asked about, not a stop');
+                skip().click();
+                await running;
+                const after = await Roster().loadJob();
+                assertDeepEqual([after.at, after.passed, after.today], [1, 1, 0]);
+                assertDeepEqual(page.sent, ['https://x.com/bob']);
+            } finally {
+                teardown();
+                await clean();
+            }
+        });
     });
 })();

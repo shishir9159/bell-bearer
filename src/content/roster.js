@@ -20,8 +20,10 @@
  *
  *   Stop at the first thing that is not understood. No retries, no pressing
  *   on to the next name. A site putting a "you are doing that too much" sheet
- *   in front of the page, sending the tab somewhere else, or drawing no
- *   Follow button at all stops the job with a note to be looked at.
+ *   in front of the page, or sending the tab somewhere else, stops the job
+ *   with a note to be looked at. A missing button is the one thing you are
+ *   asked about instead — Skip, or Stop — since you can see the page and the
+ *   job cannot.
  *
  * Nothing here calls an API or touches a token. Every name is a page the
  * browser navigates to and a button your own mouse clicks.
@@ -450,13 +452,13 @@
          * head of the file.
          *
          * Every exit from here either advances the job by exactly one or stops
-         * it. What it must never do is guess: see the head of the file.
+         * it, and only the user's Skip advances it past a name nobody followed.
          */
         async function applyOne(job) {
             const name = Roster.currentName(job);
             if (!name) {
                 notify(`Done — ${job.done} ${job.done === 1 ? rules.one : rules.many} ${rules.verbed.toLowerCase()}`, 'success');
-                return finish(`${job.done} ${rules.verbed.toLowerCase()}, ${job.skipped} already there`);
+                return finish(`${job.done} ${rules.verbed.toLowerCase()}, ${job.skipped} already there, ${job.passed || 0} skipped`);
             }
             if (Roster.atCap(job)) {
                 const note = `That is today's ${rules.pace.cap}. Carry on from the dashboard tomorrow; it starts again at ${rules.prefix}${name}.`;
@@ -499,9 +501,6 @@
                         return step(job, name, pressedAt ? 'done' : 'skipped');
                     }
                     const button = scope && first(site, 'follow', scope);
-                    if (!button && Date.now() - startedAt > 8000) {
-                        return pause(`No ${rules.verb} button on ${rules.prefix}${name}. It may be gone, private, or ${rules.name} may be asking something first — stopped rather than guessed.`);
-                    }
                     if (button) bar.mark(button);
                     else bar.unmark();
 
@@ -511,8 +510,10 @@
                         line: button
                             ? `Press ${rules.name}'s own ${rules.verb} button, ringed in red — Bell Bearer never presses it for you. ` +
                               `${job.at + 1} of ${job.names.length} in the list, ${day.today} of ${rules.pace.cap} today.`
-                            : `Looking for the ${rules.verb} button…`,
-                        acts: [{ id: 'stop', label: 'Stop', danger: true }],
+                            : Date.now() - startedAt < 8000
+                                ? `Looking for the ${rules.verb} button…`
+                                : `No ${rules.verb} button here. The ${rules.one} may be gone or private, or ${rules.name} is asking something first — Skip it, or Stop.`,
+                        acts: [{ id: 'skip', label: 'Skip' }, { id: 'stop', label: 'Stop', danger: true }],
                         onAct: (id) => { choice = id; },
                     });
 
@@ -532,7 +533,9 @@
             } finally {
                 document.removeEventListener('click', onPress, true);
             }
-            return stopHere();
+            if (choice === 'stop') return stopHere();
+            bar.unmark();
+            return step(job, name, 'passed');
         }
 
         /**
@@ -562,6 +565,7 @@
                     at: day.at + 1,
                     done: day.done + (how === 'done' ? 1 : 0),
                     skipped: day.skipped + (how === 'skipped' ? 1 : 0),
+                    passed: (day.passed || 0) + (how === 'passed' ? 1 : 0),
                     today: day.today + (how === 'done' ? 1 : 0),
                     actedAt: now,
                     nextAt: now + wait,
@@ -571,11 +575,11 @@
 
             if (!Roster.isRunning(next) || next.at === job.at) return void bar.hide();
             const after = Roster.currentName(next);
-            const said = { done: rules.verbed, skipped: `Already ${rules.verbing}` }[how];
+            const said = { done: rules.verbed, skipped: `Already ${rules.verbing}`, passed: 'Skipped' }[how];
             if (!after) {
                 bar.hide();
                 notify(`Done — ${next.done} ${next.done === 1 ? rules.one : rules.many} ${rules.verbed.toLowerCase()}`, 'success');
-                return finish(`${next.done} ${rules.verbed.toLowerCase()}, ${next.skipped} already there`);
+                return finish(`${next.done} ${rules.verbed.toLowerCase()}, ${next.skipped} already there, ${next.passed} skipped`);
             }
 
             bar.show({ head: `${said} ${rules.prefix}${name}`, line: `${rules.prefix}${after} is next.`, acts: [] });

@@ -203,12 +203,14 @@
             // paginated pages, and every page is a fresh script.
             found: [],
             at: 0,
-            // Followed or joined by the user, and found already there.
-            // Nothing is tallied as a failure: the job never acts, so nothing
-            // it does can fail, and something it does not understand stops it
-            // — see the head of src/content/roster.js.
+            // Followed or joined by the user, found already there, and passed
+            // over with the bar's Skip. Nothing is tallied as a failure: the
+            // job never acts, so nothing it does can fail, and something it
+            // does not understand stops it — see the head of
+            // src/content/roster.js.
             done: 0,
             skipped: 0,
+            passed: 0,
             day: dayKey(now),
             today: 0,                // actions taken today, against pace.cap
             status: 'running',       // running | waiting | done | stopped | paused

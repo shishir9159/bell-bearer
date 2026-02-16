@@ -132,7 +132,8 @@
                 ? `Reading your ${rules.many}`
                 : `${rules.verb}ing — ${ours.at} of ${total}`;
             panel.querySelector('.roster-job-count').textContent = ours.action === 'apply'
-                ? `${ours.done} ${rules.verbing}, ${ours.skipped} already there`
+                ? `${ours.done} ${rules.verbed.toLowerCase()}, ${ours.skipped} already there` +
+                  (ours.passed ? `, ${ours.passed} skipped` : '')
                 : `${(ours.found || []).length} so far`;
             panel.querySelector('.limit-bar span').style.width = `${Roster.progress(ours)}%`;
             panel.querySelector('.roster-job-note').textContent = ours.note ||
