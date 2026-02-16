@@ -296,10 +296,10 @@
     }
 
     /** A job on @alice, then @bob, running on @alice's page. */
-    async function onAlice() {
+    async function onAlice(gap = 50) {
         await Roster().saveJob(Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice', 'bob'] }));
         const page = pageAt('/alice');
-        const running = RosterContent().createRoster({ site: 'twitter', notify: () => {}, page, delay: () => 50 }).install();
+        const running = RosterContent().createRoster({ site: 'twitter', notify: () => {}, page, delay: () => gap }).install();
         return { page, running };
     }
 
@@ -323,6 +323,27 @@
                 const after = await Roster().loadJob();
                 assertDeepEqual([after.at, after.done, after.today], [1, 1, 1]);
                 assertDeepEqual(page.sent, ['https://x.com/bob']);
+            } finally {
+                teardown();
+                await clean();
+            }
+        });
+
+        test('Stop during the gap after a follow ends the job before the next page', async () => {
+            stage(PROFILE);
+            const theirs = document.getElementById('theirs');
+            theirs.addEventListener('click', () => { theirs.dataset.testid = '42-unfollow'; });
+            try {
+                const { page, running } = await onAlice(5000);
+                assert(await until(() => theirs.hasAttribute(MARK())));
+                theirs.click();
+                const head = () => document.querySelector(`#${window.BB.RosterBar.ID} .bb-roster-bar-head`);
+                assert(await until(() => head() && head().textContent === 'Followed @alice'), 'the gap is counted down');
+                assert(/@bob opens in \ds/.test(document.getElementById(window.BB.RosterBar.ID).textContent));
+                document.querySelector(`#${window.BB.RosterBar.ID} [data-bb-roster-act="stop"]`).click();
+                await running;
+                assertEqual(await Roster().loadJob(), null);
+                assertDeepEqual(page.sent, [], '@bob is never opened');
             } finally {
                 teardown();
                 await clean();

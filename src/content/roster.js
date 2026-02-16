@@ -539,6 +539,30 @@
         }
 
         /**
+         * Count down to `until` on the bar. False when the job was stopped,
+         * from the bar or the dashboard, before it got there.
+         */
+        async function countDown(until, head, line) {
+            let stopped = false;
+            let checkedAt = Date.now();
+            while (Date.now() < until && !stopped) {
+                bar.show({
+                    head,
+                    line: line(Math.ceil((until - Date.now()) / 1000)),
+                    acts: [{ id: 'stop', label: 'Stop', danger: true }],
+                    onAct: () => { stopped = true; },
+                });
+                if (Date.now() - checkedAt > 2000) {
+                    if (!(await mine())) return false;
+                    checkedAt = Date.now();
+                }
+                await sleep(Math.min(500, Math.max(0, until - Date.now())));
+            }
+            if (stopped) await stopHere();
+            return !stopped;
+        }
+
+        /**
          * One name behind us: record it, wait out the gap, and move on.
          *
          * The wait happens here rather than on arrival at the next page so the
@@ -582,8 +606,10 @@
                 return finish(`${next.done} ${rules.verbed.toLowerCase()}, ${next.skipped} already there, ${next.passed} skipped`);
             }
 
-            bar.show({ head: `${said} ${rules.prefix}${name}`, line: `${rules.prefix}${after} is next.`, acts: [] });
-            await sleep(Math.max(0, next.nextAt - Date.now()));
+            const ok = await countDown(next.nextAt, `${said} ${rules.prefix}${name}`, (seconds) => (how === 'done'
+                ? `${rules.prefix}${after} opens in ${seconds}s. The gap keeps ${rules.name} seeing a person's pace.`
+                : `On to ${rules.prefix}${after}.`));
+            if (!ok) return void bar.hide();
             // Re-read: the dashboard's Stop is a write to the same key.
             const latest = await mine();
             if (!latest) return void bar.hide();
