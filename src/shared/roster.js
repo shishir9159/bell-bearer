@@ -5,29 +5,31 @@
  *
  * Two jobs, and they are not symmetrical:
  *
- *   read   scroll or page through a list the site is already showing you and
- *          write down the names. Nothing is sent anywhere, nothing is changed,
- *          and it is indistinguishable from reading the page yourself because
- *          that is all it is.
+ *   read   write down the names on a list the site is already showing you —
+ *          Twitter's as you scroll it, old Reddit's a page at a time. Nothing
+ *          is sent anywhere and nothing is changed.
  *
- *   apply  open each name's page and click the site's own Follow or Join
- *          button. This one *acts on your account*, which is why almost
- *          everything below is about going slowly: PACE per site, a hard cap
- *          per day, a jittered gap between two actions, and a job that stops
- *          at the first thing it does not understand rather than pressing on.
+ *   apply  open each name's page in turn, ring the site's own Follow or Join
+ *          button, and wait for the user to press it. This one acts on your
+ *          account, by your hand, which is why almost everything below is
+ *          about going slowly: PACE per site, a hard cap per day, a jittered
+ *          gap between two follows, and a job that stops at the first thing
+ *          it does not understand rather than pressing on.
  *
- * Nothing here touches an API, a token or an endpoint. The content script
- * clicks the buttons on the page, at a pace a person could type at. That is
- * the whole of the safety argument and it is why the numbers in PACE are not
- * tuned for throughput: Twitter will suspend an account for looking automated,
- * the edge of what it tolerates is not documented and not stable, and the way
- * to stay clear of it is to stay a long way clear of it rather than to find it.
+ * Nothing here touches an API, a token or an endpoint, and nothing presses a
+ * button or scrolls a page for you. Both jobs once did, and X's automation
+ * rules name scripting its website as a reason to suspend an account; a click
+ * made by a script is also not a click the site sees a person make. What is
+ * left — reading the page, and opening the next one — is what a person does
+ * with a list beside them. PACE is not tuned for throughput either: X does
+ * not document where following gets an account locked, and the way to stay
+ * clear of that edge is to stay a long way clear of it rather than to find it.
  *
  * The job lives in storage rather than in the page, because applying a list
  * *is* a sequence of navigations — each name is another page load, which ends
- * the script that started it. Storage is what makes the job resumable: every
- * page of the site picks it up, does one thing, writes down that it did, and
- * moves on.
+ * the script that started it. Storage is what makes the job resumable: the
+ * job's page picks it up, does one thing, writes down that it did, and moves
+ * on.
  *
  * Everything above the "storage" line is pure and covered by
  * tests/node-check.js.
@@ -68,6 +70,7 @@
             pattern: /^[A-Za-z0-9_]{1,15}$/,
             verb: 'Follow',
             verbing: 'following',
+            verbed: 'Followed',
             pace: Object.freeze({ minMs: 25000, maxMs: 55000, cap: 40 }),
         }),
         reddit: Object.freeze({
@@ -81,6 +84,7 @@
             pattern: /^[A-Za-z0-9_]{2,21}$/,
             verb: 'Join',
             verbing: 'joining',
+            verbed: 'Joined',
             pace: Object.freeze({ minMs: 9000, maxMs: 20000, cap: 120 }),
         }),
     });
@@ -199,10 +203,10 @@
             // paginated pages, and every page is a fresh script.
             found: [],
             at: 0,
-            // Followed or joined, and found already there. There is no third
-            // count: a name that cannot be acted on stops the job rather than
-            // being tallied as a failure and walked past — see the note at the
-            // head of src/content/roster.js for why.
+            // Followed or joined by the user, and found already there.
+            // Nothing is tallied as a failure: the job never acts, so nothing
+            // it does can fail, and something it does not understand stops it
+            // — see the head of src/content/roster.js.
             done: 0,
             skipped: 0,
             day: dayKey(now),

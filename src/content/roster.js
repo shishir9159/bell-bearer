@@ -3,23 +3,28 @@
  * what is in it — the half that has to happen on the site's own pages.
  *
  * What a job *is* lives in src/shared/roster.js; this is the part that reads
- * x.com's and reddit.com's markup and clicks their buttons. Two rules govern
- * everything here and both are about not being mistaken for a robot:
+ * x.com's and reddit.com's markup. Three rules govern everything here, and all
+ * three are about the account not being mistaken for a robot:
  *
- *   One action per page load, then a navigation. Not because it is tidier —
+ *   Nothing is pressed for you. The job rings the site's own Follow or Join
+ *   button and waits for you to press it. It used to press it itself, and X's
+ *   automation rules name scripting its website as a reason to suspend an
+ *   account; a click from a script is not one the site sees a person make,
+ *   either. Reading is the same: what you scroll past is read, and nothing is
+ *   scrolled for you.
+ *
+ *   One name per page load, then a navigation. Not because it is tidier —
  *   because it is what a person does, and because a job that survives a page
  *   load survives the browser being closed halfway through a four-hundred
  *   account list.
  *
- *   Stop at the first thing that is not understood. No retries, no second
- *   attempt with a different selector, no pressing on to the next name. A
- *   Follow button that is not where it should be might mean X has renamed a
- *   testid; it might equally mean X has put a "you are doing that too much"
- *   interstitial in front of it, and the difference is not one this code can
- *   tell. The job pauses with a note and waits to be looked at.
+ *   Stop at the first thing that is not understood. No retries, no pressing
+ *   on to the next name. A site putting a "you are doing that too much" sheet
+ *   in front of the page, sending the tab somewhere else, or drawing no
+ *   Follow button at all stops the job with a note to be looked at.
  *
  * Nothing here calls an API or touches a token. Every name is a page the
- * browser navigates to and a button the mouse would have clicked.
+ * browser navigates to and a button your own mouse clicks.
  *
  * The selectors follow this repo's rule for somebody else's markup: several
  * spellings each, newest first, in one table per site, and never collapsed to
@@ -94,14 +99,16 @@
             loading: ['[data-testid="primaryColumn"] [role="progressbar"]'],
             /**
              * The profile header's action row — More, notify, message, Follow.
-             * Everything the job clicks is looked for inside this and nowhere
+             * The button the job rings is looked for inside this and nowhere
              * else; see actionScope for why that is not optional.
              */
             actions: ['[data-testid="userActions"]'],
             /** The Follow button, before it is pressed. */
             follow: ['[data-testid$="-follow"]'],
-            /** And after — how the click is confirmed rather than assumed. */
+            /** And after — how the press is seen to have taken. */
             followed: ['[data-testid$="-unfollow"]'],
+            /** A protected account's Follow, once pressed, is a request. */
+            requested: ['[data-testid$="-cancel"]'],
             /**
              * X saying no. An error panel, or the "Caution: this account is
              * temporarily restricted" sheet — either is a reason to stop
@@ -134,6 +141,7 @@
              */
             follow: ['.fancy-toggle-button a.option.add.active'],
             followed: ['.fancy-toggle-button a.option.remove.active'],
+            requested: [],
             // Pointedly not a bare `.error`: old Reddit puts that class on
             // every inline form complaint on the page, and halting the job
             // because a comment box was unhappy would be a bug that looked
@@ -158,8 +166,8 @@
      * that could go wrong: silent, plausible-looking, and about somebody else's
      * account.
      *
-     * No header is a null rather than a fallback to the document. The job stops
-     * on a null, and stopping is the right answer — a profile page with no
+     * No header is a null rather than a fallback to the document: nothing is
+     * rung, and the bar says there is no button here. A profile page with no
      * action row is not a page this understands.
      *
      * On old Reddit it is the sidebar's title box, where the subreddit's own
@@ -207,8 +215,9 @@
      *   the browser suite's stand-in for `location`
      * @param {() => Promise<object>} [deps.appearance]  for the bar: Theme.appearance
      * @param {(element: Element, look: object) => void} [deps.dress]  and Theme.dress
+     * @param {(site: string) => number} [deps.delay]  the gap after a follow; the suite's is short
      */
-    function createRoster({ site, notify, page = PAGE, appearance = async () => ({}), dress = () => {} }) {
+    function createRoster({ site, notify, page = PAGE, appearance = async () => ({}), dress = () => {}, delay = Roster.nextDelay }) {
         const rules = Roster.siteOf(site);
         const bar = RosterBar.createBar({ appearance, dress });
 
@@ -428,78 +437,121 @@
             return subFromHref(page.path()).toLowerCase() === name.toLowerCase();
         }
 
+        /** A stop the dashboard should show, said on the page as well. */
+        function pause(note) {
+            bar.hide();
+            notify(note, 'warning');
+            return halt('paused', note);
+        }
+
         /**
-         * Follow or join whoever this page is, then go to the next one.
+         * Ask for the Follow or Join on this page, wait for the user to press
+         * it, then go to the next one. Nothing here presses anything: see the
+         * head of the file.
          *
          * Every exit from here either advances the job by exactly one or stops
-         * it. What it must never do is try again: see the note at the head of
-         * the file about what an absent button might mean.
+         * it. What it must never do is guess: see the head of the file.
          */
         async function applyOne(job) {
             const name = Roster.currentName(job);
             if (!name) {
-                notify(`Done — ${job.done} ${job.done === 1 ? rules.one : rules.many} ${rules.verbing}`, 'success');
-                return finish(`${job.done} ${rules.verbing}, ${job.skipped} already there`);
+                notify(`Done — ${job.done} ${job.done === 1 ? rules.one : rules.many} ${rules.verbed.toLowerCase()}`, 'success');
+                return finish(`${job.done} ${rules.verbed.toLowerCase()}, ${job.skipped} already there`);
             }
-
             if (Roster.atCap(job)) {
-                return halt('waiting',
-                    `That is today's ${rules.pace.cap}. Open this again tomorrow and it carries on from ${rules.prefix}${name}.`);
+                const note = `That is today's ${rules.pace.cap}. Carry on from the dashboard tomorrow; it starts again at ${rules.prefix}${name}.`;
+                notify(note, 'info');
+                return halt('waiting', note);
             }
 
-            if (first(site, 'trouble')) {
-                return halt('paused', `${rules.name} put something in the way at ${rules.prefix}${name}. Stopped rather than pressed on.`);
+            const startedAt = Date.now();
+            let pressedAt = 0;
+            let choice = '';
+            let checkedAt = Date.now();
+            let leasedAt = Date.now();
+
+            // The user's press on the button, seen on its way in, before the
+            // site redraws it. It is what tells a follow made now from one that
+            // was already there when the page opened — only the first counts
+            // against the day.
+            const onPress = (event) => {
+                const scope = actionScope(site);
+                const button = scope && first(site, 'follow', scope);
+                if (button && button.contains(event.target)) pressedAt = Date.now();
+            };
+            document.addEventListener('click', onPress, true);
+            try {
+                while (!choice) {
+                    // Somewhere else in X's own app, for now: the bar waits there.
+                    if (!onPageFor(name)) {
+                        bar.hide();
+                        await sleep(500);
+                        continue;
+                    }
+                    if (first(site, 'trouble')) {
+                        return pause(`${rules.name} put something in the way at ${rules.prefix}${name}. Stopped rather than pressed on.`);
+                    }
+                    const scope = actionScope(site);
+                    if (scope && (first(site, 'followed', scope) || first(site, 'requested', scope))) {
+                        bar.unmark();
+                        // Already there costs nothing against the cap, so
+                        // re-running a list half applied yesterday is cheap.
+                        return step(job, name, pressedAt ? 'done' : 'skipped');
+                    }
+                    const button = scope && first(site, 'follow', scope);
+                    if (!button && Date.now() - startedAt > 8000) {
+                        return pause(`No ${rules.verb} button on ${rules.prefix}${name}. It may be gone, private, or ${rules.name} may be asking something first — stopped rather than guessed.`);
+                    }
+                    if (button) bar.mark(button);
+                    else bar.unmark();
+
+                    const day = Roster.forDay(job);
+                    bar.show({
+                        head: `${rules.verb} ${rules.prefix}${name}?`,
+                        line: button
+                            ? `Press ${rules.name}'s own ${rules.verb} button, ringed in red — Bell Bearer never presses it for you. ` +
+                              `${job.at + 1} of ${job.names.length} in the list, ${day.today} of ${rules.pace.cap} today.`
+                            : `Looking for the ${rules.verb} button…`,
+                        acts: [{ id: 'stop', label: 'Stop', danger: true }],
+                        onAct: (id) => { choice = id; },
+                    });
+
+                    // The dashboard's Stop, and another tab moving the cursor.
+                    if (Date.now() - checkedAt > 2000) {
+                        const latest = await mine();
+                        if (!latest || latest.at !== job.at) return void bar.hide();
+                        checkedAt = Date.now();
+                    }
+                    // Waiting on a person can outlast a lease; keep it.
+                    if (Date.now() - leasedAt > 60000) {
+                        await take();
+                        leasedAt = Date.now();
+                    }
+                    await sleep(300);
+                }
+            } finally {
+                document.removeEventListener('click', onPress, true);
             }
-
-            // Everything below is looked for inside the header's own action
-            // row — see actionScope. A page with no row is a page to stop on.
-            const scope = await waitFor(() => actionScope(site));
-            if (!scope) {
-                return halt('paused',
-                    `No action row on ${rules.prefix}${name}, so nothing here could be clicked safely.`);
-            }
-
-            // Already there: not a failure and not an action, so it costs
-            // nothing against the day's cap. Re-running a list you half
-            // applied yesterday should be cheap.
-            if (first(site, 'followed', scope)) return step(job, name, 'skipped');
-
-            const button = await waitFor(() => first(site, 'follow', scope));
-            if (!button) {
-                return halt('paused',
-                    `No ${rules.verb} button on ${rules.prefix}${name}. It may be gone, private, or ${rules.name} may be asking something first — stopped rather than guessed.`);
-            }
-
-            button.click();
-
-            // Confirmed rather than assumed. A click that silently did nothing
-            // is exactly what a rate limit looks like from in here, and
-            // counting it as done would walk the whole list doing nothing.
-            const worked = await waitFor(() => first(site, 'followed', scope), 6000);
-            if (!worked) {
-                return halt('paused',
-                    `${rules.prefix}${name} did not take. Stopping here — this is what being rate-limited looks like, and pressing on is how an account gets suspended.`);
-            }
-
-            return step(job, name, 'done');
+            return stopHere();
         }
 
         /**
          * One name behind us: record it, wait out the gap, and move on.
          *
          * The wait happens here rather than on arrival at the next page so the
-         * gap is between two *actions*, which is the thing being paced. Waiting
+         * gap is between two *follows*, which is the thing being paced. Waiting
          * on arrival would put the page load inside the gap and make it
-         * shorter than it reads.
+         * shorter than it reads. A name skipped, or already there, was no
+         * follow, and the next page opens after a moment instead.
          */
         async function step(job, name, how) {
             const now = Date.now();
-            const wait = how === 'done' ? Roster.nextDelay(site) : 500;
+            const wait = how === 'done' ? delay(site) : 1200;
 
             const next = await Roster.updateJob((current) => {
                 if (!current || current.site !== site) return current;
                 const day = Roster.forDay(current, now);
-                // Another page moved the cursor while we were clicking. Ours
+                // Another page moved the cursor while this one waited. Ours
                 // is the duplicate, so it is dropped rather than counted.
                 if (day.at !== job.at) return current;
                 return {
@@ -517,18 +569,21 @@
                 };
             });
 
-            if (!Roster.isRunning(next) || next.at === job.at) return null;
-            if (!Roster.currentName(next)) {
-                notify(`Done — ${next.done} ${next.done === 1 ? rules.one : rules.many} ${rules.verbing}`, 'success');
-                return finish(`${next.done} ${rules.verbing}`);
+            if (!Roster.isRunning(next) || next.at === job.at) return void bar.hide();
+            const after = Roster.currentName(next);
+            const said = { done: rules.verbed, skipped: `Already ${rules.verbing}` }[how];
+            if (!after) {
+                bar.hide();
+                notify(`Done — ${next.done} ${next.done === 1 ? rules.one : rules.many} ${rules.verbed.toLowerCase()}`, 'success');
+                return finish(`${next.done} ${rules.verbed.toLowerCase()}, ${next.skipped} already there`);
             }
 
+            bar.show({ head: `${said} ${rules.prefix}${name}`, line: `${rules.prefix}${after} is next.`, acts: [] });
             await sleep(Math.max(0, next.nextAt - Date.now()));
-            // Re-read: the dashboard's Stop is a write to the same key, and
-            // this is the one place the job sits still long enough to miss it.
-            const after = await mine();
-            if (!after) return null;
-            return goTo(pageFor(Roster.currentName(after)));
+            // Re-read: the dashboard's Stop is a write to the same key.
+            const latest = await mine();
+            if (!latest) return void bar.hide();
+            return goTo(pageFor(Roster.currentName(latest)));
         }
 
         // --------------------------------------------------------- wiring

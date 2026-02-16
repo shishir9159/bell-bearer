@@ -122,6 +122,18 @@
             await shown;
             assertEqual(document.getElementById(window.BB.RosterBar.ID), null);
         });
+
+        test('rings the site\'s button and takes the ring off again', () => {
+            const one = bar();
+            const button = document.createElement('button');
+            document.body.append(button);
+            try {
+                one.mark(button);
+                assert(button.hasAttribute(window.BB.RosterBar.MARK));
+                one.unmark();
+                assert(!button.hasAttribute(window.BB.RosterBar.MARK));
+            } finally { button.remove(); }
+        });
     });
 
     /**
@@ -266,6 +278,69 @@
                 assertEqual(after.status, 'paused');
                 assert(after.note.includes('@alice'), after.note);
             } finally { await clean(); }
+        });
+    });
+
+    /**
+     * Following from a list. The job used to press Follow itself; now it
+     * rings the button and waits, and the press is the user's.
+     */
+    const MARK = () => window.BB.RosterBar.MARK;
+
+    async function until(test, ms = 4000) {
+        for (const end = Date.now() + ms; Date.now() < end;) {
+            if (test()) return true;
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return false;
+    }
+
+    /** A job on @alice, then @bob, running on @alice's page. */
+    async function onAlice() {
+        await Roster().saveJob(Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice', 'bob'] }));
+        const page = pageAt('/alice');
+        const running = RosterContent().createRoster({ site: 'twitter', notify: () => {}, page, delay: () => 50 }).install();
+        return { page, running };
+    }
+
+    suite('the roster — following is your press, not the job\'s', () => {
+        test('REGRESSION: nothing is pressed for you; your press moves the job on', async () => {
+            stage(PROFILE);
+            const theirs = document.getElementById('theirs');
+            let presses = 0;
+            // X's own handler, as far as this needs it: the button turns.
+            theirs.addEventListener('click', () => { presses++; theirs.dataset.testid = '42-unfollow'; });
+            try {
+                const { page, running } = await onAlice();
+                assert(await until(() => theirs.hasAttribute(MARK())), 'the header\'s Follow is rung');
+                await new Promise((resolve) => setTimeout(resolve, 800));
+                assertEqual(presses, 0, 'and nothing pressed it');
+                assertEqual((await Roster().loadJob()).at, 0, 'so the job waits');
+                assert(!document.getElementById('suggestion').hasAttribute(MARK()), 'the suggestion is not rung');
+
+                theirs.click();
+                await running;
+                const after = await Roster().loadJob();
+                assertDeepEqual([after.at, after.done, after.today], [1, 1, 1]);
+                assertDeepEqual(page.sent, ['https://x.com/bob']);
+            } finally {
+                teardown();
+                await clean();
+            }
+        });
+
+        test('an account already followed costs nothing against the day', async () => {
+            stage(PROFILE.replace('42-follow', '42-unfollow'));
+            try {
+                const { page, running } = await onAlice();
+                await running;
+                const after = await Roster().loadJob();
+                assertDeepEqual([after.at, after.skipped, after.today], [1, 1, 0]);
+                assertDeepEqual(page.sent, ['https://x.com/bob']);
+            } finally {
+                teardown();
+                await clean();
+            }
         });
     });
 })();
