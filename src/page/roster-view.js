@@ -63,9 +63,9 @@
             </div>
             <p class="roster-lead">Your ${esc(rules.many)} on ${esc(rules.host)}, as a plain text file —
                read off ${esc(rules.name)}'s own pages, one name per line. Nothing is sent anywhere and no
-               API or token is involved: the pages are read the way you read them, and a name is
-               ${esc(rules.verbing.replace(/ing$/, 'ed'))} by clicking ${esc(rules.name)}'s own
-               ${esc(rules.verb)} button.</p>
+               API or token is involved. Bell Bearer never presses ${esc(rules.verb)} for you, and
+               never scrolls or clicks ${esc(rules.name)} itself: it opens each page in turn and rings
+               the button, and the press is yours.</p>
 
             <div class="roster-cards">
                 <div class="roster-card" data-roster-read>
@@ -102,6 +102,7 @@
                 <div class="roster-acts">
                     <button class="btn-secondary" data-act="save" hidden>Save what was read</button>
                     <button class="btn-secondary" data-act="resume" hidden>Carry on</button>
+                    <button class="btn-secondary" data-act="skip" hidden></button>
                     <button class="btn-secondary btn-danger" data-act="stop">Stop</button>
                 </div>
                 <p class="roster-small roster-job-foot"></p>
@@ -114,9 +115,24 @@
         const planNote = host.querySelector('.roster-plan');
         const panel = host.querySelector('.roster-job');
 
+        /** Where one name's page is. Mirrors pageFor in src/content/roster.js. */
+        const pageFor = (name) => (site === 'twitter' ? `https://x.com/${name}` : `https://old.reddit.com/r/${name}/`);
+
+        const open = async (url) => {
+            try { await chrome.tabs.create({ url, active: true }); } catch (_) { Ui.toast(`Open ${url} yourself and it carries on there`, 'info'); }
+        };
+
         // ------------------------------------------------------- drawing
 
+        /**
+         * Drawn again every few seconds while a job runs, as well as on every
+         * write to it: a closed tab writes nothing, and the panel would never
+         * learn that nobody is working on the job.
+         */
+        let tick = 0;
+
         function render() {
+            clearTimeout(tick);
             const names = (roster && roster.names) || [];
             readNote.textContent = names.length
                 ? `${names.length} ${names.length === 1 ? rules.one : rules.many}, read ${ageText(roster.readAt)}.`
@@ -136,23 +152,38 @@
                   (ours.passed ? `, ${ours.passed} skipped` : '')
                 : `${(ours.found || []).length} so far`;
             panel.querySelector('.limit-bar span').style.width = `${Roster.progress(ours)}%`;
+            const idle = Roster.isIdle(ours);
+            const spent = ours.status === 'waiting' && Roster.atCap(ours);
             panel.querySelector('.roster-job-note').textContent = ours.note ||
-                (ours.status === 'running' ? `Running on the ${rules.host} tab.` : '');
+                (ours.status !== 'running' ? ''
+                    : idle ? `No ${rules.host} tab is working on this.`
+                        : ours.action === 'apply' ? `On the ${rules.host} tab, waiting for you to press ${rules.verb}.`
+                            : `Running on the ${rules.host} tab.`);
             panel.querySelector('.limit-bar').classList.toggle('is-spent', ours.status === 'paused');
 
-            // "Carry on" is for a job that stopped at something it did not
-            // understand. Not for one waiting on tomorrow's allowance — that
-            // one resumes by itself the next time the site is open, and a
-            // button here would only walk it into the same halt.
-            panel.querySelector('[data-act="resume"]').hidden = ours.status !== 'paused';
+            // Carry on is for a job that stopped on something, one whose cap
+            // was yesterday's, and one no tab is working on. A job moves only
+            // on its own page now, which makes the third the common one: its
+            // tab was closed, and nothing else will open the page again.
+            // Not for one whose cap is today's — that would only walk it into
+            // the same halt.
+            panel.querySelector('[data-act="resume"]').hidden =
+                !(ours.status === 'paused' || (ours.status === 'waiting' && !spent) || idle);
+            // A name the site will not show — the tab was sent somewhere
+            // else — stops the job, and passing over it is the user's call.
+            const name = Roster.currentName(ours);
+            const skip = panel.querySelector('[data-act="skip"]');
+            skip.hidden = !(ours.status === 'paused' && name);
+            skip.textContent = `Skip ${rules.prefix}${name}`;
             // A read keeps what it has found on the job, so a tab closed
             // before Done has not thrown it away.
             panel.querySelector('[data-act="save"]').hidden = ours.action !== 'read' || !(ours.found || []).length;
             panel.querySelector('[data-act="stop"]').textContent =
                 Roster.isRunning(ours) ? 'Stop' : 'Clear';
-            panel.querySelector('.roster-job-foot').textContent = ours.status === 'waiting'
-                ? `Carries on by itself the next time ${rules.host} is open.`
+            panel.querySelector('.roster-job-foot').textContent = spent
+                ? `That is today's ${rules.pace.cap}. Carry on from here tomorrow.`
                 : '';
+            if (ours.status === 'running') tick = setTimeout(render, 10000);
         }
 
         // ------------------------------------------------------- actions
@@ -160,10 +191,9 @@
         /**
          * Start a job and open the tab that will run it.
          *
-         * The tab is opened active on purpose. Reading scrolls a list, applying
-         * clicks a button, and a browser throttles timers and defers layout in
-         * a tab nobody is looking at — so a job started quietly in the
-         * background is a job that appears to hang.
+         * The tab is opened active on purpose. Both jobs need you on it — to
+         * scroll the list, to press the button — and a browser throttles
+         * timers in a tab nobody is looking at.
          */
         async function start(action, names) {
             if (Roster.isRunning(job)) {
@@ -174,15 +204,7 @@
             await Roster.saveJob(next);
             job = next;
             render();
-
-            const url = action === 'read'
-                ? BB.RosterStart[site]
-                : (site === 'twitter' ? `https://x.com/${names[0]}` : `https://old.reddit.com/r/${names[0]}/`);
-            try {
-                await chrome.tabs.create({ url, active: true });
-            } catch (_) {
-                Ui.toast(`Open ${rules.host} yourself and it will carry on there`, 'info');
-            }
+            await open(action === 'read' ? BB.RosterStart[site] : pageFor(names[0]));
         }
 
         host.addEventListener('click', async (event) => {
@@ -224,19 +246,23 @@
                     break;
 
                 case 'resume':
+                case 'skip': {
                     // kickedAt: the tab opened below may not be the job's own
                     // page yet, and only just after this may one take it up.
-                    await Roster.updateJob((current) => (current
-                        ? { ...current, status: 'running', note: '', leaseBy: '', leaseUntil: 0, kickedAt: Date.now() }
+                    const passing = button.dataset.act === 'skip';
+                    const next = await Roster.updateJob((current) => (current && current.site === site
+                        ? {
+                            ...Roster.release(current), status: 'running', note: '', kickedAt: Date.now(),
+                            ...(passing ? { at: current.at + 1, passed: (current.passed || 0) + 1 } : {}),
+                        }
                         : current));
-                    if (job) {
-                        const name = Roster.currentName(job);
-                        const url = job.action === 'read'
-                            ? BB.RosterStart[site]
-                            : (site === 'twitter' ? `https://x.com/${name}` : `https://old.reddit.com/r/${name}/`);
-                        try { await chrome.tabs.create({ url, active: true }); } catch (_) { /* opened by hand */ }
-                    }
+                    if (!next || next.site !== site) break;
+                    if (next.action === 'read') await open(BB.RosterStart[site]);
+                    else if (Roster.currentName(next)) await open(pageFor(Roster.currentName(next)));
+                    // Skipped past the last name: nothing is left to open.
+                    else await Roster.updateJob((current) => (current ? { ...current, status: 'done', note: 'Skipped the last one' } : current));
                     break;
+                }
 
                 default:
                     break;
@@ -267,9 +293,9 @@
 
             planNote.textContent = `${plan.total} ${plan.total === 1 ? rules.one : rules.many}` +
                 (already.size ? `, ${fresh} not in your last read` : '') +
-                `. ${rules.name} gets ${plan.cap} a day at ${Math.round(rules.pace.minMs / 1000)}–` +
-                `${Math.round(rules.pace.maxMs / 1000)} seconds apart, so about ${spanText(plan.perDayMs)} ` +
-                `today and ${plan.days} ${plan.days === 1 ? 'day' : 'days'} in all. ` +
+                `. You press ${rules.verb} on each, and the next opens ${Math.round(rules.pace.minMs / 1000)}–` +
+                `${Math.round(rules.pace.maxMs / 1000)} seconds later, up to ${plan.cap} a day — about ` +
+                `${spanText(plan.perDayMs)} today and ${plan.days} ${plan.days === 1 ? 'day' : 'days'} in all. ` +
                 `Anything already there is skipped and costs nothing.`;
             applyBtn.disabled = false;
         });

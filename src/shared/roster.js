@@ -246,10 +246,22 @@
         ({ ...job, leaseBy: pageId, leaseUntil: now + LEASE_MS });
 
     /** Hand the job back before navigating, so the next page can take it up. */
-    const release = (job) => ({ ...job, leaseBy: '', leaseUntil: 0 });
+    const release = (job, now = Date.now()) => ({ ...job, leaseBy: '', leaseUntil: 0, releasedAt: now });
 
     /** Is some page working on this job now? */
     const isHeld = (job, now = Date.now()) => !!job && !!job.leaseBy && job.leaseUntil > now;
+
+    /**
+     * A running job no page has worked on for a while: its tab was closed, or
+     * the site sent it somewhere that is not the job's page. Only the job's
+     * own page moves it on, so nothing else will, and the dashboard offers to
+     * open that page again. Long enough for a page to load and take it up.
+     */
+    const IDLE_MS = 30000;
+    function isIdle(job, now = Date.now()) {
+        if (!job || job.status !== 'running' || isHeld(job, now)) return false;
+        return now - Math.max(job.releasedAt || 0, job.leaseUntil || 0, job.kickedAt || 0) > IDLE_MS;
+    }
 
     /**
      * How long after the dashboard opens a tab for a job any page of the site
@@ -413,7 +425,7 @@
         SITES, ROSTERS_KEY, JOB_KEY, MAX_NAMES,
         siteOf, ids, parseName, parseList, toText, fileName, handleFromHref,
         dayKey, newJob, isRunning, forDay, atCap, currentName, nextDelay, plan, progress,
-        LEASE_MS, canClaim, claim, release, isHeld, KICK_MS, isKicked,
+        LEASE_MS, canClaim, claim, release, isHeld, IDLE_MS, isIdle, KICK_MS, isKicked,
         loadRosters, saveRoster, loadJob, saveJob, clearJob, updateJob,
     };
 

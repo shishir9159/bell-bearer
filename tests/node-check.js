@@ -6594,6 +6594,20 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Roster.isKicked({ ...job, kickedAt: undefined }, noon), false, 'a job from before kickedAt existed');
     });
 
+    check('a running job no page has taken up for a while is idle', () => {
+        const job = Roster.newJob({ site: 'twitter', action: 'apply', names: ['a'], now: noon });
+        const later = noon + Roster.IDLE_MS + 1;
+        eq(Roster.isIdle(job, noon + 1000), false, 'the tab the dashboard opened is still loading');
+        eq(Roster.isIdle(job, later), true, 'and never took it up');
+        eq(Roster.isIdle(Roster.claim(job, 'p', later), later + 1000), false, 'a page holds it');
+        const left = Roster.release(Roster.claim(job, 'p', later), later);
+        eq(Roster.isIdle(left, later + 1000), false, 'between one page and the next');
+        eq(Roster.isIdle(left, later + Roster.IDLE_MS + 1), true, 'the next page never came');
+        const held = Roster.claim(job, 'p', later);
+        eq(Roster.isIdle(held, later + Roster.LEASE_MS + Roster.IDLE_MS + 1), true, 'a closed tab, its lease run out');
+        eq(Roster.isIdle({ ...job, status: 'paused' }, later), false, 'a paused job is not idle, it is paused');
+    });
+
     check('the cap is a cap per day, because the job outlives the day', () => {
         const noonJob = { ...Roster.newJob({ site: 'twitter', action: 'apply', names: ['a'], now: noon }), today: 40 };
         eq(Roster.atCap(noonJob, noon), true);
