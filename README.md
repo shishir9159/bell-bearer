@@ -74,7 +74,9 @@ playlist already holds when you follow it is not reported as new.
 ## Keyboard shortcuts
 
 Shortcuts work on any site with a video, not just YouTube, and are ignored
-while you are typing in a field.
+while you are typing in a field. That includes a video inside a player's own
+shadow root, which is where Reddit keeps every one of its own; on a feed of
+them, the keys act on the one on screen.
 
 | Keys | Action |
 | --- | --- |
