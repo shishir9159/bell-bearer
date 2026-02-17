@@ -28,7 +28,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Site switches**: Each site's card in Settings has a switch at its corner. Off, the site leaves the dashboard and none of Bell Bearer's code for it loads on its pages — they get only what every other page does
 - **Activity**: Opt-in, on-device record of where your screen time goes
 - **Daily time limit**: A budget, or a window of hours, on any site you name — counted while you are actually looking at it, snoozable ten minutes at a time
-- **Rosters**: Who you follow on Twitter and the subreddits you have joined, out to a text file and back in again, slowly
+- **Rosters**: Who you follow on Twitter and the subreddits you have joined, out to a text file and back in again — slowly, and every Follow and Join your own click
 - **Chess.com and Lichess**: Games, time management and time at the board; a clock warning and moves read aloud while you play
 - **Watch party**: A YouTube video or a Netflix episode in sync with other people, each on their own account — through a server, your own relay, browser-to-browser codes or public trackers — with a chat beside the player
 - **LeetCode**: Each problem timed on LeetCode's own stopwatch, submissions recorded from its own traffic, an FSRS-5 review schedule graded in one click, your notes and code templates on the page, and a mock-interview mode that hides the hints
@@ -715,43 +715,62 @@ the accounts you follow, the subreddits you have joined — into a plain text
 file, one name per line, and read a file back in to follow or join what it
 names.
 
-No API, no token, no endpoint. Reading walks the pages you can already see;
-applying opens each name's page and clicks the site's own Follow or Join button.
-That is the whole of the safety argument, and it is why the two directions are
-not offered as one button:
+No API, no token, no endpoint — and nothing is pressed or scrolled for you.
+Bell Bearer reads the pages you look at and opens the next one; every Follow and
+every Join is your own click on the site's own button. It used to press the
+button itself, and to scroll Twitter's list itself, and X's automation rules give
+scripting its website as a reason to suspend an account. So a list is worked
+through with you rather than for you:
 
 | | Reading | Applying |
 | --- | --- | --- |
-| What it touches | nothing — it changes no state anywhere | your account, at the site's sufferance |
-| Twitter | scrolls `/<you>/following` | 40 a day, 25–55 seconds apart |
-| Reddit | pages through `old.reddit.com/subreddits/mine` | 120 a day, 9–20 seconds apart |
+| What it touches | nothing — it changes no state anywhere | your account, by your own press |
+| Twitter | opens `/<you>/following`; you scroll it to the end and press **Done** | 40 a day, the next profile 25–55 seconds after a follow |
+| Reddit | pages through `old.reddit.com/subreddits/mine` | 120 a day, the next subreddit 9–20 seconds after a join |
+
+Reading Twitter takes only the rows whose own button says you follow the
+account. X draws its "Who to follow" suggestions in the same rows, beside the
+list and sometimes under it, and a file read with those in it would follow
+strangers when it was applied. Reading Reddit pages through old Reddit's list a
+few seconds a page: the same account and cookie, and a plain list rather than
+the virtualised one new Reddit draws. Neither saves an empty read over the last
+one.
+
+Applying opens each name's page with a bar at the foot of it — whose page this
+is, how far down the list you are, today's count against the cap — and the
+site's own Follow or Join button ringed in red. Press it and the bar counts down
+to the next page; **Skip** passes over a name and **Stop** ends the job.
 
 Twitter's numbers are deliberately the slower pair. Reddit rate-limits an
-account and tells you so; Twitter suspends one and does not, the edge of what it
-tolerates is neither documented nor stable, and the way to stay clear of it is
-to stay a long way clear rather than to find it. The gap between two actions is
-jittered inside its range, because a click at exactly the same interval for an
-hour is a signature and a person does not have one.
+account and tells you so; Twitter locks or suspends one and does not, the edge
+of what it tolerates is neither documented nor stable, and the way to stay clear
+of it is to stay a long way clear rather than to find it. The gap after a follow
+is jittered inside its range, because the same interval for an hour is a
+signature and a person does not have one.
 
 Before an apply job starts, the panel says how many names it is, how many are
 new since your last read, roughly how long today's sitting will take and how
 many days the whole thing is. A four-hundred account list is eleven days of
 Twitter's cap, which is not something to discover on day three.
 
-A job stops at the first thing it does not understand — a missing Follow button,
-a click that silently did nothing, anything the site puts in the way — and says
-so, rather than trying again or moving on. A click that does nothing is exactly
-what being rate-limited looks like from inside the page, and pressing on from
-there is how an account gets suspended. Anything already followed or joined is
-skipped and costs nothing against the day, so re-running a list you half applied
-yesterday is cheap.
+A job stops at the first thing it does not understand — the site putting a "you
+are doing that too much" sheet in front of the page, or sending the tab somewhere
+other than where it was sent, as old Reddit does with a signed-out visitor — and
+says so in the dashboard, rather than trying again or moving on. A page with no
+Follow button is the one thing you are asked about instead, on the bar, since you
+can see the page and the job cannot. Anything already followed or joined moves
+on at once and costs nothing against the day, so re-running a list you half
+applied yesterday is cheap.
 
 Applying a list *is* a sequence of navigations, so the job lives in storage
-rather than in any page: every page of the site picks it up, does one thing,
-writes down that it did and moves on. That is what makes it survive a page load,
-a closed browser, and the day's cap running out in the middle. One page holds it
-at a time — two tabs would otherwise follow the same account twice — and the
-dashboard can stop it, or carry on where it left off.
+rather than in any page: the job's own page picks it up, does one thing, writes
+down that it did and moves on. That is what makes it survive a page load, a
+closed browser, and the day's cap running out in the middle. Other pages of the
+site leave it alone — a job used to be taken up by every page of the site, and
+would send an x.com tab opened that evening off to somebody's profile. One page
+holds it at a time — two tabs would otherwise ask for the same account twice —
+and the dashboard can stop it, skip the name it stopped on, or carry on where it
+left off, which is also how a job whose tab was closed is picked up again.
 
 ## Activity
 
@@ -1021,7 +1040,8 @@ src/content/    injected into pages: a core on every page (main.js, player, shor
   skim.js          the launcher: page search, the jump, the result list
   link-hints.js    a label on every link and button in view
   time-limit.js    counts the day on any limited site, and covers it
-  roster.js        reads a roster off the site's pages, and works through one
+  roster-bar.js    the bar a roster job shows on the site's page, and the ring on its button
+  roster.js        reads a roster off the site's pages, and works through one with you
   checkpoints.js   recording and saving checkpoints
   transcripts.js   transcript fetching and caching, per video and per language
   reader.js        the reader: the adopted player, its layouts, following the video, chapters
@@ -1353,21 +1373,30 @@ A roster is the list last read off a site, and at most one job in flight:
   },
   bbRosterJob: {
     site: "twitter", action: "apply", names: ["…"], found: [],
-    at: 12, done: 11, skipped: 1, failed: 0,
-    day: "2026-09-24", today: 12, status: "running", note: "",
-    nextAt: 0, leaseBy: "k3f9a1", leaseUntil: 0
+    at: 12, done: 10, skipped: 1, passed: 1,
+    day: "2026-09-24", today: 10, status: "running", note: "",
+    nextAt: 0, kickedAt: 0, leaseBy: "k3f9a1", leaseUntil: 0, releasedAt: 0
   }
 }
 ```
 
 `at` is the only thing that moves through the list; `done`, `skipped` and
-`failed` are counts rather than lists, because writing two thousand names back
+`passed` (followed by you, already there, skipped by you) are counts rather than lists, because writing two thousand names back
 on every step is a storage write per action for something nobody reads. `today`
 is against the site's cap and is reset by the `day` turning over, since a job of
 four hundred names runs over days by design. `leaseBy` is the page currently
 holding the job — two tabs would otherwise follow the same account twice — and it
 is handed back before each navigation, with `leaseUntil` covering the case where
-the tab is simply closed.
+the tab is simply closed. `kickedAt` is when the dashboard last opened a tab for
+the job: for two minutes after it, a page that is not the job's own may take it
+up, to find its way there. A running job no page has held for thirty seconds
+since `releasedAt` or `leaseUntil` is one nobody is working on, and the
+dashboard offers to carry it on.
+
+One thing is kept outside `chrome.storage.local`: `bb-roster-hop` in the site's
+own `sessionStorage`, the path the job last sent that tab to. The page that
+arrives reads and removes it, which is how a page the site redirected knows it
+was sent, and an ordinary visit to the site knows it was not.
 
 A watch party keeps nothing in `chrome.storage.local` beyond its `party*`
 settings. The room, its members and its invites live in the session and are
