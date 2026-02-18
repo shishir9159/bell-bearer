@@ -382,4 +382,73 @@
             }
         });
     });
+
+    /**
+     * A job asked for from the popup: the tab that is asked is the tab that
+     * does it, so one with no script to answer leaves nothing waiting.
+     */
+    function asked(site, path) {
+        const page = pageAt(path);
+        const notes = [];
+        const roster = RosterContent().createRoster({ site, notify: (message) => notes.push(message), page });
+        return { page, notes, roster };
+    }
+
+    suite('the roster — asked from the popup', () => {
+        test('a read starts on the tab that was asked, and goes to the list', async () => {
+            try {
+                const { page, roster } = asked('reddit', '/r/rust/');
+                assertDeepEqual(roster.start({ kind: 'read' }), { ok: true });
+                assert(await until(() => page.sent.length === 1), 'no dashboard, and no waiting for a tab');
+                assert(/\/subreddits\/mine\//.test(page.sent[0]), page.sent[0]);
+                const job = await Roster().loadJob();
+                assertDeepEqual([job.site, job.action, job.status], ['reddit', 'read', 'running']);
+            } finally { await clean(); }
+        });
+
+        test('with a job running, a second is not started over it', async () => {
+            try {
+                await Roster().saveJob(Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice'] }));
+                const { page, notes, roster } = asked('reddit', '/r/rust/');
+                roster.start({ kind: 'read' });
+                assert(await until(() => notes.length === 1), 'said on the page');
+                assertEqual(page.sent.length, 0);
+                assertEqual((await Roster().loadJob()).site, 'twitter');
+            } finally { await clean(); }
+        });
+
+        test('Carry on takes a stopped job back to the page it stopped on', async () => {
+            try {
+                const job = { ...Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice', 'bob'] }), status: 'paused', note: 'x' };
+                await Roster().saveJob(job);
+                const { page, roster } = asked('twitter', '/home');
+                roster.start({ kind: 'resume' });
+                assert(await until(() => page.sent.length === 1));
+                assertDeepEqual(page.sent, ['https://x.com/alice']);
+                const after = await Roster().loadJob();
+                assertDeepEqual([after.status, after.note, after.at], ['running', '', 0]);
+            } finally { await clean(); }
+        });
+
+        test('Skip passes over the name it stopped on', async () => {
+            try {
+                const job = { ...Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice', 'bob'] }), status: 'paused' };
+                await Roster().saveJob(job);
+                const { page, roster } = asked('twitter', '/home');
+                roster.start({ kind: 'skip' });
+                assert(await until(() => page.sent.length === 1));
+                assertDeepEqual(page.sent, ['https://x.com/bob']);
+                const after = await Roster().loadJob();
+                assertDeepEqual([after.at, after.passed, after.today], [1, 1, 0]);
+            } finally { await clean(); }
+        });
+
+        test('a request it does not know is refused, and nothing is written', async () => {
+            try {
+                const { roster } = asked('reddit', '/');
+                assertDeepEqual(roster.start({ kind: 'follow-everyone' }), { ok: false });
+                assertEqual(await Roster().loadJob(), null);
+            } finally { await clean(); }
+        });
+    });
 })();

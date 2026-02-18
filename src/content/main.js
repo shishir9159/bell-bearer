@@ -239,6 +239,13 @@
                 sendResponse({ ok: true });
                 break;
 
+            // The popup's Roster panel, asking this tab to read its list or
+            // to carry a job on. Answered at once, like the download: the
+            // work goes on here after the popup has closed.
+            case 'rosterStart':
+                sendResponse(roster ? roster.start(message) : { ok: false });
+                break;
+
             case 'copyLinkAsMarkdown':
                 markdown.copy(markdown.buildLinkMarkdown(message.linkUrl, message.selectionText)).then((ok) => {
                     if (ok) notify('Copied link as Markdown', 'success');
@@ -259,6 +266,8 @@
     let leetUi = null;
     let typerUi = null;
     let chatUi = null;
+    /** Reading and applying a roster, on x.com and reddit.com. */
+    let roster = null;
     /** The YouTube reader; built on YouTube only, and opened on demand. */
     let reader = null;
     /** Saving the video on the page as an .mp4, on a site with an adapter for it. */
@@ -670,7 +679,8 @@
      * storage for this site, so on an ordinary visit this is one storage read.
      */
     if (site === 'twitter' || site === 'reddit') {
-        BB.RosterContent.createRoster({ site, notify, appearance: () => Theme.appearance(), dress: Theme.dress }).install();
+        roster = BB.RosterContent.createRoster({ site, notify, appearance: () => Theme.appearance(), dress: Theme.dress });
+        roster.install();
     }
 
     // ------------------------------------------------------ cookie banners

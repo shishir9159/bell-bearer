@@ -627,52 +627,68 @@
         }
 
         /**
-         * Which page acts on a job, for each kind. Its own page does — the
-         * following list, the listing, the name's profile — and, for a moment
-         * after the dashboard opened a tab, any page, to find its way there.
-         * Any other page of the site leaves the job alone, and a tab the job
-         * sent somewhere that turned out to be somewhere else stops it.
+         * Where `job` should be, and whether this page is it: its own page is
+         * the following list, the listing, or the profile of the name it is
+         * on. `url` is that page, or '' when it cannot be told from here.
+         *
+         * `look` waits for X to draw its navigation, to learn whose following
+         * list that is. It used to be read as soon as the script ran, before X
+         * had drawn it, so no read ever found the account and every one
+         * stopped on its first page. A page with no reason to care does not
+         * wait.
          */
-        async function enterTwitterRead(job, hop) {
-            const following = /^\/[A-Za-z0-9_]{1,15}\/following\/?$/.test(page.path());
-            if (!following && !hop && !Roster.isKicked(job)) return null;
-
-            // Read only after X has drawn its navigation. It used to be read
-            // as soon as the script ran, before X had, so no read ever found
-            // the account and every one stopped on its first page.
+        async function place(job, look) {
+            if (job.action === 'apply') {
+                const name = Roster.currentName(job);
+                // No name left is a job to finish, which any page may do.
+                if (!name) return { here: true };
+                return { here: onPageFor(name), url: pageFor(name), what: `${rules.prefix}${name}` };
+            }
+            if (site === 'reddit') {
+                return {
+                    here: /^\/subreddits\/mine(?:\/|$)/.test(page.path()),
+                    url: START.reddit,
+                    // Signed out, as a rule: old Reddit sends that to /login.
+                    what: 'your list of subreddits — sign in to Reddit, then start again',
+                };
+            }
+            const path = page.path().replace(/\/$/, '').toLowerCase();
+            if (!look && !/^\/[a-z0-9_]{1,15}\/following$/.test(path)) return { here: false, url: '' };
             const handle = await signedIn();
-            const want = `/${handle}/following`;
-            if (handle && page.path().replace(/\/$/, '').toLowerCase() === want.toLowerCase()) {
-                return (await take()) ? readTwitter(job) : null;
-            }
-            if (hop) {
-                return halt('paused', `x.com sent the tab to ${page.path()} instead of your following list.`);
-            }
-            if (!Roster.isKicked(job) || !(await take())) return null;
-            if (!handle) return halt('paused', 'Could not tell which account is signed in — sign in to x.com, then start again.');
-            return goTo(`https://x.com${want}`);
+            return {
+                here: !!handle && path === `/${handle}/following`.toLowerCase(),
+                url: handle ? `https://x.com/${handle}/following` : '',
+                what: 'your following list',
+                lost: 'Could not tell which account is signed in — sign in to x.com, then start again.',
+            };
         }
 
-        async function enterRedditRead(job, hop) {
-            if (/^\/subreddits\/mine(?:\/|$)/.test(page.path())) {
-                return (await take()) ? readReddit(job) : null;
+        /** Carry `job` on from this page: do its work here, or go to where it is done. */
+        async function run(job, { go = false, hop = '' } = {}) {
+            try {
+                const where = await place(job, go || !!hop);
+                if (where.here) {
+                    if (!(await take())) return null;
+                    if (job.action === 'apply') return await applyOne(job);
+                    return await (site === 'twitter' ? readTwitter(job) : readReddit(job));
+                }
+                if (go) {
+                    if (!(await take())) return null;
+                    return await (where.url ? goTo(where.url) : pause(where.lost));
+                }
+                // Sent somewhere by the job, and somewhere else is where the
+                // tab is: the site's doing, and not one to send it round again.
+                if (hop) return await pause(`${rules.name} sent the tab to ${page.path()} instead of ${where.what}.`);
+                // Another page of the site, on an ordinary visit: left alone.
+                return null;
+            } catch (error) {
+                // Including the extension being reloaded out from under this
+                // page, which throws from every chrome.* call. A job left
+                // running with a live lease would be stuck; halting is the
+                // recoverable end.
+                bar.hide();
+                return halt('paused', `Stopped on an error: ${error && error.message ? error.message : 'unknown'}`);
             }
-            // Signed out, as a rule: old Reddit sends that to /login.
-            if (hop) {
-                return halt('paused', `Reddit sent the tab to ${page.path()} instead of your list of subreddits — sign in to Reddit, then start again.`);
-            }
-            if (!Roster.isKicked(job) || !(await take())) return null;
-            return goTo(START.reddit);
-        }
-
-        async function enterApply(job, hop) {
-            const name = Roster.currentName(job);
-            // No name left is a job to finish, which any page may do.
-            if (!name || onPageFor(name)) return (await take()) ? applyOne(job) : null;
-            if (hop) {
-                return halt('paused', `${rules.name} sent the tab to ${page.path()} instead of ${rules.prefix}${name}. Stopped rather than guessed.`);
-            }
-            return null;
         }
 
         /**
@@ -689,24 +705,50 @@
             const hop = takeHop();
             const job = await mine();
             if (!job) return;
-
-            try {
-                if (job.action === 'read') {
-                    await (site === 'twitter' ? enterTwitterRead(job, hop) : enterRedditRead(job, hop));
-                } else {
-                    await enterApply(job, hop);
-                }
-            } catch (error) {
-                // Including the extension being reloaded out from under this
-                // page, which throws from every chrome.* call. A job left
-                // running with a live lease would be stuck; halting is the
-                // recoverable end.
-                bar.hide();
-                await halt('paused', `Stopped on an error: ${error && error.message ? error.message : 'unknown'}`);
-            }
+            // A read may find its way from any page for a moment after the
+            // dashboard opened a tab for it; see Roster.isKicked.
+            await run(job, { go: job.action === 'read' && !hop && Roster.isKicked(job), hop });
         }
 
-        return { install };
+        /**
+         * A job asked for from the popup, on this tab: `read` starts one,
+         * `resume` and `skip` carry on the one there is.
+         *
+         * The page that is asked is the page that does it. A job used to be
+         * written to storage by the dashboard for whichever tab loaded next,
+         * and when none could — a tab still running the content script from
+         * before an update, as it turned out — the job sat there "running"
+         * with nothing to say so. Asked directly, a tab with no script to
+         * answer is silence the popup can hear, and no job is written.
+         *
+         * Answers at once; the work goes on after the popup has closed.
+         */
+        function start(request) {
+            if (!rules || !['read', 'resume', 'skip'].includes(request && request.kind)) return { ok: false };
+            begin(request.kind);
+            return { ok: true };
+        }
+
+        async function begin(kind) {
+            if (kind === 'read') {
+                if (Roster.isRunning(await Roster.loadJob())) {
+                    return notify('A roster job is already running — stop it first', 'warning');
+                }
+                const job = Roster.newJob({ site, action: 'read' });
+                await Roster.saveJob(job);
+                return run(job, { go: true });
+            }
+            const next = await Roster.updateJob((job) => (job && job.site === site
+                ? {
+                    ...Roster.release(job), status: 'running', note: '',
+                    ...(kind === 'skip' && job.action === 'apply' ? { at: job.at + 1, passed: (job.passed || 0) + 1 } : {}),
+                }
+                : job));
+            if (!next || next.site !== site) return null;
+            return run(Roster.forDay(next), { go: true });
+        }
+
+        return { install, start };
     }
 
     /** Where a read job starts, before it knows anything about the account. */
