@@ -6569,6 +6569,16 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Roster.plan('twitter', []).total, 0);
     });
 
+    check('a job with something left to do is not started over', () => {
+        const job = Roster.newJob({ site: 'twitter', action: 'apply', names: ['a', 'b'] });
+        eq(Roster.isOpen(job), true);
+        eq(Roster.isOpen({ ...job, status: 'paused' }), true, 'stopped on something is not finished');
+        eq(Roster.isRunning({ ...job, status: 'paused' }), false, 'though it is not running either');
+        eq(Roster.isOpen({ ...job, status: 'waiting' }), true);
+        eq(Roster.isOpen({ ...job, status: 'done' }), false);
+        eq(Roster.isOpen(null), false);
+    });
+
     check('the plan is said as one sentence, on the page that will run it', () => {
         eq(Roster.spanText(60000 * 27), '27 minutes');
         eq(Roster.spanText(60000 * 150), '2h 30m');

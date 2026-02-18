@@ -232,6 +232,13 @@
 
     const isRunning = (job) => !!job && (job.status === 'running' || job.status === 'waiting');
 
+    /**
+     * A job with something still to do, stopped or not. A new one is not
+     * started over it: a paused list with three hundred names left is not
+     * something a press on Read should write over.
+     */
+    const isOpen = (job) => !!job && job.status !== 'done' && job.status !== 'stopped';
+
     /** How long a page may hold a job before another may take it over. */
     const LEASE_MS = 150000;
 
@@ -453,7 +460,7 @@
     const Roster = {
         SITES, ROSTERS_KEY, JOB_KEY, MAX_NAMES,
         siteOf, ids, parseName, parseList, toText, fileName, handleFromHref,
-        dayKey, newJob, isRunning, forDay, atCap, currentName, nextDelay, plan, spanText, planText, progress,
+        dayKey, newJob, isRunning, isOpen, forDay, atCap, currentName, nextDelay, plan, spanText, planText, progress,
         LEASE_MS, canClaim, claim, release, isHeld, IDLE_MS, isIdle, KICK_MS, isKicked,
         loadRosters, saveRoster, loadJob, saveJob, clearJob, updateJob,
     };

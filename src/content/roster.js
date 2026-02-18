@@ -762,8 +762,8 @@
          * browser wants before it will open a file dialog at all.
          */
         async function pick() {
-            if (Roster.isRunning(await Roster.loadJob())) {
-                return notify('A roster job is already running — stop it first', 'warning');
+            if (Roster.isOpen(await Roster.loadJob())) {
+                return notify('A roster job is not finished — carry it on or clear it first', 'warning');
             }
             let names = [];
             const cancel = { id: 'cancel', label: 'Cancel', danger: true };
@@ -771,6 +771,8 @@
             async function onAct(id) {
                 if (id === 'cancel') return bar.hide();
                 if (id === 'go') {
+                    // Looked at again: the bar may have stood here a while.
+                    if (Roster.isOpen(await Roster.loadJob())) return bar.hide();
                     const job = Roster.newJob({ site, action: 'apply', names });
                     await Roster.saveJob(job);
                     return run(job, { go: true });
@@ -800,8 +802,8 @@
         async function begin(kind) {
             if (kind === 'pick') return pick();
             if (kind === 'read') {
-                if (Roster.isRunning(await Roster.loadJob())) {
-                    return notify('A roster job is already running — stop it first', 'warning');
+                if (Roster.isOpen(await Roster.loadJob())) {
+                    return notify('A roster job is not finished — carry it on or clear it first', 'warning');
                 }
                 const job = Roster.newJob({ site, action: 'read' });
                 await Roster.saveJob(job);
