@@ -22,15 +22,6 @@
 
     const esc = (text) => Dom.escapeHtml(text);
 
-    /** 9_000_000 ms → "2h 30m", for the sentence before a job starts. */
-    function spanText(ms) {
-        const minutes = Math.round(ms / 60000);
-        if (minutes < 60) return `${Math.max(1, minutes)} minutes`;
-        const hours = Math.floor(minutes / 60);
-        const rest = minutes % 60;
-        return rest ? `${hours}h ${rest}m` : `${hours} hours`;
-    }
-
     function ageText(ms) {
         if (!ms) return 'never';
         const mins = Math.round((Date.now() - ms) / 60000);
@@ -287,16 +278,7 @@
                 return;
             }
 
-            const plan = Roster.plan(site, staged);
-            const already = new Set(((roster && roster.names) || []).map((n) => n.toLowerCase()));
-            const fresh = staged.filter((name) => !already.has(name.toLowerCase())).length;
-
-            planNote.textContent = `${plan.total} ${plan.total === 1 ? rules.one : rules.many}` +
-                (already.size ? `, ${fresh} not in your last read` : '') +
-                `. You press ${rules.verb} on each, and the next opens ${Math.round(rules.pace.minMs / 1000)}–` +
-                `${Math.round(rules.pace.maxMs / 1000)} seconds later, up to ${plan.cap} a day — about ` +
-                `${spanText(plan.perDayMs)} today and ${plan.days} ${plan.days === 1 ? 'day' : 'days'} in all. ` +
-                `Anything already there is skipped and costs nothing.`;
+            planNote.textContent = Roster.planText(site, staged, (roster && roster.names) || []);
             applyBtn.disabled = false;
         });
 
@@ -332,5 +314,5 @@
         Settings.watch([Roster.JOB_KEY, Roster.ROSTERS_KEY], () => panels.forEach((p) => p.reload()));
     }
 
-    BB.RosterView = { mountAll, mountPanel, spanText, ageText };
+    BB.RosterView = { mountAll, mountPanel, ageText };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

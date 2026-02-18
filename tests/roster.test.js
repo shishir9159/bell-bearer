@@ -443,6 +443,48 @@
             } finally { await clean(); }
         });
 
+        test('a list is picked on the page, its cost said, and only then started', async () => {
+            const page = pageAt('/home');
+            const roster = RosterContent().createRoster({
+                site: 'twitter', notify: () => {}, page, pickFile: async () => '@alice\n# not her\n@bob\n',
+            });
+            const bar = () => document.getElementById(window.BB.RosterBar.ID);
+            const act = (id) => bar() && bar().querySelector(`[data-bb-roster-act="${id}"]`);
+            try {
+                await Roster().saveRoster('twitter', ['bob']);
+                roster.start({ kind: 'pick' });
+                assert(await until(() => act('choose')), 'the bar asks for the file');
+                act('choose').click();
+                assert(await until(() => act('go')), 'and then for a yes');
+                assert(/2 accounts, 1 not in your last read\. You press Follow on each/.test(bar().textContent),
+                    bar().textContent.trim());
+                assertEqual(await Roster().loadJob(), null, 'a file is a plan, not a job');
+                act('go').click();
+                assert(await until(() => page.sent.length === 1));
+                assertDeepEqual(page.sent, ['https://x.com/alice']);
+                assertDeepEqual((await Roster().loadJob()).names, ['alice', 'bob']);
+            } finally {
+                if (bar()) bar().remove();
+                await clean();
+            }
+        });
+
+        test('a file with no names in it starts nothing', async () => {
+            const roster = RosterContent().createRoster({ site: 'reddit', notify: () => {}, page: pageAt('/'), pickFile: async () => 'x\n\n' });
+            const bar = () => document.getElementById(window.BB.RosterBar.ID);
+            try {
+                roster.start({ kind: 'pick' });
+                assert(await until(() => bar() && bar().querySelector('[data-bb-roster-act="choose"]')));
+                bar().querySelector('[data-bb-roster-act="choose"]').click();
+                assert(await until(() => /Nothing in that file/.test(bar().textContent)));
+                assertEqual(bar().querySelector('[data-bb-roster-act="go"]'), null);
+                assertEqual(await Roster().loadJob(), null);
+            } finally {
+                if (bar()) bar().remove();
+                await clean();
+            }
+        });
+
         test('a request it does not know is refused, and nothing is written', async () => {
             try {
                 const { roster } = asked('reddit', '/');

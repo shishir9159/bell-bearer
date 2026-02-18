@@ -6569,6 +6569,21 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Roster.plan('twitter', []).total, 0);
     });
 
+    check('the plan is said as one sentence, on the page that will run it', () => {
+        eq(Roster.spanText(60000 * 27), '27 minutes');
+        eq(Roster.spanText(60000 * 150), '2h 30m');
+        eq(Roster.spanText(60000 * 120), '2 hours');
+        eq(Roster.spanText(1000), '1 minutes', 'never "0 minutes" for something that takes any time at all');
+
+        const said = Roster.planText('twitter', ['alice', 'Bob', 'carol'], ['bob']);
+        eq(said.startsWith('3 accounts, 2 not in your last read. You press Follow on each'), true, said);
+        eq(said.includes('25–55 seconds later, up to 40 a day'), true, said);
+        eq(said.includes('1 day in all'), true, said);
+        eq(Roster.planText('reddit', ['rust']).startsWith('1 subreddit. You press Join'), true,
+            'nothing read yet is nothing to compare against');
+        eq(Roster.planText('reddit', []), '');
+    });
+
     check('a job is claimed by one page at a time', () => {
         const job = Roster.newJob({ site: 'twitter', action: 'apply', names: ['a', 'b'], now: 1000 });
         eq(Roster.canClaim(job, 'page1', 1000), true, 'nobody holds it yet');

@@ -69,6 +69,26 @@
         assign: (url) => location.assign(url),
     });
 
+    /**
+     * The text of a file the user picks, or null when they pick none. Called
+     * from the press on the bar's button and nowhere else: a browser opens a
+     * file dialog only for a press, and the press has to be this turn's.
+     */
+    function chooseFile() {
+        return new Promise((resolve) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.txt,text/plain';
+            input.addEventListener('change', () => {
+                const file = input.files && input.files[0];
+                if (!file) return resolve(null);
+                return file.text().then(resolve, () => resolve(null));
+            });
+            input.addEventListener('cancel', () => resolve(null));
+            input.click();
+        });
+    }
+
     function takeHop() {
         try {
             const path = sessionStorage.getItem(HOP_KEY);
@@ -218,8 +238,9 @@
      * @param {() => Promise<object>} [deps.appearance]  for the bar: Theme.appearance
      * @param {(element: Element, look: object) => void} [deps.dress]  and Theme.dress
      * @param {(site: string) => number} [deps.delay]  the gap after a follow; the suite's is short
+     * @param {() => Promise<string|null>} [deps.pickFile]  the text of a file the user picks
      */
-    function createRoster({ site, notify, page = PAGE, appearance = async () => ({}), dress = () => {}, delay = Roster.nextDelay }) {
+    function createRoster({ site, notify, page = PAGE, appearance = async () => ({}), dress = () => {}, delay = Roster.nextDelay, pickFile = chooseFile }) {
         const rules = Roster.siteOf(site);
         const bar = RosterBar.createBar({ appearance, dress });
 
@@ -712,7 +733,8 @@
 
         /**
          * A job asked for from the popup, on this tab: `read` starts one,
-         * `resume` and `skip` carry on the one there is.
+         * `pick` asks for the list to follow from, and `resume` and `skip`
+         * carry on the one there is.
          *
          * The page that is asked is the page that does it. A job used to be
          * written to storage by the dashboard for whichever tab loaded next,
@@ -724,12 +746,59 @@
          * Answers at once; the work goes on after the popup has closed.
          */
         function start(request) {
-            if (!rules || !['read', 'resume', 'skip'].includes(request && request.kind)) return { ok: false };
+            if (!rules || !['read', 'pick', 'resume', 'skip'].includes(request && request.kind)) return { ok: false };
             begin(request.kind);
             return { ok: true };
         }
 
+        /**
+         * Choose the list to follow from, here on the page, and say what it
+         * will cost before anything starts.
+         *
+         * On the page and not in the popup that asked for it. A popup closes
+         * when a file dialog takes the focus from it — in Firefox always, in
+         * Chrome on some systems — and the file is then picked into nothing.
+         * The bar's own button is also a press on the page, which is what a
+         * browser wants before it will open a file dialog at all.
+         */
+        async function pick() {
+            if (Roster.isRunning(await Roster.loadJob())) {
+                return notify('A roster job is already running — stop it first', 'warning');
+            }
+            let names = [];
+            const cancel = { id: 'cancel', label: 'Cancel', danger: true };
+
+            async function onAct(id) {
+                if (id === 'cancel') return bar.hide();
+                if (id === 'go') {
+                    const job = Roster.newJob({ site, action: 'apply', names });
+                    await Roster.saveJob(job);
+                    return run(job, { go: true });
+                }
+                // Before any await: the dialog opens on this press or not at all.
+                const text = await pickFile();
+                if (text === null) return null;
+                names = Roster.parseList(text, site);
+                if (!names.length) return ask('Nothing in that file parsed as a name. Pick another.');
+                const known = ((await Roster.loadRosters())[site] || {}).names || [];
+                return bar.show({
+                    head: `${rules.verb} ${names.length} from this list?`,
+                    line: Roster.planText(site, names, known),
+                    acts: [{ id: 'go', label: `${rules.verb} them` }, { id: 'choose', label: 'Another file' }, cancel],
+                    onAct,
+                });
+            }
+            const ask = (line) => bar.show({
+                head: `${rules.verb} from a list`,
+                line,
+                acts: [{ id: 'choose', label: 'Choose a file…' }, cancel],
+                onAct,
+            });
+            return ask(`Pick a .txt with one ${rules.one} per line — one Bell Bearer wrote, or your own.`);
+        }
+
         async function begin(kind) {
+            if (kind === 'pick') return pick();
             if (kind === 'read') {
                 if (Roster.isRunning(await Roster.loadJob())) {
                     return notify('A roster job is already running — stop it first', 'warning');

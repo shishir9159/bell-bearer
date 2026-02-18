@@ -338,6 +338,35 @@
         };
     }
 
+    /** 9_000_000 ms → "2h 30m", for the sentence before a job starts. */
+    function spanText(ms) {
+        const minutes = Math.round(ms / 60000);
+        if (minutes < 60) return `${Math.max(1, minutes)} minutes`;
+        const hours = Math.floor(minutes / 60);
+        const rest = minutes % 60;
+        return rest ? `${hours}h ${rest}m` : `${hours} hours`;
+    }
+
+    /**
+     * That plan as the sentence it is said in, with how many of the names
+     * are not in `known`, the list last read. A four-hundred name list is
+     * ten days of Twitter's cap, and that is not something to find out on
+     * day three.
+     */
+    function planText(site, names, known = []) {
+        const rules = siteOf(site);
+        const cost = plan(site, names);
+        if (!rules || !cost.total) return '';
+        const already = new Set(known.map((name) => name.toLowerCase()));
+        const fresh = names.filter((name) => !already.has(name.toLowerCase())).length;
+        return `${cost.total} ${cost.total === 1 ? rules.one : rules.many}` +
+            (already.size ? `, ${fresh} not in your last read` : '') +
+            `. You press ${rules.verb} on each, and the next opens ${Math.round(rules.pace.minMs / 1000)}–` +
+            `${Math.round(rules.pace.maxMs / 1000)} seconds later, up to ${cost.cap} a day — about ` +
+            `${spanText(cost.perDayMs)} today and ${cost.days} ${cost.days === 1 ? 'day' : 'days'} in all. ` +
+            `Anything already there is skipped and costs nothing.`;
+    }
+
     /** done / total as a percentage, for the bar. */
     function progress(job) {
         if (!job || job.action !== 'apply' || !job.names.length) return 0;
@@ -424,7 +453,7 @@
     const Roster = {
         SITES, ROSTERS_KEY, JOB_KEY, MAX_NAMES,
         siteOf, ids, parseName, parseList, toText, fileName, handleFromHref,
-        dayKey, newJob, isRunning, forDay, atCap, currentName, nextDelay, plan, progress,
+        dayKey, newJob, isRunning, forDay, atCap, currentName, nextDelay, plan, spanText, planText, progress,
         LEASE_MS, canClaim, claim, release, isHeld, IDLE_MS, isIdle, KICK_MS, isKicked,
         loadRosters, saveRoster, loadJob, saveJob, clearJob, updateJob,
     };
