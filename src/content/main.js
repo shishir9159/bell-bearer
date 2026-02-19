@@ -673,10 +673,11 @@
      * Reading your own list off x.com or reddit.com, and working through one to
      * follow or join what is in it.
      *
-     * Started from the dashboard, carried out here, and picked up again on
-     * every page of the site — which is what makes it survive the navigation
-     * between one name and the next. Nothing happens unless there is a job in
-     * storage for this site, so on an ordinary visit this is one storage read.
+     * Asked for from the popup (the rosterStart message above), carried out
+     * here, and picked up again by the job's next page — which is what makes
+     * it survive the navigation between one name and the next. Nothing
+     * happens unless there is a job in storage for this site, so on an
+     * ordinary visit this is one storage read.
      */
     if (site === 'twitter' || site === 'reddit') {
         roster = BB.RosterContent.createRoster({ site, notify, appearance: () => Theme.appearance(), dress: Theme.dress });

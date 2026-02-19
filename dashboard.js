@@ -38,11 +38,9 @@
             { id: 'people', label: 'People', panel: 'twitterPeoplePanel' },
             { id: 'posts', label: 'Posts', panel: 'twitterPostsPanel' },
             { id: 'time', label: 'Time', panel: 'twitterTimePanel' },
-            { id: 'roster', label: 'Roster', panel: 'twitterRosterPanel' },
         ],
         reddit: [
             { id: 'time', label: 'Time', panel: 'redditTimePanel' },
-            { id: 'roster', label: 'Roster', panel: 'redditRosterPanel' },
         ],
         leetcode: [
             // Review first: the question the log exists to answer is "what
@@ -103,7 +101,6 @@
         ChessStats: ['src/shared/lichess.js', 'src/page/chess-stats.js'],
         XPouchView: ['src/shared/x-pouch.js', 'src/page/x-pouch-view.js'],
         TimeLimitView: ['src/shared/time-limits.js', 'src/page/time-limit-view.js'],
-        RosterView: ['src/shared/roster.js', 'src/page/roster-view.js'],
         LeetStats: ['src/shared/fsrs.js', 'src/shared/leetcode.js', 'src/shared/leet-api.js', 'src/page/leet-stats.js'],
         LeetTemplatesView: ['src/shared/leet-templates.js', 'src/page/leet-templates-view.js'],
         ChatViews: ['src/shared/chat-pins.js', 'src/shared/prompt-templates.js', 'src/shared/prompt-queue.js', 'src/page/chat-views.js'],
@@ -116,8 +113,8 @@
     const SITE_VIEWS = {
         chess: ['ChessStats'],
         lichess: ['ChessStats'],
-        twitter: ['XPouchView', 'TimeLimitView', 'RosterView'],
-        reddit: ['TimeLimitView', 'RosterView'],
+        twitter: ['XPouchView', 'TimeLimitView'],
+        reddit: ['TimeLimitView'],
         leetcode: ['LeetStats', 'LeetTemplatesView'],
         typeracer: ['TyperStats'],
         chatgpt: ['ChatViews'],

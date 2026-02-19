@@ -256,7 +256,7 @@
 
         const finish = (note) => halt('done', note || '');
 
-        /** The bar's Stop: the dashboard's, from the page. */
+        /** The bar's Stop: the popup's, from the page. */
         async function stopHere() {
             bar.hide();
             await Roster.updateJob((job) => (job && job.site === site ? null : job));
@@ -331,7 +331,7 @@
          * or not. So the page reads what you scroll past and the bar asks you
          * to scroll; holding End is as quick as the script was. The list is
          * banked every few seconds, so a tab closed two thousand accounts in
-         * has not thrown them away, and the dashboard can save what it holds.
+         * has not thrown them away, and the popup can save what it holds.
          */
         async function readTwitter(job) {
             const found = new Map((job.found || []).map((name) => [name.toLowerCase(), name]));
@@ -367,7 +367,7 @@
                     banked = found.size;
                     bankedAt = Date.now();
                 }
-                // The dashboard's Stop is a write to the job.
+                // The popup's Stop is a write to the job.
                 if (Date.now() - checkedAt > 2000) {
                     if (!(await mine())) return void bar.hide();
                     checkedAt = Date.now();
@@ -391,7 +391,7 @@
                 return halt('paused', `No ${rules.many} were read, so the last read was kept. Scroll the list before pressing Done.`);
             }
             await Roster.saveRoster(site, [...found.values()]);
-            notify(`Read ${found.size} ${found.size === 1 ? rules.one : rules.many} — the list is in the dashboard`, 'success');
+            notify(`Read ${found.size} ${found.size === 1 ? rules.one : rules.many} — Download .txt is in the popup`, 'success');
             return finish(`${found.size} ${rules.many}`);
         }
 
@@ -441,7 +441,7 @@
                 return halt('paused', `Found no ${rules.many} on old Reddit's list of yours, so the last read was kept.`);
             }
             await Roster.saveRoster(site, [...found.values()]);
-            notify(`Read ${found.size} ${found.size === 1 ? rules.one : rules.many} — the list is in the dashboard`, 'success');
+            notify(`Read ${found.size} ${found.size === 1 ? rules.one : rules.many} — Download .txt is in the popup`, 'success');
             return finish(`${found.size} ${rules.many}`);
         }
 
@@ -460,7 +460,7 @@
             return subFromHref(page.path()).toLowerCase() === name.toLowerCase();
         }
 
-        /** A stop the dashboard should show, said on the page as well. */
+        /** A stop the popup should show, said on the page as well. */
         function pause(note) {
             bar.hide();
             notify(note, 'warning');
@@ -482,7 +482,7 @@
                 return finish(`${job.done} ${rules.verbed.toLowerCase()}, ${job.skipped} already there, ${job.passed || 0} skipped`);
             }
             if (Roster.atCap(job)) {
-                const note = `That is today's ${rules.pace.cap}. Carry on from the dashboard tomorrow; it starts again at ${rules.prefix}${name}.`;
+                const note = `That is today's ${rules.pace.cap}. Carry on from the popup tomorrow; it starts again at ${rules.prefix}${name}.`;
                 notify(note, 'info');
                 return halt('waiting', note);
             }
@@ -538,7 +538,7 @@
                         onAct: (id) => { choice = id; },
                     });
 
-                    // The dashboard's Stop, and another tab moving the cursor.
+                    // The popup's Stop, and another tab moving the cursor.
                     if (Date.now() - checkedAt > 2000) {
                         const latest = await mine();
                         if (!latest || latest.at !== job.at) return void bar.hide();
@@ -561,7 +561,7 @@
 
         /**
          * Count down to `until` on the bar. False when the job was stopped,
-         * from the bar or the dashboard, before it got there.
+         * from the bar or the popup, before it got there.
          */
         async function countDown(until, head, line) {
             let stopped = false;
@@ -631,7 +631,7 @@
                 ? `${rules.prefix}${after} opens in ${seconds}s. The gap keeps ${rules.name} seeing a person's pace.`
                 : `On to ${rules.prefix}${after}.`));
             if (!ok) return void bar.hide();
-            // Re-read: the dashboard's Stop is a write to the same key.
+            // Re-read: the popup's Stop is a write to the same key.
             const latest = await mine();
             if (!latest) return void bar.hide();
             return goTo(pageFor(Roster.currentName(latest)));
@@ -668,7 +668,7 @@
             if (site === 'reddit') {
                 return {
                     here: /^\/subreddits\/mine(?:\/|$)/.test(page.path()),
-                    url: START.reddit,
+                    url: LISTING,
                     // Signed out, as a rule: old Reddit sends that to /login.
                     what: 'your list of subreddits — sign in to Reddit, then start again',
                 };
@@ -822,13 +822,10 @@
         return { install, start };
     }
 
-    /** Where a read job starts, before it knows anything about the account. */
-    const START = Object.freeze({
-        twitter: 'https://x.com/home',
-        reddit: 'https://old.reddit.com/subreddits/mine/subscriber/?limit=100',
-    });
+    /** Old Reddit's list of your subreddits, where a read of them starts. */
+    const LISTING = 'https://old.reddit.com/subreddits/mine/subscriber/?limit=100';
 
-    const RosterContent = { createRoster, SELECTORS, START, actionScope, handleFromHref, subFromHref };
+    const RosterContent = { createRoster, SELECTORS, LISTING, actionScope, handleFromHref, subFromHref };
 
     root.BB = root.BB || {};
     root.BB.RosterContent = RosterContent;

@@ -6651,17 +6651,6 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             'a read job has no total to be a fraction of');
     });
 
-    check('the dashboard and the content script agree where a read starts', () => {
-        const RosterContent = require('../src/content/roster.js');
-        // Two copies of two URLs, which is two too many — but the page cannot
-        // import the content script's table and vice versa, so the next best
-        // thing is a test that fails the moment they drift.
-        const page = require('fs').readFileSync('src/page/roster-view.js', 'utf8');
-        for (const id of Roster.ids()) {
-            eq(page.includes(RosterContent.START[id]), true, `${id}: ${RosterContent.START[id]}`);
-        }
-    });
-
     check('a handle is read off an href, and a site page is not a handle', () => {
         const RosterContent = require('../src/content/roster.js');
         eq(RosterContent.handleFromHref('/alice'), 'alice');
