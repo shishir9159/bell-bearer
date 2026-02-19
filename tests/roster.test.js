@@ -493,4 +493,84 @@
             } finally { await clean(); }
         });
     });
+
+    /** The popup's panel over a stand-in tab that answers `answer` to whatever it is asked. */
+    async function popup(site, answer) {
+        const body = document.createElement('div');
+        document.body.append(body);
+        const asks = [];
+        let closed = 0;
+        const view = window.BB.RosterPopup.createView({
+            body, site, ask: async (kind) => { asks.push(kind); return answer; }, close: () => { closed++; },
+        });
+        await view.render();
+        const press = async (act) => {
+            body.querySelector(`[data-act="${act}"]`).click();
+            await new Promise((resolve) => setTimeout(resolve, 60));
+        };
+        return { body, asks, view, press, closed: () => closed, button: (act) => body.querySelector(`[data-act="${act}"]`) };
+    }
+
+    suite('the roster — the popup\'s panel', () => {
+        test('a read is asked of the tab, and the popup closes over it', async () => {
+            await chrome.storage.local.remove(Roster().ROSTERS_KEY);
+            const p = await popup('reddit', { ok: true });
+            try {
+                assert(/Your subreddits/i.test(p.body.textContent));
+                assert(p.button('download').disabled, 'nothing read, nothing to download');
+                await p.press('read');
+                assertDeepEqual(p.asks, ['read']);
+                assertEqual(p.closed(), 1);
+                assertEqual(await Roster().loadJob(), null, 'the popup writes no job: the tab that runs it does');
+            } finally { p.body.remove(); await clean(); }
+        });
+
+        test('REGRESSION: a tab with nothing in it to answer is said so, and nothing is left running', async () => {
+            // The dashboard wrote the job and opened a tab; a tab that could
+            // not take it left it "running" with no tab working on it.
+            const p = await popup('reddit', null);
+            try {
+                await p.press('read');
+                assertEqual(p.closed(), 0, 'the popup stays, to say why');
+                assertEqual(await Roster().loadJob(), null);
+            } finally { p.body.remove(); await clean(); }
+        });
+
+        test('a stopped job offers to carry on here, or to skip the name it stopped on', async () => {
+            await Roster().saveJob({
+                ...Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice', 'carol'] }),
+                at: 1, done: 1, status: 'paused', note: 'Twitter sent the tab to /i/flow/login instead of @carol.',
+            });
+            const p = await popup('twitter', { ok: true });
+            try {
+                assert(/instead of @carol/.test(p.body.textContent));
+                assertEqual(p.button('skip').textContent, 'Skip @carol');
+                assert(p.button('read').disabled, 'one job at a time');
+                await p.press('skip');
+                assertDeepEqual(p.asks, ['skip']);
+            } finally { p.body.remove(); await clean(); }
+        });
+
+        test('a job of the other site is shown, and stopped, but not carried on from here', async () => {
+            await Roster().saveJob({ ...Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice'] }), status: 'paused', note: 'x' });
+            const p = await popup('reddit', { ok: true });
+            try {
+                assert(/Twitter: Following/.test(p.body.textContent), p.body.textContent.trim());
+                assertEqual(p.button('resume'), null, 'that is for a tab of x.com to be asked');
+                await p.press('stop');
+                assertEqual(await Roster().loadJob(), null);
+            } finally { p.body.remove(); await clean(); }
+        });
+
+        test('what a read had found is saved from here, its tab closed or not', async () => {
+            await Roster().saveJob({ ...Roster().newJob({ site: 'reddit', action: 'read' }), found: ['rust', 'cpp'] });
+            const p = await popup('reddit', { ok: true });
+            try {
+                await p.press('save');
+                assertDeepEqual((await Roster().loadRosters()).reddit.names, ['rust', 'cpp']);
+                assertEqual(await Roster().loadJob(), null);
+                assert(!p.button('download').disabled, 'and there is a file to download');
+            } finally { p.body.remove(); await clean(); }
+        });
+    });
 })();

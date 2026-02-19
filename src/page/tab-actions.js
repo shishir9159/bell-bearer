@@ -160,7 +160,17 @@
         return !!(answer && answer.ok);
     }
 
-    const TabActions = { activeTab, findVideoTab, getRate, stepRate, seek, openReader, downloadInfo, startDownload, cancelDownload };
+    /**
+     * Ask `tab` to do a roster job's `kind` — read, pick, resume or skip.
+     * Its answer, or null when no content script is there to give one; no
+     * injected fallback, for the reader's reason.
+     */
+    async function rosterStart(tab, kind) {
+        if (!tab || tab.id == null) return null;
+        return ask(tab.id, { action: 'rosterStart', kind });
+    }
+
+    const TabActions = { activeTab, findVideoTab, getRate, stepRate, seek, openReader, downloadInfo, startDownload, cancelDownload, rosterStart };
 
     root.BB = root.BB || {};
     root.BB.TabActions = TabActions;
