@@ -1132,3 +1132,55 @@ a.chess-pill:hover { transform: translateY(-1px); box-shadow: var(--card-shadow-
     color: var(--text-faint);
     text-align: center;
 }
+
+/* ======================================================================
+   x.com and reddit.com — the roster (src/page/roster-popup.js). Three
+   buttons and what they do; the work is on the page, and so is the bar
+   that says how it is going.
+   ====================================================================== */
+
+.roster-panel { background: var(--bg); }
+.roster-pop-body { padding: 12px 14px 14px; }
+
+.roster-pop-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 9px;
+}
+
+.roster-pop-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.roster-pop-when { font-size: 11px; color: var(--text-muted); }
+
+.roster-pop-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.roster-pop-acts button:disabled { opacity: .5; cursor: default; }
+
+.roster-pop-how { margin: 9px 0 0; font-size: 11px; line-height: 1.5; color: var(--text-faint); }
+
+/* A job there is, ruled off: it is about what is happening now, where the
+   rest of the panel is about what could. */
+.roster-pop-job { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+
+.roster-pop-what {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.roster-pop-what span { font-size: 10.5px; font-weight: 400; color: var(--text-faint); }
+
+.roster-pop-note { margin: 5px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--text-muted); }
+.roster-pop-job.is-stopped .roster-pop-note:first-of-type { color: var(--danger); }
+.roster-pop-job .roster-pop-acts { margin-top: 9px; }

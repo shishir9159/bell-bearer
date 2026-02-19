@@ -16,7 +16,7 @@
     'use strict';
 
     const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site,
-        ChessSites, ChessStats, ChessLimitButton, Leet, LeetPopup } = window.BB;
+        ChessSites, ChessStats, ChessLimitButton, Leet, LeetPopup, Roster, RosterPopup } = window.BB;
 
     class Popup {
         constructor() {
@@ -232,6 +232,21 @@
                 // grade is picked — and the popup is a separate document, so
                 // without this it shows a list that is already out of date.
                 Settings.watch(Leet.KEYS, () => view.render());
+            }
+
+            // x.com and reddit.com: the roster. Every button that needs the
+            // page asks the tab behind the popup, and a job changes from
+            // that tab while the popup is open over it.
+            const onRoster = !!(Roster && Roster.siteOf(this.site));
+            document.getElementById('rosterPanel').hidden = !onRoster;
+            if (onRoster) {
+                const view = RosterPopup.createView({
+                    body: document.getElementById('rosterPopupBody'),
+                    site: this.site,
+                    ask: async (kind) => TabActions.rosterStart(await TabActions.activeTab(), kind),
+                });
+                view.render();
+                Settings.watch([Roster.JOB_KEY, Roster.ROSTERS_KEY], () => view.render());
             }
         }
 
