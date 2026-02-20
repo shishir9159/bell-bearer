@@ -6594,6 +6594,12 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Roster.planText('reddit', []), '');
     });
 
+    check('a job belongs to the tab that was asked to run it', () => {
+        const job = Roster.newJob({ site: 'twitter', action: 'apply', names: ['a', 'b'], tabId: 41, now: noon });
+        eq(job.tabId, 41);
+        eq(Roster.newJob({ site: 'twitter', action: 'read' }).tabId, null, 'and one nobody was asked for is nobody\'s');
+    });
+
     check('a job is claimed by one page at a time', () => {
         const job = Roster.newJob({ site: 'twitter', action: 'apply', names: ['a', 'b'], now: 1000 });
         eq(Roster.canClaim(job, 'page1', 1000), true, 'nobody holds it yet');

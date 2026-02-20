@@ -680,7 +680,17 @@
      * ordinary visit this is one storage read.
      */
     if (site === 'twitter' || site === 'reddit') {
-        roster = BB.RosterContent.createRoster({ site, notify, appearance: () => Theme.appearance(), dress: Theme.dress });
+        roster = BB.RosterContent.createRoster({
+            site,
+            notify,
+            appearance: () => Theme.appearance(),
+            dress: Theme.dress,
+            // A job belongs to a tab, and only the worker can say which this is.
+            tabId: async () => {
+                const answer = await askWorker({ action: 'rosterTab' });
+                return answer && Number.isInteger(answer.tabId) ? answer.tabId : null;
+            },
+        });
         roster.install();
     }
 

@@ -239,8 +239,9 @@
      * @param {(element: Element, look: object) => void} [deps.dress]  and Theme.dress
      * @param {(site: string) => number} [deps.delay]  the gap after a follow; the suite's is short
      * @param {() => Promise<string|null>} [deps.pickFile]  the text of a file the user picks
+     * @param {() => Promise<number|null>} [deps.tabId]  which tab this page is in, asked of the worker
      */
-    function createRoster({ site, notify, page = PAGE, appearance = async () => ({}), dress = () => {}, delay = Roster.nextDelay, pickFile = chooseFile }) {
+    function createRoster({ site, notify, page = PAGE, appearance = async () => ({}), dress = () => {}, delay = Roster.nextDelay, pickFile = chooseFile, tabId = async () => null }) {
         const rules = Roster.siteOf(site);
         const bar = RosterBar.createBar({ appearance, dress });
 
@@ -670,7 +671,7 @@
                     here: /^\/subreddits\/mine(?:\/|$)/.test(page.path()),
                     url: LISTING,
                     // Signed out, as a rule: old Reddit sends that to /login.
-                    what: 'your list of subreddits — sign in to Reddit, then start again',
+                    what: 'your list of subreddits — sign in to Reddit, then carry on',
                 };
             }
             const path = page.path().replace(/\/$/, '').toLowerCase();
@@ -680,12 +681,17 @@
                 here: !!handle && path === `/${handle}/following`.toLowerCase(),
                 url: handle ? `https://x.com/${handle}/following` : '',
                 what: 'your following list',
-                lost: 'Could not tell which account is signed in — sign in to x.com, then start again.',
+                lost: 'Could not tell which account is signed in — sign in to x.com, then carry on.',
             };
         }
 
+        /** Whether this page is doing a job's work now; a second ask must not start a second copy of it. */
+        let working = false;
+
         /** Carry `job` on from this page: do its work here, or go to where it is done. */
         async function run(job, { go = false, hop = '' } = {}) {
+            if (working) return null;
+            working = true;
             try {
                 const where = await place(job, go || !!hop);
                 if (where.here) {
@@ -709,6 +715,8 @@
                 // recoverable end.
                 bar.hide();
                 return halt('paused', `Stopped on an error: ${error && error.message ? error.message : 'unknown'}`);
+            } finally {
+                working = false;
             }
         }
 
@@ -726,6 +734,10 @@
             const hop = takeHop();
             const job = await mine();
             if (!job) return;
+            // Its own tab, and no other: the one that was asked to run it.
+            // Every page of the site once took a job up, and an x.com tab
+            // opened that evening was sent off to somebody's profile.
+            if (job.tabId == null || (await tabId()) !== job.tabId) return;
             // A read may find its way from any page for a moment after the
             // dashboard opened a tab for it; see Roster.isKicked.
             await run(job, { go: job.action === 'read' && !hop && Roster.isKicked(job), hop });
@@ -734,7 +746,7 @@
         /**
          * A job asked for from the popup, on this tab: `read` starts one,
          * `pick` asks for the list to follow from, and `resume` and `skip`
-         * carry on the one there is.
+         * carry on the one there is — here, whichever tab it stopped in.
          *
          * The page that is asked is the page that does it. A job used to be
          * written to storage by the dashboard for whichever tab loaded next,
@@ -746,8 +758,13 @@
          * Answers at once; the work goes on after the popup has closed.
          */
         function start(request) {
-            if (!rules || !['read', 'pick', 'resume', 'skip'].includes(request && request.kind)) return { ok: false };
-            begin(request.kind);
+            const { kind, tabId: tab } = request || {};
+            if (!rules) return { ok: false };
+            // Asked before anything is offered: is this page at work on a job?
+            if (kind === 'status') return { ok: true, working };
+            // The tab is told which it is, because the job is to be its.
+            if (!['read', 'pick', 'resume', 'skip'].includes(kind) || !Number.isInteger(tab)) return { ok: false };
+            begin(kind, tab);
             return { ok: true };
         }
 
@@ -761,7 +778,7 @@
          * The bar's own button is also a press on the page, which is what a
          * browser wants before it will open a file dialog at all.
          */
-        async function pick() {
+        async function pick(tab) {
             if (Roster.isOpen(await Roster.loadJob())) {
                 return notify('A roster job is not finished — carry it on or clear it first', 'warning');
             }
@@ -773,7 +790,7 @@
                 if (id === 'go') {
                     // Looked at again: the bar may have stood here a while.
                     if (Roster.isOpen(await Roster.loadJob())) return bar.hide();
-                    const job = Roster.newJob({ site, action: 'apply', names });
+                    const job = Roster.newJob({ site, action: 'apply', names, tabId: tab });
                     await Roster.saveJob(job);
                     return run(job, { go: true });
                 }
@@ -799,19 +816,21 @@
             return ask(`Pick a .txt with one ${rules.one} per line — one Bell Bearer wrote, or your own.`);
         }
 
-        async function begin(kind) {
-            if (kind === 'pick') return pick();
+        async function begin(kind, tab) {
+            if (kind === 'pick') return pick(tab);
             if (kind === 'read') {
                 if (Roster.isOpen(await Roster.loadJob())) {
                     return notify('A roster job is not finished — carry it on or clear it first', 'warning');
                 }
-                const job = Roster.newJob({ site, action: 'read' });
+                const job = Roster.newJob({ site, action: 'read', tabId: tab });
                 await Roster.saveJob(job);
                 return run(job, { go: true });
             }
+            // Carried on in the tab that was asked, which may not be the one
+            // it stopped in: that one may be closed.
             const next = await Roster.updateJob((job) => (job && job.site === site
                 ? {
-                    ...Roster.release(job), status: 'running', note: '',
+                    ...Roster.release(job), tabId: tab, status: 'running', note: '',
                     ...(kind === 'skip' && job.action === 'apply' ? { at: job.at + 1, passed: (job.passed || 0) + 1 } : {}),
                 }
                 : job));

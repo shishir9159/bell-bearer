@@ -161,13 +161,14 @@
     }
 
     /**
-     * Ask `tab` to do a roster job's `kind` — read, pick, resume or skip.
+     * Ask `tab` to do a roster job's `kind` — read, pick, resume or skip —
+     * or for its `status`. The tab is told which it is: the job will be its.
      * Its answer, or null when no content script is there to give one; no
      * injected fallback, for the reader's reason.
      */
     async function rosterStart(tab, kind) {
         if (!tab || tab.id == null) return null;
-        return ask(tab.id, { action: 'rosterStart', kind });
+        return ask(tab.id, { action: 'rosterStart', kind, tabId: tab.id });
     }
 
     const TabActions = { activeTab, findVideoTab, getRate, stepRate, seek, openReader, downloadInfo, startDownload, cancelDownload, rosterStart };

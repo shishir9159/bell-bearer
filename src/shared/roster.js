@@ -193,7 +193,7 @@
      * because a list of two thousand names written back on every step is a
      * storage write per action for something nobody reads.
      */
-    function newJob({ site, action, names = [], now = Date.now() }) {
+    function newJob({ site, action, names = [], tabId = null, now = Date.now() }) {
         return {
             site,
             action,                  // 'read' | 'apply'
@@ -222,6 +222,11 @@
             kickedAt: now,
             actedAt: 0,              // when the last action was taken
             nextAt: 0,               // the earliest the next one may be
+            // The tab the job runs in: the one that was asked to start it, or
+            // to carry it on. A page acts on a job in that tab and no other,
+            // so two tabs of the site cannot both follow the same account,
+            // and an ordinary visit in another tab is left alone.
+            tabId,
             // Which page of the site is working on this, and until when. Two
             // tabs of the same site both pick a job up, and without a lease
             // both would follow the same account and step the cursor twice.

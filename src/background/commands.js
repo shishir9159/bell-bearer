@@ -45,6 +45,13 @@
         return { success: true };
     });
 
+    // Which tab a content script is in. A roster job belongs to one tab, and
+    // a page has no other way to learn which it is (src/content/roster.js).
+    Router.on('rosterTab', (message, sender) => ({
+        ok: true,
+        tabId: sender && sender.tab && Number.isInteger(sender.tab.id) ? sender.tab.id : null,
+    }));
+
     // A chess move read aloud (src/content/chess.js). Queued, so a quick reply
     // is spoken after the move before it, not over it. No chrome.tts
     // (Firefox) answers ok:false and the page speaks.

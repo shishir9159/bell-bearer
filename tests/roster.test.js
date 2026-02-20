@@ -143,6 +143,9 @@
      */
     const Roster = () => window.BB.Roster;
     const HOP = 'bb-roster-hop';
+    /** The tab the specs' jobs are in, and the one their pages say they are in. */
+    const TAB = 7;
+    const jobFor = (options) => Roster().newJob({ tabId: TAB, ...options });
 
     /** A stand-in for `location` at `path`, recording where it was sent. */
     function pageAt(path) {
@@ -150,11 +153,12 @@
         return { sent, path: () => path, href: () => `https://example.test${path}`, assign: (url) => sent.push(url) };
     }
 
-    async function enter(site, path, job, hop = '') {
+    /** A page at `path` loading in `tab`, with `job` in storage. */
+    async function enter(site, path, job, hop = '', tab = TAB) {
         await Roster().saveJob(job);
         if (hop) sessionStorage.setItem(HOP, hop);
         const page = pageAt(path);
-        await RosterContent().createRoster({ site, notify: () => {}, page }).install();
+        await RosterContent().createRoster({ site, notify: () => {}, page, tabId: async () => tab }).install();
         return { page, job: await Roster().loadJob() };
     }
 
@@ -166,7 +170,7 @@
     suite('the roster — which page may take a job up', () => {
         test('REGRESSION: a tab sent to the list and signed out stops, rather than going round', async () => {
             try {
-                const job = Roster().newJob({ site: 'reddit', action: 'read' });
+                const job = jobFor({ site: 'reddit', action: 'read' });
                 const { page, job: after } = await enter('reddit', '/login/', job, '/subreddits/mine/subscriber/');
                 assertEqual(page.sent.length, 0, 'sent back to the list, it is only sent to /login again');
                 assertEqual(after.status, 'paused');
@@ -176,7 +180,7 @@
 
         test('just after the dashboard opened a tab, it finds its way to the list', async () => {
             try {
-                const job = Roster().newJob({ site: 'reddit', action: 'read' });
+                const job = jobFor({ site: 'reddit', action: 'read' });
                 const { page } = await enter('reddit', '/', job);
                 assertEqual(page.sent.length, 1);
                 assert(/\/subreddits\/mine\//.test(page.sent[0]), page.sent[0]);
@@ -184,9 +188,23 @@
             } finally { await clean(); }
         });
 
+        test('REGRESSION: another tab of the site leaves the job alone, on the job\'s own page too', async () => {
+            // Every page of the site once took a job up, and an x.com tab
+            // opened that evening was sent off to somebody's profile.
+            stage('<div id="siteTable"><div class="thing subreddit"><a class="title" href="/r/rust/">rust</a></div></div>');
+            try {
+                const { page, job: after } = await enter('reddit', '/subreddits/mine/subscriber/', jobFor({ site: 'reddit', action: 'read' }), '', TAB + 1);
+                assertEqual(page.sent.length, 0);
+                assertDeepEqual([after.status, after.found.length], ['running', 0], 'not read, not stopped');
+            } finally {
+                teardown();
+                await clean();
+            }
+        });
+
         test('later on, another page of the site leaves the job alone', async () => {
             try {
-                const job = Roster().newJob({ site: 'reddit', action: 'read', now: Date.now() - Roster().KICK_MS - 1000 });
+                const job = jobFor({ site: 'reddit', action: 'read', now: Date.now() - Roster().KICK_MS - 1000 });
                 const { page, job: after } = await enter('reddit', '/r/rust/', job);
                 assertEqual(page.sent.length, 0, 'an ordinary visit is not taken over');
                 assertEqual(after.status, 'running');
@@ -196,7 +214,7 @@
 
         test('a profile that is not the name the job is on is left alone', async () => {
             try {
-                const job = Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice'] });
+                const job = jobFor({ site: 'twitter', action: 'apply', names: ['alice'] });
                 const { page, job: after } = await enter('twitter', '/bob', job);
                 assertEqual(page.sent.length, 0);
                 assertEqual(after.status, 'running');
@@ -211,7 +229,7 @@
                 <div class="thing subreddit"><a class="title" href="https://old.reddit.com/user/someone/">a profile</a></div>
             </div>`);
             try {
-                const job = Roster().newJob({ site: 'reddit', action: 'read' });
+                const job = jobFor({ site: 'reddit', action: 'read' });
                 const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', job);
                 assertEqual(after.status, 'done');
                 assertDeepEqual((await Roster().loadRosters()).reddit.names, ['rust', 'cpp']);
@@ -226,7 +244,7 @@
             stage('<div id="siteTable"></div>');
             try {
                 await Roster().saveRoster('reddit', ['kept']);
-                const job = Roster().newJob({ site: 'reddit', action: 'read' });
+                const job = jobFor({ site: 'reddit', action: 'read' });
                 const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', job);
                 assertEqual(after.status, 'paused');
                 assertDeepEqual((await Roster().loadRosters()).reddit.names, ['kept']);
@@ -246,8 +264,10 @@
             let scrolled = 0;
             window.scrollTo = () => { scrolled++; };
             try {
-                await Roster().saveJob(Roster().newJob({ site: 'twitter', action: 'read' }));
-                const reading = RosterContent().createRoster({ site: 'twitter', notify: () => {}, page: pageAt('/me/following') }).install();
+                await Roster().saveJob(jobFor({ site: 'twitter', action: 'read' }));
+                const reading = RosterContent().createRoster({
+                    site: 'twitter', notify: () => {}, page: pageAt('/me/following'), tabId: async () => TAB,
+                }).install();
                 const done = await (async () => {
                     for (let i = 0; i < 40; i++) {
                         const button = document.querySelector('#bb-roster-bar [data-bb-roster-act="done"]');
@@ -272,7 +292,7 @@
 
         test('a tab sent to a name and landing elsewhere stops the job', async () => {
             try {
-                const job = Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice'] });
+                const job = jobFor({ site: 'twitter', action: 'apply', names: ['alice'] });
                 const { page, job: after } = await enter('twitter', '/i/flow/login', job, '/alice');
                 assertEqual(page.sent.length, 0);
                 assertEqual(after.status, 'paused');
@@ -297,9 +317,9 @@
 
     /** A job on @alice, then @bob, running on @alice's page. */
     async function onAlice(gap = 50) {
-        await Roster().saveJob(Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice', 'bob'] }));
+        await Roster().saveJob(jobFor({ site: 'twitter', action: 'apply', names: ['alice', 'bob'] }));
         const page = pageAt('/alice');
-        const running = RosterContent().createRoster({ site: 'twitter', notify: () => {}, page, delay: () => gap }).install();
+        const running = RosterContent().createRoster({ site: 'twitter', notify: () => {}, page, delay: () => gap, tabId: async () => TAB }).install();
         return { page, running };
     }
 
@@ -398,11 +418,12 @@
         test('a read starts on the tab that was asked, and goes to the list', async () => {
             try {
                 const { page, roster } = asked('reddit', '/r/rust/');
-                assertDeepEqual(roster.start({ kind: 'read' }), { ok: true });
+                assertDeepEqual(roster.start({ kind: 'read', tabId: TAB }), { ok: true });
                 assert(await until(() => page.sent.length === 1), 'no dashboard, and no waiting for a tab');
                 assert(/\/subreddits\/mine\//.test(page.sent[0]), page.sent[0]);
                 const job = await Roster().loadJob();
                 assertDeepEqual([job.site, job.action, job.status], ['reddit', 'read', 'running']);
+                assertEqual(job.tabId, TAB, 'the job is that tab\'s');
             } finally { await clean(); }
         });
 
@@ -410,7 +431,7 @@
             try {
                 await Roster().saveJob(Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice'] }));
                 const { page, notes, roster } = asked('reddit', '/r/rust/');
-                roster.start({ kind: 'read' });
+                roster.start({ kind: 'read', tabId: TAB });
                 assert(await until(() => notes.length === 1), 'said on the page');
                 assertEqual(page.sent.length, 0);
                 assertEqual((await Roster().loadJob()).site, 'twitter');
@@ -419,14 +440,15 @@
 
         test('Carry on takes a stopped job back to the page it stopped on', async () => {
             try {
-                const job = { ...Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice', 'bob'] }), status: 'paused', note: 'x' };
+                // Stopped in a tab since closed; carried on in the one asked.
+                const job = { ...Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice', 'bob'], tabId: 3 }), status: 'paused', note: 'x' };
                 await Roster().saveJob(job);
                 const { page, roster } = asked('twitter', '/home');
-                roster.start({ kind: 'resume' });
+                roster.start({ kind: 'resume', tabId: TAB });
                 assert(await until(() => page.sent.length === 1));
                 assertDeepEqual(page.sent, ['https://x.com/alice']);
                 const after = await Roster().loadJob();
-                assertDeepEqual([after.status, after.note, after.at], ['running', '', 0]);
+                assertDeepEqual([after.status, after.note, after.at, after.tabId], ['running', '', 0, TAB]);
             } finally { await clean(); }
         });
 
@@ -435,7 +457,7 @@
                 const job = { ...Roster().newJob({ site: 'twitter', action: 'apply', names: ['alice', 'bob'] }), status: 'paused' };
                 await Roster().saveJob(job);
                 const { page, roster } = asked('twitter', '/home');
-                roster.start({ kind: 'skip' });
+                roster.start({ kind: 'skip', tabId: TAB });
                 assert(await until(() => page.sent.length === 1));
                 assertDeepEqual(page.sent, ['https://x.com/bob']);
                 const after = await Roster().loadJob();
@@ -452,7 +474,7 @@
             const act = (id) => bar() && bar().querySelector(`[data-bb-roster-act="${id}"]`);
             try {
                 await Roster().saveRoster('twitter', ['bob']);
-                roster.start({ kind: 'pick' });
+                roster.start({ kind: 'pick', tabId: TAB });
                 assert(await until(() => act('choose')), 'the bar asks for the file');
                 act('choose').click();
                 assert(await until(() => act('go')), 'and then for a yes');
@@ -462,7 +484,8 @@
                 act('go').click();
                 assert(await until(() => page.sent.length === 1));
                 assertDeepEqual(page.sent, ['https://x.com/alice']);
-                assertDeepEqual((await Roster().loadJob()).names, ['alice', 'bob']);
+                const made = await Roster().loadJob();
+                assertDeepEqual([made.names, made.tabId], [['alice', 'bob'], TAB]);
             } finally {
                 if (bar()) bar().remove();
                 await clean();
@@ -473,7 +496,7 @@
             const roster = RosterContent().createRoster({ site: 'reddit', notify: () => {}, page: pageAt('/'), pickFile: async () => 'x\n\n' });
             const bar = () => document.getElementById(window.BB.RosterBar.ID);
             try {
-                roster.start({ kind: 'pick' });
+                roster.start({ kind: 'pick', tabId: TAB });
                 assert(await until(() => bar() && bar().querySelector('[data-bb-roster-act="choose"]')));
                 bar().querySelector('[data-bb-roster-act="choose"]').click();
                 assert(await until(() => /Nothing in that file/.test(bar().textContent)));
@@ -488,27 +511,39 @@
         test('a request it does not know is refused, and nothing is written', async () => {
             try {
                 const { roster } = asked('reddit', '/');
-                assertDeepEqual(roster.start({ kind: 'follow-everyone' }), { ok: false });
+                assertDeepEqual(roster.start({ kind: 'follow-everyone', tabId: TAB }), { ok: false });
+                assertDeepEqual(roster.start({ kind: 'read' }), { ok: false }, 'nor one that does not say which tab');
+                assertDeepEqual(roster.start({ kind: 'status' }), { ok: true, working: false });
                 assertEqual(await Roster().loadJob(), null);
             } finally { await clean(); }
         });
     });
 
-    /** The popup's panel over a stand-in tab that answers `answer` to whatever it is asked. */
-    async function popup(site, answer) {
+    /**
+     * The popup's panel over tab TAB, which answers `answer` to whatever it
+     * is asked; `open` is the other tabs there are.
+     */
+    async function popup(site, answer, open = []) {
         const body = document.createElement('div');
         document.body.append(body);
         const asks = [];
+        const shown = [];
         let closed = 0;
         const view = window.BB.RosterPopup.createView({
-            body, site, ask: async (kind) => { asks.push(kind); return answer; }, close: () => { closed++; },
+            body,
+            site,
+            tabId: TAB,
+            ask: async (kind) => { if (kind !== 'status') asks.push(kind); return answer; },
+            alive: async (id) => open.includes(id),
+            show: (id) => shown.push(id),
+            close: () => { closed++; },
         });
         await view.render();
         const press = async (act) => {
             body.querySelector(`[data-act="${act}"]`).click();
             await new Promise((resolve) => setTimeout(resolve, 60));
         };
-        return { body, asks, view, press, closed: () => closed, button: (act) => body.querySelector(`[data-act="${act}"]`) };
+        return { body, asks, shown, view, press, closed: () => closed, button: (act) => body.querySelector(`[data-act="${act}"]`) };
     }
 
     suite('the roster — the popup\'s panel', () => {
@@ -559,6 +594,37 @@
                 assertEqual(p.button('resume'), null, 'that is for a tab of x.com to be asked');
                 await p.press('stop');
                 assertEqual(await Roster().loadJob(), null);
+            } finally { p.body.remove(); await clean(); }
+        });
+
+        test('REGRESSION: a job whose tab is closed is said so, and carried on here', async () => {
+            // "No reddit.com tab is working on this", for as long as anyone looked.
+            await Roster().saveJob(Roster().newJob({ site: 'reddit', action: 'read', tabId: 99 }));
+            const p = await popup('reddit', { ok: true });
+            try {
+                assert(/The tab it was running in is closed/.test(p.body.textContent), p.body.textContent.trim());
+                await p.press('resume');
+                assertDeepEqual(p.asks, ['resume']);
+            } finally { p.body.remove(); await clean(); }
+        });
+
+        test('one running in another tab is gone to, not started twice', async () => {
+            await Roster().saveJob(Roster().newJob({ site: 'reddit', action: 'read', tabId: 99 }));
+            const p = await popup('reddit', { ok: true }, [99]);
+            try {
+                assertEqual(p.button('resume'), null);
+                await p.press('show');
+                assertDeepEqual(p.shown, [99]);
+            } finally { p.body.remove(); await clean(); }
+        });
+
+        test('one at work in this tab is only said to be', async () => {
+            await Roster().saveJob(jobFor({ site: 'twitter', action: 'apply', names: ['alice'] }));
+            const p = await popup('twitter', { ok: true, working: true });
+            try {
+                assert(/Waiting in this tab for you to press Follow/.test(p.body.textContent), p.body.textContent.trim());
+                assertEqual(p.button('resume'), null);
+                assertEqual(p.button('stop').textContent, 'Stop');
             } finally { p.body.remove(); await clean(); }
         });
 

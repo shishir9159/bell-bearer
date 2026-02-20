@@ -54,13 +54,22 @@
      * @param {HTMLElement} options.body where the panel draws
      * @param {string} options.site 'twitter' | 'reddit', the site in the active tab
      * @param {(kind: string) => Promise<object|null>} options.ask  asks the tab for
-     *   `kind` — read, pick, resume, skip; null when nothing in it answers
+     *   `kind` — read, pick, resume, skip, or its status; null when nothing in it answers
+     * @param {number|null} [options.tabId] the tab the popup is over
+     * @param {(tabId: number) => Promise<boolean>} [options.alive] is that tab still open?
+     * @param {(tabId: number) => void} [options.show] bring that tab to the front
      * @param {() => void} [options.close] closes the popup, once the page has it
      */
-    function createView({ body, site, ask, close = () => root.close() }) {
+    function createView({ body, site, ask, tabId = null, alive = async () => false, show = () => {}, close = () => root.close() }) {
         const rules = Roster.siteOf(site);
         let roster = null;
         let job = null;
+        /**
+         * Where the job's tab is: this one or another, still open or not, and
+         * — when it is this one — whether its page is at work. Asked, where
+         * the dashboard guessed from how long the job had gone unheld.
+         */
+        let seat = { mine: false, open: false, working: false };
 
         function jobHtml() {
             if (!job) return '';
@@ -74,17 +83,23 @@
                 ? `${job.done} ${theirs.verbed.toLowerCase()}, ${job.skipped} already there` + (job.passed ? `, ${job.passed} skipped` : '')
                 : `${(job.found || []).length} so far`;
 
-            const idle = Roster.isIdle(job);
             const spent = job.status === 'waiting' && Roster.atCap(job);
+            const running = job.status === 'running';
+            // Running, with nothing running it: its tab closed, or this tab
+            // taken somewhere else since.
+            const adrift = running && (!seat.open || (seat.mine && !seat.working));
+            const elsewhere = running && seat.open && !seat.mine;
             const note = job.note || (spent ? `That is today's ${theirs.pace.cap}. Carry on tomorrow.`
-                : job.status !== 'running' ? ''
-                    : idle ? 'No tab is working on this.'
-                        : job.action === 'apply' ? `Waiting on its tab for you to press ${theirs.verb}.` : 'Running in its tab.');
+                : !running ? ''
+                    : !seat.open ? 'The tab it was running in is closed.'
+                        : elsewhere ? 'Running in another tab.'
+                            : !seat.working ? 'This tab has left the page it was on.'
+                                : job.action === 'apply' ? `Waiting in this tab for you to press ${theirs.verb}.` : 'Running in this tab.');
 
             // Carry on and Skip are asked of a tab of the job's own site,
             // which this one may not be.
             const name = Roster.currentName(job);
-            const resumable = job.status === 'paused' || (job.status === 'waiting' && !spent) || idle;
+            const resumable = job.status === 'paused' || (job.status === 'waiting' && !spent) || adrift;
             const canResume = here && resumable;
             const canSkip = here && job.status === 'paused' && !!name;
             const canSave = job.action === 'read' && (job.found || []).length > 0;
@@ -95,6 +110,7 @@
                     ${!here && resumable ? `<p class="roster-pop-note">Open ${esc(theirs.host)} to carry it on.</p>` : ''}
                     <div class="roster-pop-acts">
                         ${canResume ? '<button class="btn-reader" data-act="resume">Carry on here</button>' : ''}
+                        ${elsewhere ? '<button class="btn-party-join" data-act="show">Go to its tab</button>' : ''}
                         ${canSkip ? `<button class="btn-party-join" data-act="skip">Skip ${esc(theirs.prefix + name)}</button>` : ''}
                         ${canSave ? '<button class="btn-party-join" data-act="save">Save what was read</button>' : ''}
                         <button class="btn-party-join" data-act="stop">${Roster.isRunning(job) ? 'Stop' : 'Clear'}</button>
@@ -155,6 +171,10 @@
                     await Roster.clearJob();
                     return reload();
 
+                case 'show':
+                    if (job && job.tabId != null) show(job.tabId);
+                    return null;
+
                 default:
                     return null;
             }
@@ -171,6 +191,15 @@
             const [rosters, current] = await Promise.all([Roster.loadRosters(), Roster.loadJob()]);
             roster = rosters[site] || null;
             job = current;
+            seat = { mine: false, open: false, working: false };
+            if (job && job.tabId != null) {
+                seat.mine = job.tabId === tabId;
+                seat.open = seat.mine || await alive(job.tabId);
+                if (seat.mine && job.site === site && Roster.isRunning(job)) {
+                    const status = await ask('status');
+                    seat.working = !!(status && status.working);
+                }
+            }
             paint();
         }
 

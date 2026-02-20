@@ -240,10 +240,19 @@
             const onRoster = !!(Roster && Roster.siteOf(this.site));
             document.getElementById('rosterPanel').hidden = !onRoster;
             if (onRoster) {
+                const tab = await TabActions.activeTab();
                 const view = RosterPopup.createView({
                     body: document.getElementById('rosterPopupBody'),
                     site: this.site,
-                    ask: async (kind) => TabActions.rosterStart(await TabActions.activeTab(), kind),
+                    tabId: tab ? tab.id : null,
+                    ask: (kind) => TabActions.rosterStart(tab, kind),
+                    // A job belongs to a tab, which may not be this one, or
+                    // may be gone.
+                    alive: (id) => chrome.tabs.get(id).then(() => true, () => false),
+                    show: (id) => {
+                        chrome.tabs.update(id, { active: true });
+                        window.close();
+                    },
                 });
                 view.render();
                 Settings.watch([Roster.JOB_KEY, Roster.ROSTERS_KEY], () => view.render());
