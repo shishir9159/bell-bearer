@@ -6598,45 +6598,19 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const job = Roster.newJob({ site: 'twitter', action: 'apply', names: ['a', 'b'], tabId: 41, now: noon });
         eq(job.tabId, 41);
         eq(Roster.newJob({ site: 'twitter', action: 'read' }).tabId, null, 'and one nobody was asked for is nobody\'s');
+        eq('leaseBy' in job || 'kickedAt' in job, false, 'the tab stands in for the lease and the kick');
     });
 
-    check('a job is claimed by one page at a time', () => {
-        const job = Roster.newJob({ site: 'twitter', action: 'apply', names: ['a', 'b'], now: 1000 });
-        eq(Roster.canClaim(job, 'page1', 1000), true, 'nobody holds it yet');
+    check('where a job sent its tab is written down, for a while', () => {
+        const job = Roster.newJob({ site: 'reddit', action: 'read', tabId: 41, now: noon });
+        eq(Roster.wasSent(job, noon), false, 'it has sent it nowhere yet');
 
-        const held = Roster.claim(job, 'page1', 1000);
-        eq(Roster.canClaim(held, 'page2', 1000), false, 'two tabs would follow the same account twice');
-        eq(Roster.canClaim(held, 'page1', 1000), true, 'but the holder may carry on');
-        eq(Roster.canClaim(held, 'page2', 1000 + Roster.LEASE_MS + 1), true,
-            'a tab closed mid-job cannot hold it forever');
-        eq(Roster.canClaim(Roster.release(held), 'page2', 1000), true,
-            'and it is handed back before navigating');
-
-        eq(Roster.isHeld(held, 1000), true);
-        eq(Roster.isHeld(held, 1000 + Roster.LEASE_MS + 1), false, 'a lease run out is nobody holding it');
-        eq(Roster.isHeld(Roster.release(held), 1000), false);
-    });
-
-    check('only just after a tab is opened for it may any page take a job up', () => {
-        const job = Roster.newJob({ site: 'twitter', action: 'read', now: noon });
-        eq(Roster.isKicked(job, noon), true);
-        eq(Roster.isKicked(job, noon + Roster.KICK_MS + 1), false,
-            'an x.com tab opened that evening is not sent to the following list');
-        eq(Roster.isKicked({ ...job, kickedAt: undefined }, noon), false, 'a job from before kickedAt existed');
-    });
-
-    check('a running job no page has taken up for a while is idle', () => {
-        const job = Roster.newJob({ site: 'twitter', action: 'apply', names: ['a'], now: noon });
-        const later = noon + Roster.IDLE_MS + 1;
-        eq(Roster.isIdle(job, noon + 1000), false, 'the tab the dashboard opened is still loading');
-        eq(Roster.isIdle(job, later), true, 'and never took it up');
-        eq(Roster.isIdle(Roster.claim(job, 'p', later), later + 1000), false, 'a page holds it');
-        const left = Roster.release(Roster.claim(job, 'p', later), later);
-        eq(Roster.isIdle(left, later + 1000), false, 'between one page and the next');
-        eq(Roster.isIdle(left, later + Roster.IDLE_MS + 1), true, 'the next page never came');
-        const held = Roster.claim(job, 'p', later);
-        eq(Roster.isIdle(held, later + Roster.LEASE_MS + Roster.IDLE_MS + 1), true, 'a closed tab, its lease run out');
-        eq(Roster.isIdle({ ...job, status: 'paused' }, later), false, 'a paused job is not idle, it is paused');
+        const sent = Roster.heading(job, '/Subreddits/Mine/', noon);
+        eq(sent.headingTo, '/subreddits/mine/', 'a path is compared in one case');
+        eq(Roster.wasSent(sent, noon + 5000), true, 'a page loading now was sent here, or somewhere else instead');
+        eq(Roster.wasSent(sent, noon + Roster.SENT_MS + 1), false,
+            'later, the tab being elsewhere is the user\'s doing and not the site\'s');
+        eq(Roster.wasSent(Roster.arrived(sent), noon + 5000), false, 'and it has arrived');
     });
 
     check('the cap is a cap per day, because the job outlives the day', () => {

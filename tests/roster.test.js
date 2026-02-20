@@ -137,12 +137,12 @@
     });
 
     /**
-     * Which page may act on a job. A job used to be taken up by every page of
-     * its site for as long as it ran, which looped forever on a page the site
-     * redirected — and took over any tab of the site opened while it ran.
+     * Which page may act on a job: one in the job's own tab. A job used to be
+     * taken up by every page of its site for as long as it ran, which looped
+     * forever on a page the site redirected — and took over any tab of the
+     * site opened while it ran.
      */
     const Roster = () => window.BB.Roster;
-    const HOP = 'bb-roster-hop';
     /** The tab the specs' jobs are in, and the one their pages say they are in. */
     const TAB = 7;
     const jobFor = (options) => Roster().newJob({ tabId: TAB, ...options });
@@ -154,37 +154,23 @@
     }
 
     /** A page at `path` loading in `tab`, with `job` in storage. */
-    async function enter(site, path, job, hop = '', tab = TAB) {
+    async function enter(site, path, job, tab = TAB) {
         await Roster().saveJob(job);
-        if (hop) sessionStorage.setItem(HOP, hop);
         const page = pageAt(path);
         await RosterContent().createRoster({ site, notify: () => {}, page, tabId: async () => tab }).install();
         return { page, job: await Roster().loadJob() };
     }
 
-    async function clean() {
-        sessionStorage.removeItem(HOP);
-        await Roster().clearJob();
-    }
+    const clean = () => Roster().clearJob();
 
     suite('the roster — which page may take a job up', () => {
         test('REGRESSION: a tab sent to the list and signed out stops, rather than going round', async () => {
             try {
-                const job = jobFor({ site: 'reddit', action: 'read' });
-                const { page, job: after } = await enter('reddit', '/login/', job, '/subreddits/mine/subscriber/');
+                const job = Roster().heading(jobFor({ site: 'reddit', action: 'read' }), '/subreddits/mine/subscriber/');
+                const { page, job: after } = await enter('reddit', '/login/', job);
                 assertEqual(page.sent.length, 0, 'sent back to the list, it is only sent to /login again');
                 assertEqual(after.status, 'paused');
                 assert(/sign in/i.test(after.note), after.note);
-            } finally { await clean(); }
-        });
-
-        test('just after the dashboard opened a tab, it finds its way to the list', async () => {
-            try {
-                const job = jobFor({ site: 'reddit', action: 'read' });
-                const { page } = await enter('reddit', '/', job);
-                assertEqual(page.sent.length, 1);
-                assert(/\/subreddits\/mine\//.test(page.sent[0]), page.sent[0]);
-                assertEqual(sessionStorage.getItem(HOP), '/subreddits/mine/subscriber/', 'and marks the tab as sent');
             } finally { await clean(); }
         });
 
@@ -193,7 +179,7 @@
             // opened that evening was sent off to somebody's profile.
             stage('<div id="siteTable"><div class="thing subreddit"><a class="title" href="/r/rust/">rust</a></div></div>');
             try {
-                const { page, job: after } = await enter('reddit', '/subreddits/mine/subscriber/', jobFor({ site: 'reddit', action: 'read' }), '', TAB + 1);
+                const { page, job: after } = await enter('reddit', '/subreddits/mine/subscriber/', jobFor({ site: 'reddit', action: 'read' }), TAB + 1);
                 assertEqual(page.sent.length, 0);
                 assertDeepEqual([after.status, after.found.length], ['running', 0], 'not read, not stopped');
             } finally {
@@ -202,13 +188,11 @@
             }
         });
 
-        test('later on, another page of the site leaves the job alone', async () => {
+        test('its own tab, taken somewhere else by the user, waits', async () => {
             try {
-                const job = jobFor({ site: 'reddit', action: 'read', now: Date.now() - Roster().KICK_MS - 1000 });
-                const { page, job: after } = await enter('reddit', '/r/rust/', job);
-                assertEqual(page.sent.length, 0, 'an ordinary visit is not taken over');
+                const { page, job: after } = await enter('reddit', '/r/rust/', jobFor({ site: 'reddit', action: 'read' }));
+                assertEqual(page.sent.length, 0, 'an ordinary visit is not dragged back');
                 assertEqual(after.status, 'running');
-                assertEqual(after.leaseBy, '', 'nor held');
             } finally { await clean(); }
         });
 
@@ -229,9 +213,12 @@
                 <div class="thing subreddit"><a class="title" href="https://old.reddit.com/user/someone/">a profile</a></div>
             </div>`);
             try {
-                const job = jobFor({ site: 'reddit', action: 'read' });
+                // Sent from reddit.com to old.reddit.com: another origin, where
+                // a mark kept in the tab's sessionStorage did not follow.
+                const job = Roster().heading(jobFor({ site: 'reddit', action: 'read' }), '/subreddits/mine/subscriber/');
                 const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', job);
                 assertEqual(after.status, 'done');
+                assertEqual(after.headingTo, '', 'and it has arrived');
                 assertDeepEqual((await Roster().loadRosters()).reddit.names, ['rust', 'cpp']);
                 assertEqual(document.getElementById(window.BB.RosterBar.ID), null, 'and the bar is gone');
             } finally {
@@ -244,8 +231,7 @@
             stage('<div id="siteTable"></div>');
             try {
                 await Roster().saveRoster('reddit', ['kept']);
-                const job = jobFor({ site: 'reddit', action: 'read' });
-                const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', job);
+                const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', jobFor({ site: 'reddit', action: 'read' }));
                 assertEqual(after.status, 'paused');
                 assertDeepEqual((await Roster().loadRosters()).reddit.names, ['kept']);
             } finally {
@@ -292,11 +278,20 @@
 
         test('a tab sent to a name and landing elsewhere stops the job', async () => {
             try {
-                const job = jobFor({ site: 'twitter', action: 'apply', names: ['alice'] });
-                const { page, job: after } = await enter('twitter', '/i/flow/login', job, '/alice');
+                const job = Roster().heading(jobFor({ site: 'twitter', action: 'apply', names: ['alice'] }), '/alice');
+                const { page, job: after } = await enter('twitter', '/i/flow/login', job);
                 assertEqual(page.sent.length, 0);
                 assertEqual(after.status, 'paused');
                 assert(after.note.includes('@alice'), after.note);
+            } finally { await clean(); }
+        });
+
+        test('sent there long ago, the tab being elsewhere is the user\'s doing', async () => {
+            try {
+                const then = Date.now() - Roster().SENT_MS - 1000;
+                const job = Roster().heading(jobFor({ site: 'twitter', action: 'apply', names: ['alice'] }), '/alice', then);
+                const { job: after } = await enter('twitter', '/home', job);
+                assertEqual(after.status, 'running', 'not a stop: nothing went wrong');
             } finally { await clean(); }
         });
     });
@@ -424,6 +419,7 @@
                 const job = await Roster().loadJob();
                 assertDeepEqual([job.site, job.action, job.status], ['reddit', 'read', 'running']);
                 assertEqual(job.tabId, TAB, 'the job is that tab\'s');
+                assertEqual(job.headingTo, '/subreddits/mine/subscriber/', 'and where it was sent is written down');
             } finally { await clean(); }
         });
 

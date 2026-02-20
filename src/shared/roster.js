@@ -28,8 +28,8 @@
  * The job lives in storage rather than in the page, because applying a list
  * *is* a sequence of navigations — each name is another page load, which ends
  * the script that started it. Storage is what makes the job resumable: the
- * job's page picks it up, does one thing, writes down that it did, and moves
- * on.
+ * next page in the job's tab picks it up, does one thing, writes down that it
+ * did, and moves on.
  *
  * Everything above the "storage" line is pure and covered by
  * tests/node-check.js.
@@ -216,10 +216,6 @@
             status: 'running',       // running | waiting | done | stopped | paused
             note: '',
             startedAt: now,
-            // When the dashboard last opened a tab for it. Only for a short
-            // while after that may a page that is not the job's own take
-            // the job up — see isKicked.
-            kickedAt: now,
             actedAt: 0,              // when the last action was taken
             nextAt: 0,               // the earliest the next one may be
             // The tab the job runs in: the one that was asked to start it, or
@@ -227,11 +223,9 @@
             // so two tabs of the site cannot both follow the same account,
             // and an ordinary visit in another tab is left alone.
             tabId,
-            // Which page of the site is working on this, and until when. Two
-            // tabs of the same site both pick a job up, and without a lease
-            // both would follow the same account and step the cursor twice.
-            leaseBy: '',
-            leaseUntil: 0,
+            // Where that tab was last sent, and when; cleared on arrival.
+            headingTo: '',
+            headedAt: 0,
         };
     }
 
@@ -244,49 +238,19 @@
      */
     const isOpen = (job) => !!job && job.status !== 'done' && job.status !== 'stopped';
 
-    /** How long a page may hold a job before another may take it over. */
-    const LEASE_MS = 150000;
-
-    /** May `pageId` act on this job right now? */
-    function canClaim(job, pageId, now = Date.now()) {
-        if (!isRunning(job)) return false;
-        if (!job.leaseBy || job.leaseBy === pageId) return true;
-        return job.leaseUntil <= now;
-    }
-
-    const claim = (job, pageId, now = Date.now()) =>
-        ({ ...job, leaseBy: pageId, leaseUntil: now + LEASE_MS });
-
-    /** Hand the job back before navigating, so the next page can take it up. */
-    const release = (job, now = Date.now()) => ({ ...job, leaseBy: '', leaseUntil: 0, releasedAt: now });
-
-    /** Is some page working on this job now? */
-    const isHeld = (job, now = Date.now()) => !!job && !!job.leaseBy && job.leaseUntil > now;
-
     /**
-     * A running job no page has worked on for a while: its tab was closed, or
-     * the site sent it somewhere that is not the job's page. Only the job's
-     * own page moves it on, so nothing else will, and the dashboard offers to
-     * open that page again. Long enough for a page to load and take it up.
+     * How long after its tab was sent somewhere a job counts as on its way.
+     * A page that loads in the job's tab inside that, and is not the place,
+     * was sent somewhere else by the site — a sign-in page, as a rule — and
+     * the job stops rather than send the tab round again. After it, a page
+     * that is not the job's is the user having taken the tab elsewhere, and
+     * the job waits.
      */
-    const IDLE_MS = 30000;
-    function isIdle(job, now = Date.now()) {
-        if (!job || job.status !== 'running' || isHeld(job, now)) return false;
-        return now - Math.max(job.releasedAt || 0, job.leaseUntil || 0, job.kickedAt || 0) > IDLE_MS;
-    }
+    const SENT_MS = 60000;
 
-    /**
-     * How long after the dashboard opens a tab for a job any page of the site
-     * may take it up, rather than only the job's own page.
-     *
-     * A job used to be taken up by every page of the site, for as long as it
-     * ran. A read of Twitter starts on x.com/home, because which account is
-     * signed in is only known there; but the same rule then took over any
-     * x.com tab opened later that day and sent it somewhere else. Two minutes
-     * covers a slow first load and nothing after it.
-     */
-    const KICK_MS = 120000;
-    const isKicked = (job, now = Date.now()) => !!job && now - (job.kickedAt || 0) < KICK_MS;
+    const heading = (job, to, now = Date.now()) => ({ ...job, headingTo: String(to || '').toLowerCase(), headedAt: now });
+    const arrived = (job) => ({ ...job, headingTo: '', headedAt: 0 });
+    const wasSent = (job, now = Date.now()) => !!job && !!job.headingTo && now - (job.headedAt || 0) < SENT_MS;
 
     /**
      * `job` with its daily count reset if the day turned over under it.
@@ -431,13 +395,13 @@
      * Read, change, write — one job at a time. Resolves to the job as written,
      * or null when there is none or the step failed.
      *
-     * Two tabs of the same site can both pick a job up, and both would then
-     * follow the same account and step the cursor twice. The change is applied
-     * to what is in storage now rather than to a copy read earlier, and the
-     * content script also checks that the name it is looking at is still the
-     * one the job is on before it clicks anything. A page the job is not for
-     * hands it back unchanged, and that is no longer written back over
-     * whatever the page it is for has done since.
+     * The job's tab and the popup both write to it — the page stepping the
+     * cursor, the popup skipping a name or stopping the job. So the change is
+     * applied to what is in storage now rather than to a copy read earlier,
+     * and the content script checks that the name it is on is still the one
+     * the job is on before it counts anything. A page the job is not for
+     * hands it back unchanged, and that is not written back over whatever
+     * the page it is for has done since.
      */
     async function updateJob(change) {
         return (await jobs.update((box) => ({ job: change(box.job) }))).job;
@@ -466,7 +430,7 @@
         SITES, ROSTERS_KEY, JOB_KEY, MAX_NAMES,
         siteOf, ids, parseName, parseList, toText, fileName, handleFromHref,
         dayKey, newJob, isRunning, isOpen, forDay, atCap, currentName, nextDelay, plan, spanText, planText, progress,
-        LEASE_MS, canClaim, claim, release, isHeld, IDLE_MS, isIdle, KICK_MS, isKicked,
+        SENT_MS, heading, arrived, wasSent,
         loadRosters, saveRoster, loadJob, saveJob, clearJob, updateJob,
     };
 

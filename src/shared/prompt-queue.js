@@ -182,7 +182,10 @@
 
     // ------------------------------------------------------------- leases
 
-    /** The roster's lease (src/shared/roster.js), per chat rather than per job. */
+    /**
+     * A lease per chat: one page works a chat's queue at a time. The roster
+     * job had one like it, until a job came to belong to its tab.
+     */
     function canClaim(state, key, pageId, now = Date.now()) {
         const lease = obj(state.leases[key]);
         return !lease.by || lease.by === pageId || num(lease.until) <= now;

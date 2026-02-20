@@ -43,26 +43,6 @@
     const Selectors = ns.Selectors || req('../shared/selectors.js');
     const RosterBar = ns.RosterBar || req('./roster-bar.js');
 
-    /** This page, for the job's lease. A fresh one per load, which is right. */
-    const PAGE_ID = Math.random().toString(36).slice(2, 10);
-
-    /**
-     * Where the job last sent this tab, carried over the navigation in the
-     * tab's own sessionStorage — which survives a same-origin load and is the
-     * tab's alone, so a page that finds it knows it is the one that was sent.
-     *
-     * That is what tells "the site sent us somewhere else" from "the user
-     * opened another page of the site". Old Reddit sends a signed-out visitor
-     * from /subreddits/mine to /login; the read job used to send the tab back
-     * to the listing from there, be sent to /login again, and go round once a
-     * second for as long as the tab stayed open.
-     */
-    const HOP_KEY = 'bb-roster-hop';
-
-    function markHop(path) {
-        try { sessionStorage.setItem(HOP_KEY, path.toLowerCase()); } catch (_) { /* storage blocked: no loop guard, the lease still holds */ }
-    }
-
     const PAGE = Object.freeze({
         path: () => location.pathname,
         href: () => location.href,
@@ -87,16 +67,6 @@
             input.addEventListener('cancel', () => resolve(null));
             input.click();
         });
-    }
-
-    function takeHop() {
-        try {
-            const path = sessionStorage.getItem(HOP_KEY);
-            sessionStorage.removeItem(HOP_KEY);
-            return path || '';
-        } catch (_) {
-            return '';
-        }
     }
 
     const SELECTORS = Object.freeze({
@@ -247,11 +217,11 @@
 
         // ------------------------------------------------------ bookkeeping
 
-        /** Stop the job, say why, and hand it back. */
+        /** Stop the job and say why. */
         function halt(status, note) {
             return Roster.updateJob((job) => {
                 if (!job || job.site !== site) return job;
-                return { ...Roster.release(job), status, note };
+                return { ...Roster.arrived(job), status, note };
             });
         }
 
@@ -265,31 +235,19 @@
         }
 
         /**
-         * Leave for another page of the site, handing the job over first.
+         * Leave for another page of the site, writing down where first.
          *
-         * The order matters: a page that navigated while still holding the
-         * lease would leave the job untouchable for two and a half minutes,
-         * and the page that arrives is the one that has to pick it up.
+         * Written down so that the page which loads there can tell what
+         * became of it: the job's own tab arriving somewhere else, soon
+         * after, was sent there by the site. Old Reddit sends a signed-out
+         * visitor from /subreddits/mine to /login; the read used to send the
+         * tab back to the listing from there, be sent to /login again, and go
+         * round once a second for as long as the tab stayed open.
          */
         async function goTo(url) {
-            await Roster.updateJob((job) => (job && job.site === site ? Roster.release(job) : job));
-            markHop(new URL(url, page.href()).pathname);
+            const to = new URL(url, page.href()).pathname;
+            await Roster.updateJob((job) => (job && job.site === site ? Roster.heading(job, to) : job));
             page.assign(url);
-        }
-
-        /**
-         * Take the job for this page, or say it is somebody else's. The check
-         * and the claim are one write, so two tabs arriving together cannot
-         * both come away holding it.
-         */
-        async function take() {
-            let ours = false;
-            await Roster.updateJob((current) => {
-                if (!current || current.site !== site || !Roster.canClaim(current, PAGE_ID)) return current;
-                ours = true;
-                return Roster.claim(current, PAGE_ID);
-            });
-            return ours;
         }
 
         /** The job as it stands, or null when there is nothing of ours to do. */
@@ -360,10 +318,8 @@
                     bar.hide();
                     return halt('paused', `Twitter stopped answering after ${found.size} ${rules.many}. Leave it a while and start again.`);
                 }
-                // Banked when it grew, and once a minute regardless: a bank
-                // is also what keeps the lease, and a list read slowly must
-                // not lose it to another tab.
-                if ((found.size !== banked && Date.now() - bankedAt > 3000) || Date.now() - bankedAt > 60000) {
+                // Banked as it grows, every few seconds at most.
+                if (found.size !== banked && Date.now() - bankedAt > 3000) {
                     await bank(found);
                     banked = found.size;
                     bankedAt = Date.now();
@@ -397,7 +353,7 @@
         }
 
         const bank = (found) => Roster.updateJob((job) => (job && job.site === site
-            ? { ...Roster.claim(job, PAGE_ID), found: [...found.values()] }
+            ? { ...job, found: [...found.values()] }
             : job));
 
         /**
@@ -492,7 +448,6 @@
             let pressedAt = 0;
             let choice = '';
             let checkedAt = Date.now();
-            let leasedAt = Date.now();
 
             // The user's press on the button, seen on its way in, before the
             // site redraws it. It is what tells a follow made now from one that
@@ -544,11 +499,6 @@
                         const latest = await mine();
                         if (!latest || latest.at !== job.at) return void bar.hide();
                         checkedAt = Date.now();
-                    }
-                    // Waiting on a person can outlast a lease; keep it.
-                    if (Date.now() - leasedAt > 60000) {
-                        await take();
-                        leasedAt = Date.now();
                     }
                     await sleep(300);
                 }
@@ -604,7 +554,7 @@
                 // is the duplicate, so it is dropped rather than counted.
                 if (day.at !== job.at) return current;
                 return {
-                    ...Roster.claim(day, PAGE_ID, now),
+                    ...day,
                     // Back to running: the job may have been 'waiting' on
                     // yesterday's cap, and forDay has just cleared that.
                     status: 'running',
@@ -688,31 +638,30 @@
         /** Whether this page is doing a job's work now; a second ask must not start a second copy of it. */
         let working = false;
 
-        /** Carry `job` on from this page: do its work here, or go to where it is done. */
-        async function run(job, { go = false, hop = '' } = {}) {
+        /**
+         * Carry `job` on from this page: do its work here, or — when `go` —
+         * leave for where it is done. `sent` is the job having just sent its
+         * tab somewhere, which this page then is or is not.
+         */
+        async function run(job, { go = false, sent = false } = {}) {
             if (working) return null;
             working = true;
             try {
-                const where = await place(job, go || !!hop);
+                const where = await place(job, go || sent);
                 if (where.here) {
-                    if (!(await take())) return null;
+                    await Roster.updateJob((current) => (current && current.site === site ? Roster.arrived(current) : current));
                     if (job.action === 'apply') return await applyOne(job);
                     return await (site === 'twitter' ? readTwitter(job) : readReddit(job));
                 }
-                if (go) {
-                    if (!(await take())) return null;
-                    return await (where.url ? goTo(where.url) : pause(where.lost));
-                }
+                if (go) return await (where.url ? goTo(where.url) : pause(where.lost));
                 // Sent somewhere by the job, and somewhere else is where the
                 // tab is: the site's doing, and not one to send it round again.
-                if (hop) return await pause(`${rules.name} sent the tab to ${page.path()} instead of ${where.what}.`);
-                // Another page of the site, on an ordinary visit: left alone.
+                if (sent) return await pause(`${rules.name} sent the tab to ${page.path()} instead of ${where.what}.`);
+                // The user has taken the job's tab somewhere else. It waits.
                 return null;
             } catch (error) {
                 // Including the extension being reloaded out from under this
-                // page, which throws from every chrome.* call. A job left
-                // running with a live lease would be stuck; halting is the
-                // recoverable end.
+                // page, which throws from every chrome.* call.
                 bar.hide();
                 return halt('paused', `Stopped on an error: ${error && error.message ? error.message : 'unknown'}`);
             } finally {
@@ -721,26 +670,24 @@
         }
 
         /**
-         * Pick the job up, if there is one for this site and this page is
-         * one that may act on it. Called once per page load and never on a
-         * timer: a job advances by navigating, so every step is a new load
-         * and a new call to this.
+         * Pick the job up, if there is one for this site and this is its tab.
+         * Called once per page load and never on a timer: a job advances by
+         * navigating, so every step is a new load and a new call to this.
+         *
+         * Its tab, and no other. A job used to be taken up by every page of
+         * the site, which sent an x.com tab opened that evening off to
+         * somebody's profile; then by pages that looked like the job's, with
+         * a lease so that two could not both act and a mark in the tab's
+         * sessionStorage to say "you were sent here" — which a load of the
+         * same page had to wait out, and a change of origin (reddit.com to
+         * old.reddit.com) lost. The tab is the one thing a job is really in.
          */
         async function install() {
             if (!rules) return;
-
-            // Taken whether or not there is a job, so a mark left by one that
-            // was stopped cannot be read by the next.
-            const hop = takeHop();
             const job = await mine();
-            if (!job) return;
-            // Its own tab, and no other: the one that was asked to run it.
-            // Every page of the site once took a job up, and an x.com tab
-            // opened that evening was sent off to somebody's profile.
-            if (job.tabId == null || (await tabId()) !== job.tabId) return;
-            // A read may find its way from any page for a moment after the
-            // dashboard opened a tab for it; see Roster.isKicked.
-            await run(job, { go: job.action === 'read' && !hop && Roster.isKicked(job), hop });
+            if (!job || job.tabId == null) return;
+            if ((await tabId()) !== job.tabId) return;
+            await run(job, { sent: Roster.wasSent(job) });
         }
 
         /**
@@ -830,7 +777,7 @@
             // it stopped in: that one may be closed.
             const next = await Roster.updateJob((job) => (job && job.site === site
                 ? {
-                    ...Roster.release(job), tabId: tab, status: 'running', note: '',
+                    ...Roster.arrived(job), tabId: tab, status: 'running', note: '',
                     ...(kind === 'skip' && job.action === 'apply' ? { at: job.at + 1, passed: (job.passed || 0) + 1 } : {}),
                 }
                 : job));
