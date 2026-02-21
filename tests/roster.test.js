@@ -576,6 +576,7 @@
             });
             const p = await popup('twitter', { ok: true });
             try {
+                assert(/Accounts you follow/.test(p.body.textContent), 'not "your accounts", which are the ones you own');
                 assert(/instead of @carol/.test(p.body.textContent));
                 assertEqual(p.button('skip').textContent, 'Skip @carol');
                 assert(p.button('read').disabled, 'one job at a time');

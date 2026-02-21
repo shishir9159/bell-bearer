@@ -37,6 +37,9 @@
         return `${Math.round(hours / 24)}d ago`;
     }
 
+    /** What the list is, said plainly: "your accounts" reads as accounts you own. */
+    const TITLE = { twitter: 'Accounts you follow', reddit: 'Your subreddits' };
+
     /** What each site's two buttons do, in the one line there is room for. */
     const HOW = {
         twitter: 'Read opens your following list in this tab: scroll it to the end and press Done on the bar there. ' +
@@ -126,7 +129,7 @@
             const busy = Roster.isOpen(job);
             body.innerHTML = `
                 <div class="roster-pop-head">
-                    <span class="roster-pop-title">Your ${esc(rules.many)}</span>
+                    <span class="roster-pop-title">${esc(TITLE[site])}</span>
                     <span class="roster-pop-when">${names.length
                         ? `${names.length}, read ${esc(ageText(roster.readAt))}`
                         : 'nothing read yet'}</span>
