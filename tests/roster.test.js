@@ -563,6 +563,8 @@
             try {
                 await p.press('read');
                 assertEqual(p.closed(), 0, 'the popup stays, to say why');
+                assert(/Reload this tab first/.test(p.body.querySelector('.roster-pop-problem').textContent),
+                    'in the panel, where it is still there to read');
                 assertEqual(await Roster().loadJob(), null);
             } finally { p.body.remove(); await clean(); }
         });

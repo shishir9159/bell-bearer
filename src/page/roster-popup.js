@@ -70,6 +70,8 @@
          * the dashboard guessed from how long the job had gone unheld.
          */
         let seat = { mine: false, open: false, working: false };
+        /** Why the last button did nothing. In the panel, where it stays: a toast is gone in three seconds. */
+        let problem = '';
 
         function jobHtml() {
             if (!job) return '';
@@ -134,6 +136,7 @@
                     <button class="btn-party-join" data-act="download"${names.length ? '' : ' disabled'}>Download .txt</button>
                     <button class="btn-party-join" data-act="pick"${busy ? ' disabled' : ''}>${esc(rules.verb)} from a list…</button>
                 </div>
+                ${problem ? `<p class="roster-pop-problem" role="alert">${esc(problem)}</p>` : ''}
                 <p class="roster-pop-how">${esc(HOW[site])}</p>
                 ${jobHtml()}`;
         }
@@ -142,7 +145,8 @@
         async function hand(kind) {
             const answer = await ask(kind);
             if (answer && answer.ok) return close();
-            return Ui.toast(NO_ANSWER, 'error');
+            problem = NO_ANSWER;
+            return paint();
         }
 
         async function act(kind) {
