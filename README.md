@@ -28,7 +28,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **Site switches**: Each site's card in Settings has a switch at its corner. Off, the site leaves the dashboard and none of Bell Bearer's code for it loads on its pages — they get only what every other page does
 - **Activity**: Opt-in, on-device record of where your screen time goes
 - **Daily time limit**: A budget, or a window of hours, on any site you name — counted while you are actually looking at it, snoozable ten minutes at a time
-- **Rosters**: Who you follow on Twitter and the subreddits you have joined, out to a text file and back in again — slowly, and every Follow and Join your own click
+- **Rosters**: Who you follow on Twitter and the subreddits you have joined, out to a text file and back in again, from the popup on either site — slowly, and every Follow and Join your own click
 - **Chess.com and Lichess**: Games, time management and time at the board; a clock warning and moves read aloud while you play
 - **Watch party**: A YouTube video or a Netflix episode in sync with other people, each on their own account — through a server, your own relay, browser-to-browser codes or public trackers — with a chat beside the player
 - **LeetCode**: Each problem timed on LeetCode's own stopwatch, submissions recorded from its own traffic, an FSRS-5 review schedule graded in one click, your notes and code templates on the page, and a mock-interview mode that hides the hints
@@ -712,10 +712,18 @@ the counting happens in another tab.
 
 ## Rosters: your list out to a file, and back
 
-**Twitter › Roster** and **Reddit › Roster** read your own list off the site —
-the accounts you follow, the subreddits you have joined — into a plain text
-file, one name per line, and read a file back in to follow or join what it
-names.
+On x.com and reddit.com the popup has a roster: it reads your own list off the
+site — the accounts you follow, the subreddits you have joined — into a plain
+text file, one name per line, and reads a file back in to follow or join what it
+names. **Read my list**, **Download .txt** and **Follow from a list…**, over the
+tab that will do the work.
+
+It is in the popup, and not the dashboard where it began, because of that last
+part. The dashboard could only write a job down and open a tab in the hope that
+the tab would take it up, and when a tab could not — one still running the
+content script from before an update, say — the job sat there "running" with no
+tab working on it. The popup asks the tab behind it directly. A tab with nothing
+in it to answer is said so at once, in the panel, and no job is written.
 
 No API, no token, no endpoint — and nothing is pressed or scrolled for you.
 Bell Bearer reads the pages you look at and opens the next one; every Follow and
@@ -750,29 +758,36 @@ of it is to stay a long way clear rather than to find it. The gap after a follow
 is jittered inside its range, because the same interval for an hour is a
 signature and a person does not have one.
 
-Before an apply job starts, the panel says how many names it is, how many are
-new since your last read, roughly how long today's sitting will take and how
-many days the whole thing is. A four-hundred account list is eleven days of
+**Follow from a list…** asks for the file on the page itself, on the same bar —
+a popup closes the moment a file dialog takes the focus from it, and the file
+would be picked into nothing. Before a job starts, the bar says how many names
+it is, how many are new since your last read, roughly how long today's sitting
+will take and how many days the whole thing is. A four-hundred account list is eleven days of
 Twitter's cap, which is not something to discover on day three.
 
 A job stops at the first thing it does not understand — the site putting a "you
 are doing that too much" sheet in front of the page, or sending the tab somewhere
 other than where it was sent, as old Reddit does with a signed-out visitor — and
-says so in the dashboard, rather than trying again or moving on. A page with no
+says so, on the page and in the popup, rather than trying again or moving on. A page with no
 Follow button is the one thing you are asked about instead, on the bar, since you
 can see the page and the job cannot. Anything already followed or joined moves
 on at once and costs nothing against the day, so re-running a list you half
 applied yesterday is cheap.
 
 Applying a list *is* a sequence of navigations, so the job lives in storage
-rather than in any page: the job's own page picks it up, does one thing, writes
-down that it did and moves on. That is what makes it survive a page load, a
-closed browser, and the day's cap running out in the middle. Other pages of the
-site leave it alone — a job used to be taken up by every page of the site, and
-would send an x.com tab opened that evening off to somebody's profile. One page
-holds it at a time — two tabs would otherwise ask for the same account twice —
-and the dashboard can stop it, skip the name it stopped on, or carry on where it
-left off, which is also how a job whose tab was closed is picked up again.
+rather than in any page: the next page picks it up, does one thing, writes down
+that it did and moves on. That is what makes it survive a page load and the
+day's cap running out in the middle.
+
+A job belongs to the tab that was asked to run it, and a page acts on it in that
+tab and no other. Other tabs of the site leave it alone — a job used to be taken
+up by every page of the site, and would send an x.com tab opened that evening
+off to somebody's profile — and two tabs cannot both ask for the same account.
+If you take the job's tab somewhere else, it waits. The popup says where a job
+is: at work in this tab, running in another (**Go to its tab**), or its tab
+closed — and **Carry on here** moves it to the tab you are on, which is also how
+one that stopped, or ran out of the day's cap, is picked up again. **Skip**
+passes over the name it stopped on.
 
 ## Activity
 
@@ -1126,7 +1141,7 @@ src/page/       shared by popup.html and dashboard.html
   spark.js         a line over time, scaled by when rather than by index
   time-limit-view.js today against a site's daily limit
   limit-sites-panel.js the General list: which sites have a limit, and what it is
-  roster-view.js   a site's Roster panel: the file out, the file in, the job
+  roster-popup.js  the popup's Roster panel: the file out, and the tab asked to read or follow
   x-pouch-view.js  the dashboard's People and Posts panels — where X topics are managed
   leet-stats.js    the LeetCode Review, Practice and Notes panels
   typeracer-stats.js the TypeRacer Races, Weak spots and Practice panels
@@ -1377,7 +1392,7 @@ A roster is the list last read off a site, and at most one job in flight:
     site: "twitter", action: "apply", names: ["…"], found: [],
     at: 12, done: 10, skipped: 1, passed: 1,
     day: "2026-09-24", today: 10, status: "running", note: "",
-    nextAt: 0, kickedAt: 0, leaseBy: "k3f9a1", leaseUntil: 0, releasedAt: 0
+    nextAt: 0, tabId: 1207, headingTo: "/isorokin", headedAt: 0
   }
 }
 ```
@@ -1386,19 +1401,18 @@ A roster is the list last read off a site, and at most one job in flight:
 `passed` (followed by you, already there, skipped by you) are counts rather than lists, because writing two thousand names back
 on every step is a storage write per action for something nobody reads. `today`
 is against the site's cap and is reset by the `day` turning over, since a job of
-four hundred names runs over days by design. `leaseBy` is the page currently
-holding the job — two tabs would otherwise follow the same account twice — and it
-is handed back before each navigation, with `leaseUntil` covering the case where
-the tab is simply closed. `kickedAt` is when the dashboard last opened a tab for
-the job: for two minutes after it, a page that is not the job's own may take it
-up, to find its way there. A running job no page has held for thirty seconds
-since `releasedAt` or `leaseUntil` is one nobody is working on, and the
-dashboard offers to carry it on.
+four hundred names runs over days by design. `tabId` is the tab the job runs
+in — the one the popup was over when it was asked for, or carried on — and a
+page acts on the job in that tab alone; a content script learns which tab it is
+in by asking the worker. `headingTo` is where the job last sent that tab, and
+`headedAt` when: a page that loads in the job's tab within a minute of that,
+and is not the place, was sent somewhere else by the site, and the job stops
+rather than send the tab round again. Both are cleared on arrival.
 
-One thing is kept outside `chrome.storage.local`: `bb-roster-hop` in the site's
-own `sessionStorage`, the path the job last sent that tab to. The page that
-arrives reads and removes it, which is how a page the site redirected knows it
-was sent, and an ordinary visit to the site knows it was not.
+It was a lease and two timestamps before that, with a mark in the site's own
+`sessionStorage` to say "you were sent here" — which a reload of the same page
+had to wait two and a half minutes to take over, and a change of origin, from
+reddit.com to old.reddit.com, lost.
 
 A watch party keeps nothing in `chrome.storage.local` beyond its `party*`
 settings. The room, its members and its invites live in the session and are
