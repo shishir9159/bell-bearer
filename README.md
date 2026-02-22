@@ -91,6 +91,7 @@ them, the keys act on the one on screen.
 | `<` | Previous speed step |
 | `+` | Back to 1x |
 | `Ctrl + Shift + L` | Copy the page as a Markdown link (rebindable at `chrome://extensions/shortcuts`) |
+| `Y` `Y` | The same, on a double tap — and on a YouTube video at the second the player is on, once **Settings › YouTube** asks for that |
 | `Shift + F` | Skim: find within this page |
 | `Shift + H` | Skim: search your browsing history |
 | `Shift + A` | Skim: search the actions it can run |
@@ -125,6 +126,23 @@ anywhere but YouTube, x.com, leetcode.com, chatgpt.com and claude.ai, so on ever
 other site the key stays a plain capital P. On the two chat sites that includes the prompt
 box: with the caret in it, `Shift + P` types a P, and the panel is the button in
 the chat's header.
+
+`Y` `Y` is one key tapped twice, and it is on from the start where the
+bare-Shift letters are not, because it claims less: a single `Y` is never
+taken. The first press goes to the page exactly as it always did — GitHub's own
+`Y`, which swaps a file's address for its permalink, goes on working — and only
+a second press within half a second is kept from the page, and copies. A key
+held down is one press, any other key in between starts the count again, and
+nothing is counted while you are typing in a field. Like every key in the table
+it can be moved or switched off under **Settings › Keyboard Shortcuts**; a
+double tap moved to a key is that key twice.
+
+On a YouTube video the link is `[title - channel](watch url)`. **Settings ›
+YouTube › Copy a video's link at the current time with Y Y** adds where the
+player is — `&t=83s` — so the link opens the video at that moment rather than at
+its start. During an advert it is left off: the player's clock is the advert's
+then. `Ctrl + Shift + L` copies the link without it either way, which keeps
+both one keystroke off.
 
 The five chat keys are `Ctrl + Alt` for the LeetCode keys' reason, and more
 so: a chat site's prompt box has the focus nearly all the time. `Keybindings.conflicts`
