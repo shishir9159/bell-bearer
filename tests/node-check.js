@@ -5383,15 +5383,15 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     check('a shortcut for a feature that is off is not listed at all', () => {
         const ids = (settings) => Keybindings.list(null, 'general', settings).map((b) => b.id);
-        eq(ids({ skimMode: false, linkHints: false }), ['copy-markdown-link'],
+        eq(ids({ skimMode: false, linkHints: false }), ['copy-markdown-link', 'copy-page-link'],
             'the bare-Shift keys are nobody else\'s until Settings asks for them');
         eq(ids({ skimMode: true, linkHints: false }),
-            ['skim-find', 'skim-history', 'skim-actions', 'copy-markdown-link']);
+            ['skim-find', 'skim-history', 'skim-actions', 'copy-markdown-link', 'copy-page-link']);
         eq(ids({ skimMode: true, linkHints: true }).includes('link-hints'), true);
         eq(ids({ pouchShortcut: true }).includes('open-pouch'), true);
         eq(ids({ pouchShortcut: false }).includes('open-pouch'), false,
             'Shift+P stays a capital P until the pouch shortcut is asked for');
-        eq(ids(null).length, 6, 'with no settings to check against, the table is the whole table');
+        eq(ids(null).length, 7, 'with no settings to check against, the table is the whole table');
     });
 
     check('every feature a binding needs is a setting that exists', () => {
@@ -5429,6 +5429,30 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Keybindings.format({ ctrl: true, shift: true }, 'digit'), 'Ctrl + Shift + 1-9');
         eq(Keybindings.format({ alt: true, code: 'KeyC', key: 'c' }, 'key'), 'Alt + C');
         eq(Keybindings.format({ shift: true, code: 'Period', key: '>', char: true }, 'key'), '>');
+        eq(Keybindings.format({ code: 'KeyY', key: 'y' }, 'double'), 'Y Y');
+    });
+
+    check('a double tap is one key, matched on each press and never on a held one', () => {
+        const binding = Keybindings.resolve({}, 'copy-page-link');
+        eq([binding.kind, binding.combo.code], ['double', 'KeyY']);
+        eq(claimed({}, press('KeyY', { key: 'y' })), ['copy-page-link']);
+        eq(claimed({}, press('KeyY', { key: 'y', repeat: true })), [], 'a held y read as a second press');
+        eq(claimed({}, press('KeyY', { key: 'Y', shift: true })), [], 'a capital Y was taken');
+        eq(claimed({ 'copy-page-link': { enabled: false } }, press('KeyY', { key: 'y' })), []);
+        const counted = Shortcuts.createBindings({}, {}).filter((one) => one.double).map((one) => one.name);
+        eq(counted, ['copy-page-link'], 'the dispatcher counts presses for these alone');
+    });
+
+    check('a double tap and a single press of the same key cannot both be bound', () => {
+        // One press of the key would run the single binding, twice over,
+        // before the double ever counted to two.
+        const y = { code: 'KeyY', key: 'y' };
+        eq(Keybindings.conflicts({}, 'chess-clear-arrows', y).map((c) => c.id), ['copy-page-link']);
+        eq(Keybindings.conflicts({}, 'copy-page-link', { alt: true, code: 'KeyC', key: 'c' }).map((c) => c.id),
+            ['chess-clear-arrows']);
+        eq(Keybindings.record(press('KeyG', { key: 'g' }), 'double').combo,
+            { ctrl: false, alt: false, shift: false, meta: false, code: 'KeyG', key: 'g' });
+        eq(Keybindings.record(press('ShiftLeft', { key: 'Shift', shift: true }), 'double'), { pending: true });
     });
 
     // --------------------------------------------------------------- chess
@@ -6193,6 +6217,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(on('skim-actions'), 'KeyA');
         eq(on('link-hints'), 'KeyL');
         eq(on('copy-markdown-link'), 'KeyL');
+        eq(on('copy-page-link'), 'KeyY');
         eq(on('record-checkpoint'), 'KeyB');
         eq(on('chess-clear-arrows'), 'KeyC');
         // Matched by the character its cap prints, since these have no code

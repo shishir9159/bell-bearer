@@ -82,6 +82,7 @@
                 enabled: () => feature('pouchShortcut')() && hasPouch(),
                 run: () => actions.openPouch(),
             }],
+            ['copy-page-link', { enabled: () => true, run: () => actions.copyPageLink() }],
 
             ['record-checkpoint', { noRepeat: true, enabled: canRecord, run: () => actions.startRecording() }],
             ['segment-toggle', { noRepeat: true, enabled: canRecord, run: () => actions.toggleSegment() }],
@@ -96,16 +97,23 @@
             ['shorts-forward', { enabled: onShorts, run: () => actions.shortsSkip(1) }],
         ];
 
-        return rows.map(([name, row]) => ({
-            name,
-            match: (e) => {
-                if (row.noRepeat && e.repeat) return false;
-                const shortcut = getShortcut(name);
-                return !!shortcut && shortcut.enabled && Keybindings.matches(e, shortcut.combo, shortcut.kind);
-            },
-            enabled: row.enabled,
-            run: row.run,
-        }));
+        return rows.map(([name, row]) => {
+            // A 'double' binding matches each press of its key; install()
+            // counts them. A key held down auto-repeats well inside the
+            // double-tap window, and that is one press, not two.
+            const double = Keybindings.resolve(null, name).kind === 'double';
+            return {
+                name,
+                double,
+                match: (e) => {
+                    if ((row.noRepeat || double) && e.repeat) return false;
+                    const shortcut = getShortcut(name);
+                    return !!shortcut && shortcut.enabled && Keybindings.matches(e, shortcut.combo, shortcut.kind);
+                },
+                enabled: row.enabled,
+                run: row.run,
+            };
+        });
     }
 
     /**
@@ -118,13 +126,37 @@
         // dispatcher, which is registered first, would run a shortcut for
         // the character being typed at a hint.
         const paused = options.paused || (() => false);
+        const now = options.now || (() => performance.now());
+
+        // The first press of a 'double' binding, waiting for its second:
+        // { name, at }. Any other keystroke in between ends the wait, so
+        // `y`, `a`, `y` is three keys and not a double tap.
+        let tapped = null;
 
         const onKeyDown = (event) => {
-            if (paused() || isTypingTarget(event)) return;
+            if (paused() || isTypingTarget(event)) {
+                tapped = null;
+                return;
+            }
+            // Not a keystroke yet, and it must not end the wait either: a
+            // double tap rebound to Shift+Y has Shift going down between.
+            if (Keybindings.isModifier(event)) return;
+
+            const first = tapped;
+            tapped = null;
 
             for (const binding of bindings) {
                 if (!binding.match(event)) continue;
                 if (!binding.enabled()) return; // matched but switched off: leave the key alone
+
+                if (binding.double && !(first && first.name === binding.name &&
+                    now() - first.at <= Keybindings.DOUBLE_TAP_MS)) {
+                    // The first press is left to the page, untouched: it
+                    // may be all there is, and a page's own single-key
+                    // shortcut has to go on working.
+                    tapped = { name: binding.name, at: now() };
+                    return;
+                }
 
                 event.preventDefault();
                 // Stop the page's own handler for this key. Without it YouTube

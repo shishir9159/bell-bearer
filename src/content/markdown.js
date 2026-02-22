@@ -1,6 +1,6 @@
 /**
- * "Copy as Markdown" — for the current page (Ctrl+Shift+L or the page context
- * menu) and for a right-clicked link.
+ * "Copy as Markdown" — for the current page (Ctrl+Shift+L, y y or the page
+ * context menu) and for a right-clicked link.
  *
  * Conversion is only ever an explicit action. An earlier version hooked Ctrl+C
  * and converted whenever the selection "looked" empty, but getSelection()

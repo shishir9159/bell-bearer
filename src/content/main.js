@@ -85,6 +85,13 @@
 
     const markdown = Markdown.createMarkdown({ site, pageInfo: PageInfo });
 
+    /** The page as a Markdown link, on the clipboard: Ctrl+Shift+L, and y y. */
+    function copyPageLink() {
+        markdown.copy(markdown.buildPageMarkdown()).then((ok) => {
+            if (ok) notify('Copied page as Markdown link', 'success');
+        });
+    }
+
     // ------------------------------------------------------------- skim
 
     /**
@@ -144,6 +151,7 @@
         // built further down this file, after the keyboard is installed.
         openPouch: () => pouchUi() && pouchUi().openPouch(),
         canOpenPouch: () => !!pouchUi(),
+        copyPageLink,
         featureOn: (key) => settings[key] === true,
     }, {
         canRecord: () => !!getVideo(),
@@ -202,9 +210,7 @@
                 break;
 
             case 'copyMarkdownLink':
-                markdown.copy(markdown.buildPageMarkdown()).then((ok) => {
-                    if (ok) notify('Copied page as Markdown link', 'success');
-                });
+                copyPageLink();
                 sendResponse({ ok: true });
                 break;
 

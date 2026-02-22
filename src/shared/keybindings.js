@@ -14,11 +14,14 @@
  * keyboard map or in the list — so `list()` drops them when it is given the
  * settings to check against.
  *
- * A combo is `{ ctrl, shift, alt, meta, code, key }`. Three kinds of binding:
+ * A combo is `{ ctrl, shift, alt, meta, code, key }`. Four kinds of binding:
  *  - 'key'     the modifiers must match exactly and `code` names the physical
  *              key, so a shortcut survives a keyboard layout change;
  *  - 'digit'   the modifiers must match and any of 1-9 completes it — the
  *              digit is the argument (seconds to skip, seconds to boost);
+ *  - 'double'  a 'key' pressed twice within DOUBLE_TAP_MS. One press matches
+ *              here exactly as a 'key' does; counting the two is the
+ *              dispatcher's, in src/content/shortcuts.js;
  *  - 'command' a browser-level command (manifest `commands`), which only the
  *              browser can rebind.
  * A default combo marked `char` matches by the character typed instead — `>`
@@ -43,6 +46,10 @@
         // it off the keyboard map for most of the places it works.
         { id: 'open-pouch', scope: 'general', kind: 'key', needs: 'pouchShortcut', label: 'Open the pouch (YouTube, X and LeetCode) or the chat panel (ChatGPT and Claude)', combo: { shift: true, code: 'KeyP', key: 'P' } },
         { id: 'copy-markdown-link', scope: 'general', kind: 'command', label: 'Copy this page as a Markdown link', combo: { ctrl: true, shift: true, code: 'KeyL', key: 'L' } },
+        // A bare letter on every site, which is why it takes two: one `y`
+        // is never claimed, so a page with a `y` of its own — GitHub's,
+        // for a file's permalink — keeps it.
+        { id: 'copy-page-link', scope: 'general', kind: 'double', label: 'Copy this page as a Markdown link (double tap)', combo: { code: 'KeyY', key: 'y' } },
 
         { id: 'record-checkpoint', scope: 'youtube', kind: 'key', label: 'Create checkpoint (hold and release)', combo: { ctrl: true, code: 'KeyB', key: 'b' } },
         { id: 'segment-toggle', scope: 'youtube', kind: 'key', label: 'Mark a segment — press to start, again to end', combo: { ctrl: true, shift: true, code: 'KeyS', key: 'S' } },
@@ -91,6 +98,15 @@
     const BY_ID = Object.freeze(Object.fromEntries(BINDINGS.map((binding) => [binding.id, binding])));
 
     const MODIFIER_CODES = /^(Control|Shift|Alt|Meta|OS)(Left|Right)?$/;
+
+    /** How long after the first press of a 'double' binding the second still counts. */
+    const DOUBLE_TAP_MS = 500;
+
+    /** A modifier going down by itself, which is no keystroke yet. */
+    function isModifier(event) {
+        return MODIFIER_CODES.test((event && event.code) || '') ||
+            ['Control', 'Shift', 'Alt', 'Meta'].includes(event && event.key);
+    }
 
     /** 1-9 from either the number row or the numpad, else null. */
     function digitOf(event) {
@@ -171,8 +187,10 @@
         return out;
     }
 
+    /** `parts` is one press; a double tap reads as that press twice, "Y Y". */
     function format(combo, kind) {
-        return parts(combo, kind).join(' + ');
+        const once = parts(combo, kind).join(' + ');
+        return kind === 'double' ? `${once} ${once}` : once;
     }
 
     /** Two combos that one keystroke could trigger both of share a signature. */
@@ -189,9 +207,7 @@
      * press is `{ pending: true }` — the user is still holding keys down.
      */
     function record(event, kind) {
-        if (MODIFIER_CODES.test(event.code || '') || ['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) {
-            return { pending: true };
-        }
+        if (isModifier(event)) return { pending: true };
         const combo = { ctrl: !!event.ctrlKey, alt: !!event.altKey, shift: !!event.shiftKey, meta: !!event.metaKey };
         const modified = combo.ctrl || combo.alt || combo.meta;
 
@@ -215,7 +231,7 @@
     }
 
     const Keybindings = {
-        SCOPES, BINDINGS, digitOf, modifiersMatch, matches, resolve, list, available,
+        SCOPES, BINDINGS, DOUBLE_TAP_MS, digitOf, isModifier, modifiersMatch, matches, resolve, list, available,
         parts, format, signature, record, conflicts,
     };
 

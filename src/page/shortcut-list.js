@@ -53,9 +53,12 @@
         const combo = isCommand && commandKeys[shortcut.command || shortcut.id] !== undefined
             ? commandKeys[shortcut.command || shortcut.id]
             : null;
+        // A double tap is its one press drawn twice, side by side with no
+        // plus between: `Y` `Y`, the two keys of it, rather than Y + Y.
+        const once = keysHtml(Keybindings.parts(shortcut.combo, shortcut.kind));
         const keys = isCommand && combo !== null
             ? (combo ? keysHtml(combo.split('+')) : '<span class="kbd-none">Not set</span>')
-            : keysHtml(Keybindings.parts(shortcut.combo, shortcut.kind));
+            : (shortcut.kind === 'double' ? once + once : once);
 
         const isEditing = editing && editing.id === shortcut.id;
         return `

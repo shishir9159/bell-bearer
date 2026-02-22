@@ -198,6 +198,113 @@ suite('shortcuts: skipping in shorts', () => {
     });
 });
 
+suite('shortcuts: double tap', () => {
+    /** The real dispatcher, on the real window, with a clock the spec moves by hand. */
+    function withDispatcher(run) {
+        const copies = [];
+        const clock = { at: 1000 };
+        const uninstall = K.install({
+            hasVideo: () => false,
+            featureOn: () => false,
+            copyPageLink: () => copies.push(clock.at),
+            stopRecording() {},
+        }, { canRecord: () => false, now: () => clock.at });
+        try {
+            return run(copies, clock);
+        } finally {
+            uninstall();
+        }
+    }
+
+    const press = (code, init = {}, target = document.body) => {
+        const event = new KeyboardEvent('keydown', {
+            code, key: code.replace(/^Key/, '').toLowerCase(), bubbles: true, cancelable: true, ...init,
+        });
+        target.dispatchEvent(event);
+        return event;
+    };
+
+    test('y twice copies, and only the second press is taken from the page', () => {
+        withDispatcher((copies, clock) => {
+            const first = press('KeyY');
+            assertDeepEqual(copies, []);
+            assert(!first.defaultPrevented, 'a single y was taken off the page');
+            clock.at += 200;
+            const second = press('KeyY');
+            assertEqual(copies.length, 1);
+            assert(second.defaultPrevented, 'the page also acted on the second press');
+        });
+    });
+
+    test('a third press starts over rather than copying again', () => {
+        withDispatcher((copies, clock) => {
+            for (let i = 0; i < 3; i++) { press('KeyY'); clock.at += 100; }
+            assertEqual(copies.length, 1);
+            press('KeyY');
+            assertEqual(copies.length, 2, 'four presses are two double taps');
+        });
+    });
+
+    test('too slow, it is two single presses — and the late one can still be a first', () => {
+        withDispatcher((copies, clock) => {
+            press('KeyY');
+            clock.at += window.BB.Keybindings.DOUBLE_TAP_MS + 1;
+            assert(!press('KeyY').defaultPrevented, 'a slow second y was taken off the page');
+            assertDeepEqual(copies, []);
+            clock.at += 100;
+            press('KeyY');
+            assertEqual(copies.length, 1);
+        });
+    });
+
+    test('another key between the two ends the wait', () => {
+        withDispatcher((copies) => {
+            press('KeyY');
+            press('KeyA');
+            assert(!press('KeyY').defaultPrevented);
+            assertDeepEqual(copies, []);
+        });
+    });
+
+    test('a held key is one press, however long it repeats', () => {
+        withDispatcher((copies, clock) => {
+            press('KeyY');
+            for (let i = 0; i < 5; i++) { clock.at += 30; press('KeyY', { repeat: true }); }
+            assertDeepEqual(copies, []);
+            // Let go and pressed again at once: the hold was not half of a
+            // double tap, so this is a first press.
+            clock.at += 30;
+            assert(!press('KeyY').defaultPrevented);
+            assertDeepEqual(copies, []);
+        });
+    });
+
+    test('a modifier going down in between is not another key', () => {
+        withDispatcher((copies) => {
+            press('KeyY');
+            press('ShiftLeft', { key: 'Shift', shiftKey: true });
+            press('KeyY');
+            assertEqual(copies.length, 1);
+        });
+    });
+
+    test('y y typed into a field is two letters, and never half of a tap on the page', () => {
+        const box = document.createElement('textarea');
+        document.body.appendChild(box);
+        try {
+            withDispatcher((copies) => {
+                press('KeyY', {}, box);
+                press('KeyY', {}, box);
+                assertDeepEqual(copies, []);
+                press('KeyY');
+                press('KeyY', {}, box);
+                press('KeyY');
+                assertDeepEqual(copies, [], 'a y in the field counted towards one on the page');
+            });
+        } finally { box.remove(); }
+    });
+});
+
 suite('shortcuts: digit parsing', () => {
     test('reads 1-9 from either the number row or the numpad', () => {
         assertEqual(K.digitOf({ code: 'Digit1' }), 1);
