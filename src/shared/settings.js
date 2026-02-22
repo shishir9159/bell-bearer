@@ -262,6 +262,12 @@
         shortsSeek: false,
         shortsSeekSeconds: 5,
 
+        // On, y y on a video copies its link at the second the player has
+        // reached — `&t=83s` — rather than at the video's start. It is y y's
+        // alone: Ctrl+Shift+L copies the plain link either way, so both
+        // links stay one keystroke off.
+        youtubeLinkTimestamp: false,
+
         // A Download button in the popup on a YouTube video: picture and
         // sound in one .mp4, at the quality the player is on. Off until
         // asked for — it asks YouTube for the streams as one of its apps

@@ -85,11 +85,26 @@
 
     const markdown = Markdown.createMarkdown({ site, pageInfo: PageInfo });
 
-    /** The page as a Markdown link, on the clipboard: Ctrl+Shift+L, and y y. */
-    function copyPageLink() {
-        markdown.copy(markdown.buildPageMarkdown()).then((ok) => {
-            if (ok) notify('Copied page as Markdown link', 'success');
+    /**
+     * The page as a Markdown link, on the clipboard: Ctrl+Shift+L, and y y.
+     * `at` is the second a video's link opens on, which only y y ever asks for.
+     */
+    function copyPageLink(at = 0) {
+        markdown.copy(markdown.buildPageMarkdown(at)).then((ok) => {
+            if (ok) notify(at > 0 ? `Copied link at ${BB.Time.formatTime(at)}` : 'Copied page as Markdown link', 'success');
         });
+    }
+
+    /**
+     * Where y y's link to this video opens: where the player is once
+     * Settings › YouTube asks for that, and the video's start otherwise.
+     * Asked only on a video's own page — the home grid's hover previews are
+     * videos with a clock too, and the link copied there is the page's.
+     */
+    function linkTime() {
+        if (site !== 'youtube' || settings.youtubeLinkTimestamp !== true || !PageInfo.getVideoId()) return 0;
+        // The locator keeps one element, and Shorts swaps it on every swipe.
+        return Site.playhead(Site.isShortsPath() ? Site.activeShortsVideo() : getVideoElement());
     }
 
     // ------------------------------------------------------------- skim
@@ -151,7 +166,7 @@
         // built further down this file, after the keyboard is installed.
         openPouch: () => pouchUi() && pouchUi().openPouch(),
         canOpenPouch: () => !!pouchUi(),
-        copyPageLink,
+        copyPageLink: () => copyPageLink(linkTime()),
         featureOn: (key) => settings[key] === true,
     }, {
         canRecord: () => !!getVideo(),

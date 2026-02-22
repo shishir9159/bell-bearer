@@ -7395,6 +7395,27 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(Site.isShortsPath('/shorts/abcDEF12345'));
         assert(!Site.isShortsPath('/shorts') && !Site.isShortsPath('/watch'), 'not a short');
     });
+    check('y y stamps a video\'s link with the player\'s second, and only once asked to', () => {
+        const Site = require('../src/content/site.js');
+        const YouTube = require('../src/shared/youtube.js');
+        const page = (advert) => ({ querySelector: (selector) => (advert && selector === '#movie_player.ad-showing' ? {} : null) });
+        eq(Site.playhead({ currentTime: 83.9 }, page(false)), 83);
+        eq(YouTube.watchUrl('dQw4w9WgXcQ', Site.playhead({ currentTime: 83.9 }, page(false))),
+            'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=83s');
+        eq(Site.playhead({ currentTime: 7 }, page(true)), 0, 'an advert\'s clock was taken for the video\'s');
+        eq([Site.playhead(null, page(false)), Site.playhead({ currentTime: NaN }, page(false))], [0, 0]);
+
+        eq(require('../src/shared/settings.js').DEFAULTS.youtubeLinkTimestamp, false);
+        const html = readRepo('dashboard.html');
+        const from = html.indexOf('id="youtubeSettingsPanel"');
+        const panel = html.slice(from, html.indexOf('class="settings-section"', from));
+        assert(panel.includes('<input type="checkbox" id="youtubeLinkTimestamp">'), 'no switch in the YouTube panel');
+
+        const main = readRepo('src/content/main.js');
+        assert(/copyPageLink: \(\) => copyPageLink\(linkTime\(\)\)/.test(main), 'y y never asks where the player is');
+        assert(/settings\.youtubeLinkTimestamp !== true/.test(main), 'stamped with the switch off');
+        assert(/case 'copyMarkdownLink':\s+copyPageLink\(\);/.test(main), 'Ctrl+Shift+L was stamped too');
+    });
     check('the shorts setting has its controls, in the youtube panel, bounded as the code is', () => {
         const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
         const from = html.indexOf('id="youtubeSettingsPanel"');

@@ -166,9 +166,24 @@
         return Number.isFinite(duration) && duration > 0 ? Math.min(target, Math.max(0, duration - 0.25)) : target;
     }
 
+    /** What YouTube's player wears for as long as an advert is up. */
+    const AD_SHOWING = '#movie_player.ad-showing';
+
+    /**
+     * The second of the video `video` is at, for a link that opens it there —
+     * or 0, its start, when the element cannot be asked. YouTube plays an
+     * advert in the main <video> itself, so while one is up that element's
+     * clock is the advert's, and a link stamped from it would open the video
+     * a few seconds in for no reason anyone could work out.
+     */
+    function playhead(video, scope = document) {
+        if (!video || scope.querySelector(AD_SHOWING)) return 0;
+        return Math.max(0, Math.floor(video.currentTime) || 0);
+    }
+
     const Site = {
         detectSite, createPlayerLocator, PLAYER_SELECTORS, SHADOW_HOSTS,
-        SHORTS_SELECTORS, isShortsPath, activeShortsVideo, shortsSeekTo,
+        SHORTS_SELECTORS, isShortsPath, activeShortsVideo, shortsSeekTo, playhead,
     };
 
     root.BB = root.BB || {};

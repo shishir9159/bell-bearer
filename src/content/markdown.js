@@ -96,14 +96,18 @@
             }, true);
         }
 
-        /** `[title - channel](watch url)` on YouTube, `[title](url)` elsewhere. */
-        function buildPageMarkdown() {
+        /**
+         * `[title - channel](watch url)` on YouTube, `[title](url)` elsewhere.
+         * `seconds` is where in the video the link opens, and 0 is its start;
+         * a page that is not a video has no use for it.
+         */
+        function buildPageMarkdown(seconds = 0) {
             if (site === 'youtube') {
                 const videoId = pageInfo.getVideoId();
                 if (videoId) {
                     const title = pageInfo.getVideoTitle();
                     const channel = pageInfo.getChannelInfo().channelName;
-                    return link(`${title} - ${channel}`, YouTube.watchUrl(videoId, 0));
+                    return link(`${title} - ${channel}`, YouTube.watchUrl(videoId, seconds));
                 }
             }
             return link(document.title || location.href, location.href);

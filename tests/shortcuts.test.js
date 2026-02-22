@@ -305,6 +305,41 @@ suite('shortcuts: double tap', () => {
     });
 });
 
+suite('shortcuts: y y on a video', () => {
+    const pageInfo = {
+        getVideoId: () => 'dQw4w9WgXcQ',
+        getVideoTitle: () => 'A [live] set',
+        getChannelInfo: () => ({ channelName: 'Somebody' }),
+    };
+    const watch = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+    test('the link opens at the second it is given, and at the start given none', () => {
+        const markdown = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo });
+        assertEqual(markdown.buildPageMarkdown(83), `[A \\[live\\] set - Somebody](${watch}&t=83s)`);
+        assertEqual(markdown.buildPageMarkdown(), `[A \\[live\\] set - Somebody](${watch})`);
+    });
+
+    test('a page that is not a video copies as itself, whatever the second', () => {
+        const home = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo: { ...pageInfo, getVideoId: () => null } });
+        const elsewhere = window.BB.Markdown.createMarkdown({ site: 'other', pageInfo });
+        for (const markdown of [home, elsewhere]) {
+            assertEqual(markdown.buildPageMarkdown(83), markdown.buildPageMarkdown());
+            assert(markdown.buildPageMarkdown(83).endsWith(`(${location.href})`), 'not this page');
+        }
+    });
+
+    test('an advert’s clock is never taken for the video’s', () => {
+        const host = document.createElement('div');
+        host.innerHTML = '<div id="movie_player" class="ad-showing"><video></video></div>';
+        document.body.appendChild(host);
+        try {
+            assertEqual(window.BB.Site.playhead({ currentTime: 7.2 }), 0);
+            host.firstElementChild.classList.remove('ad-showing');
+            assertEqual(window.BB.Site.playhead({ currentTime: 7.2 }), 7);
+        } finally { host.remove(); }
+    });
+});
+
 suite('shortcuts: digit parsing', () => {
     test('reads 1-9 from either the number row or the numpad', () => {
         assertEqual(K.digitOf({ code: 'Digit1' }), 1);

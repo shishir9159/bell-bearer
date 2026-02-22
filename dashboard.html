@@ -715,6 +715,15 @@
                             <input type="number" id="shortsSeekSeconds" min="1" max="30" step="1">
                         </div>
 
+                        <p class="settings-hint"><kbd>Y</kbd> <kbd>Y</kbd> — the key tapped twice — copies the page as a Markdown link, on any site. With this on, on a video it copies the link at the moment the player has reached, so it opens there instead of at the start; during an advert it is the plain link. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> copies the plain link either way.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="youtubeLinkTimestamp">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="youtubeLinkTimestamp">Copy a video's link at the current time with Y Y</label>
+                        </div>
+
                         <p class="settings-hint">A <strong>Download</strong> button in the popup on a video saves it as one .mp4 — picture and sound together — at the quality the player is on. YouTube is asked for the streams the way its own apps ask, the way yt-dlp does; progress shows on the video's page, and the download carries on there if the popup closes.</p>
                         <div class="settings-option">
                             <label class="toggle-switch">
