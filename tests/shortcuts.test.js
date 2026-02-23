@@ -347,6 +347,137 @@ suite('shortcuts: y y on a video', () => {
     });
 });
 
+suite('shortcuts: pasting a copied link', () => {
+    const link = { markdown: '[A \\[live\\] set](https://example.com/a)', text: 'A [live] set https://example.com/a' };
+
+    /**
+     * The real listeners on the real window, a clock the spec moves by hand,
+     * and a field with the caret in it. The clipboard is the spec's to
+     * imagine: a copy "lands" there or not as `lands` says, and each paste
+     * names what it carries.
+     */
+    async function withField(run, { tag = 'textarea', copy = true } = {}) {
+        const Dom = window.BB.Dom;
+        const real = Dom.copyText;
+        const clipboard = { lands: true };
+        Dom.copyText = async () => clipboard.lands;
+        const clock = { at: 1000 };
+        const markdown = window.BB.Markdown.createMarkdown({ site: 'other', pageInfo: {} });
+        const uninstall = markdown.installPlainPaste({ now: () => clock.at });
+        const field = document.createElement(tag);
+        if (tag === 'div') field.contentEditable = 'true';
+        document.body.appendChild(field);
+        field.focus();
+        try {
+            if (copy) await markdown.copyLink(link);
+            return await run({ field, clock, markdown, clipboard });
+        } finally {
+            uninstall();
+            field.remove();
+            Dom.copyText = real;
+        }
+    }
+
+    const press = (init) => window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
+    const plainPaste = () => press({ code: 'KeyV', key: 'V', ctrlKey: true, shiftKey: true });
+
+    /** A paste of `text` aimed at `target`, as the browser sends one. */
+    const paste = (target, text) => {
+        const data = new DataTransfer();
+        data.setData('text/plain', text);
+        const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+        target.dispatchEvent(event);
+        return event;
+    };
+
+    test('ctrl+shift+v pastes the link as plain text, and the Markdown never lands', async () => {
+        await withField(({ field }) => {
+            const reached = [];
+            const onPaste = (event) => reached.push(event.clipboardData.getData('text/plain'));
+            document.addEventListener('paste', onPaste);
+            try {
+                plainPaste();
+                const event = paste(field, link.markdown);
+                assert(event.defaultPrevented, 'the Markdown was left to paste as well');
+                assertEqual(field.value, link.text);
+                assertDeepEqual(reached, [link.text], 'the page was shown the Markdown too');
+            } finally { document.removeEventListener('paste', onPaste); }
+        });
+    });
+
+    test('ctrl+v pastes what the clipboard holds, which is the Markdown', async () => {
+        await withField(({ field }) => {
+            press({ code: 'KeyV', key: 'v', ctrlKey: true });
+            assert(!paste(field, link.markdown).defaultPrevented, 'an ordinary paste was taken');
+            assertEqual(field.value, '');
+        });
+    });
+
+    test('an editor that reads its own pastes is handed the text, and nothing is typed in beside it', async () => {
+        await withField(({ field }) => {
+            const taken = [];
+            field.addEventListener('paste', (event) => {
+                taken.push(event.clipboardData.getData('text/plain'));
+                event.preventDefault();
+            });
+            plainPaste();
+            paste(field, link.markdown);
+            assertDeepEqual(taken, [link.text]);
+            assertEqual(field.textContent, '', 'typed in as well as handed over');
+        }, { tag: 'div' });
+    });
+
+    test('a Markdown link that is not the one copied pastes as it is', async () => {
+        await withField(({ field }) => {
+            plainPaste();
+            assert(!paste(field, '[somebody else’s](https://example.com/b)').defaultPrevented);
+            assertEqual(field.value, '');
+        });
+    });
+
+    test('the key goes stale: a paste long after it, or after another key, is an ordinary one', async () => {
+        await withField(({ field, clock }) => {
+            plainPaste();
+            clock.at += window.BB.Markdown.PLAIN_PASTE_MS + 1;
+            assert(!paste(field, link.markdown).defaultPrevented, 'a paste from the menu a while later was reworded');
+            plainPaste();
+            press({ code: 'KeyV', key: 'v', ctrlKey: true });
+            assert(!paste(field, link.markdown).defaultPrevented, 'ctrl+v straight after was reworded');
+            plainPaste();
+            paste(field, link.markdown);
+            assert(!paste(field, link.markdown).defaultPrevented, 'one press was two plain pastes');
+            assertEqual(field.value, link.text);
+        });
+    });
+
+    test('a paste aimed at the page rather than a field is left alone', async () => {
+        await withField(({ field }) => {
+            field.readOnly = true;
+            plainPaste();
+            assert(!paste(field, link.markdown).defaultPrevented, 'a field that cannot be typed in');
+            plainPaste();
+            assert(!paste(document.body, link.markdown).defaultPrevented, 'the page itself');
+        });
+    });
+
+    test('only a copy as Markdown is answered, and only one that reached the clipboard', async () => {
+        await withField(async ({ field, markdown, clipboard }) => {
+            assertEqual(await markdown.copyLink(link, false), true);
+            plainPaste();
+            assert(!paste(field, link.markdown).defaultPrevented, 'a copy as text has no other spelling to paste');
+            clipboard.lands = false;
+            assertEqual(await markdown.copyLink(link), false);
+            plainPaste();
+            assert(!paste(field, link.markdown).defaultPrevented, 'a link that never reached the clipboard');
+            clipboard.lands = true;
+            await markdown.copyLink(link);
+            plainPaste();
+            paste(field, link.markdown);
+            assertEqual(field.value, link.text);
+        }, { copy: false });
+    });
+});
+
 suite('shortcuts: digit parsing', () => {
     test('reads 1-9 from either the number row or the numpad', () => {
         assertEqual(K.digitOf({ code: 'Digit1' }), 1);

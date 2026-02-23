@@ -1,7 +1,8 @@
 /**
  * "Copy as Markdown" — for the current page (Ctrl+Shift+L, y y or the page
  * context menu) and for a right-clicked link. y y copies the same link as
- * plain text instead, once Settings › General asks for that.
+ * plain text instead, once Settings › General asks for that, and Ctrl+Shift+V
+ * pastes a link copied as Markdown as that plain text.
  *
  * Conversion is only ever an explicit action. An earlier version hooked Ctrl+C
  * and converted whenever the selection "looked" empty, but getSelection()
@@ -44,15 +45,60 @@
 
     /**
      * The same link with the Markdown taken off: what it is called, then
-     * where it is. One line, because it is pasted into a one-line field as
-     * often as not, and a chat box takes a newline for the end of the
-     * message. A page with nothing to call it but its address is the
-     * address, once.
+     * where it is. One line, because a search box is where it is pasted as
+     * often as not, and that has no second one. A page with nothing to call
+     * it but its address is the address, once.
      */
     function plain(label, url) {
         const name = String(label || '').replace(/\s+/g, ' ').trim();
         const address = String(url || '').trim();
         return name && name !== address ? `${name} ${address}` : address;
+    }
+
+    /** One link in both its spellings, which is what a copy is given. */
+    const both = (label, url) => ({ markdown: link(label, url), text: plain(label, url) });
+
+    /** How long after Ctrl+Shift+V goes down a paste is still that key's. */
+    const PLAIN_PASTE_MS = 1000;
+
+    /**
+     * Ctrl+Shift+V — ⌘ for Ctrl on a Mac — the browser's own "paste as plain
+     * text". By the letter as well as the key: the browser follows the
+     * layout, and on Dvorak the V it means is not where KeyV is.
+     */
+    function isPlainPaste(event) {
+        const v = event.code === 'KeyV' || String(event.key || '').toLowerCase() === 'v';
+        return v && !!event.shiftKey && !!(event.ctrlKey || event.metaKey);
+    }
+
+    /** Whether a paste aimed at `node` lands in something that takes text. */
+    function takesText(node) {
+        if (!node || node.nodeType !== 1) return false;
+        if (node.isContentEditable) return true;
+        return (node.tagName === 'TEXTAREA' || node.tagName === 'INPUT') && !node.readOnly && !node.disabled;
+    }
+
+    /**
+     * Put `text` where a paste aimed at `target` would have gone.
+     *
+     * An editor that reads its pastes itself — ProseMirror, which is both
+     * chat sites' prompt box, and most editors like it — is handed one: a
+     * `paste` of its own carrying the text, which it takes and cancels. A
+     * plain field does nothing with an event a script made and leaves it
+     * uncancelled, so there the text is typed in instead, which also keeps
+     * the field's undo. Firefox's constructor takes the text as `data` and
+     * `dataType` rather than as a DataTransfer, hence both.
+     */
+    function pasteText(target, text) {
+        let taken = false;
+        try {
+            const data = new DataTransfer();
+            data.setData('text/plain', text);
+            taken = !target.dispatchEvent(new ClipboardEvent('paste', {
+                clipboardData: data, data: text, dataType: 'text/plain', bubbles: true, cancelable: true, composed: true,
+            }));
+        } catch (_) { /* no such event to make here: typed in, below */ }
+        if (!taken) document.execCommand('insertText', false, text);
     }
 
     /**
@@ -131,7 +177,7 @@
         /** The page as a link, in both its spellings: `{ markdown, text }`. */
         function pageLink(seconds = 0) {
             const [label, url] = pageParts(seconds);
-            return { markdown: link(label, url), text: plain(label, url) };
+            return both(label, url);
         }
 
         /**
@@ -155,10 +201,79 @@
             return link(label, linkUrl);
         }
 
-        return { trackContextLinks, pageLink, buildLinkMarkdown, copy: (text) => Dom.copyText(text) };
+        /**
+         * The link last copied as Markdown, in both spellings:
+         * Ctrl+Shift+V is answered from it.
+         */
+        let copied = null;
+
+        /** Put a link on the clipboard, in the spelling asked for. Resolves to whether it got there. */
+        async function copyLink(one, asMarkdown = true) {
+            const ok = await Dom.copyText(asMarkdown ? one.markdown : one.text);
+            if (ok && asMarkdown) copied = { markdown: one.markdown, text: one.text };
+            return ok;
+        }
+
+        /**
+         * After a link is copied as Markdown, Ctrl+V pastes the Markdown —
+         * it is what the clipboard holds — and Ctrl+Shift+V pastes the same
+         * link as plain text. Returns a function that removes it.
+         *
+         * The paste event does not say which of the two keys it came from,
+         * so the key is watched for and the paste that follows it is the
+         * plain one. And it is reworded only when the clipboard still holds,
+         * to the letter, the link that was copied: a Markdown link copied
+         * out of somebody's README is theirs, and pastes as it is.
+         */
+        function installPlainPaste({ now = () => performance.now() } = {}) {
+            let pressedAt = -Infinity;
+            // The paste handed to an editor below comes back through here.
+            let handing = false;
+
+            // Any other key in between is another keystroke, and its paste
+            // — Ctrl+V straight after — is not the plain one.
+            const onKeyDown = (event) => {
+                pressedAt = isPlainPaste(event) ? now() : -Infinity;
+            };
+
+            const onPaste = (event) => {
+                if (handing) return;
+                const plainOne = now() - pressedAt <= PLAIN_PASTE_MS;
+                pressedAt = -Infinity;
+                if (!plainOne || !copied) return;
+
+                const target = (event.composedPath && event.composedPath()[0]) || event.target;
+                const data = event.clipboardData;
+                if (!takesText(target) || !data || data.getData('text/plain') !== copied.markdown) return;
+
+                // Stopped as well as cancelled: the page's own paste handler
+                // would otherwise put the Markdown in beside the text.
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                handing = true;
+                try {
+                    pasteText(target, copied.text);
+                } finally {
+                    handing = false;
+                }
+            };
+
+            window.addEventListener('keydown', onKeyDown, true);
+            window.addEventListener('paste', onPaste, true);
+
+            return function uninstall() {
+                window.removeEventListener('keydown', onKeyDown, true);
+                window.removeEventListener('paste', onPaste, true);
+            };
+        }
+
+        return {
+            trackContextLinks, pageLink, buildLinkMarkdown, copyLink, installPlainPaste,
+            copy: (text) => Dom.copyText(text),
+        };
     }
 
-    const Markdown = { createMarkdown, escapeLabel, escapeUrl, plain, checkpointList };
+    const Markdown = { createMarkdown, escapeLabel, escapeUrl, plain, isPlainPaste, PLAIN_PASTE_MS, checkpointList };
 
     root.BB = root.BB || {};
     root.BB.Markdown = Markdown;

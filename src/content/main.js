@@ -91,8 +91,7 @@
      * as plain text; only y y ever asks for either.
      */
     function copyPageLink(at = 0, asMarkdown = true) {
-        const link = markdown.pageLink(at);
-        markdown.copy(asMarkdown ? link.markdown : link.text).then((ok) => {
+        markdown.copyLink(markdown.pageLink(at), asMarkdown).then((ok) => {
             if (!ok) return;
             if (at > 0) notify(`Copied link at ${BB.Time.formatTime(at)}`, 'success');
             else notify(asMarkdown ? 'Copied page as Markdown link' : 'Copied page link as text', 'success');
@@ -193,6 +192,7 @@
 
     player.attach();
     markdown.trackContextLinks();
+    markdown.installPlainPaste();
 
     // --------------------------------------------------------- messaging
 

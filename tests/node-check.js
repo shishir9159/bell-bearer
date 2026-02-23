@@ -7422,7 +7422,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             'the brackets are Markdown\'s to escape, and text has none');
         eq(Markdown.plain('https://example.com/', 'https://example.com/'), 'https://example.com/', 'a page with no title was named twice');
         eq(Markdown.plain('', 'https://example.com/'), 'https://example.com/');
-        assert(!/\n/.test(Markdown.plain('one\ntwo', 'https://example.com/')), 'a newline sends the message in a chat box');
+        assert(!/\n/.test(Markdown.plain('one\ntwo', 'https://example.com/')), 'a one-line field has no second line');
 
         eq(require('../src/shared/settings.js').DEFAULTS.copyAsMarkdown, true);
         const html = readRepo('dashboard.html');
@@ -7433,6 +7433,20 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const main = readRepo('src/content/main.js');
         assert(/copyPageLink\(linkTime\(\), settings\.copyAsMarkdown !== false\)/.test(main), 'y y never asks which');
         assert(/case 'copyMarkdownLink':\s+copyPageLink\(\);/.test(main), 'Ctrl+Shift+L copied text, under a name that says Markdown');
+    });
+    check('ctrl+shift+v is the plain paste, by the key or by the letter, and it is listened for', () => {
+        const Markdown = require('../src/content/markdown.js');
+        const key = (code, letter, held) => ({ code, key: letter, ctrlKey: false, shiftKey: false, metaKey: false, ...held });
+        eq(Markdown.isPlainPaste(key('KeyV', 'V', { ctrlKey: true, shiftKey: true })), true);
+        eq(Markdown.isPlainPaste(key('KeyV', 'V', { metaKey: true, shiftKey: true })), true, 'a Mac\'s');
+        eq(Markdown.isPlainPaste(key('Period', 'V', { ctrlKey: true, shiftKey: true })), true, 'Dvorak\'s V is not on KeyV');
+        eq(Markdown.isPlainPaste(key('KeyV', 'М', { ctrlKey: true, shiftKey: true })), true, 'a layout with no v on it');
+        eq([key('KeyV', 'v', { ctrlKey: true }), key('KeyV', 'V', { shiftKey: true }), key('KeyC', 'C', { ctrlKey: true, shiftKey: true })]
+            .map(Markdown.isPlainPaste), [false, false, false]);
+
+        const main = readRepo('src/content/main.js');
+        assert(/markdown\.installPlainPaste\(\);/.test(main), 'nothing listens for the paste');
+        assert(/markdown\.copyLink\(markdown\.pageLink\(at\), asMarkdown\)/.test(main), 'the page\'s link is copied but not remembered');
     });
     check('the shorts setting has its controls, in the youtube panel, bounded as the code is', () => {
         const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
