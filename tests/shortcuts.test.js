@@ -315,17 +315,24 @@ suite('shortcuts: y y on a video', () => {
 
     test('the link opens at the second it is given, and at the start given none', () => {
         const markdown = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo });
-        assertEqual(markdown.buildPageMarkdown(83), `[A \\[live\\] set - Somebody](${watch}&t=83s)`);
-        assertEqual(markdown.buildPageMarkdown(), `[A \\[live\\] set - Somebody](${watch})`);
+        assertEqual(markdown.pageLink(83).markdown, `[A \\[live\\] set - Somebody](${watch}&t=83s)`);
+        assertEqual(markdown.pageLink().markdown, `[A \\[live\\] set - Somebody](${watch})`);
     });
 
     test('a page that is not a video copies as itself, whatever the second', () => {
         const home = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo: { ...pageInfo, getVideoId: () => null } });
         const elsewhere = window.BB.Markdown.createMarkdown({ site: 'other', pageInfo });
         for (const markdown of [home, elsewhere]) {
-            assertEqual(markdown.buildPageMarkdown(83), markdown.buildPageMarkdown());
-            assert(markdown.buildPageMarkdown(83).endsWith(`(${location.href})`), 'not this page');
+            assertDeepEqual(markdown.pageLink(83), markdown.pageLink());
+            assert(markdown.pageLink(83).markdown.endsWith(`(${location.href})`), 'not this page');
         }
+    });
+
+    test('as plain text it is the same link, the title and then the address', () => {
+        const video = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo });
+        assertEqual(video.pageLink(83).text, `A [live] set - Somebody ${watch}&t=83s`);
+        const elsewhere = window.BB.Markdown.createMarkdown({ site: 'other', pageInfo });
+        assertEqual(elsewhere.pageLink().text, `${document.title} ${location.href}`);
     });
 
     test('an advert’s clock is never taken for the video’s', () => {

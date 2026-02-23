@@ -103,6 +103,12 @@
         markdownContextMenu: true,
         connectToSowon: false,
 
+        // What y y puts on the clipboard: the page as a Markdown link,
+        // `[title](url)`, or off, the same two halves as plain text —
+        // `title url`. It is y y's alone: Ctrl+Shift+L and the right-click
+        // menu are named for Markdown, and copy it either way.
+        copyAsMarkdown: true,
+
         // Cookie banners: which of "Always accept" / "Always reject" are
         // added to a site's consent popup. A site remembered either way is
         // answered for you regardless; those sites are data, DATA.cookieSites.

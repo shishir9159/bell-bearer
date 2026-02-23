@@ -86,12 +86,16 @@
     const markdown = Markdown.createMarkdown({ site, pageInfo: PageInfo });
 
     /**
-     * The page as a Markdown link, on the clipboard: Ctrl+Shift+L, and y y.
-     * `at` is the second a video's link opens on, which only y y ever asks for.
+     * The page as a link, on the clipboard: Ctrl+Shift+L, and y y. `at` is
+     * the second a video's link opens on, and `asMarkdown` false is the link
+     * as plain text; only y y ever asks for either.
      */
-    function copyPageLink(at = 0) {
-        markdown.copy(markdown.buildPageMarkdown(at)).then((ok) => {
-            if (ok) notify(at > 0 ? `Copied link at ${BB.Time.formatTime(at)}` : 'Copied page as Markdown link', 'success');
+    function copyPageLink(at = 0, asMarkdown = true) {
+        const link = markdown.pageLink(at);
+        markdown.copy(asMarkdown ? link.markdown : link.text).then((ok) => {
+            if (!ok) return;
+            if (at > 0) notify(`Copied link at ${BB.Time.formatTime(at)}`, 'success');
+            else notify(asMarkdown ? 'Copied page as Markdown link' : 'Copied page link as text', 'success');
         });
     }
 
@@ -166,7 +170,7 @@
         // built further down this file, after the keyboard is installed.
         openPouch: () => pouchUi() && pouchUi().openPouch(),
         canOpenPouch: () => !!pouchUi(),
-        copyPageLink: () => copyPageLink(linkTime()),
+        copyPageLink: () => copyPageLink(linkTime(), settings.copyAsMarkdown !== false),
         featureOn: (key) => settings[key] === true,
     }, {
         canRecord: () => !!getVideo(),

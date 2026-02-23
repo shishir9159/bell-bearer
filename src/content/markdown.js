@@ -1,6 +1,7 @@
 /**
  * "Copy as Markdown" — for the current page (Ctrl+Shift+L, y y or the page
- * context menu) and for a right-clicked link.
+ * context menu) and for a right-clicked link. y y copies the same link as
+ * plain text instead, once Settings › General asks for that.
  *
  * Conversion is only ever an explicit action. An earlier version hooked Ctrl+C
  * and converted whenever the selection "looked" empty, but getSelection()
@@ -39,6 +40,19 @@
 
     function link(label, url) {
         return `[${escapeLabel(label)}](${escapeUrl(url)})`;
+    }
+
+    /**
+     * The same link with the Markdown taken off: what it is called, then
+     * where it is. One line, because it is pasted into a one-line field as
+     * often as not, and a chat box takes a newline for the end of the
+     * message. A page with nothing to call it but its address is the
+     * address, once.
+     */
+    function plain(label, url) {
+        const name = String(label || '').replace(/\s+/g, ' ').trim();
+        const address = String(url || '').trim();
+        return name && name !== address ? `${name} ${address}` : address;
     }
 
     /**
@@ -97,20 +111,27 @@
         }
 
         /**
-         * `[title - channel](watch url)` on YouTube, `[title](url)` elsewhere.
+         * What the page is called and where it is: `title - channel` and the
+         * watch URL on YouTube, the tab's title and its address elsewhere.
          * `seconds` is where in the video the link opens, and 0 is its start;
          * a page that is not a video has no use for it.
          */
-        function buildPageMarkdown(seconds = 0) {
+        function pageParts(seconds) {
             if (site === 'youtube') {
                 const videoId = pageInfo.getVideoId();
                 if (videoId) {
                     const title = pageInfo.getVideoTitle();
                     const channel = pageInfo.getChannelInfo().channelName;
-                    return link(`${title} - ${channel}`, YouTube.watchUrl(videoId, seconds));
+                    return [`${title} - ${channel}`, YouTube.watchUrl(videoId, seconds)];
                 }
             }
-            return link(document.title || location.href, location.href);
+            return [document.title || location.href, location.href];
+        }
+
+        /** The page as a link, in both its spellings: `{ markdown, text }`. */
+        function pageLink(seconds = 0) {
+            const [label, url] = pageParts(seconds);
+            return { markdown: link(label, url), text: plain(label, url) };
         }
 
         /**
@@ -134,10 +155,10 @@
             return link(label, linkUrl);
         }
 
-        return { trackContextLinks, buildPageMarkdown, buildLinkMarkdown, copy: (text) => Dom.copyText(text) };
+        return { trackContextLinks, pageLink, buildLinkMarkdown, copy: (text) => Dom.copyText(text) };
     }
 
-    const Markdown = { createMarkdown, escapeLabel, escapeUrl, checkpointList };
+    const Markdown = { createMarkdown, escapeLabel, escapeUrl, plain, checkpointList };
 
     root.BB = root.BB || {};
     root.BB.Markdown = Markdown;

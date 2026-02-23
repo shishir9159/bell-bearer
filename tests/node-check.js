@@ -7412,9 +7412,27 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(panel.includes('<input type="checkbox" id="youtubeLinkTimestamp">'), 'no switch in the YouTube panel');
 
         const main = readRepo('src/content/main.js');
-        assert(/copyPageLink: \(\) => copyPageLink\(linkTime\(\)\)/.test(main), 'y y never asks where the player is');
+        assert(/copyPageLink: \(\) => copyPageLink\(linkTime\(\),/.test(main), 'y y never asks where the player is');
         assert(/settings\.youtubeLinkTimestamp !== true/.test(main), 'stamped with the switch off');
         assert(/case 'copyMarkdownLink':\s+copyPageLink\(\);/.test(main), 'Ctrl+Shift+L was stamped too');
+    });
+    check('y y copies markdown until settings ask for plain text, and nothing else is asked', () => {
+        const Markdown = require('../src/content/markdown.js');
+        eq(Markdown.plain('A  [live]\n set', 'https://example.com/a_(b)'), 'A [live] set https://example.com/a_(b)',
+            'the brackets are Markdown\'s to escape, and text has none');
+        eq(Markdown.plain('https://example.com/', 'https://example.com/'), 'https://example.com/', 'a page with no title was named twice');
+        eq(Markdown.plain('', 'https://example.com/'), 'https://example.com/');
+        assert(!/\n/.test(Markdown.plain('one\ntwo', 'https://example.com/')), 'a newline sends the message in a chat box');
+
+        eq(require('../src/shared/settings.js').DEFAULTS.copyAsMarkdown, true);
+        const html = readRepo('dashboard.html');
+        const from = html.indexOf('data-plate="General"');
+        const panel = html.slice(from, html.indexOf('class="settings-section"', from));
+        assert(panel.includes('<input type="checkbox" id="copyAsMarkdown">'), 'no switch under General');
+
+        const main = readRepo('src/content/main.js');
+        assert(/copyPageLink\(linkTime\(\), settings\.copyAsMarkdown !== false\)/.test(main), 'y y never asks which');
+        assert(/case 'copyMarkdownLink':\s+copyPageLink\(\);/.test(main), 'Ctrl+Shift+L copied text, under a name that says Markdown');
     });
     check('the shorts setting has its controls, in the youtube panel, bounded as the code is', () => {
         const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
