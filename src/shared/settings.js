@@ -482,6 +482,11 @@
         // the time it is due. src/shared/prompt-queue.js owns the shape.
         promptQueue: 'bbPromptQueue',
 
+        // The link last copied as Markdown, in that spelling and as plain
+        // text, so that whichever tab it is pasted into can give either.
+        // src/content/markdown.js owns the shape — { markdown, text }.
+        linkCopy: 'bbLinkCopy',
+
         // Activity, by local day: one key per day under this prefix — a
         // prefix, not a key — the list of days there are, the single value
         // the store was kept in before it was split (read only to be split),
@@ -505,7 +510,7 @@
         DATA.chessCache, DATA.lichessCache, DATA.leetCalendar,
     ]);
     const CACHE_PREFIXES = Object.freeze([DATA.chessMonths]);
-    const TRANSIENT = Object.freeze([DATA.rosterJob, DATA.chatPanel, DATA.activityLast]);
+    const TRANSIENT = Object.freeze([DATA.rosterJob, DATA.chatPanel, DATA.activityLast, DATA.linkCopy]);
 
     function withDefaults(stored, keys) {
         const wanted = keys && keys.length ? keys : KEYS;

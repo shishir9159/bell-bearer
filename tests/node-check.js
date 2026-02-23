@@ -7444,6 +7444,12 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([key('KeyV', 'v', { ctrlKey: true }), key('KeyV', 'V', { shiftKey: true }), key('KeyC', 'C', { ctrlKey: true, shiftKey: true })]
             .map(Markdown.isPlainPaste), [false, false, false]);
 
+        // Every tab knows the link from storage, and what is on this
+        // machine's clipboard is nothing for a backup to restore.
+        const Settings = require('../src/shared/settings.js');
+        assert(Settings.TRANSIENT.includes(Settings.DATA.linkCopy), 'the last link copied went into a backup');
+        assert(readRepo('src/content/markdown.js').includes('Settings.set({ [COPIED]: copied })'), 'a copy is this tab\'s alone');
+
         const main = readRepo('src/content/main.js');
         assert(/markdown\.installPlainPaste\(\);/.test(main), 'nothing listens for the paste');
         assert(/markdown\.copyLink\(markdown\.pageLink\(at\), asMarkdown\)/.test(main), 'the page\'s link is copied but not remembered');

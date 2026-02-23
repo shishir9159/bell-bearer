@@ -354,29 +354,36 @@ suite('shortcuts: pasting a copied link', () => {
      * The real listeners on the real window, a clock the spec moves by hand,
      * and a field with the caret in it. The clipboard is the spec's to
      * imagine: a copy "lands" there or not as `lands` says, and each paste
-     * names what it carries.
+     * names what it carries. `copy` is where the link was copied: 'here',
+     * 'before' — in another tab, before this one was opened — or nowhere.
      */
-    async function withField(run, { tag = 'textarea', copy = true } = {}) {
+    async function withField(run, { tag = 'textarea', copy = 'here' } = {}) {
         const Dom = window.BB.Dom;
         const real = Dom.copyText;
         const clipboard = { lands: true };
         Dom.copyText = async () => clipboard.lands;
         const clock = { at: 1000 };
-        const markdown = window.BB.Markdown.createMarkdown({ site: 'other', pageInfo: {} });
+        if (copy === 'before') await anotherTab().copyLink(link);
+        const markdown = anotherTab();
         const uninstall = markdown.installPlainPaste({ now: () => clock.at });
         const field = document.createElement(tag);
         if (tag === 'div') field.contentEditable = 'true';
         document.body.appendChild(field);
         field.focus();
         try {
-            if (copy) await markdown.copyLink(link);
+            if (copy === 'here') await markdown.copyLink(link);
             return await run({ field, clock, markdown, clipboard });
         } finally {
             uninstall();
             field.remove();
             Dom.copyText = real;
+            await chrome.storage.local.remove(window.BB.Settings.DATA.linkCopy);
         }
     }
+
+    /** Another tab is another content script: a module of its own, over the same storage. */
+    const anotherTab = () => window.BB.Markdown.createMarkdown({ site: 'other', pageInfo: {} });
+    const settle = () => new Promise((done) => setTimeout(done, 0));
 
     const press = (init) => window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
     const plainPaste = () => press({ code: 'KeyV', key: 'V', ctrlKey: true, shiftKey: true });
@@ -475,6 +482,26 @@ suite('shortcuts: pasting a copied link', () => {
             paste(field, link.markdown);
             assertEqual(field.value, link.text);
         }, { copy: false });
+    });
+
+    test('a link copied in another tab pastes as text in this one', async () => {
+        await withField(async ({ field }) => {
+            plainPaste();
+            assert(!paste(field, link.markdown).defaultPrevented, 'nothing has been copied yet');
+            await anotherTab().copyLink(link);
+            plainPaste();
+            paste(field, link.markdown);
+            assertEqual(field.value, link.text);
+        }, { copy: false });
+    });
+
+    test('and in a tab opened after the copy, once it has read what was copied', async () => {
+        await withField(async ({ field }) => {
+            await settle();
+            plainPaste();
+            paste(field, link.markdown);
+            assertEqual(field.value, link.text);
+        }, { copy: 'before' });
     });
 });
 

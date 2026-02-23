@@ -16,6 +16,7 @@
     const ns = root.BB || {};
     const YouTube = ns.YouTube || req('../shared/youtube.js');
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Settings = ns.Settings || req('../shared/settings.js');
 
     /** Characters that would otherwise break out of a [label](url) pair. */
     function escapeLabel(text) {
@@ -202,15 +203,27 @@
         }
 
         /**
-         * The link last copied as Markdown, in both spellings:
-         * Ctrl+Shift+V is answered from it.
+         * The link last copied as Markdown, by this tab or any other, in
+         * both spellings: Ctrl+Shift+V is answered from it. It is kept in
+         * storage because a link is copied in one tab to be pasted in
+         * another, and mirrored here because a paste has to be answered
+         * while its event is still being dispatched, which no read from
+         * storage comes back in time for.
          */
+        const COPIED = Settings.DATA.linkCopy;
         let copied = null;
+
+        const asCopied = (value) => (value && typeof value.markdown === 'string' && typeof value.text === 'string'
+            ? { markdown: value.markdown, text: value.text }
+            : null);
 
         /** Put a link on the clipboard, in the spelling asked for. Resolves to whether it got there. */
         async function copyLink(one, asMarkdown = true) {
             const ok = await Dom.copyText(asMarkdown ? one.markdown : one.text);
-            if (ok && asMarkdown) copied = { markdown: one.markdown, text: one.text };
+            if (ok && asMarkdown) {
+                copied = asCopied(one);
+                Settings.set({ [COPIED]: copied });
+            }
             return ok;
         }
 
@@ -229,6 +242,14 @@
             let pressedAt = -Infinity;
             // The paste handed to an editor below comes back through here.
             let handing = false;
+
+            // A copy made here since this was asked is newer than its answer.
+            Settings.get([COPIED]).then((stored) => {
+                if (!copied) copied = asCopied(stored[COPIED]);
+            });
+            const unwatch = Settings.watch([COPIED], (changed) => {
+                copied = asCopied(changed[COPIED]);
+            });
 
             // Any other key in between is another keystroke, and its paste
             // — Ctrl+V straight after — is not the plain one.
@@ -262,6 +283,7 @@
             window.addEventListener('paste', onPaste, true);
 
             return function uninstall() {
+                unwatch();
                 window.removeEventListener('keydown', onKeyDown, true);
                 window.removeEventListener('paste', onPaste, true);
             };
