@@ -277,6 +277,11 @@
         // channel](url)` — from y y and Ctrl+Shift+L alike. Off, it is the
         // title alone.
         youtubeLinkChannel: true,
+        // And a Reddit page's names its subreddit, last and spelled out —
+        // `[title in AskReddit subreddit](url)` — where Reddit's own title
+        // has it as r/AskReddit, in front of the post's or behind it. Off,
+        // the subreddit is left out of the link.
+        redditLinkSubreddit: true,
 
         // A Download button in the popup on a YouTube video: picture and
         // sound in one .mp4, at the quality the player is on. Off until

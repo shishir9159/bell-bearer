@@ -143,10 +143,50 @@
     }
 
     /**
+     * A Reddit page's title with its subreddit moved to the end and spelled
+     * out — "Title in AskReddit subreddit" — or taken off.
+     *
+     * Reddit puts the subreddit in the title itself, and not in one place: a
+     * post is "Title : r/AskReddit" in the tab, "r/AskReddit on Reddit:
+     * Title" in the title it hands a link preview, and "Title : AskReddit"
+     * on old Reddit. Whichever is there comes off, and only where it names
+     * the subreddit the address is in: a post whose own words end in
+     * ": r/somewhere" keeps them. The name it is given back is the title's
+     * spelling of it, which is the subreddit's, where the address has
+     * whatever was typed.
+     *
+     * A post always gets the name, and so does any page Reddit named that
+     * way. Another page under /r/ — a wiki, a listing with a title of its
+     * own — was never called by its subreddit, and is left as it is.
+     */
+    function redditLabel(title, pathname, withSubreddit) {
+        const text = String(title || '').replace(/\s+/g, ' ').trim();
+        const at = /^\/r\/([A-Za-z0-9_]+)(\/comments\/)?/.exec(String(pathname || ''));
+        if (!at) return text;
+
+        let name = at[1];
+        const take = (all, spelled) => {
+            name = spelled;
+            return '';
+        };
+        const bare = text
+            .replace(new RegExp(`^r/(${at[1]})(?: on Reddit)?\\s*(?:[:|·-]\\s+|$)`, 'i'), take)
+            .replace(new RegExp(`\\s+[:|·-]\\s*(?:r/)?(${at[1]})$`, 'i'), take);
+
+        if (bare === text && !at[2]) return text;
+        if (!withSubreddit) return bare || text;
+        return bare ? `${bare} in ${name} subreddit` : `${name} subreddit`;
+    }
+
+    /** The tab's title and where it is, which is all a link is made from. */
+    const thisPage = () => ({ title: document.title, url: location.href, path: location.pathname });
+
+    /**
      * `getSettings` is the page's mirror of the settings, read at each copy
      * so a switch thrown in the dashboard is followed without a reload.
+     * `getPage` is thisPage, and the suite's way to be on another site's.
      */
-    function createMarkdown({ site, pageInfo, getSettings = () => Settings.DEFAULTS }) {
+    function createMarkdown({ site, pageInfo, getSettings = () => Settings.DEFAULTS, getPage = thisPage }) {
         /** The anchor most recently right-clicked, for its visible text. */
         let lastContextLink = null;
 
@@ -173,9 +213,10 @@
 
         /**
          * What the page is called and where it is: `title by channel` and
-         * the watch URL on YouTube, the tab's title and its address
-         * elsewhere. `seconds` is where in the video the link opens, and 0
-         * is its start; a page that is not a video has no use for it.
+         * the watch URL on YouTube, the tab's title — on Reddit with its
+         * subreddit put last — and its address elsewhere. `seconds` is where
+         * in the video the link opens, and 0 is its start; a page that is
+         * not a video has no use for it.
          */
         function pageParts(seconds) {
             const settings = getSettings();
@@ -185,7 +226,10 @@
                     return [videoLabel(pageInfo, settings.youtubeLinkChannel !== false), YouTube.watchUrl(videoId, seconds)];
                 }
             }
-            return [document.title || location.href, location.href];
+            const page = getPage();
+            let label = page.title;
+            if (site === 'reddit') label = redditLabel(label, page.path, settings.redditLinkSubreddit !== false);
+            return [label || page.url, page.url];
         }
 
         /** The page as a link, in both its spellings: `{ markdown, text }`. */
@@ -309,7 +353,9 @@
         };
     }
 
-    const Markdown = { createMarkdown, escapeLabel, escapeUrl, plain, isPlainPaste, PLAIN_PASTE_MS, checkpointList };
+    const Markdown = {
+        createMarkdown, escapeLabel, escapeUrl, plain, redditLabel, isPlainPaste, PLAIN_PASTE_MS, checkpointList,
+    };
 
     root.BB = root.BB || {};
     root.BB.Markdown = Markdown;

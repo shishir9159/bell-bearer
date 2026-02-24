@@ -7473,6 +7473,47 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/createMarkdown\(\{ site, pageInfo: PageInfo, getSettings: \(\) => settings \}\)/.test(readRepo('src/content/main.js')),
             'the links are made without the settings');
     });
+    check('a reddit link names its subreddit last and spelled out, wherever reddit\'s own title had it', () => {
+        const { redditLabel } = require('../src/content/markdown.js');
+        const post = '/r/AskReddit/comments/1abc2d/what_is_it/';
+        const named = (title, path = post) => redditLabel(title, path, true);
+        eq(named('What is it? : r/AskReddit'), 'What is it? in AskReddit subreddit');
+        eq(named('r/AskReddit on Reddit: What is it?'), 'What is it? in AskReddit subreddit', 'the title a link preview is given');
+        eq(named('What is it? : AskReddit'), 'What is it? in AskReddit subreddit', 'old reddit');
+        eq(named('What is it?'), 'What is it? in AskReddit subreddit', 'a post is in its subreddit whatever its title says');
+        eq(named('What is it? : r/AskReddit', '/r/askreddit/comments/1abc2d/'), 'What is it? in AskReddit subreddit',
+            'the address has what was typed, the title has its name');
+        eq(named('Is it : r/AskRedditAfterDark : r/AskReddit'), 'Is it : r/AskRedditAfterDark in AskReddit subreddit',
+            'a post\'s own words were taken for the subreddit');
+        eq(named('r/AskRedditors: who is in? : r/AskReddit'), 'r/AskRedditors: who is in? in AskReddit subreddit');
+
+        const bare = (title, path = post) => redditLabel(title, path, false);
+        eq([bare('What is it? : r/AskReddit'), bare('r/AskReddit on Reddit: What is it?'), bare('What is it?')],
+            ['What is it?', 'What is it?', 'What is it?']);
+
+        // The subreddit's own page is named by it alone, and any other page
+        // is named by reddit and left that way.
+        eq([named('r/AskReddit', '/r/AskReddit/'), bare('r/AskReddit', '/r/AskReddit/')], ['AskReddit subreddit', 'r/AskReddit']);
+        eq(named('Ask Reddit...', '/r/AskReddit/'), 'Ask Reddit...');
+        eq(named('index - AskReddit', '/r/AskReddit/wiki/index/'), 'index in AskReddit subreddit');
+        eq(named('Reddit - The heart of the internet', '/'), 'Reddit - The heart of the internet');
+        eq(named('A post : u/somebody', '/user/somebody/comments/1abc2d/a_post/'), 'A post : u/somebody');
+
+        eq(require('../src/shared/settings.js').DEFAULTS.redditLinkSubreddit, true);
+        const html = readRepo('dashboard.html');
+        const from = html.indexOf('id="redditSettingsPanel"');
+        const panel = html.slice(from, html.indexOf('class="settings-section"', from));
+        assert(panel.includes('<input type="checkbox" id="redditLinkSubreddit">'), 'no switch in the Reddit panel');
+
+        // The link itself, on reddit and off it, by the switch.
+        const url = `https://www.reddit.com${post}`;
+        const getPage = () => ({ title: 'What is it? : r/AskReddit', url, path: post });
+        const link = (site, settings) => require('../src/content/markdown.js')
+            .createMarkdown({ site, pageInfo: {}, getSettings: () => settings, getPage }).pageLink().markdown;
+        eq(link('reddit', {}), `[What is it? in AskReddit subreddit](${url})`);
+        eq(link('reddit', { redditLinkSubreddit: false }), `[What is it?](${url})`);
+        eq(link('other', {}), `[What is it? : r/AskReddit](${url})`, 'reddit switched off in Settings is any other site');
+    });
     check('a right-clicked link pastes as text too, and one with no name of its own is its address once', () => {
         const markdown = require('../src/content/markdown.js').createMarkdown({ site: 'other', pageInfo: {} });
         eq(markdown.contextLink('https://example.com/docs', 'the  docs'),

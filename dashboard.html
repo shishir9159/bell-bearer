@@ -446,6 +446,15 @@
                          data-plate="Reddit" data-plate-proper hidden>
                         <p class="settings-hint">How long you mean to spend on reddit.com in a day is set in the one list that covers every site — Settings &rarr; General, "Hold me to a daily limit on". Time counts only while a tab of the site is on screen and this window has focus. The tally is today's and nothing older than today is stored — at midnight it is gone, not archived.</p>
                         <div data-time-limit-view="reddit"></div>
+
+                        <p class="settings-hint"><kbd>Y</kbd> <kbd>Y</kbd> and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> copy the page as a link. Reddit's own title names the subreddit as <code>r/AskReddit</code>, in front of a post's title or behind it; with this on, the link names it last and spelled out instead. Off, the link is the post's title alone.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="redditLinkSubreddit">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="redditLinkSubreddit">Name the subreddit in a copied link — <code>[title in AskReddit subreddit](url)</code></label>
+                        </div>
                     </div>
 
                     <!-- Every control here binds by carrying the same id as
