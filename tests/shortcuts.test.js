@@ -315,8 +315,16 @@ suite('shortcuts: y y on a video', () => {
 
     test('the link opens at the second it is given, and at the start given none', () => {
         const markdown = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo });
-        assertEqual(markdown.pageLink(83).markdown, `[A \\[live\\] set - Somebody](${watch}&t=83s)`);
-        assertEqual(markdown.pageLink().markdown, `[A \\[live\\] set - Somebody](${watch})`);
+        assertEqual(markdown.pageLink(83).markdown, `[A \\[live\\] set by Somebody](${watch}&t=83s)`);
+        assertEqual(markdown.pageLink().markdown, `[A \\[live\\] set by Somebody](${watch})`);
+    });
+
+    test('the channel is named after "by" until settings ask for the title alone, and the switch is followed at once', () => {
+        const settings = { youtubeLinkChannel: true };
+        const markdown = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo, getSettings: () => settings });
+        assertEqual(markdown.pageLink().text, `A [live] set by Somebody ${watch}`);
+        settings.youtubeLinkChannel = false;
+        assertDeepEqual(markdown.pageLink(), { markdown: `[A \\[live\\] set](${watch})`, text: `A [live] set ${watch}` });
     });
 
     test('a page that is not a video copies as itself, whatever the second', () => {
@@ -330,7 +338,7 @@ suite('shortcuts: y y on a video', () => {
 
     test('as plain text it is the same link, the title and then the address', () => {
         const video = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo });
-        assertEqual(video.pageLink(83).text, `A [live] set - Somebody ${watch}&t=83s`);
+        assertEqual(video.pageLink(83).text, `A [live] set by Somebody ${watch}&t=83s`);
         const elsewhere = window.BB.Markdown.createMarkdown({ site: 'other', pageInfo });
         assertEqual(elsewhere.pageLink().text, `${document.title} ${location.href}`);
     });

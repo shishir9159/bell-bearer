@@ -83,7 +83,7 @@
         };
     }
 
-    const markdown = Markdown.createMarkdown({ site, pageInfo: PageInfo });
+    const markdown = Markdown.createMarkdown({ site, pageInfo: PageInfo, getSettings: () => settings });
 
     /**
      * The page as a link, on the clipboard: Ctrl+Shift+L, and y y. `at` is

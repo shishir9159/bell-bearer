@@ -132,7 +132,21 @@
         return lines.join('\n');
     }
 
-    function createMarkdown({ site, pageInfo }) {
+    /**
+     * What a video's link calls it: its title, and whose it is. "by", where
+     * this used to put a dash: titles have dashes of their own — "Artist -
+     * Song" — and after one more the channel read as another piece of it.
+     */
+    function videoLabel(pageInfo, withChannel) {
+        const title = pageInfo.getVideoTitle();
+        return withChannel ? `${title} by ${pageInfo.getChannelInfo().channelName}` : title;
+    }
+
+    /**
+     * `getSettings` is the page's mirror of the settings, read at each copy
+     * so a switch thrown in the dashboard is followed without a reload.
+     */
+    function createMarkdown({ site, pageInfo, getSettings = () => Settings.DEFAULTS }) {
         /** The anchor most recently right-clicked, for its visible text. */
         let lastContextLink = null;
 
@@ -158,18 +172,17 @@
         }
 
         /**
-         * What the page is called and where it is: `title - channel` and the
-         * watch URL on YouTube, the tab's title and its address elsewhere.
-         * `seconds` is where in the video the link opens, and 0 is its start;
-         * a page that is not a video has no use for it.
+         * What the page is called and where it is: `title by channel` and
+         * the watch URL on YouTube, the tab's title and its address
+         * elsewhere. `seconds` is where in the video the link opens, and 0
+         * is its start; a page that is not a video has no use for it.
          */
         function pageParts(seconds) {
+            const settings = getSettings();
             if (site === 'youtube') {
                 const videoId = pageInfo.getVideoId();
                 if (videoId) {
-                    const title = pageInfo.getVideoTitle();
-                    const channel = pageInfo.getChannelInfo().channelName;
-                    return [`${title} - ${channel}`, YouTube.watchUrl(videoId, seconds)];
+                    return [videoLabel(pageInfo, settings.youtubeLinkChannel !== false), YouTube.watchUrl(videoId, seconds)];
                 }
             }
             return [document.title || location.href, location.href];

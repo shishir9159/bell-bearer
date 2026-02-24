@@ -273,6 +273,10 @@
         // alone: Ctrl+Shift+L copies the plain link either way, so both
         // links stay one keystroke off.
         youtubeLinkTimestamp: false,
+        // A video's link names its channel after the title — `[title by
+        // channel](url)` — from y y and Ctrl+Shift+L alike. Off, it is the
+        // title alone.
+        youtubeLinkChannel: true,
 
         // A Download button in the popup on a YouTube video: picture and
         // sound in one .mp4, at the quality the player is on. Off until

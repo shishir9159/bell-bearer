@@ -7454,6 +7454,25 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/markdown\.installPlainPaste\(\);/.test(main), 'nothing listens for the paste');
         assert(/markdown\.copyLink\(markdown\.pageLink\(at\), asMarkdown\)/.test(main), 'the page\'s link is copied but not remembered');
     });
+    check('a video\'s link names its channel after "by", on a switch in the youtube panel that is on', () => {
+        const Markdown = require('../src/content/markdown.js');
+        const pageInfo = {
+            getVideoId: () => 'dQw4w9WgXcQ',
+            getVideoTitle: () => 'Artist - Song',
+            getChannelInfo: () => ({ channelName: 'Somebody' }),
+        };
+        const link = (settings) => Markdown.createMarkdown({ site: 'youtube', pageInfo, getSettings: () => settings }).pageLink().markdown;
+        eq(link({}), '[Artist - Song by Somebody](https://www.youtube.com/watch?v=dQw4w9WgXcQ)', 'a dash made the channel one more piece of the title');
+        eq(link({ youtubeLinkChannel: false }), '[Artist - Song](https://www.youtube.com/watch?v=dQw4w9WgXcQ)');
+
+        eq(require('../src/shared/settings.js').DEFAULTS.youtubeLinkChannel, true);
+        const html = readRepo('dashboard.html');
+        const from = html.indexOf('id="youtubeSettingsPanel"');
+        const panel = html.slice(from, html.indexOf('class="settings-section"', from));
+        assert(panel.includes('<input type="checkbox" id="youtubeLinkChannel">'), 'no switch in the YouTube panel');
+        assert(/createMarkdown\(\{ site, pageInfo: PageInfo, getSettings: \(\) => settings \}\)/.test(readRepo('src/content/main.js')),
+            'the links are made without the settings');
+    });
     check('a right-clicked link pastes as text too, and one with no name of its own is its address once', () => {
         const markdown = require('../src/content/markdown.js').createMarkdown({ site: 'other', pageInfo: {} });
         eq(markdown.contextLink('https://example.com/docs', 'the  docs'),
