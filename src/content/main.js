@@ -272,7 +272,7 @@
                 break;
 
             case 'copyLinkAsMarkdown':
-                markdown.copy(markdown.buildLinkMarkdown(message.linkUrl, message.selectionText)).then((ok) => {
+                markdown.copyLink(markdown.contextLink(message.linkUrl, message.selectionText)).then((ok) => {
                     if (ok) notify('Copied link as Markdown', 'success');
                 });
                 sendResponse({ ok: true });

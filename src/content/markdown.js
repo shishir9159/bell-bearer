@@ -182,24 +182,25 @@
         }
 
         /**
-         * `[label](url)` for a right-clicked link: the anchor's own text first,
-         * then any selected text, then a readable form of the URL itself.
+         * A right-clicked link, in both spellings. `[label](url)` is the
+         * anchor's own text first, then any selected text, then a readable
+         * form of the URL itself — which as plain text would only say the
+         * address twice, so there it is the address alone.
          */
-        function buildLinkMarkdown(linkUrl, selectionText) {
+        function contextLink(linkUrl, selectionText) {
             let label = '';
             if (lastContextLink && lastContextLink.url === linkUrl) {
                 label = lastContextLink.text || lastContextLink.title;
             }
             if (!label && selectionText) label = selectionText;
-            if (!label) {
-                try {
-                    const parsed = new URL(linkUrl);
-                    label = parsed.hostname.replace(/^www\./, '') + parsed.pathname.replace(/\/$/, '');
-                } catch (_) {
-                    label = linkUrl;
-                }
+            if (label) return both(label, linkUrl);
+            try {
+                const parsed = new URL(linkUrl);
+                label = parsed.hostname.replace(/^www\./, '') + parsed.pathname.replace(/\/$/, '');
+            } catch (_) {
+                label = linkUrl;
             }
-            return link(label, linkUrl);
+            return { markdown: link(label, linkUrl), text: plain('', linkUrl) };
         }
 
         /**
@@ -290,7 +291,7 @@
         }
 
         return {
-            trackContextLinks, pageLink, buildLinkMarkdown, copyLink, installPlainPaste,
+            trackContextLinks, pageLink, contextLink, copyLink, installPlainPaste,
             copy: (text) => Dom.copyText(text),
         };
     }

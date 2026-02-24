@@ -7454,6 +7454,17 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/markdown\.installPlainPaste\(\);/.test(main), 'nothing listens for the paste');
         assert(/markdown\.copyLink\(markdown\.pageLink\(at\), asMarkdown\)/.test(main), 'the page\'s link is copied but not remembered');
     });
+    check('a right-clicked link pastes as text too, and one with no name of its own is its address once', () => {
+        const markdown = require('../src/content/markdown.js').createMarkdown({ site: 'other', pageInfo: {} });
+        eq(markdown.contextLink('https://example.com/docs', 'the  docs'),
+            { markdown: '[the docs](https://example.com/docs)', text: 'the docs https://example.com/docs' });
+        eq(markdown.contextLink('https://www.example.com/a/b/', ''),
+            { markdown: '[example.com/a/b](https://www.example.com/a/b/)', text: 'https://www.example.com/a/b/' },
+            'a name made out of the address said it twice');
+        eq(markdown.contextLink('not a url', '').text, 'not a url');
+        assert(/markdown\.copyLink\(markdown\.contextLink\(message\.linkUrl, message\.selectionText\)\)/.test(readRepo('src/content/main.js')),
+            'copied, but never remembered for the paste');
+    });
     check('the shorts setting has its controls, in the youtube panel, bounded as the code is', () => {
         const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
         const from = html.indexOf('id="youtubeSettingsPanel"');
