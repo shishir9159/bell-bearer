@@ -451,7 +451,7 @@ suite('shortcuts: pasting a copied link', () => {
     });
 
     test('the key goes stale: a paste long after it, or after another key, is an ordinary one', async () => {
-        await withField(({ field, clock }) => {
+        await withField(async ({ field, clock }) => {
             plainPaste();
             clock.at += window.BB.Markdown.PLAIN_PASTE_MS + 1;
             assert(!paste(field, link.markdown).defaultPrevented, 'a paste from the menu a while later was reworded');
@@ -460,8 +460,24 @@ suite('shortcuts: pasting a copied link', () => {
             assert(!paste(field, link.markdown).defaultPrevented, 'ctrl+v straight after was reworded');
             plainPaste();
             paste(field, link.markdown);
-            assert(!paste(field, link.markdown).defaultPrevented, 'one press was two plain pastes');
+            await settle();
+            assert(!paste(field, link.markdown).defaultPrevented, 'a paste from the menu just after one was taken for the same press');
             assertEqual(field.value, link.text);
+        });
+    });
+
+    test('REGRESSION: a cancelled paste sent again for the same press is cancelled too, not pasted beside the text', async () => {
+        // Chrome, handed the paste as an edit command with the key, takes
+        // the cancelled command for a key nobody handled and pastes again
+        // through its own binding. The Markdown landed after the text.
+        await withField(({ field }) => {
+            plainPaste();
+            paste(field, link.markdown);
+            assert(paste(field, link.markdown).defaultPrevented, 'the second paste of one press went through as Markdown');
+            assertEqual(field.value, link.text, 'and the text is not typed in twice for it');
+            plainPaste();
+            paste(field, link.markdown);
+            assertEqual(field.value, link.text + link.text, 'a second press is a second paste');
         });
     });
 

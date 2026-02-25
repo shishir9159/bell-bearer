@@ -353,7 +353,8 @@
          * out of somebody's README is theirs, and pastes as it is.
          */
         function installPlainPaste({ now = () => performance.now() } = {}) {
-            let pressedAt = -Infinity;
+            /** The Ctrl+Shift+V last pressed — `{ at, answered }` — while a paste can still be its. */
+            let press = null;
             // The paste handed to an editor below comes back through here.
             let handing = false;
 
@@ -368,14 +369,11 @@
             // Any other key in between is another keystroke, and its paste
             // — Ctrl+V straight after — is not the plain one.
             const onKeyDown = (event) => {
-                pressedAt = isPlainPaste(event) ? now() : -Infinity;
+                press = isPlainPaste(event) ? { at: now(), answered: false } : null;
             };
 
             const onPaste = (event) => {
-                if (handing) return;
-                const plainOne = now() - pressedAt <= PLAIN_PASTE_MS;
-                pressedAt = -Infinity;
-                if (!plainOne || !copied) return;
+                if (handing || !press || !copied || now() - press.at > PLAIN_PASTE_MS) return;
 
                 const target = (event.composedPath && event.composedPath()[0]) || event.target;
                 const data = event.clipboardData;
@@ -385,6 +383,21 @@
                 // would otherwise put the Markdown in beside the text.
                 event.preventDefault();
                 event.stopImmediatePropagation();
+
+                // One press can arrive as two pastes. When the paste comes
+                // with the key as an edit command — a test driver sends it
+                // so — Chrome takes the cancelled command for a key nobody
+                // handled and runs its own binding for it, which pastes
+                // again, in the same task. That one used to go through, and
+                // the Markdown landed after the text. So a press stays this
+                // one's until the task is over, and is answered once.
+                if (press.answered) return;
+                press.answered = true;
+                const mine = press;
+                setTimeout(() => {
+                    if (press === mine) press = null;
+                }, 0);
+
                 handing = true;
                 try {
                     pasteText(target, copied.text);
