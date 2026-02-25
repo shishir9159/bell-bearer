@@ -42,11 +42,19 @@
         }
     }
 
-    /** Canonical watch URL, with a `t=` when `seconds` is past the start. */
-    function watchUrl(videoId, seconds) {
-        const base = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+    /**
+     * Canonical watch URL, with a `t=` when `seconds` is past the start, and
+     * inside `playlist` — a place in one, as playlistPlace reads it — when
+     * it is given one.
+     */
+    function watchUrl(videoId, seconds, playlist) {
+        let url = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
+        if (playlist && playlist.list) {
+            url += `&list=${encodeURIComponent(playlist.list)}`;
+            if (playlist.index) url += `&index=${playlist.index}`;
+        }
         const at = Math.floor(Number(seconds) || 0);
-        return at > 0 ? `${base}&t=${at}s` : base;
+        return at > 0 ? `${url}&t=${at}s` : url;
     }
 
     /**
@@ -113,6 +121,20 @@
         }
     }
 
+    /**
+     * Where in a playlist a watch URL is playing — `{ list, index }` — or
+     * null when it is in none. A real playlist, as above, and for a link's
+     * sake here: `list=WL` or a mix's id opens whatever the person following
+     * the link has under it, not what was being watched. `index` is the
+     * video's place in the list, and '' when the URL does not say.
+     */
+    function playlistPlace(url) {
+        const list = extractPlaylistId(url);
+        if (!list) return null;
+        const index = new URL(url, 'https://www.youtube.com').searchParams.get('index') || '';
+        return { list, index: /^\d+$/.test(index) ? index : '' };
+    }
+
     /** Canonical URL for a playlist page. */
     function playlistUrl(playlistId) {
         return `https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`;
@@ -121,7 +143,7 @@
     const YouTube = {
         extractVideoId, isYouTubeUrl, watchUrl, parseTimestampLink,
         extractChannelId, extractCanonicalChannelId,
-        extractPlaylistId, playlistUrl,
+        extractPlaylistId, playlistPlace, playlistUrl,
     };
 
     root.BB = root.BB || {};

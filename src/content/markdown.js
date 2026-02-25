@@ -266,13 +266,22 @@
          */
         function pageParts(seconds) {
             const settings = getSettings();
+            const page = getPage();
             if (site === 'youtube') {
                 const videoId = pageInfo.getVideoId();
                 if (videoId) {
-                    return [videoLabel(pageInfo, settings.youtubeLinkChannel !== false), YouTube.watchUrl(videoId, seconds)];
+                    // The watch URL is rebuilt from the id, which used to
+                    // leave behind the playlist the video was playing from.
+                    // It is kept while links are to a video's start; once
+                    // Settings asks for them at a moment, a link is to the
+                    // video alone.
+                    const playlist = settings.youtubeLinkTimestamp === true ? null : YouTube.playlistPlace(page.url);
+                    return [
+                        videoLabel(pageInfo, settings.youtubeLinkChannel !== false),
+                        YouTube.watchUrl(videoId, seconds, playlist),
+                    ];
                 }
             }
-            const page = getPage();
             let label = page.title;
             if (site === 'reddit') label = redditLabel(label, page.path, settings.redditLinkSubreddit !== false);
             if (site === 'github') label = githubLabel(label, page.path, settings.githubLinkRepo !== false);

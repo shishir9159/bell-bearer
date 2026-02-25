@@ -7461,7 +7461,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             getVideoTitle: () => 'Artist - Song',
             getChannelInfo: () => ({ channelName: 'Somebody' }),
         };
-        const link = (settings) => Markdown.createMarkdown({ site: 'youtube', pageInfo, getSettings: () => settings }).pageLink().markdown;
+        const getPage = () => ({ title: 'Artist - Song - YouTube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', path: '/watch' });
+        const link = (settings) => Markdown.createMarkdown({ site: 'youtube', pageInfo, getSettings: () => settings, getPage }).pageLink().markdown;
         eq(link({}), '[Artist - Song by Somebody](https://www.youtube.com/watch?v=dQw4w9WgXcQ)', 'a dash made the channel one more piece of the title');
         eq(link({ youtubeLinkChannel: false }), '[Artist - Song](https://www.youtube.com/watch?v=dQw4w9WgXcQ)');
 
@@ -7472,6 +7473,32 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(panel.includes('<input type="checkbox" id="youtubeLinkChannel">'), 'no switch in the YouTube panel');
         assert(/createMarkdown\(\{ site, pageInfo: PageInfo, getSettings: \(\) => settings \}\)/.test(readRepo('src/content/main.js')),
             'the links are made without the settings');
+    });
+    check('a video playing from a playlist keeps it in its link, until links are asked for at a moment', () => {
+        const YouTube = require('../src/shared/youtube.js');
+        const watch = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+        const list = 'PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf';
+        eq(YouTube.playlistPlace(`${watch}&list=${list}&index=7&pp=iAQB`), { list, index: '7' });
+        eq(YouTube.playlistPlace(`${watch}&list=${list}`), { list, index: '' });
+        eq(YouTube.playlistPlace(`${watch}&list=${list}&index=7abc`).index, '', 'an index is a number or it is nothing');
+        // Nobody following the link has this viewer's mix, or their Watch later.
+        for (const own of ['RDdQw4w9WgXcQ', 'WL', 'LL']) eq(YouTube.playlistPlace(`${watch}&list=${own}&index=2`), null, own);
+        eq([YouTube.playlistPlace(watch), YouTube.playlistPlace('')], [null, null]);
+
+        eq(YouTube.watchUrl('dQw4w9WgXcQ', 0, { list, index: '7' }), `${watch}&list=${list}&index=7`);
+        eq(YouTube.watchUrl('dQw4w9WgXcQ', 83, { list, index: '' }), `${watch}&list=${list}&t=83s`);
+        eq([YouTube.watchUrl('dQw4w9WgXcQ', 83, null), YouTube.watchUrl('dQw4w9WgXcQ')], [`${watch}&t=83s`, watch]);
+
+        const pageInfo = { getVideoId: () => 'dQw4w9WgXcQ', getVideoTitle: () => 'A set', getChannelInfo: () => ({ channelName: 'Somebody' }) };
+        const link = (url, settings, seconds) => require('../src/content/markdown.js').createMarkdown({
+            site: 'youtube', pageInfo, getSettings: () => settings, getPage: () => ({ title: 'A set - YouTube', url, path: '/watch' }),
+        }).pageLink(seconds).markdown;
+        const playing = `${watch}&list=${list}&index=7&pp=iAQB`;
+        eq(link(playing, {}), `[A set by Somebody](${watch}&list=${list}&index=7)`, 'the playlist was left behind');
+        eq(link(playing, { youtubeLinkTimestamp: true }, 83), `[A set by Somebody](${watch}&t=83s)`);
+        eq(link(playing, { youtubeLinkTimestamp: true }), `[A set by Somebody](${watch})`, 'Ctrl+Shift+L\'s, with the switch on, is to the video alone too');
+        eq(link(`${watch}&list=RDdQw4w9WgXcQ&start_radio=1`, {}), `[A set by Somebody](${watch})`, 'a mix is not a playlist to link into');
+        eq(link(watch, {}), `[A set by Somebody](${watch})`);
     });
     check('a reddit link names its subreddit last and spelled out, wherever reddit\'s own title had it', () => {
         const { redditLabel } = require('../src/content/markdown.js');

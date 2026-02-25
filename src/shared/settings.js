@@ -271,7 +271,9 @@
         // On, y y on a video copies its link at the second the player has
         // reached — `&t=83s` — rather than at the video's start. It is y y's
         // alone: Ctrl+Shift+L copies the plain link either way, so both
-        // links stay one keystroke off.
+        // links stay one keystroke off. A video playing from a playlist
+        // keeps `&list=` in its link while this is off; on, a link from
+        // either key is to the video alone.
         youtubeLinkTimestamp: false,
         // A video's link names its channel after the title — `[title by
         // channel](url)` — from y y and Ctrl+Shift+L alike. Off, it is the
