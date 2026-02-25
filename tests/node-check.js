@@ -7626,10 +7626,11 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     const ForgeSites = require('../src/shared/forge-sites.js');
 
-    check('every forge setting the registry can name has a default, and each is off', () => {
-        // Each puts a button into the forge's own page, which is asked for.
-        eq(ForgeSites.allKeys(), ['githubCiWatch', 'githubFolderDownload', 'gitlabCiWatch', 'forgejoCiWatch']);
-        eq(ForgeSites.allKeys().map((key) => globalThis.BB.Settings.DEFAULTS[key]), [false, false, false, false]);
+    check('every forge setting the registry can name has a default, and each button\'s is off', () => {
+        // A button goes into the forge's own page, which is asked for. How
+        // a copied link reads puts nothing there, and is on.
+        eq(ForgeSites.allKeys(), ['githubCiWatch', 'githubFolderDownload', 'githubLinkRepo', 'gitlabCiWatch', 'forgejoCiWatch']);
+        eq(ForgeSites.allKeys().map((key) => globalThis.BB.Settings.DEFAULTS[key]), [false, false, true, false, false]);
         eq([ForgeSites.siteKey('gitlab', 'ciWatch'), ForgeSites.siteKey('gitlab', 'nonsense'), ForgeSites.siteKey('nowhere', 'ciWatch')],
             ['gitlabCiWatch', null, null]);
     });
@@ -7637,6 +7638,47 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         // GitLab's and Forgejo's folder menus both zip a folder already.
         eq(ForgeSites.list().map((site) => ForgeSites.siteKey(site.id, 'folderDownload')), ['githubFolderDownload', null, null]);
         eq(Object.keys(globalThis.BB.Settings.DEFAULTS).filter((key) => /FolderDownload$/.test(key)), ['githubFolderDownload']);
+    });
+    check('a github link names its repository last, after a dash, wherever github\'s own title had it', () => {
+        const Markdown = require('../src/content/markdown.js');
+        const named = (title, path = '/microsoft/vscode') => Markdown.githubLabel(title, path, true);
+        // Signed in, as github.com gave them in October 2026.
+        eq(named('microsoft/vscode: Visual Studio Code'), 'Visual Studio Code - microsoft/vscode');
+        eq(named('Open Source VS Code · Issue #1 · microsoft/vscode', '/microsoft/vscode/issues/1'),
+            'Open Source VS Code · Issue #1 - microsoft/vscode');
+        eq(named('vscode/README.md at main · microsoft/vscode', '/microsoft/vscode/blob/main/README.md'),
+            'vscode/README.md at main - microsoft/vscode');
+        eq(named('A question · microsoft/vscode · Discussion #7', '/microsoft/vscode/discussions/7'),
+            'A question · Discussion #7 - microsoft/vscode', 'in the middle');
+        eq(named('microsoft/vscode'), 'microsoft/vscode', 'a repository with nothing said about it is its name');
+        eq(named('Issues · microsoft/vscode', '/Microsoft/VSCode/issues'), 'Issues - microsoft/vscode',
+            'the address has what was typed, the title has its name');
+
+        // Signed out, GitHub's own name is around the same title.
+        eq(named('GitHub - microsoft/vscode: Visual Studio Code · GitHub'), 'Visual Studio Code - microsoft/vscode');
+        eq(named('Open Source VS Code · Issue #1 · microsoft/vscode · GitHub', '/microsoft/vscode/issues/1'),
+            'Open Source VS Code · Issue #1 - microsoft/vscode');
+        eq(named('GitHub - a mirror · Issue #2 · microsoft/vscode · GitHub', '/microsoft/vscode/issues/2'),
+            'GitHub - a mirror · Issue #2 - microsoft/vscode', 'an issue\'s own words were taken for the site\'s name');
+
+        const bare = (title, path = '/microsoft/vscode') => Markdown.githubLabel(title, path, false);
+        eq([bare('microsoft/vscode: Visual Studio Code'), bare('Commits · microsoft/vscode', '/microsoft/vscode/commits/main'), bare('microsoft/vscode')],
+            ['Visual Studio Code', 'Commits', 'microsoft/vscode']);
+
+        // Not a repository's page, or one that names it some other way.
+        for (const [title, path] of [
+            ['Your profile', '/settings/profile'], ['microsoft repositories · GitHub', '/orgs/microsoft/repositories'],
+            ['torvalds (Linus Torvalds)', '/torvalds'], ['Home · microsoft/vscode Wiki', '/microsoft/vscode/wiki'],
+            ['Contributors to microsoft/vscode', '/microsoft/vscode/graphs/contributors'],
+            ['Build · microsoft/vscode@1a2b3c4', '/microsoft/vscode/actions/runs/1'],
+        ]) eq([named(title, path), bare(title, path)], [title, title], path);
+
+        const url = 'https://github.com/microsoft/vscode/issues/1';
+        const getPage = () => ({ title: 'Open Source VS Code · Issue #1 · microsoft/vscode', url, path: '/microsoft/vscode/issues/1' });
+        const link = (site, settings) => Markdown.createMarkdown({ site, pageInfo: {}, getSettings: () => settings, getPage }).pageLink().markdown;
+        eq(link('github', {}), `[Open Source VS Code · Issue #1 - microsoft/vscode](${url})`);
+        eq(link('github', { githubLinkRepo: false }), `[Open Source VS Code · Issue #1](${url})`);
+        eq(link('gitlab', {}), `[Open Source VS Code · Issue #1 · microsoft/vscode](${url})`, 'another forge\'s titles are not GitHub\'s');
     });
     check('every forge has a settings panel of its own, drawn before binding, whose switch carries its key as its id', () => {
         const ForgeSettings = require('../src/page/forge-settings.js');

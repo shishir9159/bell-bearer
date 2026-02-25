@@ -65,8 +65,12 @@
             /** What the Watch button goes on, as Settings says it. */
             watches: 'Actions runs and pull requests',
             pageOf: (pathname) => ownerRepoPage(pathname, 'pull'),
-            /** Which of SITE_KEYS' features this forge has; each is one setting. */
-            features: Object.freeze(['ciWatch', 'folderDownload']),
+            /**
+             * Which of SITE_KEYS' features this forge has; each is one
+             * setting. linkRepo is GitHub's alone because its titles are the
+             * ones that were read for it — src/content/markdown.js#githubLabel.
+             */
+            features: Object.freeze(['ciWatch', 'folderDownload', 'linkRepo']),
         }),
         gitlab: Object.freeze({
             id: 'gitlab',
@@ -135,6 +139,7 @@
     const SITE_KEYS = Object.freeze({
         ciWatch: (p) => `${p}CiWatch`,
         folderDownload: (p) => `${p}FolderDownload`,
+        linkRepo: (p) => `${p}LinkRepo`,
     });
 
     function siteKey(siteId, kind) {

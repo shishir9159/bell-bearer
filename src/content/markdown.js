@@ -178,6 +178,52 @@
         return bare ? `${bare} in ${name} subreddit` : `${name} subreddit`;
     }
 
+    /**
+     * A GitHub page's title with its repository moved to the end, after a
+     * dash — "Title · Issue #12 - owner/repo" — or taken off.
+     *
+     * GitHub names the repository in the title, and where depends on the
+     * page: last on an issue or a file ("… · Issue #12 · owner/repo"), in
+     * the middle on a discussion, in front on the repository's own page
+     * ("owner/repo: what it is"). Signed out it also puts its own name
+     * around the lot — "GitHub - owner/repo: … · GitHub" — which comes off
+     * with it, so a page is one link signed in or out.
+     *
+     * Only a title that names the repository its address is in is touched.
+     * /settings/profile is two segments and no repository, and a page that
+     * names its repository some other way — "owner/repo@1a2b3c" on a run,
+     * "Contributors to owner/repo" — reads right as it is. The name is the
+     * title's spelling of it; the address has whatever was typed.
+     */
+    function githubLabel(title, pathname, withRepo) {
+        const text = String(title || '').replace(/\s+/g, ' ').trim();
+        const [owner, repo] = String(pathname || '').split('/').filter(Boolean);
+        if (!owner || !repo) return text;
+        const wanted = `${owner}/${repo}`.toLowerCase();
+
+        const parts = text.split(' · ');
+        const signedOut = parts.length > 1 && parts[parts.length - 1] === 'GitHub';
+        if (signedOut) parts.pop();
+
+        let name = '';
+        const at = parts.findIndex((part) => part.toLowerCase() === wanted);
+        if (at >= 0) {
+            [name] = parts.splice(at, 1);
+        } else {
+            // Its own page. The "GitHub - " goes only with the "· GitHub"
+            // it comes with: an issue can be titled "GitHub - …" too.
+            const head = signedOut ? parts[0].replace(/^GitHub - /, '') : parts[0];
+            const lower = head.toLowerCase();
+            if (lower !== wanted && !lower.startsWith(`${wanted}: `)) return text;
+            name = head.slice(0, wanted.length);
+            parts[0] = head.slice(wanted.length + 1).trim();
+        }
+
+        const rest = parts.filter(Boolean).join(' · ');
+        if (!rest) return name;
+        return withRepo ? `${rest} - ${name}` : rest;
+    }
+
     /** The tab's title and where it is, which is all a link is made from. */
     const thisPage = () => ({ title: document.title, url: location.href, path: location.pathname });
 
@@ -213,10 +259,10 @@
 
         /**
          * What the page is called and where it is: `title by channel` and
-         * the watch URL on YouTube, the tab's title — on Reddit with its
-         * subreddit put last — and its address elsewhere. `seconds` is where
-         * in the video the link opens, and 0 is its start; a page that is
-         * not a video has no use for it.
+         * the watch URL on YouTube, the tab's title — with its subreddit put
+         * last on Reddit, and its repository on GitHub — and its address
+         * elsewhere. `seconds` is where in the video the link opens, and 0
+         * is its start; a page that is not a video has no use for it.
          */
         function pageParts(seconds) {
             const settings = getSettings();
@@ -229,6 +275,7 @@
             const page = getPage();
             let label = page.title;
             if (site === 'reddit') label = redditLabel(label, page.path, settings.redditLinkSubreddit !== false);
+            if (site === 'github') label = githubLabel(label, page.path, settings.githubLinkRepo !== false);
             return [label || page.url, page.url];
         }
 
@@ -354,7 +401,7 @@
     }
 
     const Markdown = {
-        createMarkdown, escapeLabel, escapeUrl, plain, redditLabel, isPlainPaste, PLAIN_PASTE_MS, checkpointList,
+        createMarkdown, escapeLabel, escapeUrl, plain, redditLabel, githubLabel, isPlainPaste, PLAIN_PASTE_MS, checkpointList,
     };
 
     root.BB = root.BB || {};

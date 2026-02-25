@@ -330,8 +330,13 @@
         //   <forge>FolderDownload — a button that saves the folder on screen
         //     as a .zip, built here from its raw files. GitHub's alone: the
         //     other two forges' folder menus already do it. Off, by the same rule.
+        //   <forge>LinkRepo — a copied link names the repository last, after
+        //     a dash — `[title - owner/repo](url)` — where the forge's own
+        //     title has it in the middle or in front. GitHub's alone so far,
+        //     and on: it is how a link reads, and draws nothing in the page.
         githubCiWatch: false,
         githubFolderDownload: false,
+        githubLinkRepo: true,
         gitlabCiWatch: false,
         forgejoCiWatch: false,
 

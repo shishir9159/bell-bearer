@@ -33,6 +33,25 @@
             </div>`;
     }
 
+    /** A forge's link switch, for the forges whose titles are reworded; nothing for the rest. */
+    function linkHtml(site) {
+        const key = ForgeSites.siteKey(site.id, 'linkRepo');
+        if (!key) return '';
+        return `
+            <h4 class="shortcut-heading">Links</h4>
+            <p class="settings-hint"><kbd>Y</kbd> <kbd>Y</kbd> and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> copy the page as a link.
+               ${esc(site.name)}'s own title names the repository in front of its description, and after a &middot; on
+               an issue, a pull request or a file; with this on, the link names it last, after a dash. Off, the
+               repository is left out of the link.</p>
+            <div class="settings-option">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="${key}">
+                    <span class="toggle-slider"></span>
+                </label>
+                <label class="setting-label" for="${key}">Name the repository at the end of a copied link — <code>[title - owner/repo](url)</code></label>
+            </div>`;
+    }
+
     function panelHtml(site) {
         const key = ForgeSites.siteKey(site.id, 'ciWatch');
         const name = esc(site.name);
@@ -54,7 +73,8 @@
             <p class="settings-hint chess-settings-lead">The run is read from its open tab, so keep the tab open; it can be in the background. Nothing is
                sent anywhere: where ${name}'s page stops updating while out of sight, the tab asks ${name} itself, about once a
                minute and with your own session, for what the page would have shown.</p>
-            ${folderHtml(site)}`;
+            ${folderHtml(site)}
+            ${linkHtml(site)}`;
     }
 
     /** Fill every `[data-forge-settings="<forge id>"]` on the page. */
