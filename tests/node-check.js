@@ -10622,9 +10622,10 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         class RTC extends EventTarget {
             constructor(config) {
                 super();
-                Object.assign(this, { config, fp: new Array(32).fill(all.length + 1), channels: [], iceGatheringState: 'new', connectionState: 'new' });
+                Object.assign(this, { config, fp: new Array(32).fill(all.length + 1), channels: [], added: [], iceGatheringState: 'new', connectionState: 'new' });
                 all.push(this);
             }
+            async addIceCandidate(candidate) { this.added.push(candidate); }
             createDataChannel(label, options) {
                 const channel = new Channel(this, options);
                 this.channels.push(channel);
@@ -10790,6 +10791,40 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(await host, true, 'the host is bound');
         eq(a.early.map((event) => JSON.parse(event.data).t), ['hello']);
         a.pc.close();
+    });
+    /** A host's offer the guest has answered, the answer not yet back with the host. */
+    async function halfMet() {
+        const { RTC } = fakeRtc();
+        const [a, b] = [PartyRtc.openPeer({ RTC }), PartyRtc.openPeer({ RTC })];
+        await a.pc.setLocalDescription();
+        await b.pc.setRemoteDescription(a.pc.localDescription);
+        await b.pc.setLocalDescription();
+        const options = { hostFp: a.pc.fp, guestFp: b.pc.fp, timeoutMs: 2000, retryMs: 5, secret: new Uint8Array(16).fill(4) };
+        return { a, b, options, remote: PartyCode.parseSdp(a.pc.localDescription.sdp) };
+    }
+    await checkAsync('a guest whose connection fails before the host has the reply keeps offering the host\'s addresses', async () => {
+        // Chrome stops checking about 12 s after the guest makes its reply.
+        // The guest took that for the end, so a host who pasted the reply any
+        // later never connected across two routers.
+        const { a, b, options, remote } = await halfMet();
+        const guest = PartyRtc.bind(b, { ...options, remote });
+        b.pc.state('failed', 'connecting');
+        await until(() => b.pc.added.length === 1, 'the host\'s address offered again');
+        b.pc.state('failed', 'connecting');
+        await until(() => b.pc.added.length === 2, 'and again after the next failure');
+        eq(b.pc.added.map((one) => [one.candidate.split(' ')[0], one.candidate.split(' ')[4]]), [['candidate:9', '127.0.0.1'], ['candidate:17', '127.0.0.1']],
+            'a new foundation each time, or Chrome ignores it');
+        await a.pc.setRemoteDescription(b.pc.localDescription);
+        eq(await Promise.all([PartyRtc.bind(a, options), guest]), [true, true]);
+    });
+    await checkAsync('a connection that came up and then failed still ends the bind', async () => {
+        const { a, b, options, remote } = await halfMet();
+        const guest = PartyRtc.bind(b, { ...options, remote });
+        await a.pc.setRemoteDescription(b.pc.localDescription);
+        await until(() => b.pc.connectionState === 'connected', 'connected');
+        a.pc.close();
+        eq(await guest, false);
+        eq(b.pc.added, []);
     });
     check('the ice settings become ice servers, with a turn server\'s credentials taken out of its url', () => {
         eq(PartyRtc.iceServers({ stun: ' stun:a.example:19302  stun:b.example ', turn: 'turn:ana:s3cr:et@relay.example:3478?transport=udp turns:relay.example:5349 http://x' }), [

@@ -113,6 +113,17 @@
     }
 
     /**
+     * The i-th of a description's candidates as an ICE candidate string.
+     * `foundation` is only ever changed to offer the same address again:
+     * Chrome ignores a candidate it already holds under the same foundation.
+     */
+    function candidateLine(c, i, foundation = i + 1) {
+        const priority = TYPE_PREF[c.type] * 2 ** 24 + (65535 - i) * 256 + 255;
+        const related = c.type === 'host' ? '' : ' raddr 0.0.0.0 rport 0';
+        return `candidate:${foundation} 1 udp ${priority} ${c.address} ${c.port} typ ${c.type}${related}`;
+    }
+
+    /**
      * The remote description, rebuilt. `type` is the side the *remote* peer
      * played: 'offer' (DTLS role left to us) or 'answer' (it took the client
      * role). `mid` has to be the one our own offer used when this is an
@@ -123,11 +134,7 @@
         const lines = [
             'v=0', 'o=- 1 2 IN IP4 127.0.0.1', 's=-', 't=0 0', `a=group:BUNDLE ${mid}`, 'a=msid-semantic: WMS',
             'm=application 9 UDP/DTLS/SCTP webrtc-datachannel', 'c=IN IP4 0.0.0.0',
-            ...desc.candidates.map((c, i) => {
-                const priority = TYPE_PREF[c.type] * 2 ** 24 + (65535 - i) * 256 + 255;
-                const related = c.type === 'host' ? '' : ' raddr 0.0.0.0 rport 0';
-                return `a=candidate:${i + 1} 1 udp ${priority} ${c.address} ${c.port} typ ${c.type}${related}`;
-            }),
+            ...desc.candidates.map((c, i) => `a=${candidateLine(c, i)}`),
             'a=end-of-candidates', `a=ice-ufrag:${desc.ufrag}`, `a=ice-pwd:${desc.pwd}`, `a=fingerprint:sha-256 ${hex}`,
             `a=setup:${type === 'offer' ? 'actpass' : 'active'}`, `a=mid:${mid}`, 'a=sctp-port:5000', 'a=max-message-size:262144',
         ];
@@ -357,7 +364,7 @@
     const PartyCode = {
         VERSION, PREFIX, KINDS, TAG_BYTES, ROOM_BYTES, SECRET_BYTES, MAC_BYTES, EXPIRES_BYTES, MAX_CANDIDATES, TYPES,
         toBase64Url, fromBase64Url, randomBytes, sameBytes, hmac,
-        parseSdp, buildSdp, pack, unpack, inviteCode, readInvite, replyCode, readReply, verifyReply, describe,
+        parseSdp, candidateLine, buildSdp, pack, unpack, inviteCode, readInvite, replyCode, readReply, verifyReply, describe,
     };
 
     root.BB = root.BB || {};

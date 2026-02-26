@@ -42,6 +42,8 @@
     const SKEW_MS = 60 * 1000;
     /** From the answer being set to the channel open and bound. */
     const CONNECT_MS = 20000;
+    /** After Chrome gives up on a connection that has not come up yet, the pause before the other end's addresses are offered again. */
+    const RETRY_MS = 2000;
     const MAX_FRAME = 8192;
     const BIND_LABEL = new TextEncoder().encode('bb-party/bind');
     /** Carried on `tick`; everything else goes on `ctl`. */
@@ -114,8 +116,12 @@
 
     const concat = (...parts) => Uint8Array.from(parts.flatMap((part) => [...part]));
 
-    /** Resolves true once `ctl` is open and both ends have proven the secret; false on anything else. */
-    function bind(peer, { secret, hostFp, guestFp, timeoutMs = CONNECT_MS }) {
+    /**
+     * Resolves true once `ctl` is open and both ends have proven the secret;
+     * false on anything else. With `remote`, the other end's description,
+     * a connection that has never come up is kept trying until `timeoutMs`.
+     */
+    function bind(peer, { secret, hostFp, guestFp, remote = null, timeoutMs = CONNECT_MS, retryMs = RETRY_MS }) {
         const { pc, ctl } = peer;
         return new Promise((resolve) => {
             const mine = PartyCode.randomBytes(16);
@@ -123,6 +129,9 @@
             let sentProof = false;
             let theirsOk = false;
             let settled = false;
+            let connected = false;
+            let retry = null;
+            let round = 0;
             const waiting = [];
             let busy = false;
             const timer = setTimeout(() => finish(false), timeoutMs);
@@ -131,6 +140,7 @@
                 if (settled) return;
                 settled = true;
                 clearTimeout(timer);
+                clearTimeout(retry);
                 // The other end may speak the moment it is bound, before
                 // whoever awaits this has put a link on the channel — or
                 // already has, while the last proof was being checked.
@@ -139,7 +149,30 @@
                 pc.removeEventListener('connectionstatechange', watch);
                 resolve(ok);
             }
-            function watch() { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') finish(false); }
+            // 'failed' before the connection has ever come up is not the end.
+            // A guest starts checking the moment it makes its reply, and
+            // Chrome stops about 12 s later; a host behind a home router lets
+            // none of those checks in, so by the time the reply had been sent
+            // back and pasted, the guest had given up, and a code party never
+            // connected over the internet. Chrome comes back from 'failed'
+            // when checks arrive, and offering the same addresses again under
+            // new foundations starts its own checks over, which also keeps
+            // the guest's router open to the host until the reply is in.
+            function watch() {
+                const state = pc.connectionState;
+                if (state === 'connected') connected = true;
+                if (state === 'closed' || (state === 'failed' && (connected || !remote))) finish(false);
+                else if (state === 'failed' && !retry) retry = setTimeout(rearm, retryMs);
+            }
+            function rearm() {
+                retry = null;
+                if (settled) return;
+                round++;
+                remote.candidates.forEach((c, i) => {
+                    const candidate = PartyCode.candidateLine(c, i, round * PartyCode.MAX_CANDIDATES + i + 1);
+                    pc.addIceCandidate({ candidate, sdpMLineIndex: 0 }).catch(() => {});
+                });
+            }
             const say = (msg) => { try { ctl.send(JSON.stringify(msg)); } catch (_) { finish(false); } };
             function open() { say({ t: 'bind', n: PartyCode.toBase64Url(mine) }); }
 
@@ -241,7 +274,7 @@
                 if (used || !PartyCode.sameBytes(reply.tag, tag) || !(await PartyCode.verifyReply(reply, secret))) return null;
                 used = true;
                 if (!(await takeAnswer(peer, desc, reply.desc))) return null;
-                if (await bind(peer, { secret, hostFp: desc.fingerprint, guestFp: reply.desc.fingerprint })) return peer;
+                if (await bind(peer, { secret, hostFp: desc.fingerprint, guestFp: reply.desc.fingerprint, remote: reply.desc })) return peer;
                 peer.pc.close();
                 return null;
             },
@@ -264,7 +297,7 @@
         if (!answered) return null;
         const { peer, desc } = answered;
         const reply = await PartyCode.replyCode({ tag: invite.tag, desc }, invite.secret);
-        const bound = bind(peer, { secret: invite.secret, hostFp: invite.desc.fingerprint, guestFp: desc.fingerprint, timeoutMs: Math.min(left, INVITE_MS + SKEW_MS) })
+        const bound = bind(peer, { secret: invite.secret, hostFp: invite.desc.fingerprint, guestFp: desc.fingerprint, remote: invite.desc, timeoutMs: Math.min(left, INVITE_MS + SKEW_MS) })
             .then((ok) => {
                 if (ok) return peer;
                 peer.pc.close();
@@ -328,7 +361,7 @@
     }
 
     const PartyRtc = {
-        CTL, TICK, GATHER_MS, INVITE_MS, SKEW_MS, CONNECT_MS, MAX_FRAME, TICKS,
+        CTL, TICK, GATHER_MS, INVITE_MS, SKEW_MS, CONNECT_MS, RETRY_MS, MAX_FRAME, TICKS,
         iceServers, natOf, openPeer, gather, describeLocal, bind,
         makeOffer, makeAnswer, takeAnswer, createInvite, acceptInvite, peerLink,
     };
