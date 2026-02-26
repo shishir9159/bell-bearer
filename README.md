@@ -91,7 +91,8 @@ them, the keys act on the one on screen.
 | `<` | Previous speed step |
 | `+` | Back to 1x |
 | `Ctrl + Shift + L` | Copy the page as a Markdown link (rebindable at `chrome://extensions/shortcuts`) |
-| `Y` `Y` | The same, on a double tap — and on a YouTube video at the second the player is on, once **Settings › YouTube** asks for that |
+| `Y` `Y` | The same, on a double tap — as plain text instead once **Settings › General** turns Markdown off, and on a YouTube video at the second the player is on, once **Settings › YouTube** asks for that |
+| `Ctrl + Shift + V` | Paste a link copied as Markdown as plain text, the title and then the address; `Ctrl + V` pastes the Markdown |
 | `Shift + F` | Skim: find within this page |
 | `Shift + H` | Skim: search your browsing history |
 | `Shift + A` | Skim: search the actions it can run |
@@ -137,12 +138,43 @@ nothing is counted while you are typing in a field. Like every key in the table
 it can be moved or switched off under **Settings › Keyboard Shortcuts**; a
 double tap moved to a key is that key twice.
 
-On a YouTube video the link is `[title - channel](watch url)`. **Settings ›
-YouTube › Copy a video's link at the current time with Y Y** adds where the
-player is — `&t=83s` — so the link opens the video at that moment rather than at
-its start. During an advert it is left off: the player's clock is the advert's
-then. `Ctrl + Shift + L` copies the link without it either way, which keeps
-both one keystroke off.
+What is copied is `[title](url)`, and it pastes two ways. `Ctrl + V` pastes
+the Markdown, which is what the clipboard holds. `Ctrl + Shift + V` — the
+browser's own "paste as plain text" — pastes the same link with the Markdown
+taken off: the title, then the address, on one line. That works in any tab, not
+only the one the link was copied in, and for a link copied from the right-click
+menu too. It is only ever the link Bell Bearer copied: once something else is on
+the clipboard `Ctrl + Shift + V` is the browser's again, and a Markdown link
+copied out of somebody's README pastes as it is. And it is a page's own fields
+it works in — the address bar, another program, or a frame inside a page gets
+the Markdown. **Settings › General › Copy as Markdown**, switched off, makes
+`Y` `Y` copy the plain text to begin with; `Ctrl + Shift + L` and the
+right-click menu are named for Markdown, and copy it either way.
+
+Three sites name more than the page in a link, each on a switch in that site's
+own settings that is on from the start:
+
+| Site | The link | Switched off |
+| --- | --- | --- |
+| YouTube | `[title by channel](watch url)` | `[title](watch url)` |
+| Reddit | `[title in AskReddit subreddit](url)` | `[title](url)` |
+| GitHub | `[title - owner/repo](url)` | `[title](url)` |
+
+Reddit's own title has the subreddit as `r/AskReddit`, behind a post's title in
+the tab and in front of it in a link preview; GitHub's has the repository after
+a `·` on an issue or a file, and in front of a repository's description. Either
+is taken out of where the site put it and, with the switch on, named once at the
+end. A page that is in no subreddit or repository is left as the site titled it.
+
+On a YouTube video, **Settings › YouTube › Copy a video's link at the current
+time with Y Y** adds where the player is — `&t=83s` — so the link opens the
+video at that moment rather than at its start. During an advert it is left off:
+the player's clock is the advert's then. `Ctrl + Shift + L` copies the link
+without it either way, which keeps both one keystroke off. A video playing from
+a playlist keeps `&list=` in its link, so it opens in the playlist — until that
+switch is on, when a link from either key is to the video alone. A mix or Watch
+later is never kept: its `list=` opens whatever the person following the link
+has under it.
 
 The five chat keys are `Ctrl + Alt` for the LeetCode keys' reason, and more
 so: a chat site's prompt box has the focus nearly all the time. `Keybindings.conflicts`
@@ -1431,6 +1463,17 @@ It was a lease and two timestamps before that, with a mark in the site's own
 `sessionStorage` to say "you were sent here" — which a reload of the same page
 had to wait two and a half minutes to take over, and a change of origin, from
 reddit.com to old.reddit.com, lost.
+
+The link last copied as Markdown is kept in both its spellings, so that
+whichever tab it is pasted into can give either:
+
+```javascript
+{
+  bbLinkCopy: { markdown: "[Title](https://…)", text: "Title https://…" }
+}
+```
+
+It is what is on this machine's clipboard, so a backup leaves it out.
 
 A watch party keeps nothing in `chrome.storage.local` beyond its `party*`
 settings. The room, its members and its invites live in the session and are
