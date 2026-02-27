@@ -9391,6 +9391,16 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         alone.ui.togglePlay();
         eq([alone.episode.video.paused, alone.episode.video.played], [false, 1]);
     });
+    check('the number-key skips go through netflix\'s player too, and never the video', () => {
+        // Alt+digit and Shift+digit went to player.skip on every site, and on
+        // Netflix that is a currentTime write: error M7375, episode stopped.
+        const main = readRepo('src/content/main.js');
+        assert(/skip: \(seconds\) => \(netflixUi \? netflixUi\.isWatching\(\) && netflixUi\.skip\(seconds\) : player\.skip\(seconds\)\)/.test(main),
+            'the number keys skip netflix through the <video>');
+        const keys = netflixKeys();
+        assert(keys.ui.skip(5));
+        eq([keys.asked, keys.episode.written()], [[{ type: 'seek', ms: 105000 }], 0]);
+    });
     check('netflix\'s player bridge is on every netflix page, and the party asks it on the same channel', () => {
         const page = SiteScripts.PAGE.find((one) => one.id === 'netflix-page');
         eq([page.site, page.matches, page.js], ['netflix', ['*://*.netflix.com/*'], ['src/content/netflix-page.js']]);

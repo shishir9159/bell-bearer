@@ -152,7 +152,10 @@
 
     Shortcuts.install({
         hasVideo: () => !!getVideoElement(),
-        skip: (seconds) => player.skip(seconds),
+        // Not through `player` on Netflix: its skip writes currentTime, which
+        // Netflix answers with error M7375 and a stopped episode. Netflix's
+        // own player seeks instead, on an episode; a preview is not skipped.
+        skip: (seconds) => (netflixUi ? netflixUi.isWatching() && netflixUi.skip(seconds) : player.skip(seconds)),
         faster: () => player.faster(),
         slower: () => player.slower(),
         resetSpeed: () => player.resetSpeed(),
