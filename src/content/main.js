@@ -163,6 +163,10 @@
         toggleReader: () => reader && reader.toggle(),
         onShorts: () => site === 'youtube' && Site.isShortsPath(),
         shortsSkip: (direction) => skipShort(direction),
+        // Resolved on each press, like the pouch: netflixUi is built further down.
+        onNetflixEpisode: () => !!netflixUi && netflixUi.isWatching(),
+        netflixStep: (direction) => netflixUi && netflixUi.step(direction),
+        netflixTogglePlay: () => netflixUi && netflixUi.togglePlay(),
         openSkim: (source) => skim.show(source),
         openHints,
         // Two sites draw a pouch, and the shortcut opens whichever one this
@@ -388,7 +392,7 @@
     // ----------------------------------------------------- Netflix extras
 
     if (site === 'netflix') {
-        netflixUi = BB.NetflixUi.createNetflixUi({ getSettings: () => settings });
+        netflixUi = BB.NetflixUi.createNetflixUi({ getSettings: () => settings, getVideoElement, notify });
         netflixUi.install();
     }
 

@@ -1,15 +1,17 @@
 /**
  * Netflix's player, from inside the page's own JavaScript world, for the watch
- * party.
+ * party and the J and L keys.
  *
- * A party has to seek, and on Netflix the one way that works is the player's
+ * Both have to seek, and on Netflix the one way that works is the player's
  * own API. Writing the <video>'s currentTime — what every other site takes —
  * throws error M7375 and stops playback. That API hangs off
  * `window.netflix`, which a content script's isolated world cannot see, so
- * the party loader injects this file with `world: 'MAIN'` into the party's tab
- * and nowhere else.
+ * this file runs with `world: 'MAIN'`: registered for every Netflix page
+ * (PAGE in src/background/site-scripts.js), and injected by the party loader
+ * too — all a party has on a Netflix switched off in Settings. A second copy
+ * finds the first and stops.
  *
- * It answers `bb:party` with `bb:party:ok` inside the same dispatch — DOM
+ * It answers `bb:netflix` with `bb:netflix:ok` inside the same dispatch — DOM
  * events are synchronous and both worlds listen on one document — so the
  * content script has its answer when its own dispatchEvent returns. Details
  * go across as JSON strings: an object made in one world arrives in the other
@@ -25,8 +27,8 @@
     if (window.__bbNetflixPage) return;
     window.__bbNetflixPage = true;
 
-    const REQUEST = 'bb:party';
-    const ANSWER = 'bb:party:ok';
+    const REQUEST = 'bb:netflix';
+    const ANSWER = 'bb:netflix:ok';
 
     const APIS = [
         () => window.netflix.appContext.state.playerApp.getAPI().videoPlayer,

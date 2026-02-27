@@ -302,6 +302,11 @@
         // nothing is written; a preview muted with Netflix's own button stays
         // muted at any level. See src/content/netflix-ui.js.
         netflixPreviewVolume: 100,
+        // J, K and L on an episode, as YouTube has them: back and forward by
+        // netflixSeekSeconds (1–30), and play or pause. Off until asked for —
+        // bare letters are a claim on someone's keyboard.
+        netflixSeekKeys: false,
+        netflixSeekSeconds: 10,
 
         // Chat sites, one set per site; the key names come from
         // src/shared/chat-sites.js#siteKey. Per site:

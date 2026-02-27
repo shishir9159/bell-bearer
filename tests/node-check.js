@@ -9304,6 +9304,106 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/NETFLIX_SURFACES = \['netflixPreviewVolume'\]/.test(main), 'a change does not reach an open page');
     });
 
+    section('netflix — j, k and l');
+
+    /** An episode's <video> that counts the currentTime writes Netflix answers with M7375. */
+    function netflixEpisode(at = 100, duration = 1500) {
+        let written = 0;
+        const video = {
+            paused: false, duration, played: 0,
+            get currentTime() { return at; },
+            set currentTime(_) { written++; },
+            play() { this.played++; this.paused = false; return Promise.resolve(); },
+            pause() { this.paused = true; },
+        };
+        return { video, written: () => written };
+    }
+    function netflixKeys({ path = '/watch/81234567', answer = { ok: true, seek: true }, seconds = 10 } = {}) {
+        const asked = [];
+        const told = [];
+        const episode = netflixEpisode();
+        const ui = NetflixUi.createNetflixUi({
+            getSettings: () => ({ netflixSeekSeconds: seconds }),
+            getVideoElement: () => episode.video,
+            notify: (message, type) => told.push([message, type]),
+            ask: (message) => { asked.push(message); return answer; },
+            doc: { addEventListener: () => {}, querySelectorAll: () => [] },
+            pathname: () => path,
+        });
+        return { ui, asked, told, episode };
+    }
+
+    check('j, k and l are claimed on an episode with the setting on, and nowhere else', () => {
+        const Keybindings = require('../src/shared/keybindings.js');
+        const Shortcuts = require('../src/content/shortcuts.js');
+        const ran = [];
+        const claim = (code, { on = true, episode = true } = {}) => Shortcuts.createBindings({
+            featureOn: (key) => key === 'netflixSeekKeys' && on,
+            onNetflixEpisode: () => episode,
+            netflixStep: (direction) => ran.push(direction),
+            netflixTogglePlay: () => ran.push('k'),
+        }).filter((binding) => binding.match({ code, key: code.slice(3).toLowerCase(), ctrlKey: false, shiftKey: false, altKey: false, metaKey: false }))
+            .map((binding) => [binding.name, binding.enabled()]);
+        eq(claim('KeyJ'), [['netflix-back', true]]);
+        eq(claim('KeyK'), [['netflix-play', true]]);
+        eq(claim('KeyL'), [['netflix-forward', true]]);
+        eq(claim('KeyL', { on: false }), [['netflix-forward', false]], 'switched off, the key goes back to the page');
+        eq(claim('KeyJ', { episode: false }), [['netflix-back', false]], 'on the browse page they are letters');
+        eq(Keybindings.SCOPES.netflix, 'Netflix');
+        const ids = (settings) => Keybindings.list({}, 'netflix', settings).map((b) => b.id);
+        eq(ids({ netflixSeekKeys: false }), [], 'listed while switched off');
+        eq(ids({ netflixSeekKeys: true }), ['netflix-back', 'netflix-play', 'netflix-forward']);
+        for (const id of ids()) eq(Keybindings.conflicts({}, id, Keybindings.resolve({}, id).combo), [], id);
+    });
+    check('a skip asks netflix\'s player, from where the episode is, and never writes the video', () => {
+        const keys = netflixKeys({ seconds: 10 });
+        assert(keys.ui.isWatching());
+        assert(keys.ui.step(1));
+        assert(keys.ui.step(-1));
+        eq(keys.asked, [{ type: 'seek', ms: 110000 }, { type: 'seek', ms: 90000 }]);
+        eq(keys.told.map((one) => one[0]), ['+10s', '−10s']);
+        eq(keys.episode.written(), 0, 'a currentTime write is M7375 on netflix');
+        eq(netflixKeys({ path: '/browse' }).ui.isWatching(), false);
+    });
+    check('a skip stays inside the episode, by the seconds the setting asks for', () => {
+        eq([NetflixUi.seekStep(5), NetflixUi.seekStep(0), NetflixUi.seekStep(99), NetflixUi.seekStep('x'), NetflixUi.seekStep(2.6)], [5, 10, 30, 10, 3]);
+        const keys = netflixKeys({ seconds: 30 });
+        keys.ui.skip(-500);
+        keys.ui.skip(5000);
+        eq(keys.asked.map((one) => one.ms), [0, 1500000]);
+    });
+    check('with no player to answer, nothing is skipped and the user is told', () => {
+        const keys = netflixKeys({ answer: null });
+        eq(keys.ui.step(1), false);
+        eq(keys.episode.written(), 0);
+        eq(keys.told, [['Netflix\'s player did not answer, so nothing was skipped', 'error']]);
+    });
+    check('k plays or pauses through the player, and through the video when it does not answer', () => {
+        const keys = netflixKeys();
+        keys.ui.togglePlay();
+        keys.episode.video.paused = true;
+        keys.ui.togglePlay();
+        eq(keys.asked, [{ type: 'pause' }, { type: 'play' }]);
+        eq(keys.episode.video.played, 0, 'the player did it');
+        const alone = netflixKeys({ answer: null });
+        alone.ui.togglePlay();
+        assert(alone.episode.video.paused, 'not paused');
+        alone.ui.togglePlay();
+        eq([alone.episode.video.paused, alone.episode.video.played], [false, 1]);
+    });
+    check('netflix\'s player bridge is on every netflix page, and the party asks it on the same channel', () => {
+        const page = SiteScripts.PAGE.find((one) => one.id === 'netflix-page');
+        eq([page.site, page.matches, page.js], ['netflix', ['*://*.netflix.com/*'], ['src/content/netflix-page.js']]);
+        const bridge = readRepo('src/content/netflix-page.js');
+        assert(bridge.includes("const REQUEST = 'bb:netflix';") && bridge.includes("const ANSWER = 'bb:netflix:ok';"));
+        assert(readRepo('src/content/party-media.js').includes("Bridge.ask('bb:netflix', message, 'bb:netflix:ok')"), 'the party asks elsewhere');
+        assert(readRepo('src/content/netflix-ui.js').includes("Bridge.ask('bb:netflix', message, 'bb:netflix:ok')"), 'the keys ask elsewhere');
+        const panel = readRepo('dashboard.html').split('id="netflixSettingsPanel"')[1].split('</div>\r\n                    <div class="settings-section"')[0];
+        assert(panel.includes('<input type="checkbox" id="netflixSeekKeys">'), 'no switch');
+        assert(panel.includes('<input type="number" id="netflixSeekSeconds" min="1" max="30" step="1">'), 'no seconds');
+        eq([globalThis.BB.Settings.DEFAULTS.netflixSeekKeys, globalThis.BB.Settings.DEFAULTS.netflixSeekSeconds], [false, 10]);
+    });
+
     // ------------------------------------------------------ bulk export
 
     section('bulk chat export');

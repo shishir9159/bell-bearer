@@ -68,6 +68,10 @@
         // Only on a Shorts page: the arrows are the page's everywhere else,
         // the watch page's own ±5s seek included.
         const onShorts = () => feature('shortsSeek')() && !!(actions.onShorts && actions.onShorts());
+        // Only on a Netflix episode: J, K and L are letters everywhere else,
+        // Netflix's own search box included — though that is a typing target
+        // and never reaches here.
+        const onNetflix = () => feature('netflixSeekKeys')() && !!(actions.onNetflixEpisode && actions.onNetflixEpisode());
 
         const rows = [
             ['skim-find', { enabled: feature('skimMode'), run: () => actions.openSkim('page') }],
@@ -95,6 +99,9 @@
             ['reader-mode', { noRepeat: true, enabled: canRecord, run: () => actions.toggleReader && actions.toggleReader() }],
             ['shorts-back', { enabled: onShorts, run: () => actions.shortsSkip(-1) }],
             ['shorts-forward', { enabled: onShorts, run: () => actions.shortsSkip(1) }],
+            ['netflix-back', { enabled: onNetflix, run: () => actions.netflixStep(-1) }],
+            ['netflix-play', { noRepeat: true, enabled: onNetflix, run: () => actions.netflixTogglePlay() }],
+            ['netflix-forward', { enabled: onNetflix, run: () => actions.netflixStep(1) }],
         ];
 
         return rows.map(([name, row]) => {

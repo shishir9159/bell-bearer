@@ -102,7 +102,7 @@
      * One synchronous round trip to src/content/netflix-page.js, in the page's
      * world. Null when nothing answered: the bridge is not in this page.
      */
-    const askPage = (message) => Bridge.ask('bb:party', message, 'bb:party:ok');
+    const askPage = (message) => Bridge.ask('bb:netflix', message, 'bb:netflix:ok');
 
     /**
      * Netflix: its own player API, falling back to the <video> for play and

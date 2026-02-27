@@ -185,19 +185,20 @@
         {
             id: 'netflix',
             sites: { netflix: ['*://*.netflix.com/*'] },
-            js: ['src/content/netflix-ui.js'],
+            js: ['src/content/bridge.js', 'src/content/netflix-ui.js'],
         },
     ]);
 
     /**
      * What has to run in the page's own world, by the site it is for: the
-     * chess.com board and LeetCode's and claude.ai's fetch exist only there.
-     * claude.ai's goes in before the page can take its fetch.
+     * chess.com board, LeetCode's and claude.ai's fetch, and Netflix's player
+     * exist only there. claude.ai's goes in before the page can take its fetch.
      */
     const PAGE = Object.freeze([
         { id: 'chess-page', site: 'chess', matches: ['*://*.chess.com/*'], js: ['src/content/chess-page.js'] },
         { id: 'leet-page', site: 'leetcode', matches: ['*://*.leetcode.com/*'], js: ['src/content/leet-page.js'] },
         { id: 'claude-page', site: 'claude', matches: ['*://claude.ai/*'], js: ['src/content/claude-page.js'], runAt: 'document_start' },
+        { id: 'netflix-page', site: 'netflix', matches: ['*://*.netflix.com/*'], js: ['src/content/netflix-page.js'] },
     ]);
 
     /** The manifest's entry for every other page: its scripts are the core list, then main.js. */

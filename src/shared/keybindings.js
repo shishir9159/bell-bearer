@@ -32,6 +32,7 @@
 
     const SCOPES = Object.freeze({
         general: 'General', youtube: 'YouTube', chess: 'Chess.com', leetcode: 'LeetCode', typeracer: 'TypeRacer', chat: 'ChatGPT and Claude',
+        netflix: 'Netflix',
     });
 
     const BINDINGS = Object.freeze([
@@ -93,6 +94,13 @@
         { id: 'chat-pin', scope: 'chat', kind: 'key', label: 'Pin the message in view', combo: { ctrl: true, alt: true, code: 'KeyP', key: 'p' } },
         { id: 'chat-prompts', scope: 'chat', kind: 'key', label: 'Insert a prompt template', combo: { ctrl: true, alt: true, code: 'KeyI', key: 'i' } },
         { id: 'chat-queue', scope: 'chat', kind: 'key', label: 'Queue what is in the prompt box', combo: { ctrl: true, alt: true, code: 'KeyQ', key: 'q' } },
+
+        // YouTube's three, as bare letters: claimed only while a Netflix
+        // episode is open and the setting is on. Everywhere else they are
+        // matched, found not running, and handed back to the page.
+        { id: 'netflix-back', scope: 'netflix', kind: 'key', needs: 'netflixSeekKeys', label: 'Skip back', combo: { code: 'KeyJ', key: 'j' } },
+        { id: 'netflix-play', scope: 'netflix', kind: 'key', needs: 'netflixSeekKeys', label: 'Play or pause', combo: { code: 'KeyK', key: 'k' } },
+        { id: 'netflix-forward', scope: 'netflix', kind: 'key', needs: 'netflixSeekKeys', label: 'Skip forward', combo: { code: 'KeyL', key: 'l' } },
     ]);
 
     const BY_ID = Object.freeze(Object.fromEntries(BINDINGS.map((binding) => [binding.id, binding])));

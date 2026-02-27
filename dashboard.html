@@ -404,6 +404,19 @@
                             <label class="setting-label" for="netflixPreviewVolume">Preview volume (percent)</label>
                             <input type="range" id="netflixPreviewVolume" min="0" max="100" step="5">
                         </div>
+
+                        <p class="settings-hint">YouTube's keys on an episode: <kbd>J</kbd> skips back, <kbd>K</kbd> plays or pauses, <kbd>L</kbd> skips forward. They go through Netflix's own player, and are claimed only while an episode is open — everywhere else on Netflix they are letters.</p>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="netflixSeekKeys">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="netflixSeekKeys">Skip back and forward with J and L, and pause with K</label>
+                        </div>
+                        <div class="settings-option">
+                            <label class="setting-label" for="netflixSeekSeconds">Seconds per skip</label>
+                            <input type="number" id="netflixSeekSeconds" min="1" max="30" step="1">
+                        </div>
                     </div>
                     <div class="settings-section" id="chessSettingsPanel" data-site-settings="chess" data-chess-settings="chess" hidden></div>
                     <div class="settings-section" id="lichessSettingsPanel" data-site-settings="lichess" data-chess-settings="lichess" hidden></div>
