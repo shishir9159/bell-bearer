@@ -398,6 +398,12 @@
                     <div class="settings-section" id="netflixSettingsPanel" data-site-settings="netflix"
                          data-plate="Netflix" data-plate-proper hidden>
                         <p class="settings-hint">A watch party plays an episode in sync for everyone in it, each on their own Netflix account. Start or join one from the popup on the episode. Your name in the room and how a party connects are set in Settings, under Watch party.</p>
+
+                        <p class="settings-hint">Netflix plays a trailer with sound under a card the pointer rests on, in the card opened from it, and in the billboard at the top of the page — at full volume. This sets how loud those previews play; an episode's own volume is left alone. At 100 they play as Netflix plays them. A preview muted with Netflix's own button stays muted at any level.</p>
+                        <div class="settings-option">
+                            <label class="setting-label" for="netflixPreviewVolume">Preview volume (percent)</label>
+                            <input type="range" id="netflixPreviewVolume" min="0" max="100" step="5">
+                        </div>
                     </div>
                     <div class="settings-section" id="chessSettingsPanel" data-site-settings="chess" data-chess-settings="chess" hidden></div>
                     <div class="settings-section" id="lichessSettingsPanel" data-site-settings="lichess" data-chess-settings="lichess" hidden></div>

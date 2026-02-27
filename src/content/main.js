@@ -47,6 +47,7 @@
         youtube: 'YouTubeUi', twitter: 'TwitterUi', reddit: 'RosterContent', chess: 'ChessContent', lichess: 'ChessContent',
         leetcode: 'LeetUi', typeracer: 'TyperUi', chatgpt: 'ChatUi', claude: 'ChatUi',
         github: 'CiWatchContent', gitlab: 'CiWatchContent', forgejo: 'CiWatchContent', vimeo: 'VimeoDownload',
+        netflix: 'NetflixUi',
     };
     const host = Site.detectSite();
     const site = !OWN[host] || BB[OWN[host]] ? host : 'other';
@@ -291,6 +292,7 @@
     let leetUi = null;
     let typerUi = null;
     let chatUi = null;
+    let netflixUi = null;
     /** Reading and applying a roster, on x.com and reddit.com. */
     let roster = null;
     /** The YouTube reader; built on YouTube only, and opened on demand. */
@@ -381,6 +383,13 @@
     // is the only thing Bell Bearer adds, and it does nothing until clicked.
     if (site === 'vimeo') {
         downloader = BB.VideoDownload.createDownloader({ adapter: BB.VimeoDownload.adapter, notify, getVideoElement, save: saver.save });
+    }
+
+    // ----------------------------------------------------- Netflix extras
+
+    if (site === 'netflix') {
+        netflixUi = BB.NetflixUi.createNetflixUi({ getSettings: () => settings });
+        netflixUi.install();
     }
 
     // ------------------------------------------------------------ X extras
@@ -760,6 +769,9 @@
     /** And a forge's Watch and Download folder buttons, on their switches. */
     const FORGE_SURFACES = forgeUi ? BB.ForgeSites.allKeys() : [];
 
+    /** And the level Netflix's previews are already playing at. */
+    const NETFLIX_SURFACES = ['netflixPreviewVolume'];
+
     /** And what an open YouTube reader has to follow without being closed. */
     const READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'readerHideChrome', 'skin'];
 
@@ -779,6 +791,8 @@
         const chatSurfacesChanged = CHAT_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
         const forgeSurfacesChanged = FORGE_SURFACES.some((key) =>
+            key in values && values[key] !== settings[key]);
+        const netflixSurfacesChanged = NETFLIX_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
 
         Object.assign(settings, values);
@@ -800,6 +814,7 @@
         if (chatSurfacesChanged && chatUi) chatUi.refreshSurfaces();
         if (forgeSurfacesChanged && forgeUi) forgeUi.refreshSurfaces();
         if (forgeSurfacesChanged && folderUi) folderUi.refreshSurfaces();
+        if (netflixSurfacesChanged && netflixUi) netflixUi.refresh();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
         if (timeLimit) timeLimit.sync();

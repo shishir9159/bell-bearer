@@ -3362,7 +3362,7 @@ check('every page gets exactly one isolated-world entry, and it is the one for i
         chess: 'src/content/chess.js', lichess: 'src/content/chess.js', leetcode: 'src/content/leet-ui.js',
         typeracer: 'src/content/typeracer-ui.js', chatgpt: 'src/content/chat-ui.js', claude: 'src/content/chat-ui.js',
         github: 'src/content/github-read.js', gitlab: 'src/content/gitlab-read.js', forgejo: 'src/content/forgejo-read.js',
-        vimeo: 'src/content/vimeo-download.js',
+        vimeo: 'src/content/vimeo-download.js', netflix: 'src/content/netflix-ui.js',
     };
     const entries = isolatedEntries();
     for (const url of [
@@ -9204,6 +9204,104 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(readRepo('popup.html').includes('<div id="vimeoPanel" class="page-actions" hidden></div>'));
         assert(/this\.site === 'vimeo'[\s\S]{0,200}appendChild\(document\.getElementById\('downloadBar'\)\)/.test(popup), 'the bar stays in the YouTube panel');
         assert(/site === 'vimeo'[\s\S]{0,300}BB\.VimeoDownload\.adapter/.test(readRepo('src/content/main.js')), 'no downloader on vimeo');
+    });
+
+    // ------------------------------------------------------------ netflix
+
+    section('netflix — how loud a preview plays');
+
+    const NetflixUi = require('../src/content/netflix-ui.js');
+
+    /** A Netflix page at `path`, its videos, and a clock the write window can be moved along. */
+    function netflixPage(path = '/browse', percent = 30) {
+        const listeners = {};
+        const videos = [];
+        const settings = { netflixPreviewVolume: percent };
+        const clock = { now: 1000 };
+        const doc = {
+            addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
+            querySelectorAll: (selector) => (selector === 'video' ? videos : []),
+        };
+        const ui = NetflixUi.createNetflixUi({ getSettings: () => settings, doc, pathname: () => path, now: () => clock.now });
+        ui.install();
+        const video = ({ inPlayer = false, volume = 1, muted = false } = {}) => {
+            const one = { tagName: 'VIDEO', volume, muted, closest: (selector) => (inPlayer && selector === '.watch-video' ? {} : null) };
+            videos.push(one);
+            return one;
+        };
+        const fire = (type, target) => (listeners[type] || []).forEach((fn) => fn({ type, target }));
+        return { ui, video, fire, settings, clock, listeners };
+    }
+
+    check('a level is a percent below 100; 100, or nothing readable, is netflix\'s own', () => {
+        eq([30, 0, -5, '45'].map(NetflixUi.previewLevel), [0.3, 0, 0, 0.45]);
+        eq([100, 150, '', null, undefined, 'loud'].map(NetflixUi.previewLevel), [null, null, null, null, null, null]);
+        eq(globalThis.BB.Settings.DEFAULTS.netflixPreviewVolume, 100, 'nothing is written until it is asked for');
+    });
+    check('a preview is turned down before its first sound, and listened for on the capture path', () => {
+        const page = netflixPage('/browse', 30);
+        eq(Object.keys(page.listeners).sort(), ['loadedmetadata', 'play', 'volumechange']);
+        const card = page.video();
+        page.fire('play', card);
+        eq(card.volume, 0.3);
+    });
+    check('an episode is no preview, by its address or by its player', () => {
+        const watching = netflixPage('/watch/81234567', 30);
+        const episode = watching.video();
+        watching.fire('play', episode);
+        eq(episode.volume, 1, 'on a watch page');
+        const browse = netflixPage('/browse', 30);
+        const player = browse.video({ inPlayer: true });
+        browse.fire('play', player);
+        eq(player.volume, 1, 'inside the episode\'s player');
+        assert(!browse.ui.isPreview({ tagName: 'AUDIO', closest: () => null }), 'only a video is a preview');
+    });
+    check('a preview muted in netflix stays muted, either way netflix spells it', () => {
+        const page = netflixPage('/browse', 30);
+        const muted = page.video({ muted: true });
+        const silent = page.video({ volume: 0 });
+        page.fire('play', muted);
+        page.fire('volumechange', silent);
+        eq([muted.muted, muted.volume, silent.volume], [true, 1, 0]);
+        // Unmuted from Netflix's button, at Netflix's full level: down it goes.
+        silent.volume = 1;
+        page.fire('volumechange', silent);
+        eq(silent.volume, 0.3);
+    });
+    check('netflix putting its level back is answered a few times, then left to it', () => {
+        const page = netflixPage('/browse', 50);
+        const card = page.video();
+        for (let i = 0; i < NetflixUi.MAX_WRITES + 2; i++) {
+            card.volume = 1;
+            page.fire('volumechange', card);
+        }
+        eq(card.volume, 1, 'still trading writes with the page');
+        page.clock.now += NetflixUi.WRITE_WINDOW_MS;
+        page.fire('volumechange', card);
+        eq(card.volume, 0.5, 'a new window, a new go');
+    });
+    check('the setting moved reaches previews already playing, and 100 gives back only what was turned down', () => {
+        const page = netflixPage('/browse', 30);
+        const card = page.video();
+        const other = page.video({ volume: 0.6 });
+        page.fire('play', card);
+        page.settings.netflixPreviewVolume = 70;
+        page.ui.refresh();
+        eq([card.volume, other.volume], [0.7, 0.7]);
+        const untouched = page.video({ volume: 0.4 });
+        page.settings.netflixPreviewVolume = 100;
+        page.ui.refresh();
+        eq([card.volume, other.volume, untouched.volume], [1, 1, 0.4]);
+    });
+    check('netflix has an entry of its own, a setting on its panel, and a page that follows it', () => {
+        const entry = SiteScripts.ENTRIES.find((one) => one.id === 'netflix');
+        eq(entry.sites, { netflix: ['*://*.netflix.com/*'] });
+        assert(entry.js.includes('src/content/netflix-ui.js'));
+        const panel = readRepo('dashboard.html').split('id="netflixSettingsPanel"')[1].split('</div>\r\n                    <div class="settings-section"')[0];
+        assert(/<input type="range" id="netflixPreviewVolume" min="0" max="100"/.test(panel), 'no slider on the Netflix panel');
+        const main = readRepo('src/content/main.js');
+        assert(/netflix: 'NetflixUi'/.test(main), 'main.js does not know netflix by its module');
+        assert(/NETFLIX_SURFACES = \['netflixPreviewVolume'\]/.test(main), 'a change does not reach an open page');
     });
 
     // ------------------------------------------------------ bulk export

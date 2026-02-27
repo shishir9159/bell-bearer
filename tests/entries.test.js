@@ -32,6 +32,7 @@
         youtube: 'src/content/youtube-ui.js', twitter: 'src/content/twitter-ui.js', reddit: 'src/content/roster.js',
         chess: 'src/content/chess.js', lichess: 'src/content/chess.js', leetcode: 'src/content/leet-ui.js',
         typeracer: 'src/content/typeracer-ui.js', chatgpt: 'src/content/chat-ui.js', claude: 'src/content/chat-ui.js',
+        netflix: 'src/content/netflix-ui.js',
     };
 
     /** Every isolated-world entry, with the sites in `off` switched off. */
@@ -83,7 +84,7 @@
     }
 
     suite('content script entries — each boots on its own', () => {
-        for (const site of ['other', 'netflix', ...Object.keys(MARKS)]) {
+        for (const site of ['other', ...Object.keys(MARKS)]) {
             test(`a ${site} page`, async () => {
                 if (location.protocol === 'file:') return; // reading ../manifest.json needs http
                 const entry = await entryFor(site);

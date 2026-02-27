@@ -50,7 +50,8 @@
         "*://gitlab.com/*",
         "*://codeberg.org/*",
         "*://vimeo.com/*",
-        "*://www.vimeo.com/*"
+        "*://www.vimeo.com/*",
+        "*://*.netflix.com/*"
       ],
       "js": [
         "src/shared/time.js",

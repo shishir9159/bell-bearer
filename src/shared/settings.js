@@ -296,6 +296,13 @@
         downloadAskWhere: false,
         downloadFolder: '',
 
+        // Netflix. The volume its previews play at — under a card the
+        // pointer rests on, in the card opened from it, and in the billboard
+        // — as a percent. At 100 they play as Netflix plays them, and
+        // nothing is written; a preview muted with Netflix's own button stays
+        // muted at any level. See src/content/netflix-ui.js.
+        netflixPreviewVolume: 100,
+
         // Chat sites, one set per site; the key names come from
         // src/shared/chat-sites.js#siteKey. Per site:
         //   <site>ComposerTools — Prompts and Queue buttons beside the site's

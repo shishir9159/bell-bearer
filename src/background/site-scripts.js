@@ -182,6 +182,11 @@
                 'src/content/vimeo-download.js',
             ],
         },
+        {
+            id: 'netflix',
+            sites: { netflix: ['*://*.netflix.com/*'] },
+            js: ['src/content/netflix-ui.js'],
+        },
     ]);
 
     /**
