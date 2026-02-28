@@ -9490,6 +9490,93 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Subtitles.cuesAt([], 3), []);
     });
 
+    section('netflix — several subtitles at once');
+
+
+    /**
+     * src/content/netflix-subs-page.js in a context of its own, with a JSON
+     * of its own to wrap — never this process's — and a document that keeps
+     * what is said on it.
+     */
+    function netflixSubsPage() {
+        const vm = require('vm');
+        const told = [];
+        const listeners = {};
+        const document = {
+            addEventListener: (type, fn) => { (listeners[type] = listeners[type] || []).push(fn); },
+            dispatchEvent: (event) => {
+                told.push([event.type, JSON.parse(event.detail)]);
+                (listeners[event.type] || []).forEach((fn) => fn(event));
+            },
+        };
+        class CustomEvent { constructor(type, init) { this.type = type; this.detail = init.detail; } }
+        const context = vm.createContext({ document, CustomEvent });
+        context.window = context;
+        vm.runInContext(readRepo('src/content/netflix-subs-page.js'), context);
+        const pageJson = vm.runInContext('JSON', context);
+        const ask = (movieId) => {
+            document.dispatchEvent(new CustomEvent('bb:netflix:subs', { detail: JSON.stringify({ type: 'tracks', movieId }) }));
+            return told.filter(([type]) => type === 'bb:netflix:subs:ok').pop()[1];
+        };
+        return { context, pageJson, told, ask };
+    }
+    const nfTrack = (language, files, extra = {}) => ({
+        type: 'timedtext', rawTrackType: 'subtitles', language, languageDescription: language.toUpperCase(),
+        isNoneTrack: false, isForcedNarrative: false, new_track_id: `T:${language}`, ttDownloadables: files, ...extra,
+    });
+
+    check('the page reads a manifest as the player parses it, and hands back the very value it was given', () => {
+        const page = netflixSubsPage();
+        const manifest = { result: { movieId: 81234567, timedtexttracks: [
+            { isNoneTrack: true, language: 'none' },
+            nfTrack('en', { 'dfxp-ls-sdh': { urls: [{ url: 'https://ttml.example/en' }] }, 'webvtt-lssdh-ios8': { downloadUrls: { 4: 'https://vtt.example/en' } } }),
+            nfTrack('en', { 'imsc1.1': { urls: [{ url: 'https://ttml.example/forced' }] } }, { isForcedNarrative: true, new_track_id: 'T:forced' }),
+            nfTrack('ja', { 'nflx-cmisc': { isImage: true, urls: [{ url: 'https://img.example/ja' }] } }),
+            nfTrack('es', { 'imsc1.1': { urls: [{ url: 'http://plain.example/es' }] } }, { rawTrackType: 'closedcaptions' }),
+        ] } };
+        const text = JSON.stringify(manifest);
+        const parsed = page.pageJson.parse(text, (key, value) => (key === 'languageDescription' ? `${value}!` : value));
+        eq(parsed.result.timedtexttracks[1].languageDescription, 'EN!', 'the reviver went through');
+        const [type, said] = page.told[0];
+        eq(type, 'bb:netflix:tracks');
+        eq(said.movieId, '81234567');
+        eq(said.tracks.map((one) => [one.id, one.language, one.kind, one.forced, one.format, one.url]), [
+            ['T:en', 'en', 'subtitles', false, 'webvtt-lssdh-ios8', 'https://vtt.example/en'],
+            ['T:forced', 'en', 'subtitles', true, 'imsc1.1', 'https://ttml.example/forced'],
+            ['T:ja', 'ja', 'subtitles', false, null, null],
+            ['T:es', 'es', 'closedcaptions', false, null, null],
+        ], 'webvtt first, the none track gone, a picture or a plain-http address no file to fetch');
+        eq(page.ask('81234567').tracks.length, 4, 'asked again later, by the isolated world');
+        eq(page.ask('999').tracks, null);
+    });
+    check('whatever the page parses, it gets back unharmed — the reader can never be what throws', () => {
+        const page = netflixSubsPage();
+        eq(page.pageJson.parse('[1,2]'), [1, 2]);
+        eq(page.pageJson.parse('"x"'), 'x');
+        eq(page.pageJson.parse('null'), null);
+        let threw = null;
+        try { page.pageJson.parse('{nope'); } catch (error) { threw = error; }
+        assert(threw instanceof require('vm').runInContext('SyntaxError', page.context), 'a bad document still throws the page\'s own SyntaxError');
+        const odd = page.pageJson.parse('{"movieId": 1, "timedtexttracks": [null, 7, {"language": 3}]}');
+        eq(odd.movieId, 1);
+        eq(page.told.map((one) => one[1].tracks), [[]], 'nothing usable, and nothing thrown');
+        // A second copy, as a second registration would load, wraps nothing twice.
+        const before = page.pageJson.parse;
+        require('vm').runInContext(readRepo('src/content/netflix-subs-page.js'), page.context);
+        assert(page.pageJson.parse === before, 'wrapped again');
+    });
+    check('only the newest few titles are kept: hover previews parse manifests too', () => {
+        const page = netflixSubsPage();
+        for (let id = 1; id <= 12; id++) page.pageJson.parse(JSON.stringify({ movieId: id, timedtexttracks: [] }));
+        eq(page.ask('1').tracks, null, 'the oldest went');
+        eq(page.ask('12').tracks, []);
+        eq(page.ask('5').tracks, []);
+    });
+    check('the reader is registered for every netflix page, ahead of the player', () => {
+        const page = SiteScripts.PAGE.find((one) => one.id === 'netflix-subs-page');
+        eq([page.site, page.matches, page.js, page.runAt], ['netflix', ['*://*.netflix.com/*'], ['src/content/netflix-subs-page.js'], 'document_start']);
+    });
+
     // ------------------------------------------------------ bulk export
 
     section('bulk chat export');
