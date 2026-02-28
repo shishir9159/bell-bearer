@@ -9419,6 +9419,46 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     const Subtitles = require('../src/shared/subtitles.js');
     const plain = (cues) => cues.map((cue) => [cue.start, cue.end, Subtitles.textOf(cue.parts)]);
 
+    /** TTML the way Netflix writes it: ticks, styles by id, one <p> a cue. */
+    const NETFLIX_TTML = [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        '<tt xmlns:tt="http://www.w3.org/ns/ttml" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" ttp:tickRate="10000000" xml:lang="en">',
+        '<head><styling>',
+        '<style xml:id="style0" tts:fontStyle="normal" tts:color="white"/>',
+        '<style xml:id="style1" tts:color="white" tts:fontStyle="italic"/>',
+        '<style xml:id="style2" style="style1"/>',
+        '</styling></head>',
+        '<body><div>',
+        '<p begin="40000000t" end="52000000t" style="style2" xml:id="subtitle1">[door creaks] &amp; then',
+        '   silence</p>',
+        '<p begin="35618750t" end="38955000t" region="region0" xml:id="subtitle0"><span style="style0">Where have you been,</span><br/><span style="style1">Hopper</span>?</p>',
+        '<p begin="00:00:06.000" end="00:00:07.500"><span tts:ruby="container"><span tts:ruby="base">漢字</span><span tts:ruby="text">かんじ</span></span>です</p>',
+        '<p begin="60000000t" end="60000000t">a cue with no length</p>',
+        '</div></body></tt>',
+    ].join('\n');
+
+    check('netflix\'s ttml: ticks, italic by style and by a style it inherits, and lines only at <br/>', () => {
+        const cues = Subtitles.parse(NETFLIX_TTML);
+        eq(plain(cues), [
+            [3.561875, 3.8955, 'Where have you been,\nHopper?'],
+            [4, 5.2, '[door creaks] & then silence'],
+            [6, 7.5, '漢字です'],
+        ], 'in time order, the reading over the kanji dropped, and the empty cue gone');
+        eq(cues[0].parts, [{ text: 'Where have you been,\n', italic: false }, { text: 'Hopper', italic: true }, { text: '?', italic: false }]);
+        eq(cues[1].parts[0].italic, true, 'style2 is italic through style1');
+    });
+    check('ttml times: ticks at the file\'s rate, clocks, frames and offsets', () => {
+        eq(Subtitles.ttmlTime('25000000t'), 2.5, 'netflix\'s 10MHz by default');
+        eq(Subtitles.ttmlTime('2500t', { tickRate: 1000 }), 2.5);
+        eq(Subtitles.ttmlTime('01:02:03.25'), 3723.25);
+        eq(Subtitles.ttmlTime('00:00:01:15', { frameRate: 30 }), 1.5);
+        eq([Subtitles.ttmlTime('2.5s'), Subtitles.ttmlTime('500ms'), Subtitles.ttmlTime('1m')], [2.5, 0.5, 60]);
+        assert(Number.isNaN(Subtitles.ttmlTime('soon')) && Number.isNaN(Subtitles.ttmlTime(null)));
+        const slow = NETFLIX_TTML.replace('ttp:tickRate="10000000"', 'ttp:tickRate="1000"');
+        // Ticks read at a thousand a second are ten hours on, after the
+        // clock cue, which does not care about the tick rate.
+        eq(plain(Subtitles.parse(slow)).map((cue) => cue[0]), [6, 35618.75, 40000]);
+    });
     check('netflix\'s webvtt: settings after the times, classes unwrapped, <i> italic, ruby and entities', () => {
         const vtt = [
             '﻿WEBVTT', '', 'NOTE Netflix', '',

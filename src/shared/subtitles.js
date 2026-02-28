@@ -1,15 +1,17 @@
 /**
- * A subtitle file as cues: WebVTT read into a list of `{ start, end, parts }`
- * — seconds, and the cue's text as runs, `{ text, italic }`, with '\n'
- * between lines.
+ * A subtitle file as cues: WebVTT and TTML, the two shapes Netflix serves a
+ * text track in, read into one list of `{ start, end, parts }` — seconds,
+ * and the cue's text as runs, `{ text, italic }`, with '\n' between lines.
  *
- * Read with regular expressions rather than DOMParser. The format is written
- * by machine, Netflix's always the same way, and a parser here can be tested
- * in Node.
+ * Read with regular expressions rather than DOMParser. Both formats are
+ * written by machine, Netflix's always the same way, and a parser here can
+ * be tested in Node; what DOMParser would add is a document per file and a
+ * second code path for the tests.
  *
  * Two things in Netflix's files are not text to show:
- *  - ruby, the reading over a Japanese word. Kept, it reads as the word and
- *    then its reading run together; the reading is dropped and the word kept.
+ *  - ruby, the reading over a Japanese word, is in both formats. Kept, it
+ *    reads as the word and then its reading run together; the reading is
+ *    dropped and the word kept.
  *  - the direction marks (&lrm; &rlm;) WebVTT carries for Arabic and Hebrew,
  *    which are kept — they are what puts the punctuation on the right side.
  */
@@ -93,14 +95,97 @@
         return sorted(cues);
     }
 
+    // --------------------------------------------------------------- TTML
+
+    const attr = (tag, name) => {
+        const match = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(tag);
+        return match ? (match[1] ?? match[2]) : null;
+    };
+
+    /** A TTML time in seconds: ticks (`35618750t`), a clock (`00:01:02.5`, or `:ff` frames), or an offset (`2.5s`, `500ms`). */
+    function ttmlTime(stamp, { tickRate = 10000000, frameRate = 30 } = {}) {
+        const value = String(stamp || '').trim();
+        let match = /^([\d.]+)(h|m|s|ms|f|t)$/.exec(value);
+        if (match) {
+            const n = Number(match[1]);
+            return { h: n * 3600, m: n * 60, s: n, ms: n / 1000, f: n / frameRate, t: n / tickRate }[match[2]];
+        }
+        match = /^(\d+):(\d{2}):(\d{2})(?:([.:])(\d+))?$/.exec(value);
+        if (!match) return NaN;
+        const [, h, m, s, sep, frac] = match;
+        const base = (Number(h) * 3600) + (Number(m) * 60) + Number(s);
+        if (!frac) return base;
+        return base + (sep === '.' ? Number(`0.${frac}`) : Number(frac) / frameRate);
+    }
+
+    /** The ids of the styles that set italic, including those that inherit it from one that does. */
+    function italicStyles(source) {
+        const styles = {};
+        for (const match of source.matchAll(/<(?:tt:)?style\b[^>]*>/g)) {
+            const id = attr(match[0], 'xml:id');
+            if (id) styles[id] = { italic: /fontStyle\s*=\s*["']italic["']/.test(match[0]), parent: attr(match[0], 'style') };
+        }
+        const italic = new Set();
+        for (const id of Object.keys(styles)) {
+            let at = styles[id];
+            for (let depth = 0; at && depth < 8; depth++) {
+                if (at.italic) { italic.add(id); break; }
+                at = at.parent ? styles[at.parent] : null;
+            }
+        }
+        return italic;
+    }
+
+    function parseTtml(source) {
+        const text = String(source).replace(/^﻿/, '');
+        const head = (/<(?:tt:)?tt\b[^>]*>/.exec(text) || [''])[0];
+        const rates = {
+            tickRate: Number(attr(head, 'ttp:tickRate')) || 10000000,
+            frameRate: Number(attr(head, 'ttp:frameRate')) || 30,
+        };
+        const italic = italicStyles(text);
+        const isItalic = (tag) => /fontStyle\s*=\s*["']italic["']/.test(tag) ||
+            (attr(tag, 'style') || '').split(/\s+/).some((id) => italic.has(id));
+        const cues = [];
+        for (const match of text.matchAll(/<(?:tt:)?p\b([^>]*)>([\s\S]*?)<\/(?:tt:)?p>/g)) {
+            const open = match[1];
+            const start = ttmlTime(attr(open, 'begin'), rates);
+            const end = ttmlTime(attr(open, 'end'), rates);
+            if (!(end > start)) continue;
+            // The ruby reading goes; and white space in the markup is one
+            // space, as TTML reads it — only <br/> breaks a line.
+            const body = match[2]
+                .replace(/<(?:tt:)?span\b[^>]*tts:ruby\s*=\s*["']text["'][^>]*>[\s\S]*?<\/(?:tt:)?span>/g, '')
+                .replace(/\s*\n\s*/g, ' ');
+            const parts = [];
+            const stack = [isItalic(open)];
+            for (const piece of body.split(/(<[^>]*>)/)) {
+                if (!piece) continue;
+                if (piece[0] !== '<') {
+                    parts.push({ text: decode(piece), italic: stack[stack.length - 1] });
+                } else if (/^<(?:tt:)?br\b/.test(piece)) {
+                    parts.push({ text: '\n', italic: stack[stack.length - 1] });
+                } else if (/^<(?:tt:)?span\b/.test(piece) && !piece.endsWith('/>')) {
+                    stack.push(stack[stack.length - 1] || isItalic(piece));
+                } else if (/^<\/(?:tt:)?span>/.test(piece) && stack.length > 1) {
+                    stack.pop();
+                }
+            }
+            const tidied = tidy(parts);
+            if (tidied.length) cues.push({ start, end, parts: tidied });
+        }
+        return sorted(cues);
+    }
+
     // -------------------------------------------------------------- shared
 
     const sorted = (cues) => cues.sort((a, b) => a.start - b.start || a.end - b.end);
 
-    /** A file as cues, told apart by what it starts with: WebVTT, or none. */
+    /** Either format, told apart by what the file starts with. */
     function parse(source) {
         const text = String(source || '').replace(/^﻿/, '').trimStart();
         if (text.startsWith('WEBVTT')) return parseVtt(text);
+        if (/^(<\?xml|<(?:tt:)?tt\b)/.test(text)) return parseTtml(text);
         return [];
     }
 
@@ -143,7 +228,7 @@
         return low < cues.length ? Math.min(next, cues[low].start) : next;
     }
 
-    const Subtitles = { parse, parseVtt, vttTime, cuesAt, nextChange, textOf, decode };
+    const Subtitles = { parse, parseVtt, parseTtml, vttTime, ttmlTime, cuesAt, nextChange, textOf, decode };
 
     root.BB = root.BB || {};
     root.BB.Subtitles = Subtitles;
