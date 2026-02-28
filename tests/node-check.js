@@ -9414,6 +9414,42 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([globalThis.BB.Settings.DEFAULTS.netflixSeekKeys, globalThis.BB.Settings.DEFAULTS.netflixSeekSeconds], [false, 10]);
     });
 
+    section('subtitles — reading a file');
+
+    const Subtitles = require('../src/shared/subtitles.js');
+    const plain = (cues) => cues.map((cue) => [cue.start, cue.end, Subtitles.textOf(cue.parts)]);
+
+    check('netflix\'s webvtt: settings after the times, classes unwrapped, <i> italic, ruby and entities', () => {
+        const vtt = [
+            '﻿WEBVTT', '', 'NOTE Netflix', '',
+            '1', '00:00:03.561 --> 00:00:05.895 position:50.00%,middle align:middle size:80.00% line:79.33%',
+            '&lrm;<c.bg_transparent>Where have you been,</c.bg_transparent>', '<i>Hopper</i>?', '',
+            '2', '00:06.000 --> 00:07.500', '<ruby>漢字<rt>かんじ</rt></ruby>です &amp; more', '',
+            '3', '00:00:09.000 --> 00:00:08.000', 'ends before it starts', '',
+        ].join('\r\n');
+        const cues = Subtitles.parse(vtt);
+        eq(plain(cues), [[3.561, 5.895, '‎Where have you been,\nHopper?'], [6, 7.5, '漢字です & more']]);
+        eq(cues[0].parts.map((part) => part.italic), [false, true, false]);
+        eq([Subtitles.vttTime('1:02:03.4'), Subtitles.vttTime('02:03,456')], [3723.4, 123.456]);
+    });
+    check('a file that is neither format is no cues, and entities are only ever text', () => {
+        eq(Subtitles.parse('<html><body>Access denied</body></html>'), []);
+        eq(Subtitles.parse(''), []);
+        eq(Subtitles.parse(null), []);
+        eq(Subtitles.decode('&lt;b&gt; &#65;&#x42; &bogus; &#0;'), '<b> AB &bogus; &#0;');
+    });
+    check('the cues showing at a moment, overlapping ones too, and when that next changes', () => {
+        const cues = [
+            { start: 1, end: 3, parts: [{ text: 'a', italic: false }] },
+            { start: 2, end: 6, parts: [{ text: 'b', italic: false }] },
+            { start: 4, end: 5, parts: [{ text: 'c', italic: false }] },
+        ];
+        const at = (time) => Subtitles.cuesAt(cues, time).map((cue) => cue.parts[0].text).join('');
+        eq([0, 1, 2.5, 3, 4.5, 5.5, 6].map(at), ['', 'a', 'ab', 'b', 'bc', 'b', '']);
+        eq([0, 1, 2.5, 3, 4.5, 5.5, 6].map((time) => Subtitles.nextChange(cues, time)), [1, 2, 3, 4, 5, 6, Infinity]);
+        eq(Subtitles.cuesAt([], 3), []);
+    });
+
     // ------------------------------------------------------ bulk export
 
     section('bulk chat export');
