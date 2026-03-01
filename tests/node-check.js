@@ -9576,6 +9576,117 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const page = SiteScripts.PAGE.find((one) => one.id === 'netflix-subs-page');
         eq([page.site, page.matches, page.js, page.runAt], ['netflix', ['*://*.netflix.com/*'], ['src/content/netflix-subs-page.js'], 'document_start']);
     });
+    const NetflixSubs = require('../src/content/netflix-subs.js');
+
+    check('the languages a setting names: codes in order, at most three, nothing else', () => {
+        eq(NetflixSubs.languagesOf('ja en'), ['ja', 'en']);
+        eq(NetflixSubs.languagesOf(' es, pt-BR;zh-Hans  '), ['es', 'pt-BR', 'zh-Hans']);
+        eq(NetflixSubs.languagesOf('en EN fr de it'), ['en', 'fr', 'de'], 'a repeat in other case is a repeat, and three is the most');
+        eq(NetflixSubs.languagesOf('english <b> 1 e'), [], 'not codes');
+        eq(NetflixSubs.languagesOf(undefined), []);
+    });
+    check('a language finds its track: exactly, then by its base, subtitles over captions, never forced', () => {
+        const t = (id, language, extra = {}) => ({ id, language, kind: 'subtitles', forced: false, url: `https://x/${id}`, ...extra });
+        const tracks = [
+            t('cc', 'en', { kind: 'closedcaptions' }), t('en', 'en'), t('forced', 'es', { forced: true }),
+            t('br', 'pt-BR'), t('pt', 'pt'), t('img', 'ja', { url: null }), t('hans', 'zh-Hans'),
+        ];
+        const id = (wanted) => (NetflixSubs.pick(tracks, wanted) || {}).id || null;
+        eq([id('en'), id('EN'), id('pt'), id('pt-BR'), id('pt-PT'), id('zh'), id('es'), id('ja'), id('de')],
+            ['en', 'en', 'pt', 'br', 'pt', 'hans', null, null, null]);
+        eq(id('en'), 'en', 'captions only when there is nothing else');
+        eq(NetflixSubs.pick([t('cc', 'en', { kind: 'closedcaptions' })], 'en').id, 'cc');
+        eq(NetflixSubs.pick(null, 'en'), null);
+    });
+    /** The data side with a view that only records what it was handed. */
+    function netflixSubsWith({ settings = {}, tracks = null, files = {}, path = '/watch/81' } = {}) {
+        const shown = [];
+        const layouts = [];
+        const told = [];
+        const fetched = [];
+        let announce = null;
+        const state = { path, settings: { netflixSubs: true, netflixSubsLanguages: 'en es', netflixSubsLayout: 'stack', ...settings } };
+        const subs = NetflixSubs.createNetflixSubs({
+            view: {
+                install: () => {},
+                show: (next) => shown.push(next.map((one) => [one.track.id, one.cues.length])),
+                setLayout: (layout) => layouts.push(layout),
+                isShowing: () => shown.length > 0 && shown[shown.length - 1].length > 0,
+            },
+            getSettings: () => state.settings,
+            notify: (message) => told.push(message),
+            ask: () => ({ movieId: '81', tracks }),
+            listen: (handler) => { announce = handler; },
+            fetchText: async (url) => {
+                fetched.push(url);
+                if (!(url in files)) throw new Error('404');
+                return files[url];
+            },
+            pathname: () => state.path,
+        });
+        return { subs, shown, layouts, told, fetched, state, announce: (message) => announce(message) };
+    }
+    const NF_VTT = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhello\n';
+    const nfTracks = [
+        { id: 'en', language: 'en', kind: 'subtitles', forced: false, url: 'https://x/en' },
+        { id: 'es', language: 'es', kind: 'subtitles', forced: false, url: 'https://x/es' },
+    ];
+
+    checkAsync('the languages asked for become tracks and cues, handed to the view in their order', async () => {
+        const nf = netflixSubsWith({ tracks: nfTracks, settings: { netflixSubsLanguages: 'es en' }, files: { 'https://x/en': NF_VTT, 'https://x/es': NF_VTT } });
+        await nf.subs.sync();
+        eq(nf.shown, [[['es', 1], ['en', 1]]]);
+        eq(nf.layouts, ['stack']);
+        await nf.subs.sync();
+        eq(nf.shown.length, 1, 'nothing changed, nothing redrawn');
+        eq(nf.fetched.length, 2, 'each file once');
+    });
+    checkAsync('switched off, or off an episode, the view is emptied; a file that failed is asked for again', async () => {
+        const nf = netflixSubsWith({ tracks: nfTracks, files: { 'https://x/en': NF_VTT } });
+        await nf.subs.sync();
+        eq(nf.shown, [[['en', 1]]], 'es failed to load, and is left out');
+        nf.state.path = '/browse';
+        await nf.subs.sync();
+        eq(nf.shown[1], []);
+        nf.state.path = '/watch/81';
+        await nf.subs.sync();
+        eq(nf.fetched.filter((url) => url === 'https://x/es').length, 2, 'not asked for again');
+        nf.state.settings.netflixSubs = false;
+        await nf.subs.sync();
+        eq(nf.shown[nf.shown.length - 1], []);
+    });
+    checkAsync('an episode left while its files come is not drawn over what follows', async () => {
+        let release;
+        const slow = new Promise((resolve) => { release = resolve; });
+        const shown = [];
+        const state = { path: '/watch/81' };
+        const subs = NetflixSubs.createNetflixSubs({
+            view: { install() {}, show: (next) => shown.push(next.map((one) => one.track.id)), setLayout() {}, isShowing: () => false },
+            getSettings: () => ({ netflixSubs: true, netflixSubsLanguages: 'en' }),
+            ask: () => ({ movieId: '81', tracks: nfTracks }),
+            listen: () => {},
+            fetchText: () => slow.then(() => NF_VTT),
+            pathname: () => state.path,
+        });
+        const pending = subs.sync();
+        state.path = '/browse';
+        await subs.sync();
+        release();
+        await pending;
+        eq(shown, [[]], 'the episode left behind was drawn after all');
+    });
+    checkAsync('tracks announced after the first ask are taken up, for this episode only', async () => {
+        const nf = netflixSubsWith({ tracks: null, files: { 'https://x/en': NF_VTT, 'https://x/es': NF_VTT } });
+        nf.subs.install();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        eq(nf.shown, [], 'nothing to draw yet');
+        nf.announce({ movieId: '99', tracks: nfTracks });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        eq(nf.shown, [], 'another title\'s tracks drew this one');
+        nf.announce({ movieId: '81', tracks: nfTracks });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        eq(nf.shown, [[['en', 1], ['es', 1]]]);
+    });
 
     // ------------------------------------------------------ bulk export
 
