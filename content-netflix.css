@@ -1,0 +1,50 @@
+/*
+ * Netflix: several subtitles at once, drawn by src/content/netflix-subs-view.js
+ * in place of Netflix's own while they are on.
+ *
+ * Sized against the player, not the window — a container query unit, so a
+ * player shrunk into the corner shrinks its lines with it. The first language
+ * is the largest; the others are smaller and warmer, so the eye can tell which
+ * line is which without reading either.
+ */
+.bb-nf-subs {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    container-type: size;
+    font-family: 'Netflix Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+.bb-nf-block {
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    bottom: 10%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8cqh;
+    text-align: center;
+}
+
+.bb-nf-track {
+    font-size: 28px;
+    font-size: 4.4cqh;
+    line-height: 1.25;
+    font-weight: 500;
+    color: #fff;
+    /* An outline under the letters rather than a glow round them: it reads
+       on snow as well as on night, which a shadow alone did not. */
+    -webkit-text-stroke: 0.14em #000;
+    paint-order: stroke fill;
+    text-shadow: 0 0.04em 0.12em rgba(0, 0, 0, 0.6);
+}
+.bb-nf-track:empty { display: none; }
+.bb-nf-track:not([data-n="0"]) {
+    font-size: 22px;
+    font-size: 3.4cqh;
+    color: #f6e4a0;
+}
+
+/* Two cues at once in one language are two speakers: one under the other. */
+.bb-nf-cue { display: block; }
