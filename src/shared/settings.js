@@ -307,6 +307,12 @@
         // bare letters are a claim on someone's keyboard.
         netflixSeekKeys: false,
         netflixSeekSeconds: 10,
+        // Several subtitles at once on an episode, drawn by Bell Bearer in
+        // place of Netflix's own: the languages as codes, in order — `ja en`
+        // — at most three, the first drawn largest. Off until asked for: it
+        // hides Netflix's own subtitle. See src/content/netflix-subs.js.
+        netflixSubs: false,
+        netflixSubsLanguages: '',
 
         // Chat sites, one set per site; the key names come from
         // src/shared/chat-sites.js#siteKey. Per site:

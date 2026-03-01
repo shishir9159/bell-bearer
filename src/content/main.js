@@ -300,6 +300,7 @@
     let typerUi = null;
     let chatUi = null;
     let netflixUi = null;
+    let netflixSubs = null;
     /** Reading and applying a roster, on x.com and reddit.com. */
     let roster = null;
     /** The YouTube reader; built on YouTube only, and opened on demand. */
@@ -395,8 +396,28 @@
     // ----------------------------------------------------- Netflix extras
 
     if (site === 'netflix') {
+        const watcher = DomWatch.createWatcher();
         netflixUi = BB.NetflixUi.createNetflixUi({ getSettings: () => settings, getVideoElement, notify });
         netflixUi.install();
+        netflixSubs = BB.NetflixSubs.createNetflixSubs({
+            view: BB.NetflixSubsView.createView({ watcher, getVideoElement }),
+            getSettings: () => settings,
+            notify,
+        });
+        netflixSubs.install();
+
+        // The X treatment: Netflix goes from the browse page to an episode,
+        // and from one episode to the next, without loading a page, and says
+        // nothing the isolated world can hear.
+        let lastPath = location.pathname;
+        watcher.add('netflix-route', () => {
+            if (location.pathname !== lastPath) {
+                lastPath = location.pathname;
+                netflixSubs.sync();
+            }
+            return false;
+        });
+        window.addEventListener('popstate', () => watcher.schedule());
     }
 
     // ------------------------------------------------------------ X extras
@@ -776,8 +797,8 @@
     /** And a forge's Watch and Download folder buttons, on their switches. */
     const FORGE_SURFACES = forgeUi ? BB.ForgeSites.allKeys() : [];
 
-    /** And the level Netflix's previews are already playing at. */
-    const NETFLIX_SURFACES = ['netflixPreviewVolume'];
+    /** And the level Netflix's previews are already playing at, and the subtitles on an episode. */
+    const NETFLIX_SURFACES = ['netflixPreviewVolume', 'netflixSubs', 'netflixSubsLanguages'];
 
     /** And what an open YouTube reader has to follow without being closed. */
     const READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'readerHideChrome', 'skin'];
@@ -822,6 +843,7 @@
         if (forgeSurfacesChanged && forgeUi) forgeUi.refreshSurfaces();
         if (forgeSurfacesChanged && folderUi) folderUi.refreshSurfaces();
         if (netflixSurfacesChanged && netflixUi) netflixUi.refresh();
+        if (netflixSurfacesChanged && netflixSubs) netflixSubs.sync();
         if (chess) chess.sync();
         if (chessLimits) chessLimits.sync();
         if (timeLimit) timeLimit.sync();

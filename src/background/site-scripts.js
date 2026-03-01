@@ -185,7 +185,14 @@
         {
             id: 'netflix',
             sites: { netflix: ['*://*.netflix.com/*'] },
-            js: ['src/content/bridge.js', 'src/content/netflix-ui.js'],
+            css: ['content-netflix.css'],
+            js: [
+                'src/shared/subtitles.js',
+                'src/content/bridge.js',
+                'src/content/netflix-ui.js',
+                'src/content/netflix-subs-view.js',
+                'src/content/netflix-subs.js',
+            ],
         },
     ]);
 

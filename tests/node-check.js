@@ -9301,7 +9301,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/<input type="range" id="netflixPreviewVolume" min="0" max="100"/.test(panel), 'no slider on the Netflix panel');
         const main = readRepo('src/content/main.js');
         assert(/netflix: 'NetflixUi'/.test(main), 'main.js does not know netflix by its module');
-        assert(/NETFLIX_SURFACES = \['netflixPreviewVolume'\]/.test(main), 'a change does not reach an open page');
+        assert(/NETFLIX_SURFACES = \['netflixPreviewVolume'[,\]]/.test(main), 'a change does not reach an open page');
     });
 
     section('netflix — j, k and l');
@@ -9686,6 +9686,19 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         nf.announce({ movieId: '81', tracks: nfTracks });
         await new Promise((resolve) => setTimeout(resolve, 0));
         eq(nf.shown, [[['en', 1], ['es', 1]]]);
+    });
+    check('netflix draws them with styles of its own, from a panel that sets them, and an open episode follows it', () => {
+        const entry = SiteScripts.ENTRIES.find((one) => one.id === 'netflix');
+        eq(entry.css, ['content-netflix.css']);
+        const at = (file) => entry.js.indexOf(`src/${file}`);
+        assert(at('shared/subtitles.js') >= 0 && at('shared/subtitles.js') < at('content/netflix-subs-view.js'), 'the view loads before what it reads cues with');
+        assert(at('content/netflix-subs-view.js') < at('content/netflix-subs.js'));
+        const panel = readRepo('dashboard.html').split('id="netflixSettingsPanel"')[1].split('</div>\r\n                    <div class="settings-section"')[0];
+        assert(panel.includes('<input type="checkbox" id="netflixSubs">'), 'no switch');
+        assert(panel.includes('id="netflixSubsLanguages"'), 'no languages');
+        const defaults = globalThis.BB.Settings.DEFAULTS;
+        eq([defaults.netflixSubs, defaults.netflixSubsLanguages], [false, '']);
+        assert(/NETFLIX_SURFACES = \[[^\]]*'netflixSubs', 'netflixSubsLanguages'[,\]]/.test(readRepo('src/content/main.js')), 'a change does not reach an open episode');
     });
 
     // ------------------------------------------------------ bulk export
