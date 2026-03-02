@@ -128,6 +128,23 @@ suite('netflix — several subtitles at once', () => {
         } finally { s.destroy(); }
     });
 
+    test('the block follows netflix\'s text up when the controls come, and is never under them', async () => {
+        const s = await nfStage();
+        try {
+            await nfUntil(() => s.host.querySelector('.bb-nf-subs'));
+            s.ownText.textContent = 'Netflix\'s line';
+            await s.at(4.5);
+            const low = s.box('es').bottom;
+            assert(Math.abs(low - s.ownText.getBoundingClientRect().bottom) <= 2, 'not on Netflix\'s line');
+            // Netflix lifts its text by its own inline style, between our cues.
+            s.ownText.style.bottom = '30%';
+            await nfFrames();
+            const high = s.box('es').bottom;
+            assert(Math.abs(high - s.ownText.getBoundingClientRect().bottom) <= 2, `stayed at ${low} under the controls`);
+            assert(high < low - 50, 'did not move up');
+        } finally { s.destroy(); }
+    });
+
     test('switched off, the block goes and netflix\'s own comes back', async () => {
         const s = await nfStage();
         try {

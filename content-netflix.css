@@ -10,7 +10,8 @@
  * Stacked, the languages meet at a seam that does not move: the first grows
  * up from it, the rest hang down from it. Laid end to end in one column
  * instead, a language moved a line whenever the other one wrapped to two.
- * Below the seam is room for the others' two lines each.
+ * Below the seam is room for the others' two lines each, down to where
+ * Netflix would set its own text (--bb-nf-bottom, measured).
  */
 .bb-nf-subs {
     position: absolute;
@@ -29,7 +30,7 @@
     left: 8%;
     right: 8%;
     height: 0;
-    bottom: calc(10% + var(--bb-nf-reserve));
+    bottom: calc(var(--bb-nf-bottom, 10%) + var(--bb-nf-reserve));
 }
 
 .bb-nf-block {
