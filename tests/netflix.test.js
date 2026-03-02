@@ -113,6 +113,21 @@ suite('netflix — several subtitles at once', () => {
         } finally { s.destroy(); }
     });
 
+    test('stacked, a language wrapping to two lines moves neither the other nor itself', async () => {
+        const s = await nfStage();
+        try {
+            await nfUntil(() => s.host.querySelector('.bb-nf-subs'));
+            await s.at(1.5);
+            const [en1, es1] = [s.box('en'), s.box('es')];
+            await s.at(4.5);
+            const [en2, es2] = [s.box('en'), s.box('es')];
+            assert(en2.height > en1.height * 1.5 && es2.height > es1.height * 1.5, 'both should be two lines now');
+            assertEqual(Math.round(en2.bottom), Math.round(en1.bottom), 'the first language\'s last line moved');
+            assertEqual(Math.round(es2.top), Math.round(es1.top), 'the second language\'s first line moved');
+            assert(en1.bottom <= es1.top, 'the first is above the second');
+        } finally { s.destroy(); }
+    });
+
     test('switched off, the block goes and netflix\'s own comes back', async () => {
         const s = await nfStage();
         try {

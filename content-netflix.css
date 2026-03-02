@@ -6,6 +6,11 @@
  * player shrunk into the corner shrinks its lines with it. The first language
  * is the largest; the others are smaller and warmer, so the eye can tell which
  * line is which without reading either.
+ *
+ * Stacked, the languages meet at a seam that does not move: the first grows
+ * up from it, the rest hang down from it. Laid end to end in one column
+ * instead, a language moved a line whenever the other one wrapped to two.
+ * Below the seam is room for the others' two lines each.
  */
 .bb-nf-subs {
     position: absolute;
@@ -13,19 +18,33 @@
     pointer-events: none;
     container-type: size;
     font-family: 'Netflix Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    /* Two lines of a smaller language (2 x 1.25 x 3.4) and the gap under the seam. */
+    --bb-nf-reserve: 9.4cqh;
+}
+.bb-nf-subs[data-count="3"] { --bb-nf-reserve: 18.8cqh; }
+.bb-nf-subs[data-count="1"] { --bb-nf-reserve: 0px; }
+
+.bb-nf-seam {
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    height: 0;
+    bottom: calc(10% + var(--bb-nf-reserve));
 }
 
 .bb-nf-block {
     position: absolute;
-    left: 8%;
-    right: 8%;
-    bottom: 10%;
+    left: 0;
+    right: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
+    /* In the lines' own unit, so the reserve above adds up whatever the page's font size. */
     gap: 0.8cqh;
     text-align: center;
 }
+.bb-nf-above { bottom: 0.4cqh; }
+.bb-nf-below { top: 0.8cqh; }
 
 .bb-nf-track {
     font-size: 28px;

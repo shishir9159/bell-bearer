@@ -12,7 +12,7 @@
  *    for all, with nothing to say where each goes.
  *  - Side by side. Each language wraps at half the width, and the eye goes
  *    back and forth across the picture.
- * What is left is one block, the first language on top.
+ * What is left is stacked about a seam (see content-netflix.css).
  */
 (function (root) {
     'use strict';
@@ -55,7 +55,9 @@
                 overlay.className = 'bb-nf-subs';
                 overlay.setAttribute('aria-hidden', 'true');
                 overlay.dataset.layout = layout;
-                overlay.appendChild(doc.createElement('div')).className = 'bb-nf-block';
+                const seam = overlay.appendChild(doc.createElement('div'));
+                seam.className = 'bb-nf-seam';
+                for (const side of ['above', 'below']) seam.appendChild(doc.createElement('div')).className = `bb-nf-block bb-nf-${side}`;
             }
             if (overlay.parentNode !== player) {
                 // Beside Netflix's own layer, so its controls, later in the
@@ -104,15 +106,16 @@
                 return { track, cues: Subtitles.cuesAt(cues, time) };
             });
             span = [time, until];
-            const block = overlay.querySelector('.bb-nf-block');
-            block.textContent = '';
+            const [above, below] = ['above', 'below'].map((name) => overlay.querySelector(`.bb-nf-${name}`));
+            [above, below].forEach((block) => { block.textContent = ''; });
+            overlay.dataset.count = String(lines.length);
             lines.forEach(({ track, cues }, index) => {
                 const row = doc.createElement('div');
                 row.className = 'bb-nf-track';
                 row.dataset.n = String(index);
                 row.lang = track.language;
                 cues.forEach((cue) => row.appendChild(cueNode(cue)));
-                block.appendChild(row);
+                (index ? below : above).appendChild(row);
             });
         }
 
