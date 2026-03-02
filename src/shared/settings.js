@@ -309,10 +309,13 @@
         netflixSeekSeconds: 10,
         // Several subtitles at once on an episode, drawn by Bell Bearer in
         // place of Netflix's own: the languages as codes, in order — `ja en`
-        // — at most three, the first drawn largest. Off until asked for: it
-        // hides Netflix's own subtitle. See src/content/netflix-subs.js.
+        // — at most three, the first drawn largest. 'stack' meets them at a
+        // seam above where Netflix sets its text; 'split' leaves the first
+        // there and puts the rest at the top. Off until asked for: it hides
+        // Netflix's own subtitle. See src/content/netflix-subs.js.
         netflixSubs: false,
         netflixSubsLanguages: '',
+        netflixSubsLayout: 'stack', // 'stack' | 'split'
 
         // Chat sites, one set per site; the key names come from
         // src/shared/chat-sites.js#siteKey. Per site:

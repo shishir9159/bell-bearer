@@ -145,6 +145,19 @@ suite('netflix — several subtitles at once', () => {
         } finally { s.destroy(); }
     });
 
+    test('split puts the rest at the top, and the setting moves an open block', async () => {
+        const s = await nfStage({ layout: 'split' });
+        try {
+            await nfUntil(() => s.host.querySelector('.bb-nf-subs'));
+            await s.at(1.5);
+            assert(s.host.querySelector('.bb-nf-top .bb-nf-track[lang="es"]'), 'es is not at the top');
+            assert(s.box('es').bottom < s.host.getBoundingClientRect().top + 120, 'not near the top of the picture');
+            s.settings.netflixSubsLayout = 'stack';
+            s.subs.sync();
+            assert(s.host.querySelector('.bb-nf-below .bb-nf-track[lang="es"]'), 'es did not come down');
+        } finally { s.destroy(); }
+    });
+
     test('switched off, the block goes and netflix\'s own comes back', async () => {
         const s = await nfStage();
         try {

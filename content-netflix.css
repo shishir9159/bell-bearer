@@ -1,5 +1,5 @@
 /*
- * Netflix: several subtitles at once, drawn by src/content/netflix-subs-view.js
+ * Netflix: several subtitles at once, drawn by src/content/netflix-subs.js
  * in place of Netflix's own while they are on.
  *
  * Sized against the player, not the window — a container query unit, so a
@@ -23,7 +23,8 @@
     --bb-nf-reserve: 9.4cqh;
 }
 .bb-nf-subs[data-count="3"] { --bb-nf-reserve: 18.8cqh; }
-.bb-nf-subs[data-count="1"] { --bb-nf-reserve: 0px; }
+.bb-nf-subs[data-count="1"],
+.bb-nf-subs[data-layout="split"] { --bb-nf-reserve: 0px; }
 
 .bb-nf-seam {
     position: absolute;
@@ -46,6 +47,7 @@
 }
 .bb-nf-above { bottom: 0.4cqh; }
 .bb-nf-below { top: 0.8cqh; }
+.bb-nf-top { top: 7%; left: 8%; right: 8%; }
 
 .bb-nf-track {
     font-size: 28px;

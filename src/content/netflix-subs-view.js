@@ -12,7 +12,8 @@
  *    for all, with nothing to say where each goes.
  *  - Side by side. Each language wraps at half the width, and the eye goes
  *    back and forth across the picture.
- * What is left is stacked about a seam (see content-netflix.css).
+ * What is left is stacked about a seam (see content-netflix.css), or split
+ * with the first language at the bottom and the others at the top.
  *
  * Netflix's own layer is hidden with `visibility`, not `display`: it is still
  * laid out, and where Netflix puts its text — higher, while the controls are
@@ -32,7 +33,7 @@
     const OWN = '.player-timedtext';
     const OWN_TEXT = '.player-timedtext-text-container';
 
-    const LAYOUTS = ['stack'];
+    const LAYOUTS = ['stack', 'split'];
     const layoutOf = (value) => (LAYOUTS.includes(value) ? value : LAYOUTS[0]);
 
     function createView({
@@ -63,6 +64,7 @@
                 overlay.className = 'bb-nf-subs';
                 overlay.setAttribute('aria-hidden', 'true');
                 overlay.dataset.layout = layout;
+                overlay.appendChild(doc.createElement('div')).className = 'bb-nf-block bb-nf-top';
                 const seam = overlay.appendChild(doc.createElement('div'));
                 seam.className = 'bb-nf-seam';
                 for (const side of ['above', 'below']) seam.appendChild(doc.createElement('div')).className = `bb-nf-block bb-nf-${side}`;
@@ -138,16 +140,17 @@
                 return { track, cues: Subtitles.cuesAt(cues, time) };
             });
             span = [time, until];
-            const [above, below] = ['above', 'below'].map((name) => overlay.querySelector(`.bb-nf-${name}`));
-            [above, below].forEach((block) => { block.textContent = ''; });
+            const [top, above, below] = ['top', 'above', 'below'].map((name) => overlay.querySelector(`.bb-nf-${name}`));
+            [top, above, below].forEach((block) => { block.textContent = ''; });
             overlay.dataset.count = String(lines.length);
+            const others = layout === 'split' ? top : below;
             lines.forEach(({ track, cues }, index) => {
                 const row = doc.createElement('div');
                 row.className = 'bb-nf-track';
                 row.dataset.n = String(index);
                 row.lang = track.language;
                 cues.forEach((cue) => row.appendChild(cueNode(cue)));
-                (index ? below : above).appendChild(row);
+                (index ? others : above).appendChild(row);
             });
             anchor();
         }
@@ -185,8 +188,13 @@
         }
 
         function setLayout(value) {
-            layout = layoutOf(value);
-            if (overlay) overlay.dataset.layout = layout;
+            const next = layoutOf(value);
+            if (next === layout) return;
+            layout = next;
+            if (!overlay) return;
+            // Which block each language goes in is decided as it is drawn.
+            overlay.dataset.layout = layout;
+            draw(true);
         }
 
         function install() {

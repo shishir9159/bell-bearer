@@ -798,7 +798,7 @@
     const FORGE_SURFACES = forgeUi ? BB.ForgeSites.allKeys() : [];
 
     /** And the level Netflix's previews are already playing at, and the subtitles on an episode. */
-    const NETFLIX_SURFACES = ['netflixPreviewVolume', 'netflixSubs', 'netflixSubsLanguages'];
+    const NETFLIX_SURFACES = ['netflixPreviewVolume', 'netflixSubs', 'netflixSubsLanguages', 'netflixSubsLayout'];
 
     /** And what an open YouTube reader has to follow without being closed. */
     const READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'readerHideChrome', 'skin'];

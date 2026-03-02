@@ -9577,6 +9577,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([page.site, page.matches, page.js, page.runAt], ['netflix', ['*://*.netflix.com/*'], ['src/content/netflix-subs-page.js'], 'document_start']);
     });
     const NetflixSubs = require('../src/content/netflix-subs.js');
+    const NetflixSubsView = require('../src/content/netflix-subs-view.js');
 
     check('the languages a setting names: codes in order, at most three, nothing else', () => {
         eq(NetflixSubs.languagesOf('ja en'), ['ja', 'en']);
@@ -9696,9 +9697,10 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const panel = readRepo('dashboard.html').split('id="netflixSettingsPanel"')[1].split('</div>\r\n                    <div class="settings-section"')[0];
         assert(panel.includes('<input type="checkbox" id="netflixSubs">'), 'no switch');
         assert(panel.includes('id="netflixSubsLanguages"'), 'no languages');
+        eq([...panel.split('id="netflixSubsLayout"')[1].matchAll(/<option value="(\w+)"/g)].map((m) => m[1]), NetflixSubsView.LAYOUTS);
         const defaults = globalThis.BB.Settings.DEFAULTS;
-        eq([defaults.netflixSubs, defaults.netflixSubsLanguages], [false, '']);
-        assert(/NETFLIX_SURFACES = \[[^\]]*'netflixSubs', 'netflixSubsLanguages'[,\]]/.test(readRepo('src/content/main.js')), 'a change does not reach an open episode');
+        eq([defaults.netflixSubs, defaults.netflixSubsLanguages, defaults.netflixSubsLayout], [false, '', 'stack']);
+        assert(/NETFLIX_SURFACES = \[[^\]]*'netflixSubs', 'netflixSubsLanguages', 'netflixSubsLayout'\]/.test(readRepo('src/content/main.js')), 'a change does not reach an open episode');
     });
 
     // ------------------------------------------------------ bulk export
