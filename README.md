@@ -1,10 +1,19 @@
-For the low-time warning sound: Chess.com plays that sound through its own audio pipeline, which an extension can only hook into unreliably (the hook breaks whenever they change their bundler). How should I make it adjustable?
+github multi topic repo search
+curl -H "Accept: application/vnd.github+json" \
+  "https://api.github.com/search/repositories?q=topic:go+topic:kubernetes+stars:>500&sort=stars"
+
+To narrow it, you can add filters in the pane’s search box, such as stars:>500 pushed:>2026-06-01 for active repos, or topic:helm for a third topic. Give me the topics you actually care about and I’ll run that search.
+
+site wide noise clamping?
+
+media sound boost (only for that page)
+
+https://phosphoricons.com/?q=youtube
 
 Vomnibar
 
 known limitations at the moment: chess board flip is not detected
 
-let's migrate to <button onClick={} onMouseDown>   </button>
 https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/functional-samples/tutorial.tabs-manager
 # Bell Bearer
 
