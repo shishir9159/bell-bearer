@@ -7656,8 +7656,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     check('every forge setting the registry can name has a default, and each button\'s is off', () => {
         // A button goes into the forge's own page, which is asked for. How
         // a copied link reads puts nothing there, and is on.
-        eq(ForgeSites.allKeys(), ['githubCiWatch', 'githubFolderDownload', 'githubLinkRepo', 'gitlabCiWatch', 'forgejoCiWatch']);
-        eq(ForgeSites.allKeys().map((key) => globalThis.BB.Settings.DEFAULTS[key]), [false, false, true, false, false]);
+        eq(ForgeSites.allKeys(), ['githubCiWatch', 'githubFolderDownload', 'githubLinkRepo', 'githubTopicSearch', 'gitlabCiWatch', 'forgejoCiWatch']);
+        eq(ForgeSites.allKeys().map((key) => globalThis.BB.Settings.DEFAULTS[key]), [false, false, true, false, false, false]);
         eq([ForgeSites.siteKey('gitlab', 'ciWatch'), ForgeSites.siteKey('gitlab', 'nonsense'), ForgeSites.siteKey('nowhere', 'ciWatch')],
             ['gitlabCiWatch', null, null]);
     });

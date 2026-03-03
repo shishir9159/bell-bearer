@@ -549,6 +549,8 @@
     let forgeUi = null;
     /** The Download folder button, on a forge whose adapter reads folders. */
     let folderUi = null;
+    /** And the search for several topics at once, on a forge whose adapter has one. */
+    let topicUi = null;
 
     if (BB.ForgeSites && BB.ForgeSites.get(site) && FORGE_ADAPTERS[site]) {
         const watcher = DomWatch.createWatcher();
@@ -562,6 +564,10 @@
             folderUi = BB.FolderDownload.createFolderDownload({ adapter, watcher, notify, getSettings: () => settings });
             folderUi.install();
         }
+        if (adapter.topics) {
+            topicUi = BB.TopicSearch.createTopicSearch({ adapter, watcher, getSettings: () => settings });
+            topicUi.install();
+        }
 
         // The X treatment once more: every forge moves between a run and its
         // jobs, or a pull request's tabs, without loading a page, and none
@@ -572,6 +578,7 @@
                 lastPath = location.pathname;
                 forgeUi.onNavigate();
                 if (folderUi) folderUi.onNavigate();
+                if (topicUi) topicUi.onNavigate();
             }
             return false;
         });
@@ -794,7 +801,7 @@
         'shortcuts',
     ] : [];
 
-    /** And a forge's Watch and Download folder buttons, on their switches. */
+    /** And a forge's Watch and Download folder buttons, and its topic search, on their switches. */
     const FORGE_SURFACES = forgeUi ? BB.ForgeSites.allKeys() : [];
 
     /** And the level Netflix's previews are already playing at, and the subtitles on an episode. */
@@ -842,6 +849,7 @@
         if (chatSurfacesChanged && chatUi) chatUi.refreshSurfaces();
         if (forgeSurfacesChanged && forgeUi) forgeUi.refreshSurfaces();
         if (forgeSurfacesChanged && folderUi) folderUi.refreshSurfaces();
+        if (forgeSurfacesChanged && topicUi) topicUi.refreshSurfaces();
         if (netflixSurfacesChanged && netflixUi) netflixUi.refresh();
         if (netflixSurfacesChanged && netflixSubs) netflixSubs.sync();
         if (chess) chess.sync();

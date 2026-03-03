@@ -55,3 +55,73 @@
 .bb-folder-download:disabled {
     cursor: progress;
 }
+
+/* The topic search: GitHub's own form-control, holding the topics as its own
+   topic tags and the filters as plainer ones, and growing a line as they wrap. */
+.bb-topic-search { margin-top: 16px; }
+
+.bb-topic-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.bb-topic-field {
+    display: flex;
+    flex: 1 1 320px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    height: auto;
+    min-height: 32px;
+    padding: 3px 8px;
+    cursor: text;
+}
+
+.bb-topic-field:focus-within {
+    border-color: var(--borderColor-accent-emphasis, #0969da);
+    outline: 2px solid var(--focus-outlineColor, #0969da);
+    outline-offset: -1px;
+    box-shadow: none;
+}
+
+.bb-topic-terms { display: contents; }
+
+.bb-topic-field .topic-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0;
+}
+
+.bb-topic-field .bb-topic-filter {
+    color: var(--fgColor-default, #1f2328);
+    background: var(--bgColor-neutral-muted, rgba(175, 184, 193, .2));
+    font-family: var(--fontStack-monospace, ui-monospace, SFMono-Regular, Consolas, monospace);
+}
+
+.bb-topic-remove {
+    display: inline-flex;
+    padding: 0;
+    margin-left: 2px;
+    border: 0;
+    background: none;
+    color: inherit;
+    opacity: .7;
+    cursor: pointer;
+}
+
+.bb-topic-remove:hover { opacity: 1; }
+.bb-topic-remove .octicon { width: 12px; height: 12px; }
+
+.bb-topic-input {
+    flex: 1 1 160px;
+    min-width: 160px;
+    padding: 2px 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+}

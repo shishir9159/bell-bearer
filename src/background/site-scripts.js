@@ -169,6 +169,7 @@
                 'src/content/forgejo-read.js',
                 'src/content/ci-watch.js',
                 'src/content/folder-download.js',
+                'src/content/topic-search.js',
             ],
         },
         {

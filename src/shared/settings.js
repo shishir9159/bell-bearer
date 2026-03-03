@@ -357,9 +357,13 @@
         //     a dash — `[title - owner/repo](url)` — where the forge's own
         //     title has it in the middle or in front. GitHub's alone so far,
         //     and on: it is how a link reads, and draws nothing in the page.
+        //   <forge>TopicSearch — a box on a topic's page that searches for
+        //     repositories with several topics at once. GitHub's alone, and
+        //     off: it goes into the page.
         githubCiWatch: false,
         githubFolderDownload: false,
         githubLinkRepo: true,
+        githubTopicSearch: false,
         gitlabCiWatch: false,
         forgejoCiWatch: false,
 

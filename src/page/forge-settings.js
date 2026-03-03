@@ -52,6 +52,24 @@
             </div>`;
     }
 
+    /** A forge's topic search switch, for the forges that have one; nothing for the rest. */
+    function topicsHtml(site) {
+        const key = ForgeSites.siteKey(site.id, 'topicSearch');
+        if (!key) return '';
+        return `
+            <h4 class="shortcut-heading">Topics</h4>
+            <p class="settings-hint">A search box on a topic's page — ${esc(site.hosts[0])}/topics/go — that adds more topics, and filters
+               such as <code>stars:&gt;500</code> or <code>pushed:&gt;2026-06-01</code>, and searches ${esc(site.name)} for the
+               repositories that have every one of them.</p>
+            <div class="settings-option">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="${key}">
+                    <span class="toggle-slider"></span>
+                </label>
+                <label class="setting-label" for="${key}">Search several topics at once on a topic's page</label>
+            </div>`;
+    }
+
     function panelHtml(site) {
         const key = ForgeSites.siteKey(site.id, 'ciWatch');
         const name = esc(site.name);
@@ -74,6 +92,7 @@
                sent anywhere: where ${name}'s page stops updating while out of sight, the tab asks ${name} itself, about once a
                minute and with your own session, for what the page would have shown.</p>
             ${folderHtml(site)}
+            ${topicsHtml(site)}
             ${linkHtml(site)}`;
     }
 

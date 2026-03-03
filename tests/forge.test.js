@@ -676,4 +676,62 @@
             teardown();
         });
     });
+
+    // ------------------------------------------------------- topic search
+
+    /** A topic page's column as github.com drew /topics/cloud-native in October 2026, cut to one card. */
+    const topicColumn = `<div class="topic p-responsive container-lg"><div class="d-md-flex gutter-md"><div class="col-md-8 col-lg-9" data-hpc>
+        <h2 class="h3 color-fg-muted">Here are 3,859 public repositories matching this topic...</h2>
+        <div class="d-sm-flex"><details class="details-reset details-overlay select-menu"><summary>Language: All</summary></details>
+            <details class="details-reset details-overlay select-menu"><summary>Sort: Most stars</summary></details></div>
+        <article class="border rounded color-shadow-small color-bg-subtle tmp-my-4"><h3>ClickHouse / ClickHouse</h3></article>
+        <form class="ajax-pagination-form js-ajax-pagination"><button type="submit">Load more…</button></form>
+        </div></div></div>`;
+
+    function makeTopics({ on = true } = {}) {
+        const settings = { githubTopicSearch: on };
+        const opened = [];
+        const win = { location: { pathname: '/topics/cloud-native', assign: (url) => opened.push(url) } };
+        const ui = BB().TopicSearch.createTopicSearch({
+            adapter: BB().GithubRead.adapter, watcher: nowWatcher(), getSettings: () => settings, win,
+        });
+        const box = () => document.getElementById(BB().TopicSearch.BOX_ID);
+        const $ = (selector) => box().querySelector(selector);
+        const type = (text) => {
+            $('.bb-topic-input').value = text;
+            $('.bb-topic-form').dispatchEvent(new Event('submit', { cancelable: true }));
+        };
+        return { ui, settings, opened, win, box, $, type };
+    }
+
+    suite('github topic search', () => {
+        test('it goes under the page\'s own menus, with the page\'s topic in it, while its switch is on', async () => {
+            const host = stage(topicColumn);
+            const { ui, settings, box, $ } = makeTopics();
+            ui.install();
+            assertEqual(host.querySelector('.d-sm-flex').nextElementSibling, box());
+            assertEqual($('.topic-tag').textContent, 'cloud-native');
+            settings.githubTopicSearch = false;
+            ui.refreshSurfaces();
+            assertEqual(box(), null);
+            teardown();
+        });
+
+        test('typed words become tags, and Search asks github for every topic and filter in the box', async () => {
+            stage(topicColumn);
+            const { ui, opened, $, type } = makeTopics();
+            ui.install();
+            type('');
+            assertEqual(opened.length, 0, 'the page\'s own topic alone is the page itself');
+            type('kubernetes Go cloud-native pushed:>2026-06-01 stars: #');
+            assertDeepEqual([...$('.bb-topic-terms').children].map((tag) => tag.textContent), ['kubernetes', 'go', 'pushed:>2026-06-01']);
+            assertEqual($('.bb-topic-input').value, 'stars: #', 'what is neither stays to be mended');
+            const url = new URL(opened[0], 'https://github.com');
+            assertDeepEqual([url.pathname, url.searchParams.get('q'), url.searchParams.get('type'), url.searchParams.get('s')],
+                ['/search', 'topic:cloud-native topic:kubernetes topic:go pushed:>2026-06-01', 'repositories', 'stars']);
+            $('.bb-topic-remove[data-index="0"]').click();
+            assertDeepEqual([...$('.bb-topic-terms').children].map((tag) => tag.textContent), ['go', 'pushed:>2026-06-01']);
+            teardown();
+        });
+    });
 })();

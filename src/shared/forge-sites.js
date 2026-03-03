@@ -69,8 +69,9 @@
              * Which of SITE_KEYS' features this forge has; each is one
              * setting. linkRepo is GitHub's alone because its titles are the
              * ones that were read for it — src/content/markdown.js#githubLabel.
+             * topicSearch is too, since the search it asks is GitHub's.
              */
-            features: Object.freeze(['ciWatch', 'folderDownload', 'linkRepo']),
+            features: Object.freeze(['ciWatch', 'folderDownload', 'linkRepo', 'topicSearch']),
         }),
         gitlab: Object.freeze({
             id: 'gitlab',
@@ -140,6 +141,7 @@
         ciWatch: (p) => `${p}CiWatch`,
         folderDownload: (p) => `${p}FolderDownload`,
         linkRepo: (p) => `${p}LinkRepo`,
+        topicSearch: (p) => `${p}TopicSearch`,
     });
 
     function siteKey(siteId, kind) {
