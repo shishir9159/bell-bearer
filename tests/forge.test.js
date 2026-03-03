@@ -688,12 +688,29 @@
         <form class="ajax-pagination-form js-ajax-pagination"><button type="submit">Load more…</button></form>
         </div></div></div>`;
 
-    function makeTopics({ on = true } = {}) {
+    const repo = (n) => ({ full_name: `owner${n}/repo-${n}`, description: `Repo <${n}>`, stargazers_count: 12345, forks_count: 1,
+        language: 'Go', topics: ['go', 'kubernetes'], pushed_at: '2026-10-17T10:00:00Z' });
+
+    /** The API as the search sees it: each search's `q` and page written down, and a hundred repositories while there are more. */
+    function fakeApi({ total = 150 } = {}) {
+        const asked = [];
+        const fetchImpl = async (url) => {
+            const params = new URL(url).searchParams;
+            const page = Number(params.get('page'));
+            asked.push([params.get('q'), page, params.get('sort')]);
+            const count = Math.max(0, Math.min(100, total - (page - 1) * 100));
+            const items = Array.from({ length: count }, (_, i) => repo((page - 1) * 100 + i + 1));
+            return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ total_count: total, items }) };
+        };
+        return { fetchImpl, asked };
+    }
+
+    function makeTopics({ on = true, total } = {}) {
         const settings = { githubTopicSearch: on };
-        const opened = [];
-        const win = { location: { pathname: '/topics/cloud-native', assign: (url) => opened.push(url) } };
+        const api = fakeApi({ total });
+        const win = { location: { pathname: '/topics/cloud-native' } };
         const ui = BB().TopicSearch.createTopicSearch({
-            adapter: BB().GithubRead.adapter, watcher: nowWatcher(), getSettings: () => settings, win,
+            adapter: BB().GithubRead.adapter, watcher: nowWatcher(), getSettings: () => settings, fetchImpl: api.fetchImpl, win,
         });
         const box = () => document.getElementById(BB().TopicSearch.BOX_ID);
         const $ = (selector) => box().querySelector(selector);
@@ -701,7 +718,7 @@
             $('.bb-topic-input').value = text;
             $('.bb-topic-form').dispatchEvent(new Event('submit', { cancelable: true }));
         };
-        return { ui, settings, opened, win, box, $, type };
+        return { ui, settings, api, win, box, $, type };
     }
 
     suite('github topic search', () => {
@@ -717,20 +734,44 @@
             teardown();
         });
 
-        test('typed words become tags, and Search asks github for every topic and filter in the box', async () => {
-            stage(topicColumn);
-            const { ui, opened, $, type } = makeTopics();
+        test('a search with more topics and a filter takes the page\'s list over, and Clear gives it back', async () => {
+            const host = stage(topicColumn);
+            const { ui, api, $, type } = makeTopics();
             ui.install();
-            type('');
-            assertEqual(opened.length, 0, 'the page\'s own topic alone is the page itself');
-            type('kubernetes Go cloud-native pushed:>2026-06-01 stars: #');
-            assertDeepEqual([...$('.bb-topic-terms').children].map((tag) => tag.textContent), ['kubernetes', 'go', 'pushed:>2026-06-01']);
-            assertEqual($('.bb-topic-input').value, 'stars: #', 'what is neither stays to be mended');
-            const url = new URL(opened[0], 'https://github.com');
-            assertDeepEqual([url.pathname, url.searchParams.get('q'), url.searchParams.get('type'), url.searchParams.get('s')],
-                ['/search', 'topic:cloud-native topic:kubernetes topic:go pushed:>2026-06-01', 'repositories', 'stars']);
+            type('kubernetes Go pushed:>2026-06-01');
+            await waitFor(() => $('.bb-topic-list').children.length, 'the cards');
+            assertDeepEqual(api.asked, [['topic:cloud-native topic:kubernetes topic:go pushed:>2026-06-01', 1, 'stars']]);
+            assertEqual($('.bb-topic-said').textContent, 'Here are 150 public repositories matching cloud-native, kubernetes and go, with pushed:>2026-06-01');
+            assertEqual($('.bb-topic-list').children.length, 100);
+            assertEqual($('article h3 a.text-bold').getAttribute('href'), '/owner1/repo-1');
+            assertEqual($('article p').textContent, 'Repo <1>', 'a description is text, not markup');
+            const column = host.querySelector('[data-hpc]');
+            assert(column.classList.contains(BB().TopicSearch.SEARCHING), 'the page\'s own list is still shown');
+
+            $('.bb-topic-more').click();
+            await waitFor(() => $('.bb-topic-list').children.length === 150, 'the second page');
+            assertEqual($('.bb-topic-more').hidden, true, 'there is no third');
+
+            $('.bb-topic-clear').click();
+            assert(!column.classList.contains(BB().TopicSearch.SEARCHING));
+            assertEqual($('.bb-topic-results').hidden, true);
+            assertEqual($('.bb-topic-terms').children.length, 0);
+            teardown();
+        });
+
+        test('a removed topic searches again, and once the box is empty the page\'s own list is back', async () => {
+            const host = stage(topicColumn);
+            const { ui, api, $, type } = makeTopics();
+            ui.install();
+            type('helm stars:>500');
+            await waitFor(() => api.asked.length === 1, 'the search');
+            assertEqual(api.asked[0][0], 'topic:cloud-native topic:helm stars:>500');
             $('.bb-topic-remove[data-index="0"]').click();
-            assertDeepEqual([...$('.bb-topic-terms').children].map((tag) => tag.textContent), ['go', 'pushed:>2026-06-01']);
+            await waitFor(() => api.asked.length === 2, 'the search again');
+            assertEqual(api.asked[1][0], 'topic:cloud-native stars:>500');
+            $('.bb-topic-remove[data-index="0"]').click();
+            assert(!host.querySelector('[data-hpc]').classList.contains(BB().TopicSearch.SEARCHING));
+            assertEqual(api.asked.length, 2, 'an empty box is no search');
             teardown();
         });
     });

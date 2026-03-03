@@ -60,6 +60,9 @@
    topic tags and the filters as plainer ones, and growing a line as they wrap. */
 .bb-topic-search { margin-top: 16px; }
 
+/* GitHub's .btn says how it displays, which would outrank the attribute. */
+.bb-topic-search [hidden] { display: none !important; }
+
 .bb-topic-form {
     display: flex;
     flex-wrap: wrap;
@@ -125,3 +128,7 @@
     color: inherit;
     font: inherit;
 }
+
+/* While a search is shown, the page's own heading, menus, cards and Load
+   more stand aside; they are only hidden, so Clear has them back as they were. */
+.bb-topic-searching > :not(.bb-topic-search) { display: none !important; }

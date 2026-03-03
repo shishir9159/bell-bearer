@@ -2,11 +2,12 @@
  * A topic page on github.com searched for several topics at once: a box under
  * the page's Language and Sort menus that starts with the page's own topic and
  * takes more — and any of the search's filters, `stars:>500` or
- * `pushed:>2026-06-01` — then searches for what has every one of them.
+ * `pushed:>2026-06-01` — then shows what has every topic in the page's own
+ * cards, in place of the page's list. Clear gives that list back untouched; it
+ * was only hidden.
  *
- * The page's markup is the adapter's (src/content/github-read.js); the box is
- * GitHub's own form-control holding its own topic tags, so it sits under the
- * page's menus as if the page had drawn it.
+ * The request and the page's markup are the adapter's (src/content/github-read.js);
+ * the cards copy github.com's own, so they sit in its list as its own do.
  */
 (function (root) {
     'use strict';
@@ -16,27 +17,64 @@
     const esc = Dom.escapeHtml;
 
     const BOX_ID = 'bb-topic-search';
+    /** On the page's column while a search is shown: everything of the page's own in it is hidden. */
+    const SEARCHING = 'bb-topic-searching';
     const SORTS = [['stars', 'Most stars'], ['forks', 'Most forks'], ['updated', 'Recently updated'], ['', 'Best match']];
 
-    /** github.com's own octicon, as its pages draw it. */
-    const X_ICON = '<svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" class="octicon octicon-x"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path></svg>';
+    /** Linguist's colours for the languages most repositories are in; any other goes without its dot. */
+    const LANGUAGE_COLORS = {
+        Go: '#00ADD8', Python: '#3572A5', JavaScript: '#f1e05a', TypeScript: '#3178c6', Java: '#b07219', Rust: '#dea584',
+        'C++': '#f34b7d', C: '#555555', 'C#': '#178600', Shell: '#89e051', HTML: '#e34c26', Ruby: '#701516', PHP: '#4F5D95',
+        Kotlin: '#A97BFF', Swift: '#F05138', HCL: '#844FBA', Dockerfile: '#384d54', 'Jupyter Notebook': '#DA5B0B',
+    };
 
-    /** GitHub's own search for repositories, sorted as the box asks; a blank sort is its best match. */
-    function searchUrl(query, sort) {
-        const params = new URLSearchParams({ q: query, type: 'repositories' });
-        if (sort) {
-            params.set('s', sort);
-            params.set('o', 'desc');
-        }
-        return `/search?${params}`;
+    /** github.com's own octicons, as its topic page draws them. */
+    const svg = (path, cls) => `<svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" class="octicon ${cls}"><path d="${path}"></path></svg>`;
+    const REPO_ICON = svg('M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8ZM5 12.25a.25.25 0 0 1 .25-.25h3.5a.25.25 0 0 1 .25.25v3.25a.25.25 0 0 1-.4.2l-1.45-1.087a.249.249 0 0 0-.3 0L5.4 15.7a.25.25 0 0 1-.4-.2Z', 'octicon-repo color-fg-muted mr-2');
+    const STAR_ICON = svg('M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Zm0 2.445L6.615 5.5a.75.75 0 0 1-.564.41l-3.097.45 2.24 2.184a.75.75 0 0 1 .216.664l-.528 3.084 2.769-1.456a.75.75 0 0 1 .698 0l2.77 1.456-.53-3.084a.75.75 0 0 1 .216-.664l2.24-2.183-3.096-.45a.75.75 0 0 1-.564-.41L8 2.694Z', 'octicon-star v-align-text-bottom mr-1');
+    const X_ICON = svg('M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z', 'octicon-x');
+
+    const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+    const day = (iso) => {
+        const at = new Date(iso);
+        return Number.isNaN(at.getTime()) ? '' : at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
+    /** "go, kubernetes and cloud-native". */
+    const listed = (words) => (words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`);
+
+    /** One repository as the topic page draws its own: name, stars, description, topics, when it moved and its language. */
+    function cardHtml(repo) {
+        const [owner, name] = repo.repo.split('/');
+        const href = `/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+        const color = LANGUAGE_COLORS[repo.language];
+        return `<article class="border rounded color-shadow-small color-bg-subtle my-4 tmp-my-4">
+  <div class="px-3 tmp-px-3"><div class="d-flex flex-justify-between flex-items-start flex-wrap gap-2 my-3 tmp-my-3">
+    <div class="d-flex flex-1"><span style="margin-top:2px">${REPO_ICON}</span>
+      <h3 class="f3 color-fg-muted text-normal lh-condensed">
+        <a data-turbo="false" href="/${esc(encodeURIComponent(owner))}" class="Link">${esc(owner)}</a> /
+        <a data-turbo="false" href="${esc(href)}" class="Link text-bold wb-break-word">${esc(name)}</a></h3>
+      ${repo.archived ? '<span class="Label Label--attention ml-2">Archived</span>' : ''}</div>
+    <a data-turbo="false" href="${esc(href)}/stargazers" class="btn-sm btn color-bg-default" title="${esc(repo.stars.toLocaleString('en-US'))} stars">${STAR_ICON}${esc(compact.format(repo.stars).toLowerCase())}</a>
+  </div></div>
+  <div class="color-bg-default rounded-bottom-2 border-top color-border-muted">
+    ${repo.description ? `<div class="px-3 pt-3 tmp-px-3 tmp-pt-3"><p class="color-fg-muted mb-0">${esc(repo.description)}</p></div>` : ''}
+    ${repo.topics.length ? `<div class="d-flex flex-wrap border-bottom color-border-muted px-3 pt-2 pb-2 tmp-px-3">${repo.topics.map((topic) =>
+        `<a title="Topic: ${esc(topic)}" href="/topics/${esc(encodeURIComponent(topic))}" class="topic-tag topic-tag-link Link f6 mb-2">${esc(topic)}</a>`).join('')}</div>` : ''}
+    <div class="p-3 tmp-p-3"><ul class="d-flex f6 list-style-none color-fg-muted">
+      ${repo.pushed ? `<li class="mr-4 tmp-mr-4">Updated <span class="no-wrap">${esc(day(repo.pushed))}</span></li>` : ''}
+      ${repo.language ? `<li class="mr-4 tmp-mr-4">${color ? `<span class="repo-language-color" style="background-color: ${color}"></span> ` : ''}<span>${esc(repo.language)}</span></li>` : ''}
+    </ul></div>
+  </div>
+</article>`;
     }
 
-    function createTopicSearch({ adapter, watcher, getSettings, win = root, doc = root.document }) {
+    function createTopicSearch({ adapter, watcher, getSettings, fetchImpl = root.fetch, win = root, doc = root.document }) {
         const topics = adapter.topics;
 
         const enabled = () => getSettings()[ForgeSites.siteKey(adapter.site, 'topicSearch')] === true;
 
-        /** The box for one topic page; what was typed into it goes with it when the page moves on. */
+        /** The box for one topic page; everything it searched for dies with it when the page moves on. */
         function build(topic) {
             const box = doc.createElement('div');
             box.id = BOX_ID;
@@ -48,12 +86,20 @@
              placeholder="Add a topic, or stars:>500 pushed:>2026-06-01"></div>
     <select class="form-select select-sm bb-topic-sort" aria-label="Sort">${SORTS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select>
     <button type="submit" class="btn btn-sm btn-primary">Search</button>
-  </form>`;
+    <button type="button" class="btn btn-sm bb-topic-clear" title="Back to this topic's own list" hidden>Clear</button>
+  </form>
+  <div class="bb-topic-results" hidden>
+    <h2 class="h3 color-fg-muted mt-3 bb-topic-said"></h2>
+    <div class="bb-topic-list"></div>
+    <button type="button" class="ajax-pagination-btn btn color-border-default f6 mt-0 width-full bb-topic-more" hidden>Load more…</button>
+  </div>`;
             const $ = (selector) => box.querySelector(selector);
             const input = $('.bb-topic-input');
             const sort = $('.bb-topic-sort');
             /** Each topic and filter added, in the order it was: `{ topic }` or `{ filter }`. */
             let terms = [];
+            let page = 0;
+            let asking = 0;
 
             function drawTerms() {
                 $('.bb-topic-terms').innerHTML = terms.map((term, i) => {
@@ -85,12 +131,63 @@
                 sort: sort.value,
             });
 
+            function show(searching) {
+                $('.bb-topic-results').hidden = !searching;
+                $('.bb-topic-clear').hidden = !searching;
+                if (box.parentElement) box.parentElement.classList.toggle(SEARCHING, searching);
+            }
+
+            async function ask(more = false) {
+                const asked = search();
+                const token = ++asking;
+                const said = $('.bb-topic-said');
+                const button = $('.bb-topic-more');
+                page = more ? page + 1 : 1;
+                if (!more) {
+                    $('.bb-topic-list').innerHTML = '';
+                    said.textContent = 'Searching…';
+                    button.hidden = true;
+                }
+                show(true);
+                said.classList.remove('color-fg-danger');
+                button.disabled = true;
+                button.textContent = 'Loading more…';
+                const found = await topics.search(asked, page, { fetchImpl });
+                // A search asked again before this one answered has the box now.
+                if (token !== asking) return;
+                button.disabled = false;
+                button.textContent = 'Load more…';
+                if (found.error) {
+                    page -= 1;
+                    said.textContent = found.error;
+                    said.classList.add('color-fg-danger');
+                    return;
+                }
+                $('.bb-topic-list').insertAdjacentHTML('beforeend', found.repos.map(cardHtml).join(''));
+                // Each word whole: GitHub balances a heading's lines, and broke
+                // "cloud-native" at its hyphen to do it.
+                const whole = (word) => `<span class="no-wrap">${esc(word)}</span>`;
+                const names = listed(asked.topics.map(whole));
+                const filters = asked.filters.map(whole).join(' ');
+                said.innerHTML = found.total === 0
+                    ? `No public repository has ${asked.topics.length > 1 ? `all of ${names}` : names}${filters ? ' with these filters' : ''}`
+                    : `Here ${found.total === 1 ? 'is 1 public repository' : `are ${found.total.toLocaleString('en-US')} public repositories`} matching ${names}${filters ? `, with ${filters}` : ''}`;
+                button.hidden = !found.more;
+            }
+
+            function clear() {
+                asking++;
+                terms = [];
+                input.value = '';
+                drawTerms();
+                show(false);
+            }
+
             $('.bb-topic-form').addEventListener('submit', (event) => {
                 event.preventDefault();
                 take();
-                if (!terms.length) return;
-                const asked = search();
-                win.location.assign(searchUrl(topics.query(asked), asked.sort));
+                if (terms.length) ask();
+                else clear();
             });
             input.addEventListener('keydown', (event) => {
                 if ((event.key === ' ' || event.key === ',') && input.value.trim()) {
@@ -109,15 +206,26 @@
                 }
                 terms.splice(Number(remove.dataset.index), 1);
                 drawTerms();
+                // What is shown follows the box: one fewer topic is searched again.
+                if (!$('.bb-topic-results').hidden) {
+                    if (terms.length) ask();
+                    else clear();
+                }
             });
+            sort.addEventListener('change', () => { if (!$('.bb-topic-results').hidden) ask(); });
+            $('.bb-topic-clear').addEventListener('click', clear);
+            $('.bb-topic-more').addEventListener('click', () => ask(true));
             return box;
         }
 
-        /** Put in under the page's own menus, kept in on its redraws, and taken out once off or elsewhere. */
+        /** Put in under the page's own menus, kept in on its redraws, and taken out — with the page's list back — once off or elsewhere. */
         function place() {
             const topic = enabled() ? topics.at(win.location.pathname) : null;
             const placed = doc.getElementById(BOX_ID);
-            if (placed && placed.dataset.topic !== topic) placed.remove();
+            if (placed && placed.dataset.topic !== topic) {
+                if (placed.parentElement) placed.parentElement.classList.remove(SEARCHING);
+                placed.remove();
+            }
             if (!topic || doc.getElementById(BOX_ID)) return false;
             const column = topics.column(doc);
             if (!column) return false;
@@ -135,7 +243,7 @@
         return { install: onNavigate, onNavigate, refreshSurfaces: onNavigate };
     }
 
-    const TopicSearch = { BOX_ID, searchUrl, createTopicSearch };
+    const TopicSearch = { BOX_ID, SEARCHING, cardHtml, listed, createTopicSearch };
 
     root.BB.TopicSearch = TopicSearch;
     if (typeof module !== 'undefined' && module.exports) module.exports = TopicSearch;
