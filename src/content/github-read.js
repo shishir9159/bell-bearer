@@ -24,6 +24,12 @@
  * A folder download, once it is clicked, keeps to the same rule: the
  * folder's own JSON, the file finder's `tree-list` of the commit, and each
  * file's `/raw/` copy, every one a request the page itself makes.
+ *
+ * The topic search is the one exception, and goes to the API on purpose: no
+ * page of github.com asks for several topics at once but its own search,
+ * whose JSON is shaped for its React app and would go with your session.
+ * api.github.com's search is documented and is asked signed out, so your
+ * account is never part of it — at the price of ten searches a minute.
  */
 (function (root) {
     'use strict';
@@ -65,6 +71,15 @@
          */
         folderSlot: ['.react-code-view-header-element--wide div:has(> [data-testid="tree-overflow-menu-anchor"])',
             'div:has(> [data-testid="tree-overflow-menu-anchor"])', '.file-navigation .d-flex'],
+
+        /**
+         * A topic page's column of repositories, which the search takes over,
+         * and the row of its Language and Sort menus that the search goes
+         * under; the heading above that row where the row is not found.
+         */
+        topicColumn: ['.topic [data-hpc]', '.topic .col-md-8', '.topic .col-lg-9'],
+        topicFilters: [':scope > .d-sm-flex:has(details.select-menu)', ':scope > div:has(> details.select-menu)'],
+        topicHeading: [':scope > h2'],
     });
 
     const { find, findAll } = Selectors.table(SELECTORS);
@@ -252,6 +267,107 @@
      */
     const rawUrl = (folder, at, path) => `/${folder.repo}/raw/${at.oid}/${encodePath(path)}`;
 
+    // ------------------------------------------------------------- topics
+
+    const SEARCH_URL = 'https://api.github.com/search/repositories';
+    /** The most the search hands back per request, and in all: past 1,000 it answers 422. */
+    const PER_PAGE = 100;
+    const MAX_RESULTS = 1000;
+
+    /**
+     * A topic as GitHub spells one: lower case, words joined by hyphens, at
+     * most 50 characters. "Cloud Native" and "topic:cloud-native" are both
+     * typed for cloud-native; anything left empty is no topic.
+     */
+    function topicName(typed) {
+        return String(typed || '').trim().toLowerCase().replace(/^topic:/, '')
+            .replace(/[\s_]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '').slice(0, 50);
+    }
+
+    /** /topics/<name> is a topic's page; /topics itself, and anything under a topic, is not. */
+    function topicAt(pathname) {
+        const [area, name, more] = String(pathname || '').split(/[?#]/)[0].split('/').filter(Boolean);
+        if (area !== 'topics' || !name || more) return null;
+        try { return topicName(decodeURIComponent(name)) || null; } catch (_) { return null; }
+    }
+
+    /**
+     * One word typed into the search box: a topic — `helm`, `topic:helm` —
+     * or any other of the search's qualifiers, `stars:>500` or
+     * `pushed:>2026-06-01`, kept as typed but for the qualifier's case.
+     * Null for what is neither.
+     */
+    function topicTerm(typed) {
+        const word = String(typed || '').trim();
+        const qualifier = /^(-?[a-z][a-z_-]*):(\S+)$/i.exec(word);
+        if (qualifier && qualifier[1].toLowerCase() !== 'topic') return { filter: `${qualifier[1].toLowerCase()}:${qualifier[2]}` };
+        // A filter not finished — "stars:" — is not the topic "stars".
+        if (/:/.test(word.replace(/^topic:/i, ''))) return null;
+        const topic = topicName(word);
+        return topic ? { topic } : null;
+    }
+
+    /** The search's `q`: every topic, which all have to be on a repository, then every filter. */
+    function topicQuery({ topics = [], filters = [] } = {}) {
+        const named = [...new Set(topics.map(topicName).filter(Boolean))].map((topic) => `topic:${topic}`);
+        return [...named, ...new Set(filters)].join(' ');
+    }
+
+    /** The search's address; a blank `sort` is GitHub's best match. */
+    function topicSearchUrl(search, page = 1) {
+        const params = new URLSearchParams({ q: topicQuery(search), per_page: String(PER_PAGE), page: String(page) });
+        if (search.sort) {
+            params.set('sort', search.sort);
+            params.set('order', 'desc');
+        }
+        return `${SEARCH_URL}?${params}`;
+    }
+
+    /** A repository as a topic page's card needs it, from the search's item. */
+    const repoOf = (item) => ({
+        repo: String(item.full_name || ''),
+        description: String(item.description || ''),
+        stars: Number(item.stargazers_count) || 0,
+        forks: Number(item.forks_count) || 0,
+        language: String(item.language || ''),
+        topics: Array.isArray(item.topics) ? item.topics.map(String) : [],
+        pushed: String(item.pushed_at || ''),
+        archived: item.archived === true,
+    });
+
+    /**
+     * One page of the search: `{ total, repos, more }`, or `{ error }` worded
+     * for the page. Asked without credentials, so the search is never made
+     * as you; GitHub then allows ten a minute from this address, and says
+     * when the next one is, which is passed on.
+     */
+    async function searchTopics(search, page = 1, { fetchImpl = root.fetch, now = Date.now() } = {}) {
+        let response = null;
+        try {
+            response = await fetchImpl(topicSearchUrl(search, page), { credentials: 'omit', headers: { Accept: 'application/vnd.github+json' } });
+        } catch (_) {
+            return { error: 'GitHub\'s search could not be reached' };
+        }
+        const header = (name) => (response.headers && response.headers.get(name)) || '';
+        // A 403 is also GitHub refusing the request for some other reason,
+        // with a message of its own; only one that says the minute is used
+        // up, or asks for a wait, is the limit.
+        const limited = response.status === 429 || (response.status === 403 && (header('x-ratelimit-remaining') === '0' || header('retry-after')));
+        if (limited) {
+            const reset = Number(header('x-ratelimit-reset')) * 1000;
+            const wait = Number(header('retry-after')) || (reset > now ? Math.ceil((reset - now) / 1000) : 60);
+            return { error: `GitHub allows ten searches a minute without signing in — try again in ${wait}s`, wait };
+        }
+        let data = null;
+        try { data = await response.json(); } catch (_) { /* answered below */ }
+        if (!response.ok || !data || !Array.isArray(data.items)) {
+            return { error: (data && data.message) || `GitHub's search answered ${response.status}` };
+        }
+        const total = Number(data.total_count) || 0;
+        const repos = data.items.map(repoOf);
+        return { total, repos, more: repos.length === PER_PAGE && page * PER_PAGE < Math.min(total, MAX_RESULTS) };
+    }
+
     const adapter = {
         site: 'github',
         ci: {
@@ -270,9 +386,22 @@
             slot: (doc) => find('folderSlot', doc),
             buttonClass: 'Button Button--secondary Button--medium',
         },
+        topics: {
+            at: topicAt,
+            term: topicTerm,
+            query: topicQuery,
+            search: searchTopics,
+            column: (doc) => find('topicColumn', doc),
+            /** What the search bar goes after: the page's Language and Sort row, or its heading. */
+            anchor: (column) => find('topicFilters', column) || find('topicHeading', column),
+            MAX_RESULTS,
+        },
     };
 
-    const GithubRead = { SELECTORS, adapter, readRun, readChecks, countedJobs, fetchChecks, fetchRun, jobName, folderAt, readFolder, listFolder };
+    const GithubRead = {
+        SELECTORS, adapter, readRun, readChecks, countedJobs, fetchChecks, fetchRun, jobName, folderAt, readFolder, listFolder,
+        topicName, topicAt, topicTerm, topicQuery, topicSearchUrl, searchTopics,
+    };
 
     root.BB = root.BB || {};
     root.BB.GithubRead = GithubRead;

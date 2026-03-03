@@ -8015,6 +8015,59 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([message, asked], ['Could not fetch a.js (404)', ['same-origin', 'same-origin', 'same-origin']]);
     });
 
+    section('the github topic search');
+
+    check('a topic page is /topics/<name>, and a topic is spelled as github spells one', () => {
+        eq([GithubFolder.topicAt('/topics/cloud-native'), GithubFolder.topicAt('/topics/Go?o=desc&s=stars'), GithubFolder.topicAt('/topics/c%2B%2B')],
+            ['cloud-native', 'go', 'c']);
+        for (const path of ['/topics', '/topics/', '/topics/go/more', '/collections/go', '/a/topics', '/topics/%E0%A4%A']) eq(GithubFolder.topicAt(path), null, path);
+        eq(['Cloud Native', 'topic:kubernetes', ' service_mesh ', '--a  b--', '#!', 'x'.repeat(60)].map(GithubFolder.topicName),
+            ['cloud-native', 'kubernetes', 'service-mesh', 'a-b', '', 'x'.repeat(50)]);
+    });
+    check('a word typed in the box is a topic, or a filter kept as it was typed', () => {
+        eq(['helm', 'topic:Helm', 'Stars:>500', 'pushed:>2026-06-01', 'language:go', '-archived:true', 'stars:', '#!'].map(GithubFolder.topicTerm), [
+            { topic: 'helm' }, { topic: 'helm' }, { filter: 'stars:>500' }, { filter: 'pushed:>2026-06-01' }, { filter: 'language:go' },
+            { filter: '-archived:true' }, null, null,
+        ]);
+    });
+    check('every topic has to be on a repository, and every filter after them', () => {
+        eq(GithubFolder.topicQuery({ topics: ['go', 'Kubernetes', 'go', ''], filters: ['stars:>500', 'pushed:>2026-06-01', 'stars:>500'] }),
+            'topic:go topic:kubernetes stars:>500 pushed:>2026-06-01');
+        const url = new URL(GithubFolder.topicSearchUrl({ topics: ['go', 'kubernetes'], filters: ['stars:>500'], sort: 'stars' }, 2));
+        eq([url.origin + url.pathname, url.searchParams.get('q'), url.searchParams.get('sort'), url.searchParams.get('order'), url.searchParams.get('page')],
+            ['https://api.github.com/search/repositories', 'topic:go topic:kubernetes stars:>500', 'stars', 'desc', '2']);
+        eq(new URL(GithubFolder.topicSearchUrl({ topics: ['go'] })).searchParams.has('sort'), false, 'best match is no sort');
+    });
+    await checkAsync('the search is asked signed out, and says what it found and whether there is more', async () => {
+        const asked = [];
+        const answer = (status, body, headers = {}) => async (url, init) => {
+            asked.push([url, init.credentials]);
+            return { ok: status < 300, status, headers: { get: (name) => headers[name] || null }, json: async () => body };
+        };
+        const item = { full_name: 'kubernetes/kubernetes', description: 'Production-Grade Container Scheduling', stargazers_count: 118000,
+            forks_count: 41000, language: 'Go', topics: ['go', 'kubernetes'], pushed_at: '2026-10-17T10:00:00Z' };
+        const full = await GithubFolder.searchTopics({ topics: ['go'] }, 1, { fetchImpl: answer(200, { total_count: 250, items: Array(100).fill(item) }) });
+        eq([full.total, full.repos.length, full.more, full.repos[0]], [250, 100, true, {
+            repo: 'kubernetes/kubernetes', description: 'Production-Grade Container Scheduling', stars: 118000, forks: 41000,
+            language: 'Go', topics: ['go', 'kubernetes'], pushed: '2026-10-17T10:00:00Z', archived: false,
+        }]);
+        eq(asked[0][1], 'omit', 'the search went with your session');
+        const last = await GithubFolder.searchTopics({ topics: ['go'] }, 10, { fetchImpl: answer(200, { total_count: 5000, items: Array(100).fill(item) }) });
+        eq(last.more, false, 'past the 1,000 the search hands back');
+
+        const limited = await GithubFolder.searchTopics({ topics: ['go'] }, 1, {
+            now: 1000000, fetchImpl: answer(403, { message: 'API rate limit exceeded' }, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1042' }),
+        });
+        eq([limited.wait, /ten searches a minute/.test(limited.error)], [42, true]);
+        eq((await GithubFolder.searchTopics({ topics: ['go'] }, 1, { fetchImpl: answer(429, {}, { 'retry-after': '7' }) })).wait, 7);
+        eq((await GithubFolder.searchTopics({ topics: ['go'] }, 1, {
+            fetchImpl: answer(403, { message: 'Request forbidden by administrative rules.' }, { 'x-ratelimit-remaining': '8' }),
+        })).error, 'Request forbidden by administrative rules.', 'a refusal is not the limit');
+        eq((await GithubFolder.searchTopics({ topics: ['go'] }, 1, { fetchImpl: answer(422, { message: 'Validation Failed' }) })).error, 'Validation Failed');
+        eq((await GithubFolder.searchTopics({ topics: ['go'] }, 1, { fetchImpl: async () => { throw new TypeError('offline'); } })).error,
+            'GitHub\'s search could not be reached');
+    });
+
     // ------------------------------------------------- the conversation tree
 
     section('the conversation tree');
