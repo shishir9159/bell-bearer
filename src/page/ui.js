@@ -14,6 +14,7 @@
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
     const Settings = ns.Settings || req('../shared/settings.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
 
     // ------------------------------------------------------------- modals
 
@@ -166,7 +167,7 @@
             document.querySelectorAll('header').forEach((el) => el.classList.toggle('dark-theme', dark));
             const toggle = toggleId && document.getElementById(toggleId);
             if (toggle) {
-                toggle.textContent = dark ? '☀️' : '🌙';
+                toggle.innerHTML = dark ? Icons.svg('lamp-pendant', { size: 17 }) : Icons.svg('moon-stars', { size: 17 });
                 toggle.title = dark ? 'Switch to light theme' : 'Switch to dark theme';
             }
         };

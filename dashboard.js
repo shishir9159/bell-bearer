@@ -10,11 +10,11 @@
 (function () {
     'use strict';
 
-    const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, TabActions, SettingsForm, SiteIcons,
+    const { Bookmarks, Pins, Subscriptions, Settings, Feed, Time, Dom, YouTube, Ui, TabActions, SettingsForm, SiteIcons, Icons,
         CookieSitesPanel, ShortcutList, Plate, ChessSettings, BackupButtons, Skin } = window.BB;
 
-    /** The emoji the popup used for "nothing saved"; every empty list here wears it too. */
-    const EMPTY_ICON = '🔖';
+    /** The popup's glyph for "nothing saved"; every empty list here wears it too. */
+    const EMPTY_ICON = Icons.svg('bookmark-simple');
 
     /**
      * Each site's subtabs, in order: the tab id, its label, and the
@@ -148,9 +148,12 @@
     /**
      * A pin, as a glyph. An emoji pin renders as a different object on every
      * platform and is coloured by the font rather than the skin; this one takes
-     * currentColor and so follows the accent of whichever skin is on.
+     * currentColor and so follows the accent of whichever skin is on. It is
+     * the upright pin, not Phosphor's leaning one: the button tilts it itself
+     * while the video is unpinned.
      */
-    const PIN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3v2h-1v5l2 2.5V15h-4.2v6l-.8 1-.8-1v-6H7v-2.5L9 10V5H8V3z"/></svg>';
+    const PIN_ICON = Icons.svg('push-pin-simple-fill');
+    const COPY_ICON = Icons.svg('copy', { cls: 'btn-glyph' });
 
     // Tab id / view id stems. 'stats' is the Activity view: its tab stays
     // hidden until the trackActivity setting is on, but the switching wiring
@@ -185,6 +188,7 @@
             // Wire the UI before loading data: a failure while reading storage
             // must never leave the settings toggles dead, since a setting could
             // then never be turned on.
+            Icons.fill(document);
             Ui.installTheme({ toggleId: 'themeToggle' });
             // The popup has always installed the skin; this page never did, so
             // it opened in the default palette whatever was saved, and a skin
@@ -639,8 +643,8 @@
                         <div class="video-card-meta">
                             <span class="bookmark-count-badge">${count} checkpoint${count === 1 ? '' : 's'}</span>
                             ${hasSubtitles ? `
-                                <button class="btn-small copy-subtitles-with-time" title="Copy all subtitles with timestamps">📋 Copy all (time)</button>
-                                <button class="btn-small copy-subtitles-no-time" title="Copy all subtitles">📋 Copy all</button>
+                                <button class="btn-small copy-subtitles-with-time" title="Copy all subtitles with timestamps">${COPY_ICON}Copy all (time)</button>
+                                <button class="btn-small copy-subtitles-no-time" title="Copy all subtitles">${COPY_ICON}Copy all</button>
                             ` : ''}
                         </div>
                     </div>
@@ -979,7 +983,7 @@
                 ${subtitle ? `<div class="bookmark-subtitle">"${Dom.escapeHtml(subtitle)}"</div>` : ''}
                 ${bookmark.note ? `<div class="bookmark-note">${Dom.escapeHtml(bookmark.note)}</div>` : ''}
                 <div class="bookmark-actions">
-                    ${subtitle ? '<button class="btn-small copy-bookmark-subtitle" title="Copy subtitle">📋</button>' : ''}
+                    ${subtitle ? `<button class="btn-small copy-bookmark-subtitle" title="Copy subtitle" aria-label="Copy subtitle">${Icons.svg('copy')}</button>` : ''}
                     <button class="btn-small seek-btn" data-time="${time}">Go to time</button>
                     <button class="btn-small delete delete-btn">Delete</button>
                 </div>

@@ -19,7 +19,7 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
-    const { Leet, Dom } = BB;
+    const { Leet, Dom, Icons } = BB;
 
     const esc = Dom.escapeHtml;
     const att = Dom.escapeAttr;
@@ -82,7 +82,7 @@
                             <span class="leet-pop-when">${esc(whenText(problem, now))}</span>
                         </span>
                     </button>`).join('')}</div>
-                ${rest > 0 ? `<button type="button" class="leet-pop-more" data-leet-dashboard="1">and ${rest} more →</button>` : ''}`;
+                ${rest > 0 ? `<button type="button" class="leet-pop-more" data-leet-dashboard="1">and ${rest} more${Icons.svg('arrow-right', { size: 13 })}</button>` : ''}`;
         }
 
         /**

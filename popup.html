@@ -34,13 +34,11 @@
         <div id="speedControlBar" class="speed-control-bar" role="group" aria-label="Playback speed" hidden>
             <!-- The word "Playback" was here. The icon carries no text of its
                  own, so the group above is what a screen reader announces. -->
-            <svg class="speed-label" viewBox="0 0 240 240" aria-hidden="true" focusable="false">
-                <path fill="currentColor" d="M158.83,48.83A71.17,71.17,0,1,0,230,120,71.163,71.163,0,0,0,158.83,48.83Zm45.293,77.632H152.34V74.708h12.952v38.83h38.83ZM35.878,74.708h38.83V87.66H35.878ZM10,113.538H61.755V126.49H10Zm25.878,38.83h38.83V165.32H35.878Z"></path>
-            </svg>
+            <i class="speed-label" data-icon="speedometer"></i>
             <div class="speed-buttons">
-                <button id="speedDownBtn" class="btn-speed" title="Slower (previous step)" aria-label="Slower">−</button>
+                <button id="speedDownBtn" class="btn-speed" title="Slower (previous step)" aria-label="Slower"><i data-icon="minus"></i></button>
                 <span id="speedDisplay" class="speed-display" aria-live="polite">1x</span>
-                <button id="speedUpBtn" class="btn-speed" title="Faster (next step)" aria-label="Faster">+</button>
+                <button id="speedUpBtn" class="btn-speed" title="Faster (next step)" aria-label="Faster"><i data-icon="plus"></i></button>
                 <button id="speedResetBtn" class="btn-speed btn-speed-reset" title="Reset to 1x" aria-label="Reset speed">1x</button>
             </div>
         </div>
@@ -74,7 +72,7 @@
 
                 <div class="bookmark-details" id="bookmarkDetails">
                     <div class="no-selection">
-                        <div class="empty-icon">⏱</div>
+                        <div class="empty-icon"><i data-icon="timer"></i></div>
                         <p>Select a video to see its checkpoints</p>
                     </div>
                 </div>
@@ -134,6 +132,7 @@
     <script src="src/shared/ids.js"></script>
     <script src="src/shared/bookmarks.js"></script>
     <script src="src/shared/site-icons.js"></script>
+    <script src="src/shared/icons.js"></script>
     <script src="src/shared/chess-sites.js"></script>
     <script src="src/shared/chess.js"></script>
     <script src="src/shared/lichess.js"></script>

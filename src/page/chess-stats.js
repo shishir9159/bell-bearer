@@ -15,7 +15,7 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
-    const { Chess, ChessSites, Settings, Dom, SiteIcons } = BB;
+    const { Chess, ChessSites, Settings, Dom, SiteIcons, Icons } = BB;
 
     const esc = Dom.escapeHtml;
 
@@ -301,7 +301,7 @@
     function emptyMarkup({ site, title, message, action, actionId }) {
         return `
             <div class="empty-state chess-empty">
-                <div class="empty-icon chess-empty-icon">${SiteIcons ? SiteIcons.svg(site, { size: 40 }) : '♟'}</div>
+                <div class="empty-icon chess-empty-icon">${SiteIcons ? SiteIcons.svg(site, { size: 40 }) : Icons.svg('horse')}</div>
                 <h3 class="bb-proper">${title}</h3>
                 ${message ? `<p>${message}</p>` : ''}
                 ${action ? `<button class="btn-primary chess-empty-action" type="button" data-chess-action="${actionId}">${action}</button>` : ''}

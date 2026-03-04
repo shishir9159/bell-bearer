@@ -14,15 +14,10 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
-    const { Settings, ChessSites, ChessLimits } = BB;
+    const { Settings, ChessSites, ChessLimits, Icons } = BB;
 
     /** An open padlock — the same weight as the header's other controls. */
-    const ICON = `
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <rect x="3" y="11" width="18" height="11" rx="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
-        </svg>`;
+    const ICON = Icons.svg('lock-simple-open', { size: 13 });
 
     /** "bullet and blitz", "bullet, blitz and rapid" — for the tooltip. */
     function listNames(names) {

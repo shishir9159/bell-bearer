@@ -114,6 +114,8 @@ check('clamps out-of-range rates', () => {
 // ----------------------------------------------------------------- dom
 
 const Dom = require('../src/shared/dom.js');
+// On BB before anything that draws a glyph as it loads.
+require('../src/shared/icons.js');
 
 section('escaping and URL safety');
 check('escapes markup in text', () => eq(Dom.escapeHtml('<b>&"x"'), '&lt;b&gt;&amp;&quot;x&quot;'));

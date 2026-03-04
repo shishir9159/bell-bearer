@@ -21,7 +21,7 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
-    const { Settings, Typer, Dom, Spark, SiteIcons } = BB;
+    const { Settings, Typer, Dom, Spark, SiteIcons, Icons } = BB;
 
     const esc = Dom.escapeHtml;
     const att = Dom.escapeAttr;
@@ -78,7 +78,7 @@
     function emptyMarkup(title, message) {
         return `
             <div class="empty-state">
-                <div class="empty-icon">${SiteIcons ? SiteIcons.svg('typeracer', { size: 40 }) : '⌨'}</div>
+                <div class="empty-icon">${SiteIcons ? SiteIcons.svg('typeracer', { size: 40 }) : Icons.svg('keyboard')}</div>
                 <h3 class="bb-proper">${esc(title)}</h3>
                 ${message ? `<p>${esc(message)}</p>` : ''}
             </div>`;

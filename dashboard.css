@@ -667,6 +667,10 @@ html.is-dragging-site .site-slot > .site-switch { transform: none; }
 
 .btn-small:hover { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-soft-2); }
 .btn-small:active { transform: translateY(1px); }
+.copy-bookmark-subtitle svg { display: block; width: 13px; height: 13px; }
+
+/* A glyph ahead of a button's word, at the word's size. */
+.btn-glyph { width: 1.2em; height: 1.2em; margin-right: 5px; vertical-align: -0.25em; }
 
 .btn-small.delete { background: transparent; color: var(--text-faint); }
 .btn-small.delete:hover { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger); }
@@ -707,6 +711,7 @@ html.is-dragging-site .site-slot > .site-switch { transform: none; }
 
 .empty-state p { font-size: 13.5px; line-height: 1.55; }
 .empty-state .empty-icon { font-size: 40px; line-height: 1; margin-bottom: 14px; opacity: .85; }
+.empty-icon > svg { display: inline-block; width: 1em; height: 1em; vertical-align: top; }
 
 /* The same mark at list-row size, for an empty group inside a card. */
 .empty-inline {

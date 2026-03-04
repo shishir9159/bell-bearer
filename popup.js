@@ -15,7 +15,7 @@
 (function () {
     'use strict';
 
-    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site,
+    const { Bookmarks, Settings, Speed, Time, Dom, Ui, TabActions, Skin, Site, Icons,
         ChessSites, ChessStats, ChessLimitButton, Leet, LeetPopup, Roster, RosterPopup } = window.BB;
 
     class Popup {
@@ -32,6 +32,7 @@
         }
 
         async init() {
+            Icons.fill(document);
             Ui.installTheme({});
             if (Skin) await Skin.install();
             this.wireControls();
@@ -475,7 +476,7 @@
             if (this.videos.length === 0) {
                 list.innerHTML = `
                     <div class="empty-state">
-                        <div class="empty-icon">🔖</div>
+                        <div class="empty-icon">${Icons.svg('bookmark-simple')}</div>
                         <h3>No checkpoints yet</h3>
                         <p>Hold <strong>Ctrl + B</strong> on any YouTube video to drop your first checkpoint.</p>
                     </div>`;
@@ -503,7 +504,7 @@
             if (!video) {
                 details.innerHTML = `
                     <div class="no-selection">
-                        <div class="empty-icon">⏱</div>
+                        <div class="empty-icon">${Icons.svg('timer')}</div>
                         <p>Select a video to see its checkpoints</p>
                     </div>`;
                 return;

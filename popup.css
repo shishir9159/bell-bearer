@@ -593,6 +593,7 @@ body.is-party .container > :not(header):not(#partyView) { display: none !importa
 
 .empty-state p, .no-selection p { font-size: 12.5px; line-height: 1.55; }
 .empty-icon { font-size: 30px; line-height: 1; margin-bottom: 10px; opacity: .8; }
+.empty-icon > svg { display: inline-block; width: 1em; height: 1em; vertical-align: top; }
 
 /* ---------- per-site panels ---------- */
 
@@ -1102,6 +1103,7 @@ a.chess-pill:hover { transform: translateY(-1px); box-shadow: var(--card-shadow-
 }
 
 .leet-pop-more:hover { background: var(--surface-2); }
+.leet-pop-more svg { margin-left: 4px; vertical-align: -0.2em; }
 
 .leet-pop-done { padding: 26px 12px; text-align: center; }
 .leet-pop-done-title { margin: 0 0 5px; font-size: 13.5px; font-weight: 600; color: var(--text); }

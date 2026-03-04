@@ -19,7 +19,7 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
-    const { Settings, Leet, LeetApi, Fsrs, Dom, Ui, SiteIcons } = BB;
+    const { Settings, Leet, LeetApi, Fsrs, Dom, Ui, SiteIcons, Icons } = BB;
 
     const esc = Dom.escapeHtml;
     const att = Dom.escapeAttr;
@@ -118,7 +118,7 @@
     function emptyMarkup(title, message) {
         return `
             <div class="empty-state">
-                <div class="empty-icon">${SiteIcons ? SiteIcons.svg('leetcode', { size: 40 }) : '🧩'}</div>
+                <div class="empty-icon">${SiteIcons ? SiteIcons.svg('leetcode', { size: 40 }) : Icons.svg('puzzle-piece')}</div>
                 <h3 class="bb-proper">${esc(title)}</h3>
                 ${message ? `<p>${esc(message)}</p>` : ''}
             </div>`;
