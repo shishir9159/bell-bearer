@@ -61,7 +61,7 @@
             <p class="settings-hint">A search box on a topic's page — ${esc(site.hosts[0])}/topics/go — that adds more topics, and filters
                such as <code>stars:&gt;500</code> or <code>pushed:&gt;2026-06-01</code>, and shows the repositories that have every one
                of them in place of the page's own list. It asks GitHub's public search signed out, so your account is never part
-               of it; that allows ten searches a minute.</p>
+               of it; that allows ten searches a minute. The filters are kept for the next topic page.</p>
             <div class="settings-option">
                 <label class="toggle-switch">
                     <input type="checkbox" id="${key}">

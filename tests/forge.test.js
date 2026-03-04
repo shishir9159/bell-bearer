@@ -705,12 +705,14 @@
         return { fetchImpl, asked };
     }
 
-    function makeTopics({ on = true, total } = {}) {
+    function makeTopics({ on = true, stored = null, total } = {}) {
         const settings = { githubTopicSearch: on };
         const api = fakeApi({ total });
+        const saved = [];
+        const store = { load: async () => stored, save: (kept) => saved.push(kept) };
         const win = { location: { pathname: '/topics/cloud-native' } };
         const ui = BB().TopicSearch.createTopicSearch({
-            adapter: BB().GithubRead.adapter, watcher: nowWatcher(), getSettings: () => settings, fetchImpl: api.fetchImpl, win,
+            adapter: BB().GithubRead.adapter, watcher: nowWatcher(), getSettings: () => settings, fetchImpl: api.fetchImpl, store, win,
         });
         const box = () => document.getElementById(BB().TopicSearch.BOX_ID);
         const $ = (selector) => box().querySelector(selector);
@@ -718,7 +720,7 @@
             $('.bb-topic-input').value = text;
             $('.bb-topic-form').dispatchEvent(new Event('submit', { cancelable: true }));
         };
-        return { ui, settings, api, win, box, $, type };
+        return { ui, settings, api, saved, win, box, $, type };
     }
 
     suite('github topic search', () => {
@@ -772,6 +774,27 @@
             $('.bb-topic-remove[data-index="0"]').click();
             assert(!host.querySelector('[data-hpc]').classList.contains(BB().TopicSearch.SEARCHING));
             assertEqual(api.asked.length, 2, 'an empty box is no search');
+            teardown();
+        });
+
+        test('the filters and sort searched with are kept, put back in the box on the next page, and not searched', async () => {
+            stage(topicColumn);
+            const first = makeTopics();
+            first.ui.install();
+            first.$('.bb-topic-sort').value = 'updated';
+            first.type('helm stars:>500');
+            await waitFor(() => first.api.asked.length === 1, 'the search');
+            assertDeepEqual(first.saved, [{ filters: ['stars:>500'], sort: 'updated' }], 'the topics are the page\'s own');
+
+            stage(topicColumn);
+            const next = makeTopics({ stored: first.saved[0] });
+            next.ui.install();
+            await waitFor(() => next.$('.bb-topic-terms').children.length, 'the kept filter');
+            assertEqual(next.$('.bb-topic-filter').textContent, 'stars:>500');
+            assertEqual(next.$('.bb-topic-sort').value, 'updated');
+            assertEqual(next.api.asked.length, 0, 'a visit spent a search');
+            next.$('.bb-topic-clear').click();
+            assertDeepEqual(next.saved, [{ filters: [], sort: 'updated' }], 'cleared, and forgotten');
             teardown();
         });
     });

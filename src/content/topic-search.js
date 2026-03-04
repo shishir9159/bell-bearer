@@ -6,13 +6,18 @@
  * cards, in place of the page's list. Clear gives that list back untouched; it
  * was only hidden.
  *
+ * The filters and the sort are kept for the next topic page, since "only the
+ * active ones" is a standing wish; the topics are each page's own. They are
+ * put back in the box, not searched: a topic page that searched by itself
+ * would spend one of ten searches a minute on every visit.
+ *
  * The request and the page's markup are the adapter's (src/content/github-read.js);
  * the cards copy github.com's own, so they sit in its list as its own do.
  */
 (function (root) {
     'use strict';
 
-    const { ForgeSites, Dom } = root.BB;
+    const { ForgeSites, Dom, Settings } = root.BB;
 
     const esc = Dom.escapeHtml;
 
@@ -69,8 +74,25 @@
 </article>`;
     }
 
-    function createTopicSearch({ adapter, watcher, getSettings, fetchImpl = root.fetch, win = root, doc = root.document }) {
+    /** Where the filters and sort are kept between topic pages; reading or writing them never throws into the page. */
+    const STORE = {
+        async load() {
+            try {
+                const stored = (await chrome.storage.local.get(Settings.DATA.topicSearch))[Settings.DATA.topicSearch];
+                return stored && Array.isArray(stored.filters) ? stored : null;
+            } catch (_) {
+                return null;
+            }
+        },
+        save(kept) {
+            try { chrome.storage.local.set({ [Settings.DATA.topicSearch]: kept }).catch(() => {}); } catch (_) { /* the extension went away */ }
+        },
+    };
+
+    function createTopicSearch({ adapter, watcher, getSettings, fetchImpl = root.fetch, store = STORE, win = root, doc = root.document }) {
         const topics = adapter.topics;
+        let kept = { filters: [], sort: 'stars' };
+        const loaded = store.load().then((stored) => { if (stored) kept = { ...kept, ...stored }; });
 
         const enabled = () => getSettings()[ForgeSites.siteKey(adapter.site, 'topicSearch')] === true;
 
@@ -147,6 +169,8 @@
                     $('.bb-topic-list').innerHTML = '';
                     said.textContent = 'Searching…';
                     button.hidden = true;
+                    kept = { filters: asked.filters, sort: asked.sort };
+                    store.save(kept);
                 }
                 show(true);
                 said.classList.remove('color-fg-danger');
@@ -181,6 +205,8 @@
                 input.value = '';
                 drawTerms();
                 show(false);
+                kept = { filters: [], sort: sort.value };
+                store.save(kept);
             }
 
             $('.bb-topic-form').addEventListener('submit', (event) => {
@@ -215,6 +241,12 @@
             sort.addEventListener('change', () => { if (!$('.bb-topic-results').hidden) ask(); });
             $('.bb-topic-clear').addEventListener('click', clear);
             $('.bb-topic-more').addEventListener('click', () => ask(true));
+
+            loaded.then(() => {
+                terms = kept.filters.map((filter) => ({ filter }));
+                sort.value = SORTS.some(([value]) => value === kept.sort) ? kept.sort : 'stars';
+                drawTerms();
+            });
             return box;
         }
 

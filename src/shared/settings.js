@@ -528,6 +528,11 @@
         // src/content/markdown.js owns the shape — { markdown, text }.
         linkCopy: 'bbLinkCopy',
 
+        // The filters and sort a GitHub topic search last used, put back in
+        // the box on the next topic page. src/content/topic-search.js owns
+        // the shape — { filters, sort }.
+        topicSearch: 'bbTopicSearch',
+
         // Activity, by local day: one key per day under this prefix — a
         // prefix, not a key — the list of days there are, the single value
         // the store was kept in before it was split (read only to be split),

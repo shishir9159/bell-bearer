@@ -43,6 +43,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 - **LeetCode**: Each problem timed on LeetCode's own stopwatch, submissions recorded from its own traffic, an FSRS-5 review schedule graded in one click, your notes and code templates on the page, and a mock-interview mode that hides the hints
 - **TypeRacer**: Every race logged from the keystrokes themselves — the letter pairs you stall on, the characters you reach for wrongly, and what correcting them costs you in words per minute — plus a typing caret and a synthesised key sound
 - **Downloads**: The video in a YouTube or Vimeo tab saved from the popup as one .mp4, at the quality the player is on — YouTube's once Settings › YouTube turns it on, and never a DRM-protected Vimeo clip; and a GitHub folder as a .zip, from a button beside its own. When YouTube changes and a download stops working, `node tools/yt-check.js` says which step broke
+- **GitHub topics**: A topic's page searched for several topics at once — add `kubernetes` and `go`, or a filter such as `stars:>500 pushed:>2026-06-01`, beside its own, and the repositories with every one of them take the page's list over in its own cards. It asks GitHub's public search signed out, ten searches a minute; Settings › GitHub turns it on
 - **Reward System**: Track watch credits to spend them on popcorn for later
 
 Export and Import sit in the dashboard header, beside the theme button, and
