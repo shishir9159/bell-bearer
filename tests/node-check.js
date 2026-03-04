@@ -3593,6 +3593,32 @@ check('and it does catch a list put the wrong way round', () => {
     eq(LoadOrder.lint(['src/a.js'], sources), ['src/a.js takes B as it loads, and nothing before it provides one']);
 });
 
+section('the icon set, shaken down to what is used');
+const IconTool = require('../tools/icons.js');
+check('the table holds exactly the Phosphor icons the code names', () => {
+    const { missing, unused } = IconTool.audit();
+    eq(missing, [], 'named but not in the table — run node tools/icons.js');
+    eq(unused, [], 'in the table but named nowhere — run node tools/icons.js');
+});
+check('a name is read from a literal in a script or a page, and from nothing else', () => {
+    const text = `Icons.svg('x') + Icons.svg("push-pin-fill", { size: 12 }) <i data-icon="speedometer"></i> Icons.svg(name)`;
+    eq([...IconTool.namesIn(text)], ['x', 'push-pin-fill', 'speedometer']);
+});
+check('a packed table keeps only what the packed code names', () => {
+    const source = readRepo(IconTool.MODULE);
+    const { head, tail } = IconTool.parse(source);
+    const shaken = IconTool.shake(source, new Set(['x']));
+    eq([...IconTool.parse(shaken).glyphs.keys()], ['x']);
+    assert(shaken.startsWith(head) && shaken.endsWith(tail), 'the code around the table changed');
+    eq(IconTool.shake(source, IconTool.audit().used), source, 'a table already in line is not left as it was');
+});
+check('a glyph is drawn in the text colour, and a name the table lacks draws nothing', () => {
+    const Icons = require('../src/shared/icons.js');
+    const x = Icons.svg('x', { size: 12, cls: 'octicon' });
+    assert(x.includes('fill="currentColor"') && x.includes('width="12"') && x.includes('class="octicon"'), x);
+    eq(Icons.svg('no-such-icon'), '');
+});
+
 section('the chess low-clock tone, on the sound module');
 check('the tone is the same two notes it always was', () => {
     // A refactor, not a redesign: 880 then 1180, 180ms apart, a sine, and a

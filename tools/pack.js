@@ -7,7 +7,9 @@
  * store has any use for. This zips the runtime alone: the manifest, the three
  * pages and their scripts, src/, the styles, fonts, icons and textures. Then
  * it checks that everything the manifest and the pages name made it in, so a
- * file outside those places fails here rather than in a user's browser.
+ * file outside those places fails here rather than in a user's browser, and
+ * shakes the icon table down to the glyphs the packed code names (see
+ * tools/icons.js).
  *
  *   node tools/pack.js            dist/bell-bearer-<version>.zip
  *   node tools/pack.js --firefox  dist/bell-bearer-<version>-firefox.zip, with
@@ -19,6 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const Zip = require('../src/shared/zip.js');
 const SiteScripts = require('../src/background/site-scripts.js');
+const Icons = require('./icons.js');
 
 const ROOT = path.join(__dirname, '..');
 const PAGES = ['popup.html', 'dashboard.html', 'offscreen.html'];
@@ -86,8 +89,11 @@ function pack({ firefox = false } = {}) {
     const absent = missing({ firefox });
     if (absent.length) throw new Error(`named but not packed: ${absent.join(', ')}`);
     const packed = files({ firefox });
+    const icons = Icons.audit(packed);
+    if (icons.missing.length) throw new Error(`named but not in ${Icons.MODULE}: ${icons.missing.join(', ')} — run node tools/icons.js`);
+    const data = (name, from) => (name === Icons.MODULE ? Buffer.from(Icons.shake(read(from).toString('utf8'), icons.used)) : read(from));
     const { version } = JSON.parse(read(packed.get('manifest.json')).toString('utf8'));
-    const entries = [...packed].map(([name, from]) => ({ name, data: read(from), at: fs.statSync(path.join(ROOT, from)).mtimeMs }));
+    const entries = [...packed].map(([name, from]) => ({ name, data: data(name, from), at: fs.statSync(path.join(ROOT, from)).mtimeMs }));
     const out = path.join(ROOT, 'dist', `bell-bearer-${version}${firefox ? '-firefox' : ''}.zip`);
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, Zip.build(entries));

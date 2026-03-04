@@ -16,7 +16,7 @@
     'use strict';
 
     const ns = root.BB || {};
-    const { Keybindings, Settings, Dom, Ui, FeatherIcons } = ns;
+    const { Keybindings, Settings, Dom, Ui, Icons } = ns;
 
     const BROWSER_SHORTCUTS_URL = 'chrome://extensions/shortcuts';
 
@@ -66,10 +66,10 @@
                 <span class="shortcut-key">${isEditing ? '<span class="kbd-listening">Press the new shortcut…</span>' : keys}</span>
                 <span class="shortcut-desc">${Dom.escapeHtml(shortcut.label)}</span>
                 <span class="shortcut-actions">
-                    ${shortcut.custom ? `<button type="button" class="shortcut-icon-btn" data-shortcut-action="reset" title="Back to default (${Dom.escapeAttr(Keybindings.format(Keybindings.resolve(null, shortcut.id).combo, shortcut.kind))})" aria-label="Reset ${Dom.escapeAttr(shortcut.label)} to default">${FeatherIcons.svg('rotate-ccw', 14)}</button>` : '<span class="shortcut-icon-slot" aria-hidden="true"></span>'}
+                    ${shortcut.custom ? `<button type="button" class="shortcut-icon-btn" data-shortcut-action="reset" title="Back to default (${Dom.escapeAttr(Keybindings.format(Keybindings.resolve(null, shortcut.id).combo, shortcut.kind))})" aria-label="Reset ${Dom.escapeAttr(shortcut.label)} to default">${Icons.svg('arrow-counter-clockwise', { size: 14 })}</button>` : '<span class="shortcut-icon-slot" aria-hidden="true"></span>'}
                     <button type="button" class="shortcut-icon-btn${isEditing ? ' is-active' : ''}" data-shortcut-action="edit"
                             title="${isCommand ? 'Change in the browser\'s shortcut settings' : isEditing ? 'Cancel' : 'Change shortcut'}"
-                            aria-label="${isEditing ? 'Cancel editing' : 'Edit'} ${Dom.escapeAttr(shortcut.label)}">${FeatherIcons.svg(isCommand ? 'external-link' : isEditing ? 'x' : 'edit-2', 14)}</button>
+                            aria-label="${isEditing ? 'Cancel editing' : 'Edit'} ${Dom.escapeAttr(shortcut.label)}">${isCommand ? Icons.svg('arrow-square-out', { size: 14 }) : isEditing ? Icons.svg('x', { size: 14 }) : Icons.svg('pencil-simple', { size: 14 })}</button>
                     <label class="toggle-switch toggle-sm" title="${shortcut.enabled ? 'Turn off' : 'Turn on'}">
                         <input type="checkbox" data-shortcut-action="toggle" ${shortcut.enabled ? 'checked' : ''} aria-label="${Dom.escapeAttr(shortcut.label)} on">
                         <span class="toggle-slider"></span>

@@ -26,7 +26,7 @@
 
     const BB = (root.BB = root.BB || {});
     const req = (path) => (typeof require === 'function' ? require(path) : null);
-    const FeatherIcons = BB.FeatherIcons || req('../shared/feather-icons.js');
+    const Icons = BB.Icons || req('../shared/icons.js');
     const Keybindings = BB.Keybindings || req('../shared/keybindings.js');
     const SiteIcons = BB.SiteIcons || req('../shared/site-icons.js');
     const Dom = BB.Dom || req('../shared/dom.js');
@@ -40,7 +40,7 @@
     /**
      * One row per array, the design's own layout. `label`/`sub` draw a
      * two-line legend the way a physical keycap prints a shifted symbol above
-     * its base one; `icon` draws a Feather glyph instead.
+     * its base one; `icon` is a glyph drawn instead.
      *
      * `code` is the KeyboardEvent.code that cap sends, and it doubles as the
      * cap's id — that is what lets a binding find its own key without a
@@ -49,17 +49,17 @@
      */
     const ROWS = [
         [
-            { icon: 'x', cls: 'key__esc', code: 'Escape' },
+            { icon: Icons.svg('x'), cls: 'key__esc', code: 'Escape' },
             { label: '!', sub: '1', code: 'Digit1' }, { label: '@', sub: '2', code: 'Digit2' },
             { label: '#', sub: '3', code: 'Digit3' }, { label: '$', sub: '4', code: 'Digit4' },
             { label: '%', sub: '5', code: 'Digit5' }, { label: '^', sub: '6', code: 'Digit6' },
             { label: '&', sub: '7', code: 'Digit7' }, { label: '*', sub: '8', code: 'Digit8' },
             { label: '(', sub: '9', code: 'Digit9' }, { label: ')', sub: '0', code: 'Digit0' },
             { label: '_', sub: '-', code: 'Minus' }, { label: '+', sub: '=', code: 'Equal' },
-            { icon: 'delete', cls: 'key__delete', code: 'Backspace' },
+            { icon: Icons.svg('backspace'), cls: 'key__delete', code: 'Backspace' },
         ],
         [
-            { icon: 'log-in', cls: 'key__oneandhalf', code: 'Tab' },
+            { icon: Icons.svg('sign-in'), cls: 'key__oneandhalf', code: 'Tab' },
             { label: 'Q', code: 'KeyQ' }, { label: 'W', code: 'KeyW' }, { label: 'E', code: 'KeyE' },
             { label: 'R', code: 'KeyR' }, { label: 'T', code: 'KeyT' }, { label: 'Y', code: 'KeyY' },
             { label: 'U', code: 'KeyU' }, { label: 'I', code: 'KeyI' }, { label: 'O', code: 'KeyO' },
@@ -68,15 +68,15 @@
             { label: '|', sub: '\\', cls: 'key__oneandhalf', code: 'Backslash' },
         ],
         [
-            { icon: 'meh', cls: 'key__caps', code: 'CapsLock' },
+            { icon: Icons.svg('smiley-meh'), cls: 'key__caps', code: 'CapsLock' },
             { label: 'A', code: 'KeyA' }, { label: 'S', code: 'KeyS' }, { label: 'D', code: 'KeyD' },
             { label: 'F', code: 'KeyF' }, { label: 'G', code: 'KeyG' }, { label: 'H', code: 'KeyH' },
             { label: 'J', code: 'KeyJ' }, { label: 'K', code: 'KeyK' }, { label: 'L', code: 'KeyL' },
             { label: ':', sub: ';', code: 'Semicolon' }, { label: '"', sub: "'", code: 'Quote' },
-            { icon: 'corner-down-left', cls: 'key__enter', code: 'Enter' },
+            { icon: Icons.svg('arrow-elbow-down-left'), cls: 'key__enter', code: 'Enter' },
         ],
         [
-            { icon: 'arrow-up-circle', cls: 'key__shift-left', mod: 'shift' },
+            { icon: Icons.svg('arrow-circle-up'), cls: 'key__shift-left', mod: 'shift' },
             { label: 'Z', code: 'KeyZ' }, { label: 'X', code: 'KeyX' }, { label: 'C', code: 'KeyC' },
             { label: 'V', code: 'KeyV' }, { label: 'B', code: 'KeyB' }, { label: 'N', code: 'KeyN' },
             { label: 'M', code: 'KeyM' },
@@ -85,20 +85,20 @@
             // The right Shift is drawn but never lit. Two caps lighting for
             // one modifier reads as two different keys being asked for, and
             // the leader from the label only ever points at one of them.
-            { icon: 'arrow-up-circle' },
-            { icon: 'arrow-up', cls: 'key__arrow', code: 'ArrowUp' },
-            { icon: 'trash-2', code: 'Delete' },
+            { icon: Icons.svg('arrow-circle-up') },
+            { icon: Icons.svg('arrow-up'), cls: 'key__arrow', code: 'ArrowUp' },
+            { icon: Icons.svg('trash'), code: 'Delete' },
         ],
         [
             { label: '^', cls: 'key__bottom-funct', mod: 'ctrl' },
-            { icon: 'activity', cls: 'key__bottom-funct', mod: 'alt' },
-            { icon: 'command', cls: 'key__bottom-funct', mod: 'meta' },
+            { icon: Icons.svg('pulse'), cls: 'key__bottom-funct', mod: 'alt' },
+            { icon: Icons.svg('command'), cls: 'key__bottom-funct', mod: 'meta' },
             { cls: 'key__spacebar', code: 'Space' },
-            { icon: 'command', mod: 'meta' },
-            { icon: 'activity', mod: 'alt' },
-            { icon: 'arrow-left', cls: 'key__arrow', code: 'ArrowLeft' },
-            { icon: 'arrow-down', cls: 'key__arrow', code: 'ArrowDown' },
-            { icon: 'arrow-right', cls: 'key__arrow', code: 'ArrowRight' },
+            { icon: Icons.svg('command'), mod: 'meta' },
+            { icon: Icons.svg('pulse'), mod: 'alt' },
+            { icon: Icons.svg('arrow-left'), cls: 'key__arrow', code: 'ArrowLeft' },
+            { icon: Icons.svg('arrow-down'), cls: 'key__arrow', code: 'ArrowDown' },
+            { icon: Icons.svg('arrow-right'), cls: 'key__arrow', code: 'ArrowRight' },
         ],
     ];
 
@@ -118,7 +118,7 @@
 
     /** The scopes the tab strip offers, in order. */
     const SCOPES = [
-        { id: 'general', name: 'Common', icon: 'keyboard' },
+        { id: 'general', name: 'Common', icon: Icons.svg('keyboard', { size: 18 }) },
         { id: 'youtube', name: 'YouTube', site: 'youtube' },
         { id: 'chess', name: 'Chess.com', site: 'chess' },
         { id: 'lichess', name: 'Lichess', site: 'lichess' },
@@ -288,11 +288,10 @@
         const kid = spec.code || '';
         const classes = ['kbd-key'];
         if (spec.cls) classes.push(spec.cls);
-        const body = spec.icon
-            ? FeatherIcons.svg(spec.icon, 16)
-            : spec.sub
-                ? `${esc(spec.label)}<span class="kbd-sub">${esc(spec.sub)}</span>`
-                : esc(spec.label || '');
+        const label = spec.sub
+            ? `${esc(spec.label)}<span class="kbd-sub">${esc(spec.sub)}</span>`
+            : esc(spec.label || '');
+        const body = spec.icon || label;
         return `<div class="${classes.join(' ')}" role="button" tabindex="0"
                      ${kid ? `data-kid="${kid}"` : ''}${spec.mod ? ` data-mod="${spec.mod}"` : ''}>${body}</div>`;
     }
@@ -303,9 +302,7 @@
 
     function tabsHtml() {
         return SCOPES.map((item) => {
-            const mark = item.site
-                ? SiteIcons.svg(item.site, { size: 18 })
-                : FeatherIcons.svg(item.icon, 18);
+            const mark = item.site ? SiteIcons.svg(item.site, { size: 18 }) : item.icon;
             return `<button class="kbd-scope" type="button" role="tab" data-scope="${item.id}"
                             title="${esc(item.name)}" aria-label="${esc(item.name)}">
                         <span class="kbd-scope-mark">${mark}</span>
