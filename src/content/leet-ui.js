@@ -31,6 +31,7 @@
     const ns = root.BB || {};
     const Settings = ns.Settings || req('../shared/settings.js');
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const Time = ns.Time || req('../shared/time.js');
     const Fsrs = ns.Fsrs || req('../shared/fsrs.js');
     const Leet = ns.Leet || req('../shared/leetcode.js');
@@ -368,10 +369,7 @@
                 <div class="bb-leet-card-head">
                     <span class="bb-leet-card-title">How did that go?</span>
                     <button type="button" class="bb-leet-card-x" data-bb-leet-close="1"
-                            title="Leave it ungraded" aria-label="Leave it ungraded">
-                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
-                             stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6 6 18"></path></svg>
-                    </button>
+                            title="Leave it ungraded" aria-label="Leave it ungraded">${Icons.svg('x')}</button>
                 </div>
                 <p class="bb-leet-card-sub">${Dom.escapeHtml(problem.title || problem.slug)} · ${Dom.escapeHtml(spent)} · ${Dom.escapeHtml(tries)}</p>
                 <div class="bb-leet-grades" role="group" aria-label="How did that go?">

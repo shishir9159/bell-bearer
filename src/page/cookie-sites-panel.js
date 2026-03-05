@@ -9,7 +9,7 @@
     'use strict';
 
     const ns = root.BB || {};
-    const { CookieSites, Settings, Dom, Ui } = ns;
+    const { CookieSites, Settings, Dom, Ui, Icons } = ns;
 
     function mount(container) {
         if (!container) return;
@@ -40,7 +40,7 @@
                         <span class="bb-dropdown-host">${Dom.escapeHtml(row.host)}</span>
                         <span class="bb-decision is-${row.decision === 'decline' ? 'decline' : 'accept'}">${row.decision === 'decline' ? 'Rejected' : 'Accepted'}</span>
                         <button type="button" class="bb-dropdown-remove" data-host="${Dom.escapeAttr(row.host)}"
-                                title="Forget ${Dom.escapeAttr(row.host)}" aria-label="Forget ${Dom.escapeAttr(row.host)}">&times;</button>
+                                title="Forget ${Dom.escapeAttr(row.host)}" aria-label="Forget ${Dom.escapeAttr(row.host)}">${Icons.svg('x', { size: 13 })}</button>
                     </div>`).join('')
                 : '<div class="bb-dropdown-empty">No sites yet. Click "Always accept" or "Always reject" on a cookie popup to add one.</div>';
         }

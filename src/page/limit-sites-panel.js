@@ -19,7 +19,7 @@
     'use strict';
 
     const ns = root.BB || {};
-    const { LimitSites, Settings, Dom, Ui } = ns;
+    const { LimitSites, Settings, Dom, Ui, Icons } = ns;
 
     const esc = (text) => Dom.escapeHtml(text);
     const att = (text) => Dom.escapeAttr(text);
@@ -78,7 +78,7 @@
                         <span class="limit-what">${esc(LimitSites.describe(row))}</span>
                         <button type="button" class="bb-dropdown-remove" data-host="${att(row.host)}"
                                 title="Stop holding ${att(row.host)} to a limit"
-                                aria-label="Remove the limit on ${att(row.host)}">&times;</button>
+                                aria-label="Remove the limit on ${att(row.host)}">${Icons.svg('x', { size: 13 })}</button>
                     </div>`).join('')
                 : '<div class="bb-dropdown-empty">No limits yet. Name a site above and say how long it gets.</div>';
         }

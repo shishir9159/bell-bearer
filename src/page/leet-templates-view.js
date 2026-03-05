@@ -20,14 +20,14 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
-    const { Settings, LeetTemplates, Dom, Ui } = BB;
+    const { Settings, LeetTemplates, Dom, Ui, Icons } = BB;
 
     const esc = Dom.escapeHtml;
     const att = Dom.escapeAttr;
 
     const ICONS = {
-        grip: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
-        trash: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7v13h12V7"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>',
+        grip: Icons.svg('dots-six-vertical'),
+        trash: Icons.svg('trash'),
     };
 
     function mountPanel(host) {

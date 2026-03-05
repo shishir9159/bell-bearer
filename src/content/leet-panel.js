@@ -26,6 +26,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const Leet = ns.Leet || req('../shared/leetcode.js');
     const LeetTemplates = ns.LeetTemplates || req('../shared/leet-templates.js');
     const Overlay = ns.Overlay || req('./overlay.js');
@@ -126,10 +127,7 @@
                         <p class="bb-leet-sub">Loading…</p>
                     </div>
                     <button type="button" class="bb-leet-close" data-bb-close="1"
-                            title="Close" aria-label="Close">
-                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
-                             stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6 6 18"></path></svg>
-                    </button>
+                            title="Close" aria-label="Close">${Icons.svg('x')}</button>
                 </div>
                 <div class="bb-leet-body">
                     <nav class="bb-leet-rail" aria-label="Lists"></nav>

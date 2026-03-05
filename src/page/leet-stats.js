@@ -25,7 +25,7 @@
     const att = Dom.escapeAttr;
 
     const ICONS = {
-        trash: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M6 7v13h12V7"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>',
+        trash: Icons.svg('trash'),
     };
 
     /**
@@ -388,7 +388,7 @@
                             ${diffPill(problem.difficulty)}
                             <span class="page-host">${esc(dueText(problem, now))}</span>
                             <button type="button" class="leet-note-del" data-leet-forget="${att(problem.slug)}"
-                                    title="Forget this problem" aria-label="Forget this problem">&times;</button>
+                                    title="Forget this problem" aria-label="Forget this problem">${Icons.svg('x', { size: 13 })}</button>
                         </div>
                         <button type="button" class="leet-note-body" data-leet-note="${att(problem.slug)}">${esc(problem.note)}</button>
                     </div>`).join('')}</div>`;
