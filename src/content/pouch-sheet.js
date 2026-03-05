@@ -32,6 +32,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const Feed = ns.Feed || req('../shared/feed.js');
     const Playlists = ns.Playlists || req('../shared/playlists.js');
     const Settings = ns.Settings || req('../shared/settings.js');
@@ -744,7 +745,7 @@
                     <div class="bb-sheet-tools">
                         <div class="bb-seg" role="group" aria-label="Time range">${ranges}</div>
                         <select class="bb-select" aria-label="Sort">${sorts}</select>
-                        <button class="bb-close" type="button" data-bb-close aria-label="Close">&times;</button>
+                        <button class="bb-close" type="button" data-bb-close aria-label="Close">${Icons.svg('x')}</button>
                     </div>
                 </div>
                 <div class="bb-sheet-body">

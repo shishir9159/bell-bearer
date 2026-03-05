@@ -24,6 +24,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const Time = ns.Time || req('../shared/time.js');
     const XPouch = ns.XPouch || req('../shared/x-pouch.js');
 
@@ -212,10 +213,7 @@
                     <div class="bb-x-tile bb-x-tile-on">
                         <span class="bb-x-tile-name">${esc(topic.name)}</span>
                         <button type="button" class="bb-x-close" data-bb-back="1" title="Back to topics"
-                                aria-label="Back to topics">
-                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
-                                 stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6 6 18"></path></svg>
-                        </button>
+                                aria-label="Back to topics">${Icons.svg('x')}</button>
                     </div>
                     <div class="bb-x-items">${rows}</div>
                 </div>`;

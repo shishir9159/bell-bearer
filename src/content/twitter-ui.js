@@ -30,6 +30,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const Settings = ns.Settings || req('../shared/settings.js');
     const XPouch = ns.XPouch || req('../shared/x-pouch.js');
     const PouchButton = ns.PouchButton || req('../shared/pouch-button.js');
@@ -964,8 +965,7 @@
             return `
                 <div class="bb-x-picker-new">
                     <button type="button" class="bb-x-picker-row bb-x-picker-add" data-bb-new="1">
-                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor"
-                             stroke-width="2"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+                        ${Icons.svg('plus')}
                         New topic
                     </button>
                     <form class="bb-x-picker-form" hidden>

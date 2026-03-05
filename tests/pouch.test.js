@@ -22,8 +22,8 @@
  * built while its own drawer leaks into the next test.
  */
 
-/** The first path command of the tick glyph — what "filed" looks like. */
-const TICK_PATH = /M9 16\.17/;
+/** The first path command of the tick glyph, Phosphor's check — what "filed" looks like. */
+const TICK_PATH = /M229\.66,77\.66/;
 
 function pouchUi(style) {
     return window.BB.YouTubeUi.createYouTubeUi({

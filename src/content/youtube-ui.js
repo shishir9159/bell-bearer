@@ -21,6 +21,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const Feed = ns.Feed || req('../shared/feed.js');
     const Playlists = ns.Playlists || req('../shared/playlists.js');
     const Settings = ns.Settings || req('../shared/settings.js');
@@ -676,7 +677,7 @@
                 <div class="bb-panel bb-panel-sm">
                     <div class="bb-panel-head">
                         <h3>Remove from pouch?</h3>
-                        <button class="bb-close" type="button" data-bb-close aria-label="Close">&times;</button>
+                        <button class="bb-close" type="button" data-bb-close aria-label="Close">${Icons.svg('x')}</button>
                     </div>
                     <div class="bb-panel-body">
                         <p class="bb-muted">${Dom.escapeHtml(channelInfo.channelName)} will be taken out of your
@@ -709,7 +710,7 @@
                 <div class="bb-panel bb-panel-sm">
                     <div class="bb-panel-head">
                         <h3>Add to pouch</h3>
-                        <button class="bb-close" type="button" data-bb-close aria-label="Close">&times;</button>
+                        <button class="bb-close" type="button" data-bb-close aria-label="Close">${Icons.svg('x')}</button>
                     </div>
                     <div class="bb-pouch-channel">
                         ${avatar}

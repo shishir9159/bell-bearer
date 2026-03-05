@@ -18,13 +18,15 @@
 (function (root) {
     'use strict';
 
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+    const Icons = (root.BB && root.BB.Icons) || req('./icons.js');
+
     /**
-     * The mark. Sized by CSS rather than by the attribute, because the same
+     * The mark. Sized by CSS, which outranks the attribute, because the same
      * glyph is a 24px icon in YouTube's subscribe row and a 17px one in X's
      * action row, and a hard-coded width there would have to be undone twice.
      */
-    const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="bb-pouch-glyph">' +
-        '<path d="M14 10H2v2h12v-2zm0-4H2v2h12V6zm4 8v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM2 16h8v-2H2v2z"></path></svg>';
+    const ICON = Icons.svg('list-plus', { cls: 'bb-pouch-glyph' });
 
     /**
      * The filed state. YouTube turns its own Subscribe button into a flat grey
@@ -34,8 +36,7 @@
      * X's bookmark button does the same thing with a filled glyph, so the tick
      * reads correctly there too.
      */
-    const TICK = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" class="bb-pouch-glyph">' +
-        '<path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
+    const TICK = Icons.svg('check', { cls: 'bb-pouch-glyph' });
 
     /** Marks a button as ours, whatever page it was injected into. */
     const CLASS = 'bb-pouch-button';
