@@ -58,6 +58,7 @@
       "js": [
         "src/shared/time.js",
         "src/shared/dom.js",
+        "src/shared/icons.js",
         "src/shared/speed.js",
         "src/shared/settings.js",
         "src/shared/store.js",

@@ -21,6 +21,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const ChatTree = ns.ChatTree || req('../shared/chat-tree.js');
     const ChatDiff = ns.ChatDiff || req('../shared/chat-diff.js');
     const Overlay = ns.Overlay || req('./overlay.js');
@@ -114,7 +115,7 @@
                             <button type="button" class="bb-btn" data-bb-compare-mode="side">Side by side</button>
                             <button type="button" class="bb-btn" data-bb-compare-mode="inline">One column</button>
                         </div>
-                        <button type="button" class="bb-close" data-bb-close="1" aria-label="Close">×</button>
+                        <button type="button" class="bb-close" data-bb-close="1" aria-label="Close">${Icons.svg('x')}</button>
                     </div>
                     <div class="bb-panel-body bb-chat-compare-body"></div>
                 </div>`,

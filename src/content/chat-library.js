@@ -20,6 +20,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const ChatSites = ns.ChatSites || req('../shared/chat-sites.js');
     const ChatExport = ns.ChatExport || req('../shared/chat-export.js');
     const Zip = ns.Zip || req('../shared/zip.js');
@@ -99,7 +100,7 @@
                 contentHtml: `
                     <div class="bb-panel bb-panel-lg bb-chat-library" data-bb-keep-panel="1">
                         <div class="bb-panel-head"><h3>Export chats</h3>
-                            <button type="button" class="bb-close" data-bb-close="1" aria-label="Close">×</button></div>
+                            <button type="button" class="bb-close" data-bb-close="1" aria-label="Close">${Icons.svg('x')}</button></div>
                         <div class="bb-panel-body">
                             <input type="search" class="bb-input bb-chat-lib-filter" placeholder="Filter the titles loaded so far" spellcheck="false">
                             <div class="bb-chat-lib-list" role="list"></div>

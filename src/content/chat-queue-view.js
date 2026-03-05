@@ -15,6 +15,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const ChatTree = ns.ChatTree || req('../shared/chat-tree.js');
     const PromptQueue = ns.PromptQueue || req('../shared/prompt-queue.js');
 
@@ -40,11 +41,11 @@
     }
 
     const ICON = {
-        up: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 14l6-6 6 6"/></svg>',
-        down: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 10l6 6 6-6"/></svg>',
-        edit: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
-        remove: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>',
-        when: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+        up: Icons.svg('caret-up'),
+        down: Icons.svg('caret-down'),
+        edit: Icons.svg('pencil-simple'),
+        remove: Icons.svg('x'),
+        when: Icons.svg('clock'),
     };
 
     const act = (name, id, label, body = ICON[name]) =>

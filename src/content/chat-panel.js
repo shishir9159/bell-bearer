@@ -27,6 +27,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
 
     const PANEL_ID = 'bb-chat-panel';
     const SCRIM_ID = 'bb-chat-scrim';
@@ -38,7 +39,7 @@
 
     const esc = (text) => Dom.escapeHtml(text);
 
-    const CLOSE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12"></path><path d="M18 6 6 18"></path></svg>';
+    const CLOSE_ICON = Icons.svg('x');
 
     /**
      * Would a docked panel clear the thread? `threadRight` is the right edge
@@ -256,7 +257,7 @@
             </button></li>`).join('')}</ol>`;
     }
 
-    const PIN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M16 3v2h-1v5l2 2.5V15h-4.2v6l-.8 1-.8-1v-6H7v-2.5L9 10V5H8V3z"/></svg>';
+    const PIN_ICON = Icons.svg('push-pin-simple-fill');
 
     /**
      * This chat's pins. `onPath` says which can be reached as the page stands;
@@ -278,9 +279,7 @@
                     <span class="bb-chat-pin-label">${esc(pin.label || pin.excerpt || 'Pinned message')}</span>
                     ${pin.label && pin.excerpt ? `<span class="bb-chat-pin-sub">${esc(pin.excerpt)}</span>` : ''}${away}
                 </button>
-                <button type="button" class="bb-chat-pin-act" data-bb-chat-relabel="${node}" title="Name this pin" aria-label="Name this pin">
-                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>
-                </button>
+                <button type="button" class="bb-chat-pin-act" data-bb-chat-relabel="${node}" title="Name this pin" aria-label="Name this pin">${Icons.svg('pencil-simple')}</button>
                 <button type="button" class="bb-chat-pin-act" data-bb-chat-unpin="${node}" title="Unpin" aria-label="Unpin">${CLOSE_ICON}</button>
             </li>`;
         }).join('')}</ul>`;

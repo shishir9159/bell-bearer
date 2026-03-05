@@ -22,6 +22,7 @@
     const ns = root.BB || {};
     const Settings = ns.Settings || req('../shared/settings.js');
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const Keybindings = ns.Keybindings || req('../shared/keybindings.js');
     const ChatSites = ns.ChatSites || req('../shared/chat-sites.js');
     const ChatExport = ns.ChatExport || req('../shared/chat-export.js');
@@ -50,7 +51,7 @@
     /** How long the page has to settle before an unknown turn means a refetch. */
     const REFETCH_MS = 1500;
 
-    const TOGGLE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10"></path><path d="M4 12h7"></path><path d="M4 18h10"></path><rect x="15.5" y="4" width="4.5" height="16" rx="1.2"></rect></svg>';
+    const TOGGLE_ICON = Icons.svg('sidebar');
 
     const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -728,7 +729,7 @@
                 return;
             }
             const name = (ChatSites.get(adapter.site) || {}).name || 'The site';
-            const dismiss = '<button type="button" class="bb-chat-limit-x" data-bb-limit="dismiss" aria-label="Dismiss">×</button>';
+            const dismiss = `<button type="button" class="bb-chat-limit-x" data-bb-limit="dismiss" aria-label="Dismiss">${Icons.svg('x', { size: 12 })}</button>`;
             let html;
             if (held) {
                 html = `<span>${Dom.escapeHtml(name)} says a limit has been reached — ${Dom.escapeHtml(windowText(limit))}, and your queue waits until then.</span>`;

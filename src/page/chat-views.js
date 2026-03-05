@@ -17,7 +17,7 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
-    const { Settings, ChatSites, ChatPins, Dom, Ui } = BB;
+    const { Settings, ChatSites, ChatPins, Dom, Ui, Icons } = BB;
 
     const esc = Dom.escapeHtml;
     const att = Dom.escapeAttr;
@@ -102,7 +102,7 @@
 
     // ------------------------------------------------------------- prompts
 
-    const GRIP = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+    const GRIP = Icons.svg('dots-six-vertical');
 
     /**
      * The prompt templates, which every chat site shares. The rows are the
@@ -143,7 +143,7 @@
                             <span class="leet-tpl-title">${esc(template.name)}</span>
                             <span class="leet-tpl-sub">${esc(sitesText(template))}${fields.length ? ` · asks for ${esc(fields.join(', '))}` : ''}${template.uses ? ` · used ${template.uses}×` : ''}</span>
                         </button>
-                        <button type="button" class="leet-tpl-del" data-chat-delete="1" title="Delete this prompt" aria-label="Delete this prompt">×</button>
+                        <button type="button" class="leet-tpl-del" data-chat-delete="1" title="Delete this prompt" aria-label="Delete this prompt">${Icons.svg('x')}</button>
                     </div>
                 </div>`;
             }).join('') : '<div class="empty-inline"><span>No prompts. Make one, or put the starters back.</span></div>';
