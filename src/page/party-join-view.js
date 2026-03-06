@@ -5,10 +5,10 @@
 (function (root) {
     'use strict';
 
-    const { Settings, PartyPanel, PartyViews } = root.BB;
+    const { Settings, PartyPanel, PartyViews, Icons } = root.BB;
     const { ENDED_KEY, ICONS, countdown } = PartyPanel;
 
-    const LEFT = '<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="23" y1="11" x2="17" y2="11"></line></svg>';
+    const LEFT = Icons.svg('user-minus', { size: 34 });
 
     /** The design's endings, by the code a party ended (or failed to start) with, and where each one's way on leads. */
     const ENDINGS = Object.freeze({

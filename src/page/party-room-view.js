@@ -6,11 +6,11 @@
 (function (root) {
     'use strict';
 
-    const { PartyViews } = root.BB;
+    const { PartyViews, Icons } = root.BB;
 
-    const DOTS = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>';
-    const LOCK = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>';
-    const BUBBLE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
+    const DOTS = Icons.svg('dots-three', { size: 13 });
+    const LOCK = Icons.svg('lock-simple', { size: 14 });
+    const BUBBLE = Icons.svg('chat', { size: 14 });
     const ROLE = { host: 'Host', cohost: 'Co-host' };
 
     const me = (s) => (s.members || []).find((m) => m.id === s.you) || {};

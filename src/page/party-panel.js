@@ -16,7 +16,7 @@
 (function (root) {
     'use strict';
 
-    const { Settings, Dom, Ui } = root.BB;
+    const { Settings, Dom, Ui, Icons } = root.BB;
     const esc = Dom.escapeHtml;
 
     /** PartyWorker.ENDED_KEY: why the authority ended the last party. */
@@ -47,7 +47,7 @@
     });
 
     const ICONS = {
-        copy: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>',
+        copy: Icons.svg('copy', { size: 12 }),
     };
 
     const send = (message) => new Promise((resolve) => {
@@ -87,7 +87,7 @@
         }
 
         function subhead({ title, note = '', back = true, extra = '' }) {
-            return `<div class="party-sub">${back ? '<button class="party-back" type="button" data-act="back" aria-label="Back">←</button>' : ''}
+            return `<div class="party-sub">${back ? `<button class="party-back" type="button" data-act="back" aria-label="Back">${Icons.svg('arrow-left', { size: 14 })}</button>` : ''}
                 <div class="party-sub-text"><h3>${esc(title)}</h3><div class="party-sub-note">${note}</div></div>${extra}</div>`;
         }
 

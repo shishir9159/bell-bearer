@@ -23,6 +23,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const PartyChat = ns.PartyChat || req('../shared/party-chat.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const PartyChip = ns.PartyChip || req('./party-chip.js');
 
     /** Frame G's panel: 328 wide, 12 in from whatever it sits against. */
@@ -38,8 +39,8 @@
      */
     const KEPT = Object.freeze(['keydown', 'keyup', 'keypress', 'mousedown', 'pointerdown', 'click', 'dblclick']);
 
-    const CLOSE = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
-    const SEND = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
+    const CLOSE = Icons.svg('x');
+    const SEND = Icons.svg('paper-plane-tilt', { size: 15 });
 
     const pad = (n) => String(n).padStart(2, '0');
     /** "12:04", the design's clock. */
