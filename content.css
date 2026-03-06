@@ -1406,6 +1406,8 @@
     color: var(--bb-accent);
 }
 
+.bb-skim-mark svg { display: block; margin: 0 auto; }
+
 .bb-skim-text {
     flex: 1;
     min-width: 0;

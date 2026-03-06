@@ -27,6 +27,7 @@
     const ns = root.BB || {};
     const Skim = ns.Skim || req('../shared/skim.js');
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const ScrollTo = ns.ScrollTo || req('./scroll-to.js');
 
     const PANEL_ID = 'bb-skim';
@@ -41,6 +42,14 @@
 
     const highlightsAvailable = () =>
         typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight === 'function';
+
+    /** What each kind of row is marked with, ahead of its text. */
+    const MARKS = {
+        page: Icons.svg('paragraph', { size: 13 }),
+        tab: Icons.svg('browser', { size: 13 }),
+        history: Icons.svg('clock-counter-clockwise', { size: 13 }),
+        action: Icons.svg('command', { size: 13 }),
+    };
 
     /**
      * @param {object} deps
@@ -232,7 +241,7 @@
         // ----------------------------------------------------- the drawing
 
         function rowHtml(row, index) {
-            const mark = { page: '¶', tab: '▭', history: '↺', action: '⌘' }[row.kind] || '·';
+            const mark = MARKS[row.kind] || Icons.svg('dot', { size: 13 });
             const text = row.kind === 'page'
                 ? `${esc(row.pre)}<b>${esc(row.mid)}</b>${esc(row.post)}`
                 : esc(row.title);

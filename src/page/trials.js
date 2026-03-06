@@ -25,20 +25,17 @@
     'use strict';
 
     const BB = (root.BB = root.BB || {});
-    const { Trials, Dom, Ui, Plate } = BB;
+    const { Trials, Dom, Ui, Plate, Icons } = BB;
 
     const esc = Dom.escapeHtml;
     const attr = Dom.escapeAttr;
 
-    /** The glyphs the slot head needs, drawn the way the design draws them. */
+    /** The glyphs the slot head needs. */
     const ICONS = {
-        lock: '<rect x="3" y="11" width="18" height="10" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>',
-        unlock: '<rect x="3" y="11" width="18" height="10" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 9.6-1.4"></path>',
-        x: '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>',
+        lock: Icons.svg('lock-simple', { size: 13 }),
+        unlock: Icons.svg('lock-simple-open', { size: 13 }),
+        x: Icons.svg('x', { size: 13 }),
     };
-
-    const glyph = (name) => `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
-            stroke-width="2" stroke-linecap="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
     /** The last snapshot, and what the pointer is doing to it. */
     let deskState = null;
@@ -155,9 +152,9 @@
                     <span class="tg-slot-count" title="${group.tabs.length} tab${group.tabs.length === 1 ? '' : 's'}">${group.tabs.length}</span>
                     <button class="tg-icon${locked ? ' is-on' : ''}" type="button" data-act="lock"
                             title="${locked ? `${left} min left` : 'Lock this group for a stretch'}"
-                            aria-label="Lock this group">${glyph(locked ? 'lock' : 'unlock')}</button>
+                            aria-label="Lock this group">${locked ? ICONS.lock : ICONS.unlock}</button>
                     <button class="tg-icon" type="button" data-act="discard" ${locked ? 'disabled' : ''}
-                            title="Discard this group" aria-label="Discard this group">${glyph('x')}</button>
+                            title="Discard this group" aria-label="Discard this group">${ICONS.x}</button>
                 </div>
                 ${menu === group.id ? lockMenu(group, locked) : ''}
                 ${locked ? `<div class="tg-note">${left} min left — nothing goes in or out until then</div>` : ''}

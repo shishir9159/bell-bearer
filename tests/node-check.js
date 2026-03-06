@@ -3614,6 +3614,15 @@ check('a packed table keeps only what the packed code names', () => {
     assert(shaken.startsWith(head) && shaken.endsWith(tail), 'the code around the table changed');
     eq(IconTool.shake(source, IconTool.audit().used), source, 'a table already in line is not left as it was');
 });
+check('nothing else draws an icon of its own', () => {
+    // Drawings rather than icons: the sites' brand marks, the charts, the
+    // chat's branch map, the keyboard's leader lines, the plates' corners
+    // and the frame the reader's cursors are drawn in.
+    const DRAWINGS = ['src/shared/icons.js', 'src/shared/site-icons.js', 'src/page/heat-map.js', 'src/page/spark.js',
+        'src/content/chat-tree-view.js', 'src/page/keyboard.js', 'src/shared/corners.js', 'src/content/reader-highlights.js'];
+    const files = [...require('../tools/pack.js').files().values()].filter((file) => /\.(js|html)$/.test(file));
+    eq(files.filter((file) => !DRAWINGS.includes(file) && /<svg\s/.test(readRepo(file))), [], 'drawn by hand instead of with Icons.svg');
+});
 check('a glyph is drawn in the text colour, and a name the table lacks draws nothing', () => {
     const Icons = require('../src/shared/icons.js');
     const x = Icons.svg('x', { size: 12, cls: 'octicon' });
