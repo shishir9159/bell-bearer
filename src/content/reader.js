@@ -27,6 +27,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const Theme = ns.Theme || req('./theme.js');
     const ReaderTranscript = ns.ReaderTranscript || req('./reader-transcript.js');
     const ReaderLayout = ns.ReaderLayout || req('./reader-layout.js');
@@ -75,13 +76,11 @@
         };
     }
 
-    const svg = (size, body, width = 1.75) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="${width}" stroke-linecap="round" aria-hidden="true">${body}</svg>`;
     const ICON = Object.freeze({
-        close: svg(18, '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>'),
-        chevron: svg(14, '<path d="m6 9 6 6 6-6"></path>'),
-        up: svg(14, '<path d="m18 15-6-6-6 6"></path>'),
-        down: svg(14, '<path d="M12 5v14"></path><path d="m19 12-7 7-7-7"></path>'),
+        close: Icons.svg('x', { size: 18 }),
+        chevron: Icons.svg('caret-down', { size: 14 }),
+        up: Icons.svg('caret-up', { size: 14 }),
+        down: Icons.svg('arrow-down', { size: 14 }),
     });
 
     function listHtml(kind) {

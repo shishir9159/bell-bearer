@@ -15,29 +15,29 @@
 (function (root) {
     'use strict';
 
-    const icon = (body) => `<svg width="22" height="16" viewBox="0 0 22 16" fill="none" stroke="currentColor"
-        stroke-width="1.3" aria-hidden="true"><rect x="1" y="1.5" width="20" height="13" rx="2"></rect>${body}</svg>`;
+    const req = (path) => (typeof require === 'function' ? require(path) : null);
+    const Icons = (root.BB && root.BB.Icons) || req('../shared/icons.js');
 
     const LAYOUTS = Object.freeze([
         Object.freeze({
             id: 'dock', title: 'Dock: video beside the transcript',
-            icon: icon('<rect x="3.5" y="4" width="9" height="6" rx="0.8" fill="currentColor" stroke="none"></rect><path d="M15 5h3.5M15 8h3.5M15 11h3.5"></path>'),
+            icon: Icons.svg('square-split-horizontal', { size: 18 }),
         }),
         Object.freeze({
             id: 'float', title: 'Float: a transcript card over the video',
-            icon: icon('<rect x="3.5" y="4" width="15" height="8" rx="0.8" fill="currentColor" fill-opacity="0.28" stroke="none"></rect><rect x="12.5" y="5" width="5" height="6.5" rx="0.8" fill="currentColor" stroke="none"></rect>'),
+            icon: Icons.svg('picture-in-picture', { size: 18 }),
         }),
         Object.freeze({
             id: 'glass', title: 'Glass: fullscreen video, slim transcript',
-            icon: icon('<rect x="3.5" y="4" width="15" height="8" rx="0.8" fill="currentColor" fill-opacity="0.28" stroke="none"></rect><path d="M13 6h4.5M13 8.5h4.5M13 11h3"></path>'),
+            icon: Icons.svg('frame-corners', { size: 18 }),
         }),
         Object.freeze({
             id: 'band', title: 'Band: three sentences under the video',
-            icon: icon('<rect x="5" y="3.6" width="12" height="5.6" rx="0.8" fill="currentColor" stroke="none"></rect><path d="M5.5 11.6h11"></path>'),
+            icon: Icons.svg('subtitles', { size: 18 }),
         }),
         Object.freeze({
             id: 'focus', title: 'Focus: transcript first, player pinned',
-            icon: icon('<path d="M4 5h8M4 7.7h8M4 10.4h6"></path><rect x="13.5" y="8.6" width="5" height="3.6" rx="0.6" fill="currentColor" stroke="none"></rect>'),
+            icon: Icons.svg('article', { size: 18 }),
         }),
     ]);
     const LAYOUT_IDS = Object.freeze(LAYOUTS.map((layout) => layout.id));

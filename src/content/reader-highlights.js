@@ -27,6 +27,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const Time = ns.Time || req('../shared/time.js');
     const Bookmarks = ns.Bookmarks || req('../shared/bookmarks.js');
     const ReaderTranscript = ns.ReaderTranscript || req('./reader-transcript.js');
@@ -40,21 +41,28 @@
     /** A note is written this long after the last keystroke, not on every one. */
     const NOTE_DEBOUNCE_MS = 400;
 
-    const svg = (size, body, extra = '') => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"${extra}>${body}</svg>`;
     const ICON = Object.freeze({
-        play: '<svg width="9" height="10" viewBox="0 0 9 10" aria-hidden="true"><path d="M1 .8v8.4L8.2 5z" fill="currentColor"></path></svg>',
-        note: svg(16, '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path>'),
-        pen: svg(13, '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>', ' stroke-width="2"'),
-        trash: svg(16, '<path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>'),
-        copy: svg(14, '<rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>'),
+        play: Icons.svg('play-fill', { size: 10 }),
+        note: Icons.svg('note-pencil'),
+        pen: Icons.svg('pencil-simple', { size: 13 }),
+        trash: Icons.svg('trash'),
+        copy: Icons.svg('copy', { size: 14 }),
     });
 
-    /** The pen and the eraser, drawn in the skin's ink, as cursors. */
+    /**
+     * The pen and the eraser, as cursors: Phosphor's filled glyphs, dark with
+     * a white rim so they read on any skin, and the pen over a dash of the
+     * skin's ink.
+     */
     function cursors(ink) {
         const uri = (body) => `url("data:image/svg+xml,${encodeURIComponent(body)}")`;
-        const pen = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><path d="M2.5 25.5h8.5" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M2.5 25.5h8.5" stroke="${ink}" stroke-width="3" stroke-linecap="round"/><g transform="rotate(45 14 14)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"><rect x="10.5" y="1.5" width="7" height="13.5" rx="1.6" fill="#26262a"/><path d="M10.5 15h7l-1.6 4h-3.8z" fill="#26262a"/><path d="M12.4 19h3.2l-.7 3.6-2.1-.9z" fill="${ink}"/></g></svg>`;
-        const eraser = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><g transform="rotate(45 14 14)" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"><rect x="9" y="3" width="10" height="20" rx="2.5" fill="#26262a"/><path d="M9 15.5h10v5a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 9 20.5z" fill="#f3a6bd"/></g></svg>';
+        const frame = (body) => `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">${body}</svg>`;
+        // 18px of glyph, nudged so the working end of either sits on the
+        // hotspot below. The rim is in the glyph's 256-unit grid: 22 is 1.5px.
+        const tool = (glyph) => `<g transform="translate(5 4.5)" color="#26262a" stroke="#fff" stroke-width="22" paint-order="stroke">${glyph}</g>`;
+        const dash = `<path d="M2.5 25.5h8.5" stroke="#fff" stroke-width="5" stroke-linecap="round"/><path d="M2.5 25.5h8.5" stroke="${ink}" stroke-width="3" stroke-linecap="round"/>`;
+        const pen = frame(dash + tool(Icons.svg('pencil-simple-fill', { size: 18 })));
+        const eraser = frame(tool(Icons.svg('eraser-fill', { size: 18 })));
         return { pen: `${uri(pen)} 8 20, text`, eraser: `${uri(eraser)} 8 20, default` };
     }
 
