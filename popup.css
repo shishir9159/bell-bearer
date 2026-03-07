@@ -81,19 +81,25 @@ body {
 
 /* ---------- header ---------- */
 
+/* One row at every width: the wordmark, and Dashboard across from it. It was
+   a column under 560px, which put Dashboard on a line of its own under the
+   name. It wraps rather than overflows if the limit override joins it in a
+   popup squeezed to 340px. */
 header {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    padding: 12px 14px 10px;
+    padding: 10px 14px;
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
 }
 
 .brand {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
     min-width: 0;
 }
 
@@ -120,20 +126,25 @@ header h1 {
 }
 
 .brand-count {
-    margin-left: auto;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 600;
-    color: var(--text-faint);
+    color: var(--text-muted);
+    background: var(--surface-3);
+    border-radius: var(--r-pill);
+    padding: 2px 8px;
     white-space: nowrap;
     flex-shrink: 0;
 }
 
-/* Action row: scrolls sideways rather than wrapping, so a 340px popup
-   never hides Clear behind a fold. */
+.brand-count:empty { display: none; }
+
+/* Scrolls sideways rather than wrapping, so a 340px popup never hides a
+   button behind a fold. */
 .controls {
     display: flex;
     gap: 6px;
     align-items: center;
+    margin-left: auto;
     overflow-x: auto;
     scrollbar-width: none;
     padding-bottom: 1px;
@@ -865,12 +876,7 @@ a.chess-pill:hover { transform: translateY(-1px); box-shadow: var(--card-shadow-
 
     .bookmark-details { width: 58%; flex: 1; }
 
-    header {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        padding: 11px 16px;
-    }
+    header { padding: 11px 16px; }
 
     .controls { overflow: visible; }
     .brand-count { display: none; }
