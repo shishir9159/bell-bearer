@@ -581,6 +581,14 @@ body.is-party .container > :not(header):not(#partyView) { display: none !importa
     padding: 24px 22px;
 }
 
+/* "No checkpoints yet" the same way, in the list's column: it sat 44px from
+   the top while the pane beside it was centred, so the two messages did not
+   line up. The list is a flex column, so auto margins centre it. */
+.video-list > .empty-state {
+    margin: auto 0;
+    padding: 24px 22px;
+}
+
 .empty-state h3 {
     font-family: var(--font-head);
     font-size: 14px;
