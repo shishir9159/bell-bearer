@@ -57,14 +57,16 @@
                  has one set of listeners. -->
             <div class="page-actions" id="pageActions">
                 <div class="page-action" id="downloadBar" hidden>
-                    <button id="downloadBtn" class="btn-reader" type="button">Download</button>
+                    <button id="downloadBtn" class="act-btn" type="button"><i class="act-icon" data-icon="download-simple"></i><span id="downloadLabel">Download</span></button>
                 </div>
-                <div class="page-action" id="partyBar" hidden>
-                    <button id="partyStartBtn" class="btn-reader" type="button">Start a party</button>
-                    <button id="partyJoinBtn" class="btn-party-join" type="button">Join</button>
+                <!-- Join sits inside the party's button: they are two doors
+                     into the same room. -->
+                <div class="party-split" id="partyBar" role="group" aria-label="Watch party" hidden>
+                    <button id="partyStartBtn" class="party-start" type="button" title="Start a watch party"><i class="act-icon" data-icon="users-three"></i>Party</button>
+                    <button id="partyJoinBtn" class="party-join" type="button" title="Join a watch party with its code">Join</button>
                 </div>
                 <div class="page-action" id="readerBar">
-                    <button id="openReaderBtn" class="btn-reader" type="button" disabled>Open the reader</button>
+                    <button id="openReaderBtn" class="act-btn" type="button" disabled><i class="act-icon" data-icon="book-open-text"></i>Reading mode</button>
                 </div>
             </div>
             <div class="main-content" id="mainContent">

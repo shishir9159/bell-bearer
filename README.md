@@ -199,7 +199,7 @@ produced a symbol, or that the browser says had AltGraph down, is left to the pa
 Checkpoints used to be recorded blind: hold `Ctrl + B`, let go, and whatever the
 transcript said was stapled to the span — with no way to read the transcript
 while you worked, see the checkpoints you already had, or write a note. The
-reader is the missing half. Open it from the popup's **Open the reader** button
+reader is the missing half. Open it from the popup's **Reading mode** button
 or with `Ctrl + Alt + R` on any video; `Esc` or the × puts the page back.
 
 **It is YouTube's own player, moved rather than copied.** `#movie_player` is
@@ -911,7 +911,7 @@ between you is play, pause, seek, speed and which video, never the picture, so
 nothing is streamed, nothing goes near Netflix's DRM, and a member costs the
 room about fifty bytes a second.
 
-On a YouTube or Netflix video the popup has **Start a party** and **Join**.
+On a YouTube or Netflix video the popup has **Party**, with **Join** inside it.
 Starting asks how the party connects:
 
 | Way | What you hand out | What carries the party |

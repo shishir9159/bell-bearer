@@ -318,7 +318,7 @@
             button.title = info ? '' : 'Reload the tab first — Bell Bearer is not running in it yet';
             this.downloadBusy = !!(info && info.busy);
             // How far it has got is on the button that stops it.
-            button.textContent = !info ? 'Download' : info.busy ? `Cancel (${info.percent}%)` : `Download${info.label ? ` ${info.label}` : ''}`;
+            document.getElementById('downloadLabel').textContent = !info ? 'Download' : info.busy ? `Cancel (${info.percent}%)` : `Download${info.label ? ` ${info.label}` : ''}`;
         }
 
         async toggleDownload() {

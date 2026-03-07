@@ -244,6 +244,89 @@ header h1 {
    from the next; the group is only there for popup.js to show, hide and move. */
 .page-action { display: contents; }
 
+/* Every button in the row is a white capsule, the speed buttons' look, so
+   the two bars read as one set; Dashboard stays the one solid button. */
+.act-btn, .party-split {
+    flex-shrink: 0;
+    height: 30px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--btn-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.act-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px 0 10px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.act-btn:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.act-btn:active:not(:disabled) { transform: translateY(1px); }
+.act-btn:disabled { color: var(--text-faint); box-shadow: none; cursor: default; }
+
+/* A button's glyph wears the accent until the button is filled with it. */
+.act-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    color: var(--accent-ink);
+    transition: color .15s ease;
+}
+
+.act-btn:hover:not(:disabled) .act-icon, .party-start:hover .act-icon { color: currentColor; }
+.act-btn:disabled .act-icon { color: inherit; }
+
+/* Start and Join, two buttons in one capsule: Join is the chip inside it. */
+.party-split {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+}
+
+.party-start, .party-join {
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    border: none;
+    border-radius: var(--btn-radius);
+    font-family: var(--font);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+}
+
+.party-start {
+    gap: 6px;
+    padding: 0 8px 0 7px;
+    background: transparent;
+    color: var(--text);
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+.party-join {
+    padding: 0 10px;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.party-start:hover, .party-join:hover { background: var(--accent); color: var(--on-accent); }
+.party-start:active, .party-join:active { transform: scale(.96); }
+
+/* The roster's buttons (src/page/roster-popup.js): a solid primary, and the
+   quiet ones beside it. */
 .btn-reader {
     flex-shrink: 0;
     padding: 5px 12px;
@@ -265,8 +348,6 @@ header h1 {
     cursor: default;
 }
 
-/* The watch party's Join, beside its Start. Its views are party.css, loaded
-   with the party's code. */
 .btn-party-join {
     flex-shrink: 0;
     padding: 5px 12px;
