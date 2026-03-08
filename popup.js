@@ -1,5 +1,5 @@
 /**
- * The toolbar popup: recent checkpoints, and an optional speed bar.
+ * The toolbar popup: recent checkpoints, and a row of actions on the page.
  *
  * Modals, toasts, theme and tab control live in the shared modules; this file
  * is the popup's own wiring and rendering only. Import, export and "clear all"
@@ -184,27 +184,12 @@
             document.body.dataset.bbSite = this.site;
 
             document.getElementById('youtubePanel').hidden = this.site !== 'youtube';
-            if (this.site === 'youtube') {
-                this.setupReaderBar();
-                this.setupDownloadBar();
-            }
-            // The party plays on YouTube and Netflix. On Netflix its buttons
-            // are the popup's only content, so they move out of the YouTube
-            // panel's row into a row of their own.
-            const partyBar = document.getElementById('partyBar');
-            partyBar.hidden = this.site !== 'youtube' && this.site !== 'netflix';
-            if (this.site === 'netflix') {
-                const netflix = document.getElementById('netflixPanel');
-                netflix.appendChild(partyBar);
-                netflix.hidden = false;
-            }
-            // The download button's other home: on Vimeo it is the popup.
-            if (this.site === 'vimeo') {
-                const vimeo = document.getElementById('vimeoPanel');
-                vimeo.appendChild(document.getElementById('downloadBar'));
-                vimeo.hidden = false;
-                this.setupDownloadBar();
-            }
+            // The action row under the header: the reader on YouTube, the
+            // party where it plays, the download where a video can be saved.
+            document.getElementById('readerBar').hidden = this.site !== 'youtube';
+            document.getElementById('partyBar').hidden = this.site !== 'youtube' && this.site !== 'netflix';
+            if (this.site === 'youtube') this.setupReaderBar();
+            if (this.site === 'youtube' || this.site === 'vimeo') this.setupDownloadBar();
             this.resumeParty();
             const chessSite = ChessSites.get(this.site);
             document.getElementById('chessPanel').hidden = !chessSite;
@@ -371,7 +356,7 @@
 
             document.getElementById('speedUpBtn').addEventListener('click', () => this.step(1));
             document.getElementById('speedDownBtn').addEventListener('click', () => this.step(-1));
-            document.getElementById('speedResetBtn').addEventListener('click', () => this.step(0));
+            document.getElementById('speedDisplay').addEventListener('click', () => this.step(0));
 
             this.speedTab = await TabActions.activeTab();
             this.showRate(await TabActions.getRate(this.speedTab));
@@ -391,7 +376,7 @@
             const display = document.getElementById('speedDisplay');
             if (!display) return;
             display.textContent = rate == null ? '—' : Speed.format(rate);
-            display.title = rate == null ? 'No video on this page' : '';
+            display.title = rate == null ? 'No video on this page' : 'Reset to 1x';
         }
 
         // -------------------------------------------------------- actions

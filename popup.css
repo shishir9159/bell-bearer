@@ -212,41 +212,35 @@ header h1 {
     color: var(--on-accent);
 }
 
-/* ---------- speed bar ---------- */
+/* ---------- action row ---------- */
 
-.speed-control-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 9px 14px;
-    background: var(--accent-soft);
-    border-bottom: 1px solid var(--border);
-}
-
-
-/* Download, the watch party and the reader: one row on the same accent-soft
-   ground as the speed bar above it, because all of them act on the page
-   rather than on the list below. They were three bars, each with a line
-   saying what its button does; the buttons say it themselves, and why one is
-   greyed out is its tooltip. */
+/* Download, the watch party, the reader and the playback speed: one row on
+   an accent-soft ground, because all of them act on the page rather than on
+   the list below. The speed was a bar of its own above it; it sits at the
+   row's right end now, and drops to a line of its own, still on the right,
+   when a narrow popup has no room for it. The buttons say what they do
+   themselves, and why one is greyed out is its tooltip. */
 .page-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     padding: 8px 14px;
     background: var(--accent-soft);
     border-bottom: 1px solid var(--border);
 }
 
+/* Nothing in it applies here (an extension page, or a site with no video):
+   no row, rather than an empty tinted strip under the header. */
+.page-actions:not(:has(> :not([hidden]))) { display: none; }
+
 /* A group is its buttons alone, so every button in the row is the same gap
-   from the next; the group is only there for popup.js to show, hide and move. */
+   from the next; the group is only there for popup.js to show and hide. */
 .page-action { display: contents; }
 
-/* Every button in the row is a white capsule, the speed buttons' look, so
-   the two bars read as one set; Dashboard stays the one solid button. */
-.act-btn, .party-split {
+/* Every control in the row is the same white capsule, the speed control's
+   look, so the row reads as one set; Dashboard stays the one solid button. */
+.act-btn, .party-split, .speed-control {
     flex-shrink: 0;
     height: 30px;
     background: var(--surface);
@@ -365,35 +359,33 @@ header h1 {
 
 /* While the party's views are up they are the popup, under the header, at
    full height on every site — Netflix's popup is otherwise only as tall as
-   its one bar. */
+   its one row. */
 body.is-party .container { height: 600px; min-height: 600px; }
 body.is-party .container > :not(header):not(#partyView) { display: none !important; }
 
+/* The playback speed, at the row's right end. */
+.speed-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    padding: 3px;
+}
+
 /* The speed icon. It paints with currentColor, so it takes the skin's accent
-   ink the way the other controls on an accent-soft ground do, and follows a
-   theme change without anything having to redraw it. */
+   ink and follows a theme change without anything having to redraw it. */
 .speed-label {
-    width: 18px;
-    height: 18px;
+    width: 15px;
+    height: 15px;
     flex-shrink: 0;
     display: block;
+    margin: 0 3px 0 5px;
     color: var(--accent-ink);
 }
 
-.speed-buttons {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-pill);
-    padding: 3px;
-    box-shadow: var(--card-shadow);
-}
-
 .btn-speed {
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -401,28 +393,33 @@ body.is-party .container > :not(header):not(#partyView) { display: none !importa
     border: none;
     color: var(--accent-ink);
     border-radius: var(--r-pill);
-    font-family: var(--font);
-    font-size: 16px;
-    font-weight: 700;
-    line-height: 1;
     cursor: pointer;
     transition: background .15s ease, color .15s ease, transform .1s ease;
 }
 
+.btn-speed svg { width: 12px; height: 12px; }
 .btn-speed:hover { background: var(--accent); color: var(--on-accent); }
 .btn-speed:active { transform: scale(.92); }
 
-.btn-speed-reset { width: auto; padding: 0 10px; font-size: 11.5px; font-weight: 700; }
-
+/* The rate, which is also its own reset to 1x. */
 .speed-display {
+    min-width: 40px;
+    height: 22px;
+    padding: 0 4px;
+    background: transparent;
+    border: none;
+    border-radius: var(--r-pill);
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 700;
     color: var(--text);
-    min-width: 42px;
     text-align: center;
     font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
 }
+
+.speed-display:hover { background: var(--accent-soft); color: var(--accent-ink); }
 
 /* ---------- panes ----------
    Narrow: one column, .main-content slides between list and detail.
@@ -957,7 +954,9 @@ a.chess-pill:hover { transform: translateY(-1px); box-shadow: var(--card-shadow-
 
     .bookmark-details { width: 58%; flex: 1; }
 
+    /* The row's buttons line up under the wordmark. */
     header { padding: 11px 16px; }
+    .page-actions { padding: 8px 16px; }
 
     .controls { overflow: visible; }
     .brand-count { display: none; }

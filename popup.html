@@ -31,15 +31,35 @@
             </div>
         </header>
 
-        <div id="speedControlBar" class="speed-control-bar" role="group" aria-label="Playback speed" hidden>
-            <!-- The word "Playback" was here. The icon carries no text of its
-                 own, so the group above is what a screen reader announces. -->
-            <i class="speed-label" data-icon="speedometer"></i>
-            <div class="speed-buttons">
-                <button id="speedDownBtn" class="btn-speed" title="Slower (previous step)" aria-label="Slower"><i data-icon="minus"></i></button>
-                <span id="speedDisplay" class="speed-display" aria-live="polite">1x</span>
-                <button id="speedUpBtn" class="btn-speed" title="Faster (next step)" aria-label="Faster"><i data-icon="plus"></i></button>
-                <button id="speedResetBtn" class="btn-speed btn-speed-reset" title="Reset to 1x" aria-label="Reset speed">1x</button>
+        <!-- What the popup does to the page, in one row under the header:
+             saving the video, the watch party, the reader and the playback
+             speed. They act on the page rather than being settings, so they
+             sit up here rather than in the dashboard. popup.js shows each
+             where it applies — download on YouTube (once Settings asks for
+             it) and Vimeo, the party on YouTube and Netflix, the reader on
+             YouTube, the speed on any web page — and the row is gone when
+             none of them is. -->
+        <div class="page-actions" id="pageActions">
+            <div class="page-action" id="downloadBar" hidden>
+                <button id="downloadBtn" class="act-btn" type="button"><i class="act-icon" data-icon="download-simple"></i><span id="downloadLabel">Download</span></button>
+            </div>
+            <!-- Join sits inside the party's button: they are two doors into
+                 the same room. -->
+            <div class="party-split" id="partyBar" role="group" aria-label="Watch party" hidden>
+                <button id="partyStartBtn" class="party-start" type="button" title="Start a watch party"><i class="act-icon" data-icon="users-three"></i>Party</button>
+                <button id="partyJoinBtn" class="party-join" type="button" title="Join a watch party with its code">Join</button>
+            </div>
+            <div class="page-action" id="readerBar" hidden>
+                <button id="openReaderBtn" class="act-btn" type="button" disabled><i class="act-icon" data-icon="book-open-text"></i>Reading mode</button>
+            </div>
+            <!-- The rate is its own reset: a separate "1x" button beside it
+                 read as a second rate. The icon carries no text of its own, so
+                 the group's label is what a screen reader announces. -->
+            <div id="speedControlBar" class="speed-control" role="group" aria-label="Playback speed" hidden>
+                <i class="speed-label" data-icon="speedometer"></i>
+                <button id="speedDownBtn" class="btn-speed" type="button" title="Slower (previous step)" aria-label="Slower"><i data-icon="minus"></i></button>
+                <button id="speedDisplay" class="speed-display" type="button" title="Reset to 1x" aria-live="polite">1x</button>
+                <button id="speedUpBtn" class="btn-speed" type="button" title="Faster (next step)" aria-label="Faster"><i data-icon="plus"></i></button>
             </div>
         </div>
 
@@ -47,28 +67,6 @@
              shortcut, the transcript they attach to) — shown only when the
              active tab is on YouTube. See popup.js#applySiteLayout. -->
         <div id="youtubePanel" hidden>
-            <!-- What the popup does to the page, in one row: saving the video,
-                 the watch party and the reader. They act on the page rather
-                 than being settings, so they sit up here with the speed bar
-                 rather than in the dashboard. Download shows on YouTube only
-                 once Settings asks for it. Where one of them is all there is,
-                 popup.js moves it into that site's own row below — the
-                 download to #vimeoPanel, the party to #netflixPanel — so each
-                 has one set of listeners. -->
-            <div class="page-actions" id="pageActions">
-                <div class="page-action" id="downloadBar" hidden>
-                    <button id="downloadBtn" class="act-btn" type="button"><i class="act-icon" data-icon="download-simple"></i><span id="downloadLabel">Download</span></button>
-                </div>
-                <!-- Join sits inside the party's button: they are two doors
-                     into the same room. -->
-                <div class="party-split" id="partyBar" role="group" aria-label="Watch party" hidden>
-                    <button id="partyStartBtn" class="party-start" type="button" title="Start a watch party"><i class="act-icon" data-icon="users-three"></i>Party</button>
-                    <button id="partyJoinBtn" class="party-join" type="button" title="Join a watch party with its code">Join</button>
-                </div>
-                <div class="page-action" id="readerBar">
-                    <button id="openReaderBtn" class="act-btn" type="button" disabled><i class="act-icon" data-icon="book-open-text"></i>Reading mode</button>
-                </div>
-            </div>
             <div class="main-content" id="mainContent">
                 <div class="video-list" id="videoList"></div>
 
@@ -108,19 +106,13 @@
             <div class="roster-pop-body" id="rosterPopupBody"></div>
         </div>
 
-        <!-- Netflix: the watch party's buttons, and nothing else. -->
-        <div id="netflixPanel" class="page-actions" hidden></div>
-
-        <!-- Vimeo: the download button, moved here from the YouTube panel. -->
-        <div id="vimeoPanel" class="page-actions" hidden></div>
-
         <!-- The watch party, once it is asked for or on: start, join, the
              code exchange, the room and how it ended. Drawn by
              src/page/party-panel.js, which is only loaded when needed. -->
         <div class="party-view" id="partyView" hidden></div>
 
-        <!-- Anywhere else the popup is the header alone (and the speed bar,
-             on a page with a <video>). -->
+        <!-- Anywhere else the popup is the header alone (and the action row's
+             speed control, on a web page). -->
     </div>
 
 

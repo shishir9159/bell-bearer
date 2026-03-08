@@ -9056,10 +9056,11 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         }
         assert(/enabled: \(\) => settings\.youtubeDownload === true/.test(main), 'the tab would download with the switch off');
     });
-    check('download, the party and the reader share one row in the popup, with no line of description', () => {
+    check('download, the party, the reader and the speed share one row in the popup, with no line of description', () => {
         const html = readRepo('popup.html');
-        const row = html.slice(html.indexOf('id="pageActions"'), html.indexOf('id="mainContent"'));
-        for (const group of ['downloadBar', 'partyBar', 'readerBar']) assert(row.includes(`id="${group}"`), `${group} is not in the row`);
+        const row = html.slice(html.indexOf('id="pageActions"'), html.indexOf('id="youtubePanel"'));
+        for (const group of ['downloadBar', 'partyBar', 'readerBar', 'speedControlBar']) assert(row.includes(`id="${group}"`), `${group} is not in the row`);
+        assert(html.indexOf('id="pageActions"') < html.indexOf('id="youtubePanel"'), 'the row is inside the YouTube panel, so no other site has it');
         assert(!/reader-bar-note|Note"/.test(html), 'a button still has a description beside it');
         assert(!/getElementById\('\w*Note'\)/.test(readRepo('popup.js')), 'popup.js still writes a description');
     });
@@ -9289,10 +9290,10 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(message, VimeoDownload.DRM_REFUSAL);
         assert(!site.asked.some((one) => one.url === VIMEO_PLAYLIST_URL), 'the playlist was fetched');
     });
-    check('the popup moves its download bar to vimeo, with no switch in the way, and the tab builds a downloader there', () => {
+    check('the popup offers its download on vimeo, with no switch in the way, and the tab builds a downloader there', () => {
         const popup = readRepo('popup.js');
-        assert(readRepo('popup.html').includes('<div id="vimeoPanel" class="page-actions" hidden></div>'));
-        assert(/this\.site === 'vimeo'[\s\S]{0,200}appendChild\(document\.getElementById\('downloadBar'\)\)/.test(popup), 'the bar stays in the YouTube panel');
+        assert(/this\.site === 'vimeo'\) this\.setupDownloadBar\(\)/.test(popup), 'no download on vimeo');
+        assert(/if \(this\.site === 'youtube' && !\(await Settings\.get\(\['youtubeDownload'\]\)\)/.test(popup), 'the switch reaches past youtube');
         assert(/site === 'vimeo'[\s\S]{0,300}BB\.VimeoDownload\.adapter/.test(readRepo('src/content/main.js')), 'no downloader on vimeo');
     });
 
