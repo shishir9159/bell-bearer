@@ -23,6 +23,8 @@
     /** Our ids, apart from the page's own. */
     const ID_PREFIX = 'bbr-';
 
+    const MATHML = 'http://www.w3.org/1998/Math/MathML';
+
     /** Kept as they are, children and all. */
     const BLOCK = new Set(['P', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'DL', 'DT', 'DD',
         'FIGURE', 'FIGCAPTION', 'TABLE', 'CAPTION', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD', 'HR', 'DETAILS', 'SUMMARY']);
@@ -43,6 +45,9 @@
         TIME: ['datetime'], ABBR: ['title'], DFN: ['title'],
     };
     const EVERYWHERE = ['lang', 'dir'];
+
+    /** Hosts whose iframe is a player: shown as a link to it, not as a frame the page's policy may refuse. */
+    const PLAYERS = /(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be|vimeo\.com|dailymotion\.com|twitch\.tv|loom\.com|ted\.com|soundcloud\.com|spotify\.com|codepen\.io|jsfiddle\.net|streamable\.com)$/;
 
     /** Classes that mean the element is not shown, on sites that hide it with a class rather than the attribute. */
     const HIDDEN_CLASS = /(^|\s)(hidden|sr-only|visually-hidden|screen-reader-text|screenreader-only|u-hidden|is-hidden|d-none|noprint)(\s|$)/i;
@@ -72,6 +77,48 @@
         return url.href;
     }
 
+    /** `src` as an absolute http(s) address or an inline image, or null. */
+    function sourceOf(src, base) {
+        const raw = String(src || '').trim();
+        if (!raw) return null;
+        if (/^data:image\//i.test(raw)) return raw;
+        try {
+            const url = new URL(raw, base);
+            return /^https?:$/.test(url.protocol) ? url.href : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    /**
+     * A srcset's candidates, absolute, as `[{ url, size, rank }]`: `size`
+     * the descriptor as written (`640w`, `2x`), `rank` it as a number to
+     * order by — widths as they are, a density as a thousand pixels a unit.
+     */
+    function candidates(srcset, base) {
+        const out = [];
+        // Split on the comma between candidates, not one inside an address.
+        for (const part of String(srcset || '').split(/,\s+(?=\S)|,(?=\s*https?:)/)) {
+            const [url, size = ''] = part.trim().split(/\s+/);
+            const src = sourceOf(url, base);
+            if (!src || src.startsWith('data:')) continue;
+            const width = /^(\d+)w$/.exec(size);
+            const density = /^([\d.]+)x$/.exec(size);
+            const rank = width ? Number(width[1]) : density ? Number(density[1]) * 1000 : 1000;
+            out.push({ url: src, size: width || density ? size : '', rank });
+        }
+        return out;
+    }
+
+    /** The largest candidate, for the image viewer. */
+    function largest(srcset, base) {
+        const list = candidates(srcset, base).sort((a, b) => b.rank - a.rank);
+        return list.length ? list[0].url : null;
+    }
+
+    /** A placeholder some lazy loader drew while the real image waited: a 1×1 gif, or nothing. */
+    const isPlaceholder = (src) => !src || /^data:image\/(gif|png|svg)/i.test(src) && src.length < 600;
+
     function createCleaner({ doc = root.document, base = '', drop = '', keepClass = null } = {}) {
         const make = (tag) => doc.createElement(tag);
 
@@ -95,6 +142,153 @@
                 const kept = String(from.getAttribute('class') || '').split(/\s+/).filter((one) => one && keepClass.test(one));
                 if (kept.length) to.className = kept.join(' ');
             }
+        }
+
+        // ------------------------------------------------------------ media
+
+        function image(el) {
+            // Lazy loaders keep the real address in a data attribute and a
+            // placeholder in src until the image scrolls into view — which a
+            // copy never does.
+            let src = sourceOf(el.getAttribute('src'), base);
+            const lazy = ['data-src', 'data-lazy-src', 'data-original', 'data-url', 'data-hi-res-src']
+                .map((name) => sourceOf(el.getAttribute(name), base)).find(Boolean);
+            if (lazy && isPlaceholder(src)) src = lazy;
+            const set = el.getAttribute('data-srcset') || el.getAttribute('data-lazy-srcset') || el.getAttribute('srcset') || '';
+            const picture = el.parentElement && el.parentElement.tagName === 'PICTURE' ? el.parentElement : null;
+            const sources = picture ? [...picture.querySelectorAll('source')].map((one) => one.getAttribute('srcset') || one.getAttribute('data-srcset') || '') : [];
+            // One kind of descriptor to a srcset: the img's own if it has
+            // one, else the first <source> that does.
+            const all = [set, ...sources].map((one) => candidates(one, base)).find((list) => list.length) || [];
+            if (isPlaceholder(src) && all.length) src = [...all].sort((a, b) => b.rank - a.rank)[0].url;
+            if (!src || isPlaceholder(src)) return null;
+            // Icons, spacers and tracking pixels, as the page sizes them.
+            const w = Number(el.getAttribute('width'));
+            const h = Number(el.getAttribute('height'));
+            if ((w && w < 48 && (!h || h < 48)) || (h && h < 48 && (!w || w < 48))) return null;
+            const img = make('img');
+            img.src = src;
+            if (all.some((one) => one.size)) img.setAttribute('srcset', all.map((one) => `${one.url} ${one.size || '1x'}`).join(', '));
+            img.alt = el.getAttribute('alt') || '';
+            if (w) img.setAttribute('width', String(w));
+            if (h) img.setAttribute('height', String(h));
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            copyAttrs(el, img);
+            return img;
+        }
+
+        function media(el) {
+            const out = make(el.tagName.toLowerCase());
+            const src = sourceOf(el.getAttribute('src'), base);
+            if (src) out.src = src;
+            const poster = sourceOf(el.getAttribute('poster'), base);
+            if (poster) out.poster = poster;
+            for (const one of el.querySelectorAll('source')) {
+                const url = sourceOf(one.getAttribute('src'), base);
+                if (!url) continue;
+                const source = make('source');
+                source.src = url;
+                if (one.getAttribute('type')) source.type = one.getAttribute('type');
+                out.appendChild(source);
+            }
+            if (!src && !out.querySelector('source')) return null;
+            out.controls = true;
+            out.preload = 'none';
+            return out;
+        }
+
+        function frame(el) {
+            const src = sourceOf(el.getAttribute('src') || el.getAttribute('data-src'), base);
+            if (!src) return null;
+            let host = '';
+            try { host = new URL(src).hostname.replace(/^www\./, ''); } catch (_) { return null; }
+            if (!PLAYERS.test(host)) return null;
+            const p = make('p');
+            p.className = 'tr-embed';
+            const a = make('a');
+            a.href = src.replace('youtube.com/embed/', 'youtube.com/watch?v=').replace('youtube-nocookie.com/embed/', 'youtube.com/watch?v=');
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = `${el.getAttribute('title') || 'Embedded'} — ${host}`;
+            p.appendChild(a);
+            return p;
+        }
+
+        /** What a <noscript> holds for a reader with no script: the real <img> a lazy loader replaced. */
+        function noscript(el, out) {
+            // Its content is text on a page with script on, and parsed
+            // elements in a document read with DOMParser, which has none.
+            const html = el.children.length ? el.innerHTML : el.textContent || '';
+            if (!/<img\b/i.test(html) || typeof DOMParser !== 'function') return;
+            const parsed = new DOMParser().parseFromString(html, 'text/html').querySelector('img');
+            const img = parsed && image(parsed);
+            if (!img) return;
+            const last = out.lastChild;
+            if (last && last.tagName === 'IMG') {
+                if (last.src === img.src) return;
+                if (isPlaceholder(last.getAttribute('src'))) last.remove();
+            }
+            out.appendChild(img);
+        }
+
+        // ------------------------------------------------------------- code
+
+        /** A block's code as text: a <br> or a line's own element is a newline, a gutter of line numbers is nothing. */
+        function codeText(node) {
+            let text = '';
+            const walk = (one) => {
+                if (one.nodeType === 3) { text += one.data; return; }
+                if (one.nodeType !== 1) return;
+                const cls = one.getAttribute('class') || '';
+                if (/(^|\s)(linenos?|line-numbers?(-rows)?|gutter|ln|hljs-ln-numbers|line-number)(\s|$)/.test(cls) || one.hasAttribute('data-line-number')) return;
+                if (one.tagName === 'BR') { text += '\n'; return; }
+                for (const child of one.childNodes) walk(child);
+                if (/^(DIV|P|LI|TR)$/.test(one.tagName) && !text.endsWith('\n')) text += '\n';
+            };
+            walk(node);
+            return text.replace(/\n$/, '');
+        }
+
+        function languageOf(el) {
+            for (const one of [el, el.querySelector('code'), el.parentElement, el.parentElement && el.parentElement.parentElement]) {
+                if (!one || !one.getAttribute) continue;
+                const cls = `${one.getAttribute('class') || ''} ${one.getAttribute('data-lang') || ''} ${one.getAttribute('data-language') || ''}`;
+                const match = /(?:^|\s)(?:language-|lang-|highlight-(?:source-)?|brush:\s*)([\w+#-]+)/.exec(cls) ||
+                    /^\s*([\w+#-]+)\s*$/.exec(one.getAttribute('data-lang') || one.getAttribute('data-language') || '');
+                if (match && !/^(none|text|plain|plaintext)$/i.test(match[1])) return match[1].toLowerCase();
+            }
+            return '';
+        }
+
+        function preformatted(el) {
+            const pre = make('pre');
+            const code = make('code');
+            code.textContent = codeText(el);
+            const lang = languageOf(el);
+            if (lang) pre.dataset.lang = lang;
+            pre.appendChild(code);
+            return code.textContent.trim() ? pre : null;
+        }
+
+        // ------------------------------------------------------------- math
+
+        function math(el) {
+            const copy = (one) => {
+                if (one.nodeType === 3) return doc.createTextNode(one.data);
+                if (one.nodeType !== 1) return null;
+                const out = doc.createElementNS(MATHML, one.localName);
+                for (const { name, value } of [...one.attributes]) {
+                    if (/^on/i.test(name) || /href$/i.test(name) || name === 'style' || name === 'class' || name === 'id') continue;
+                    try { out.setAttribute(name, value); } catch (_) { /* an attribute name the DOM refuses */ }
+                }
+                for (const child of one.childNodes) {
+                    const made = copy(child);
+                    if (made) out.appendChild(made);
+                }
+                return out;
+            };
+            return copy(el);
         }
 
         // ----------------------------------------------------------- tables
@@ -121,8 +315,23 @@
             }
             if (one.nodeType !== 1) return;
             const tag = one.tagName.toUpperCase();
-            if (tag === 'NOSCRIPT') return;
+            if (one.namespaceURI === MATHML || tag === 'MATH') {
+                if (!isHidden(one)) out.appendChild(math(one));
+                return;
+            }
+            if (tag === 'NOSCRIPT') { noscript(one, out); return; }
             if (DROP.has(tag) || isHidden(one) || dropped(one)) return;
+            // MathJax 3 draws in elements of its own, with the MathML beside them for screen readers.
+            if (tag === 'MJX-CONTAINER') {
+                const mml = one.querySelector('math');
+                if (mml) out.appendChild(math(mml));
+                return;
+            }
+            if (tag === 'IMG') { const img = image(one); if (img) out.appendChild(img); return; }
+            if (tag === 'PICTURE') { const img = one.querySelector('img'); const made = img && image(img); if (made) out.appendChild(made); return; }
+            if (tag === 'VIDEO' || tag === 'AUDIO') { const made = media(one); if (made) out.appendChild(made); return; }
+            if (tag === 'IFRAME') { const made = frame(one); if (made) out.appendChild(made); return; }
+            if (tag === 'PRE') { const made = preformatted(one); if (made) out.appendChild(made); return; }
             if (tag === 'TABLE') {
                 if (isLayoutTable(one)) { out.appendChild(blocks(one)); return; }
                 const wrap = make('div');
@@ -219,7 +428,7 @@
             return out;
         }
 
-        return { clean: (el) => tidy(el.tagName && CONTAINER.has(el.tagName.toUpperCase()) ? blocks(el) : children(el, doc.createDocumentFragment())) };
+        return { clean: (el) => tidy(el.tagName && CONTAINER.has(el.tagName.toUpperCase()) ? blocks(el) : children(el, doc.createDocumentFragment())), image, largest: (set) => largest(set, base) };
     }
 
     const isBlock = (one) => one.nodeType === 1 && (BLOCK.has(one.tagName) || /^(PRE|VIDEO|AUDIO|DIV)$/.test(one.tagName));
@@ -274,7 +483,7 @@
         return createCleaner(options).clean(el);
     }
 
-    const ArticleClean = { clean, createCleaner, linkOf, ID_PREFIX };
+    const ArticleClean = { clean, createCleaner, linkOf, sourceOf, candidates, largest, ID_PREFIX };
 
     root.BB = root.BB || {};
     root.BB.ArticleClean = ArticleClean;
