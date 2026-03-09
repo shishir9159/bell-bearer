@@ -1,12 +1,17 @@
 /*
- * the YouTube reader.
+ * the readers: YouTube's, and the text reader every other page can open.
  *
- * Loaded after content.css, and only by this site's entry. The reader keeps
- * its own palette, --rd-*, rather than content.css's --bb-*: it is a whole
- * page rather than a panel over one, and its design names colours the panels
- * have no use for — the stage behind a letterboxed video, the highlighter's
- * wet ink, the toolbar's ground. The skins are the same four, read off the
- * same data-bb-skin and data-bb-theme every injected surface carries.
+ * Loaded after content.css. The readers keep their own palette, --rd-*,
+ * rather than content.css's --bb-*: each is a whole page rather than a panel
+ * over one, and its design names colours the panels have no use for — the
+ * stage behind a letterboxed video, the highlighter's wet ink, the toolbar's
+ * ground. The skins are the same four, read off the same data-bb-skin and
+ * data-bb-theme every injected surface carries.
+ *
+ * One palette for both, so a skin is not drawn twice and cannot drift: the
+ * palette's rules take either reader, and everything after them is one
+ * reader's alone, under its own root class. YouTube's entry lists this
+ * sheet; the text reader brings it wherever it is opened.
  */
 
 /* =====================================================================
@@ -75,7 +80,7 @@ html.bb-reader-open body { overflow: hidden !important; }
    The palette: YouTube's own, light and dark. The other skins follow.
    ===================================================================== */
 
-.bb-reader {
+:is(.bb-reader, .bb-text-reader) {
     --rd-page: #ffffff;
     --rd-panel: #ffffff;
     --rd-card: #ffffff;
@@ -150,7 +155,7 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-note-style: normal;
 }
 
-.bb-reader[data-bb-theme="dark"] {
+:is(.bb-reader, .bb-text-reader)[data-bb-theme="dark"] {
     --rd-page: #0f0f0f;
     --rd-panel: #0f0f0f;
     --rd-card: #212121;
@@ -1083,7 +1088,7 @@ html.bb-reader-open body { overflow: hidden !important; }
    ===================================================================== */
 
 /* Riso: printed in two inks on newsprint, hard edges, offset shadows. */
-.bb-reader[data-bb-skin="riso"] {
+:is(.bb-reader, .bb-text-reader)[data-bb-skin="riso"] {
     --rd-r: 0px;
     --rd-r-sm: 0px;
     --rd-r-chip: 0px;
@@ -1147,7 +1152,7 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-stage: #17161a;
 }
 
-.bb-reader[data-bb-skin="riso"][data-bb-theme="dark"] {
+:is(.bb-reader, .bb-text-reader)[data-bb-skin="riso"][data-bb-theme="dark"] {
     --rd-page: #121115;
     --rd-panel: #1b1a20;
     --rd-card: #1b1a20;
@@ -1193,7 +1198,7 @@ html.bb-reader-open body { overflow: hidden !important; }
 /* Medieval: a manuscript. Cardo set a little larger, Grenze for headings,
    a pilcrow before each paragraph's time, rubricated ink as a wash under
    the lower half of the line, and ruled lines for the bar's band. */
-.bb-reader[data-bb-skin="medieval"] {
+:is(.bb-reader, .bb-text-reader)[data-bb-skin="medieval"] {
     --rd-r: 3px;
     --rd-r-sm: 3px;
     --rd-r-chip: 3px;
@@ -1257,7 +1262,7 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-stage: #2b2016;
 }
 
-.bb-reader[data-bb-skin="medieval"][data-bb-theme="dark"] {
+:is(.bb-reader, .bb-text-reader)[data-bb-skin="medieval"][data-bb-theme="dark"] {
     --rd-page: #1b140c;
     --rd-panel: #241c12;
     --rd-card: #241c12;
@@ -1301,7 +1306,7 @@ html.bb-reader-open body { overflow: hidden !important; }
 /* Deco: gilt on black or cream. Poiret One for headings, wide-tracked
    capitals, a gold bar under the lower part of the line for ink, and the
    corner ornament on every framed panel. */
-.bb-reader[data-bb-skin="deco"] {
+:is(.bb-reader, .bb-text-reader)[data-bb-skin="deco"] {
     --rd-r: 0px;
     --rd-r-sm: 0px;
     --rd-r-chip: 0px;
@@ -1367,7 +1372,7 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-corner-rule: #d5cdb6;
 }
 
-.bb-reader[data-bb-skin="deco"][data-bb-theme="dark"] {
+:is(.bb-reader, .bb-text-reader)[data-bb-skin="deco"][data-bb-theme="dark"] {
     --rd-page: #0e0d0c;
     --rd-panel: #161513;
     --rd-card: #161513;

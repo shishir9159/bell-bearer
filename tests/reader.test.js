@@ -124,7 +124,7 @@
             document.head.appendChild(link);
         });
         styles = sheet('../content.css', 'bb-reader-test-styles')
-            .then(() => sheet('../content-youtube.css', 'bb-reader-test-styles-youtube'));
+            .then(() => sheet('../content-reader.css', 'bb-reader-test-styles-reader'));
         return styles;
     }
 

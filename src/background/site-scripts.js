@@ -28,7 +28,7 @@
         {
             id: 'youtube',
             sites: { youtube: ['*://*.youtube.com/*', '*://*.youtube-nocookie.com/*', '*://youtu.be/*'] },
-            css: ['content-youtube.css'],
+            css: ['content-reader.css'],
             js: [
                 'src/shared/transcript.js',
                 'src/shared/bookmarks.js',
