@@ -98,6 +98,62 @@
         });
     });
 
+    const ArticleExtract = () => window.BB.ArticleExtract;
+
+    const PARA = 'Paragraph text that goes on for a while, with commas, clauses, and enough words to be read as prose by anyone who looks. ';
+    const prose = (n, tag = 'p') => Array.from({ length: n }, (_, i) => `<${tag}>${i + 1}. ${PARA}${PARA}</${tag}>`).join('');
+
+    function article(head, body) {
+        return new DOMParser().parseFromString(`<!doctype html><html lang="en"><head><base href="${BASE}">${head}</head><body>${body}</body></html>`, 'text/html');
+    }
+
+    suite('text reader — finding the article', () => {
+        test('of a main holding the article and a sidebar, the article is taken, and the page around it is not', () => {
+            const doc = article('<title>Post</title>', `<header><a href="/">Site</a><nav><a href="/a">A</a></nav></header>
+                <main><article><h1>The post</h1>${prose(5)}<div class="share"><a href="#">Share</a></div></article>
+                <div class="sidebar">${prose(1)}</div></main><footer>${prose(1)}</footer>`);
+            const found = ArticleExtract().read(doc);
+            const box = document.createElement('div');
+            box.appendChild(found.body);
+            assertEqual(box.querySelectorAll('p').length, 5);
+            assertEqual(box.textContent.includes('Share'), false, 'the share bar came along');
+            assertEqual(box.querySelector('h2'), null, 'the title was drawn twice, once over the body');
+        });
+
+        test('a page with no landmark at all is scored, and the paragraphs\' container wins with its neighbours', () => {
+            const doc = article('<title>Old page</title>', `<div id="top"><a href="/">Home</a> | <a href="/x">X</a></div>
+                <div id="wrap"><div class="text">${prose(4)}</div><div class="text">${prose(2)}</div><div class="links"><a href="/1">One link</a> <a href="/2">Two links</a></div></div>`);
+            const box = document.createElement('div');
+            box.appendChild(ArticleExtract().read(doc).body);
+            assertEqual(box.querySelectorAll('p').length, 6);
+            assertEqual(box.textContent.includes('One link'), false);
+        });
+
+        test('the title, byline, date and site come from what the page publishes for previews', () => {
+            const doc = article(`<title>Fallback | Example Blog</title><meta property="og:title" content="Real title">
+                <meta property="og:site_name" content="Example Blog"><meta property="og:image" content="/share.png">
+                <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite"},
+                {"@type":"BlogPosting","headline":"From JSON-LD","author":[{"@type":"Person","name":"Ada"},{"name":"Grace"}],"datePublished":"2024-05-01T10:00:00Z"}]}</script>`,
+            `<article>${prose(4)}</article>`);
+            const found = ArticleExtract().read(doc);
+            assertDeepEqual([found.title, found.byline, found.published, found.siteName],
+                ['From JSON-LD', 'Ada, Grace', '2024-05-01T10:00:00Z', 'Example Blog']);
+            assertEqual(found.hero, 'https://example.com/share.png', 'an article with no picture of its own gets the page\'s');
+        });
+
+        test('a title is cut at the site\'s name, and a title\'s own dash is left alone', () => {
+            const trim = ArticleExtract().trimTitle;
+            assertEqual(trim('How caching works | Example Blog', 'Example Blog'), 'How caching works');
+            assertEqual(trim('Example Blog — How caching works', 'Example Blog'), 'How caching works');
+            assertEqual(trim('The long road to here - Part 2', 'Example Blog'), 'The long road to here - Part 2');
+            assertEqual(trim('The long road to here - Part 2', 'Example Blog', { loose: true }), 'The long road to here', 'a <title>\'s tag line');
+        });
+
+        test('a page with nothing to read reads as nothing', () => {
+            assertEqual(ArticleExtract().read(article('<title>x</title>', '<div><a href="/">Home</a></div>')), null);
+        });
+    });
+
     suite('text reader — images, video, code and math', () => {
         test('a lazy image is the one its loader was holding back, at an address that works here', () => {
             const out = cleaned(`<p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/img/a.jpg" alt="A"></p>
