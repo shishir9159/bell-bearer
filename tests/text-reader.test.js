@@ -210,4 +210,149 @@
             assertEqual(out.textContent.replace(/\s+/g, ''), 'Sox=2.');
         });
     });
+
+    // ------------------------------------------------------------ the shell
+
+    const ArticleReader = () => window.BB.ArticleReader;
+
+    /** The reader's sheet, over XHR: the mock has taken fetch. */
+    function loadSheet() {
+        return new Promise((done) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', '../content-reader.css');
+            xhr.onload = () => done(xhr.responseText);
+            xhr.onerror = () => done('');
+            xhr.send();
+        });
+    }
+
+    /** An article as an adapter answers one, its body built from `html`. */
+    function articleOf(html, extra = {}) {
+        return () => {
+            const body = document.createDocumentFragment();
+            const holder = document.createElement('div');
+            holder.innerHTML = html;
+            while (holder.firstChild) body.appendChild(holder.firstChild);
+            return { title: 'A title', byline: 'Ada', published: '2024-05-01T10:00:00Z', siteName: 'Example', url: location.href, body, ...extra };
+        };
+    }
+
+    const readers = [];
+    function makeReader(read, options = {}) {
+        const notes = [];
+        const reader = ArticleReader().createArticleReader({
+            adapter: { read }, getSettings: () => ({ ...window.BB.Settings.DEFAULTS, ...(options.settings || {}) }),
+            copyText: async () => true, notify: (text) => notes.push(text), loadStyles: loadSheet,
+        });
+        readers.push(reader);
+        return { reader, notes };
+    }
+
+    function closeAll() {
+        while (readers.length) readers.pop().close();
+    }
+
+    const styled = (reader) => new Promise((done) => {
+        const wait = () => (reader.element && !reader.element.classList.contains('is-still') ? done() : setTimeout(wait, 10));
+        wait();
+    });
+
+    const LONG = prose(4);
+
+    suite('text reader — the reader over the page', () => {
+        test('it opens over the page and closes leaving the page as it was, twice over', async () => {
+            closeAll();
+            document.documentElement.style.overflow = 'clip';
+            const before = document.body.innerHTML;
+            const { reader } = makeReader(articleOf(LONG));
+            assertEqual(reader.open(), true);
+            await styled(reader);
+            assertEqual(document.documentElement.style.getPropertyValue('overflow'), 'hidden', 'the page scrolled under the reader');
+            assertEqual(document.getElementById(ArticleReader().ROOT_ID), reader.host);
+            assertEqual(reader.host.shadowRoot, null, 'the page can read the reader through an open shadow root');
+            reader.close();
+            reader.close();
+            assertEqual(document.body.innerHTML.trim(), before.trim());
+            assertEqual(document.documentElement.style.overflow, 'clip', 'the page\'s own overflow was not put back');
+            assertEqual(document.documentElement.classList.contains(ArticleReader().OPEN_CLASS), false);
+            document.documentElement.style.overflow = '';
+        });
+
+        test('the page\'s own styles do not reach the article', async () => {
+            closeAll();
+            const style = document.createElement('style');
+            style.textContent = 'p { margin: 77px !important; color: rgb(255, 0, 0) !important; } div { display: none; }';
+            document.head.appendChild(style);
+            try {
+                const { reader } = makeReader(articleOf(LONG));
+                reader.open();
+                await styled(reader);
+                const p = reader.element.querySelector('.tr-body p');
+                assert(getComputedStyle(p).marginLeft !== '77px', 'a page rule set the article\'s margins');
+                assert(getComputedStyle(p).color !== 'rgb(255, 0, 0)', 'a page rule set the article\'s ink');
+                assert(reader.element.getBoundingClientRect().height > 0, 'a page rule hid the reader');
+            } finally {
+                style.remove();
+                closeAll();
+            }
+        });
+
+        test('the head says who, when and how long, and leaves out a summary that is only the lead again', () => {
+            closeAll();
+            const lead = 'Paragraph text that goes on for a while';
+            const { reader } = makeReader(articleOf(LONG, { description: lead }));
+            reader.open();
+            const head = reader.element.querySelector('.tr-head');
+            assertEqual(head.querySelector('.tr-title').textContent, 'A title');
+            const facts = head.querySelector('.tr-byline').textContent;
+            assert(/^Ada · .*2024 · \d+ min read$/.test(facts), facts);
+            assertEqual(head.querySelector('.tr-dek'), null);
+            closeAll();
+        });
+
+        test('a page with little on it says so, and opens all the same when asked; opened by itself it stays shut', () => {
+            closeAll();
+            const { reader } = makeReader(articleOf('<p>Sign in to continue.</p>'));
+            assertEqual(reader.open({ auto: true }), false);
+            assertEqual(reader.isOpen, false);
+            reader.open();
+            const thin = reader.element.querySelector('.tr-thin');
+            assert(thin && /does not look like an article/.test(thin.textContent), 'no word of it');
+            thin.querySelector('.tr-anyway').click();
+            assertEqual(reader.element.querySelector('.tr-body').textContent.trim(), 'Sign in to continue.');
+            closeAll();
+        });
+
+        test('nothing to read is said once, and nothing opens', () => {
+            closeAll();
+            const { reader, notes } = makeReader(() => null);
+            assertEqual(reader.open(), false);
+            assertEqual(notes.length, 1);
+            assertEqual(reader.open({ auto: true }), false);
+            assertEqual(notes.length, 1, 'opening by itself announced it');
+        });
+
+        test('escape leaves a field first, then closes; the page hears no key pressed in the reader', () => {
+            closeAll();
+            const heard = [];
+            const listen = (event) => heard.push(event.key);
+            document.addEventListener('keydown', listen);
+            try {
+                const { reader } = makeReader(articleOf(LONG));
+                reader.open();
+                const field = document.createElement('input');
+                reader.element.querySelector('.tr-body').appendChild(field);
+                field.focus();
+                field.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true, composed: true }));
+                assertDeepEqual(heard, [], 'the page\'s j went off under the reader');
+                field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+                assertEqual(reader.isOpen, true, 'escape in a field threw the article away');
+                reader.element.querySelector('.tr-scroll').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+                assertEqual(reader.isOpen, false);
+            } finally {
+                document.removeEventListener('keydown', listen);
+                closeAll();
+            }
+        });
+    });
 })();
