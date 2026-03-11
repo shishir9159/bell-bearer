@@ -1413,3 +1413,233 @@ html.bb-reader-open body { overflow: hidden !important; }
     --rd-corner-gold: #e0c274;
     --rd-corner-rule: #332f28;
 }
+
+/* =====================================================================
+   The text reader (src/content/article-reader.js): any page's article in
+   one column over the page, with the palette above. It is drawn in a
+   shadow root that adopts this sheet, so these rules reach nothing of the
+   page's and none of the page's reach them. It holds the page still with
+   inline styles of its own: no rule here is for the page.
+   ===================================================================== */
+
+.bb-text-reader {
+    --tr-page: var(--rd-page);
+    --tr-text: var(--rd-text);
+    --tr-muted: var(--rd-muted);
+    --tr-link: var(--rd-knob);
+    --tr-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+
+    position: absolute;
+    inset: 0;
+    isolation: isolate;
+    overflow: hidden;
+    background: var(--tr-page);
+    color: var(--tr-text);
+    font-family: var(--rd-font);
+    font-size: 14px;
+    line-height: 1.45;
+    text-align: left;
+    -webkit-font-smoothing: antialiased;
+    opacity: 1;
+    transition: opacity .18s ease;
+}
+
+/* The default skin's night is YouTube's near-black, which is what a video
+   wants behind it. Prose wants Dark Reader's softer pair: a grey that is not
+   black, and an ink that is not white, so a long page does not glare. */
+.bb-text-reader[data-bb-skin="default"][data-bb-theme="dark"] {
+    --rd-page: #181a1b;
+    --rd-panel: #1e2021;
+    --rd-card: #222526;
+    --rd-text: #e3e0db;
+    --rd-muted: #a9a49b;
+    --rd-faint: #7d7a74;
+    --rd-divider: rgba(232, 230, 227, .12);
+}
+
+.bb-text-reader.is-still { opacity: 0; transition: none; }
+
+.bb-text-reader *,
+.bb-text-reader *::before,
+.bb-text-reader *::after { box-sizing: border-box; }
+
+.bb-text-reader [hidden] { display: none !important; }
+
+.bb-text-reader button {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+.bb-text-reader button:focus-visible,
+.bb-text-reader a:focus-visible {
+    outline: 2px solid var(--rd-knob);
+    outline-offset: 2px;
+}
+
+.bb-text-reader .tr-tex {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--rd-tex);
+    background-size: var(--rd-tex-size);
+    mix-blend-mode: var(--rd-tex-blend);
+    opacity: var(--rd-tex-opacity);
+}
+
+/* ---- The bar: quiet, a name and the reader's few tools */
+
+.tr-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 48px;
+    padding: 0 10px 0 18px;
+    background: color-mix(in oklab, var(--tr-page) 88%, transparent);
+    backdrop-filter: blur(8px);
+}
+
+.tr-where {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--rd-font-tab);
+    font-size: 12.5px;
+    letter-spacing: var(--rd-tab-track);
+    text-transform: var(--rd-tab-case);
+    color: var(--rd-faint);
+}
+
+.tr-flex { flex: 1 1 auto; }
+
+.tr-tools { display: flex; align-items: center; gap: 2px; }
+
+.bb-text-reader .tr-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 7px;
+    border-radius: var(--rd-r-sm);
+    font-family: var(--rd-font-tab);
+    font-size: 12.5px;
+    color: var(--tr-muted);
+}
+
+.bb-text-reader .tr-btn:hover { background: var(--rd-chip); color: var(--tr-text); }
+.bb-text-reader .tr-btn[aria-pressed="true"] { background: var(--rd-chip); color: var(--rd-accent-ink); }
+
+/* ---- The column */
+
+.tr-scroll {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    outline: none;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rd-chip-2) transparent;
+}
+
+.tr-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, var(--tr-measure, 704px)) minmax(0, 1fr);
+    column-gap: 40px;
+    min-height: 100%;
+    padding: 88px 24px 120px;
+}
+
+.tr-article { grid-column: 2; min-width: 0; }
+
+.tr-head { margin-bottom: 2.2em; font-size: var(--tr-size, 18px); }
+
+.tr-kicker {
+    margin: 0 0 .7em;
+    font-family: var(--rd-font-tab);
+    font-size: .72em;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--rd-accent-ink);
+}
+
+.tr-title {
+    margin: 0;
+    font-family: var(--tr-font-head, var(--rd-font-head));
+    font-weight: var(--rd-head-weight);
+    letter-spacing: var(--rd-head-track);
+    font-size: 2.1em;
+    line-height: 1.16;
+    text-wrap: balance;
+    color: var(--tr-text);
+}
+
+.bb-text-reader[data-bb-skin="riso"] .tr-title,
+.bb-text-reader[data-bb-skin="deco"] .tr-title { text-transform: var(--rd-head-case); font-size: 1.8em; }
+
+.tr-dek {
+    margin: .6em 0 0;
+    font-size: 1.12em;
+    line-height: 1.45;
+    color: var(--tr-muted);
+}
+
+.tr-byline {
+    margin: 1em 0 0;
+    font-family: var(--rd-font-tab);
+    font-size: .78em;
+    color: var(--rd-faint);
+}
+
+.tr-dot { margin: 0 .2em; }
+
+.tr-hero { margin: 1.6em 0 0; }
+.tr-hero img { display: block; width: 100%; height: auto; border-radius: var(--rd-r-sm); }
+
+.tr-foot {
+    margin-top: 3em;
+    padding-top: 1.2em;
+    border-top: 1px solid var(--rd-divider);
+}
+
+.bb-text-reader .tr-source {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--rd-font-tab);
+    font-size: 13px;
+    color: var(--rd-faint);
+    text-decoration: none;
+}
+
+.bb-text-reader .tr-source:hover { color: var(--tr-text); }
+
+.tr-thin { padding: 1em 0; color: var(--tr-muted); font-size: var(--tr-size, 18px); }
+
+.bb-text-reader .tr-anyway {
+    display: inline-flex;
+    padding: 6px 14px;
+    border-radius: var(--rd-r-chip);
+    background: var(--rd-chip);
+    color: var(--tr-text);
+    font-size: 14px;
+}
+
+@media (max-width: 640px) {
+    .tr-page { padding: 72px 18px 96px; column-gap: 0; grid-template-columns: 0 minmax(0, 1fr) 0; }
+    .tr-title { font-size: 1.7em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .bb-text-reader { transition: none; }
+}

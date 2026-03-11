@@ -67,6 +67,8 @@
 
     const loadSheet = () => fetch(chrome.runtime.getURL(SHEET)).then((answer) => (answer.ok ? answer.text() : ''));
 
+    /** Fewer words than this is not an article: a front page, a login, a feed. */
+    const MIN_WORDS = 140;
     /** Words a minute, and characters a minute for scripts written without spaces. */
     const WPM = 230;
     const CPM = 500;
@@ -163,8 +165,12 @@
 
         // ------------------------------------------------ open and close
 
-        /** Open on the page's article. `auto` is the reader opening itself, which says nothing where there is nothing to read. */
-        function open({ auto = false } = {}) {
+        /**
+         * Open on the page's article. `force` opens a page that does not
+         * look like an article, as "Open anyway" asks; `auto` is the reader
+         * opening itself on a listed site, which on such a page does nothing.
+         */
+        function open({ force = false, auto = false } = {}) {
             if (session) return true;
             let article = null;
             try {
@@ -177,6 +183,7 @@
                 return false;
             }
             const counted = measure(article.body.textContent);
+            if (counted.words < MIN_WORDS && !force && auto) return false;
 
             const host = document.createElement('bb-text-reader');
             host.id = ROOT_ID;
@@ -208,7 +215,7 @@
             dress(mine, { theme: Theme.pageTheme(), skin: 'default' });
             document.body.appendChild(host);
             mine.release = holdPage();
-            show(mine, article, counted);
+            show(mine, article, counted, { force });
             // Shown once its styles are in: unstyled for a frame, it would be
             // the article as the browser's defaults set it, flashing.
             sheetOf(loadStyles).then((text) => {
@@ -252,7 +259,7 @@
         // ----------------------------------------------------- drawing
 
         /** Draw `article` in the open reader: the head, the body, the foot. */
-        function show(mine, article, counted = measure(article.body.textContent)) {
+        function show(mine, article, counted = measure(article.body.textContent), { force = false } = {}) {
             mine.article = article;
             mine.key = article.key || keyOf(article.url);
             const esc = Dom.escapeHtml;
@@ -265,7 +272,7 @@
             else column.removeAttribute('dir');
 
             const when = dateLabel(article.published, article.lang);
-            const facts = [article.byline, when, `${counted.minutes} min read`].filter(Boolean).map(esc).join('<span class="tr-dot">·</span>');
+            const facts = [article.byline, when, `${counted.minutes} min read`].filter(Boolean).map(esc).join(' <span class="tr-dot">·</span> ');
             const dek = article.description && !squash(article.body.textContent.slice(0, 600)).includes(squash(article.description).slice(0, 80))
                 ? `<p class="tr-dek">${esc(article.description)}</p>` : '';
             element.querySelector('.tr-head').innerHTML = `
@@ -277,7 +284,13 @@
 
             const body = mine.body;
             body.textContent = '';
-            body.appendChild(article.body);
+            if (counted.words < MIN_WORDS && !force) {
+                body.innerHTML = `<div class="tr-thin"><p>This page does not look like an article — ${counted.words} words to read.</p>
+                    <button type="button" class="tr-anyway">Open anyway</button></div>`;
+                body.querySelector('.tr-anyway').addEventListener('click', () => show(mine, article, counted, { force: true }));
+            } else {
+                body.appendChild(article.body);
+            }
 
             const host = (() => { try { return new URL(article.url).hostname.replace(/^www\./, ''); } catch (_) { return ''; } })();
             element.querySelector('.tr-foot').innerHTML = host
@@ -359,7 +372,7 @@
         };
     }
 
-    const ArticleReader = { createArticleReader, measure, keyOf, dateLabel, ROOT_ID, OPEN_CLASS, SHEET };
+    const ArticleReader = { createArticleReader, measure, keyOf, dateLabel, ROOT_ID, OPEN_CLASS, MIN_WORDS, SHEET };
 
     root.BB = root.BB || {};
     root.BB.ArticleReader = ArticleReader;
