@@ -137,6 +137,25 @@
     }
 
     /**
+     * Open the text reader in `tab`, any page but YouTube's: the worker
+     * brings it into the tab first if it is not there yet
+     * (src/background/reader-loader.js). Answers `{ ok, reason }`.
+     */
+    async function openTextReader(tab) {
+        if (!tab || tab.id == null) return null;
+        return new Promise((done) => {
+            try {
+                chrome.runtime.sendMessage({ action: 'openTextReader', tabId: tab.id, url: tab.url, op: 'open' }, (answer) => {
+                    void chrome.runtime.lastError;
+                    done(answer || null);
+                });
+            } catch (_) {
+                done(null);
+            }
+        });
+    }
+
+    /**
      * The tab's video download: what it would save — `{ ok, busy, percent,
      * label }` — or null when there is no content script to ask. No injected
      * fallback, for the reader's reason: the download is the content
@@ -171,7 +190,7 @@
         return ask(tab.id, { action: 'rosterStart', kind, tabId: tab.id });
     }
 
-    const TabActions = { activeTab, findVideoTab, getRate, stepRate, seek, openReader, downloadInfo, startDownload, cancelDownload, rosterStart };
+    const TabActions = { activeTab, findVideoTab, getRate, stepRate, seek, openReader, openTextReader, downloadInfo, startDownload, cancelDownload, rosterStart };
 
     root.BB = root.BB || {};
     root.BB.TabActions = TabActions;

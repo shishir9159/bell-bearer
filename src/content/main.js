@@ -163,7 +163,8 @@
         startRecording: () => recorder && recorder.startRecording(),
         stopRecording: () => recorder && recorder.stopRecording(),
         toggleSegment: () => recorder && recorder.toggleSegment(),
-        toggleReader: () => reader && reader.toggle(),
+        toggleReader: () => toggleReader(),
+        canRead: () => (site === 'youtube' ? !!getVideo() : /^https?:$/.test(location.protocol)),
         onShorts: () => site === 'youtube' && Site.isShortsPath(),
         shortsSkip: (direction) => skipShort(direction),
         // Resolved on each press, like the pouch: netflixUi is built further down.
@@ -341,6 +342,16 @@
             copyText: (text) => markdown.copy(text),
         });
         return textReader;
+    }
+
+    /** The key: the video reader on YouTube, the text reader anywhere else — asked of the worker while it is not here. */
+    function toggleReader() {
+        if (reader) return reader.toggle();
+        if (site === 'youtube') return false;
+        const text = getTextReader();
+        if (text) return text.toggle();
+        askWorker({ action: 'openTextReader' });
+        return true;
     }
 
     /**

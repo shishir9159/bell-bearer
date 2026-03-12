@@ -184,11 +184,11 @@
             document.body.dataset.bbSite = this.site;
 
             document.getElementById('youtubePanel').hidden = this.site !== 'youtube';
-            // The action row under the header: the reader on YouTube, the
-            // party where it plays, the download where a video can be saved.
-            document.getElementById('readerBar').hidden = this.site !== 'youtube';
+            // The action row under the header: the reader on any web page,
+            // the party where it plays, the download where a video can be saved.
+            document.getElementById('readerBar').hidden = !this.isWebPage;
             document.getElementById('partyBar').hidden = this.site !== 'youtube' && this.site !== 'netflix';
-            if (this.site === 'youtube') this.setupReaderBar();
+            if (this.isWebPage) this.setupReaderBar();
             if (this.site === 'youtube' || this.site === 'vimeo') this.setupDownloadBar();
             this.resumeParty();
             const chessSite = ChessSites.get(this.site);
@@ -248,12 +248,18 @@
         // ----------------------------------------------------- reader bar
 
         /**
-         * The reader needs a video to read, so the button is only live on a
-         * watch page — and its tooltip says why when it is not, rather than
-         * it sitting there greyed out with no explanation.
+         * On YouTube the reader needs a video to read, so the button is only
+         * live on a watch page — and its tooltip says why when it is not,
+         * rather than it sitting there greyed out with no explanation. Any
+         * other page is read as text.
          */
         async setupReaderBar() {
             const button = document.getElementById('openReaderBtn');
+            if (this.site !== 'youtube') {
+                button.disabled = false;
+                button.title = 'Read this page in one quiet column (Ctrl+Alt+R)';
+                return;
+            }
             const tab = await TabActions.activeTab();
             let onVideo = false;
             try {
@@ -265,6 +271,13 @@
 
         async openReader() {
             const tab = await TabActions.activeTab();
+            if (this.site !== 'youtube') {
+                const answer = await TabActions.openTextReader(tab);
+                if (answer && answer.ok) window.close();
+                else if (answer && answer.reason === 'unscriptable') Ui.toast('The reader cannot open on this page', 'error');
+                else Ui.toast('Nothing to read on this page', 'info');
+                return;
+            }
             if (await TabActions.openReader(tab)) {
                 window.close();
                 return;

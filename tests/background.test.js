@@ -86,6 +86,8 @@ suite('background: sowon focus reporting', () => {
 
 suite('background: copy-as-Markdown context menus', () => {
     const someTab = { id: 7, windowId: 100, url: 'https://example.com/a', title: 'A' };
+    /** The Markdown items alone: "Open in reader" is there whatever the switch says. */
+    const markdownIds = () => M.menuIds().filter((id) => id !== 'bb-open-reader');
 
     test('creates link and page items on install (enabled by default)', async () => {
         M.reset({ localStore: {} });
@@ -106,29 +108,33 @@ suite('background: copy-as-Markdown context menus', () => {
         assertDeepEqual(link.contexts, ['link'], 'must only appear when right-clicking a link');
     });
 
-    test('creates no menus when the setting is turned off', async () => {
+    test('creates no Markdown menus when the setting is turned off, and still offers the reader', async () => {
         M.reset({ localStore: { markdownContextMenu: false } });
         M.fire.installed();
         await M.settle();
-        assertEqual(M.menuIds().length, 0);
+        assertEqual(markdownIds().length, 0);
+        const reader = M.state.menus.find((m) => m.id === 'bb-open-reader');
+        assert(reader, 'the reader went with the Markdown switch');
+        assertDeepEqual(reader.contexts, ['page']);
     });
 
     test('menus are rebuilt when the setting is toggled', async () => {
         M.reset({ localStore: { markdownContextMenu: false } });
         M.fire.installed();
         await M.settle();
-        assertEqual(M.menuIds().length, 0);
+        assertEqual(markdownIds().length, 0);
 
         chrome.storage.local.set({ markdownContextMenu: true });
         await M.settle();
-        assertEqual(M.menuIds().length, 2, 'enabling should recreate the items');
+        assertEqual(markdownIds().length, 2, 'enabling should recreate the items');
+        assertEqual(M.menuIds().filter((id) => id === 'bb-open-reader').length, 1, 'the reader was offered twice');
     });
 
     test('menus are recreated on browser startup', async () => {
         M.reset({ localStore: {} });
         M.fire.startup();
         await M.settle();
-        assertEqual(M.menuIds().length, 2);
+        assertEqual(markdownIds().length, 2);
     });
 
     test('clicking the link item asks the page to convert that link', async () => {

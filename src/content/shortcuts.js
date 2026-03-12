@@ -96,7 +96,9 @@
             ['speed-up', { enabled: hasVideo, run: () => actions.faster() }],
             ['speed-down', { enabled: hasVideo, run: () => actions.slower() }],
             ['speed-reset', { enabled: hasVideo, run: () => actions.resetSpeed() }],
-            ['reader-mode', { noRepeat: true, enabled: canRecord, run: () => actions.toggleReader && actions.toggleReader() }],
+            // The video reader on YouTube, which needs a video; the text
+            // reader on any other page, which needs only a page.
+            ['reader-mode', { noRepeat: true, enabled: () => (actions.canRead ? actions.canRead() : canRecord()), run: () => actions.toggleReader && actions.toggleReader() }],
             ['shorts-back', { enabled: onShorts, run: () => actions.shortsSkip(-1) }],
             ['shorts-forward', { enabled: onShorts, run: () => actions.shortsSkip(1) }],
             ['netflix-back', { enabled: onNetflix, run: () => actions.netflixStep(-1) }],

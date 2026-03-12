@@ -5420,15 +5420,15 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     check('a shortcut for a feature that is off is not listed at all', () => {
         const ids = (settings) => Keybindings.list(null, 'general', settings).map((b) => b.id);
-        eq(ids({ skimMode: false, linkHints: false }), ['copy-markdown-link', 'copy-page-link'],
+        eq(ids({ skimMode: false, linkHints: false }), ['copy-markdown-link', 'copy-page-link', 'reader-mode'],
             'the bare-Shift keys are nobody else\'s until Settings asks for them');
         eq(ids({ skimMode: true, linkHints: false }),
-            ['skim-find', 'skim-history', 'skim-actions', 'copy-markdown-link', 'copy-page-link']);
+            ['skim-find', 'skim-history', 'skim-actions', 'copy-markdown-link', 'copy-page-link', 'reader-mode']);
         eq(ids({ skimMode: true, linkHints: true }).includes('link-hints'), true);
         eq(ids({ pouchShortcut: true }).includes('open-pouch'), true);
         eq(ids({ pouchShortcut: false }).includes('open-pouch'), false,
             'Shift+P stays a capital P until the pouch shortcut is asked for');
-        eq(ids(null).length, 7, 'with no settings to check against, the table is the whole table');
+        eq(ids(null).length, 8, 'with no settings to check against, the table is the whole table');
     });
 
     check('every feature a binding needs is a setting that exists', () => {

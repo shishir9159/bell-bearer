@@ -1,5 +1,5 @@
 /**
- * The "Copy as Markdown" context menus.
+ * The context menus: "Copy as Markdown", and "Open in reader".
  *
  * Markdown conversion is an EXPLICIT action: it happens only when the user
  * right-clicks a link (or the page) and picks the item. An earlier version
@@ -9,6 +9,9 @@
  *
  * Copying from the browser's address bar cannot be hooked: the omnibox is
  * browser chrome, not page content, and no extension API exposes it.
+ *
+ * "Open in reader" is not behind the Markdown switch: reading a page is no
+ * Markdown matter, and the item does nothing until it is picked.
  */
 (function () {
     'use strict';
@@ -17,6 +20,7 @@
 
     const MENU_LINK = 'bb-copy-link-markdown';
     const MENU_PAGE = 'bb-copy-page-markdown';
+    const MENU_READER = 'bb-open-reader';
 
     // Firefox for Android has no contextMenus API at all.
     const available = !!(chrome.contextMenus && chrome.contextMenus.create);
@@ -31,6 +35,13 @@
 
         chrome.contextMenus.removeAll(() => {
             void chrome.runtime.lastError;
+            chrome.contextMenus.create({
+                id: MENU_READER,
+                title: 'Open in reader',
+                contexts: ['page'],
+                documentUrlPatterns: ['http://*/*', 'https://*/*'],
+            }, () => { void chrome.runtime.lastError; });
+
             Settings.get(['markdownContextMenu']).then((settings) => {
                 // Enabled unless explicitly turned off.
                 if (settings.markdownContextMenu === false) return;
@@ -67,6 +78,10 @@
                 });
             } else if (info.menuItemId === MENU_PAGE) {
                 tellTab(tab.id, { action: 'copyMarkdownLink' });
+            } else if (info.menuItemId === MENU_READER) {
+                // The video reader on YouTube, the text reader anywhere else.
+                const { ReaderLoader } = globalThis.BB;
+                if (ReaderLoader && ReaderLoader.loader) ReaderLoader.loader.open(tab.id, tab.url, { op: 'open' });
             }
         });
     }

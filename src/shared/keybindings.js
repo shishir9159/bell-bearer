@@ -51,6 +51,10 @@
         // is never claimed, so a page with a `y` of its own — GitHub's,
         // for a file's permalink — keeps it.
         { id: 'copy-page-link', scope: 'general', kind: 'double', label: 'Copy this page as a Markdown link (double tap)', combo: { code: 'KeyY', key: 'y' } },
+        // Ctrl+Alt, the cluster chess and LeetCode already use: the bare-Shift
+        // letters belong to Skim, and Ctrl+Shift+R is the browser's reload.
+        // General: the video reader on YouTube, the text reader on any other page.
+        { id: 'reader-mode', scope: 'general', kind: 'key', label: 'Open or close the reader', combo: { ctrl: true, alt: true, code: 'KeyR', key: 'r' } },
 
         { id: 'record-checkpoint', scope: 'youtube', kind: 'key', label: 'Create checkpoint (hold and release)', combo: { ctrl: true, code: 'KeyB', key: 'b' } },
         { id: 'segment-toggle', scope: 'youtube', kind: 'key', label: 'Mark a segment — press to start, again to end', combo: { ctrl: true, shift: true, code: 'KeyS', key: 'S' } },
@@ -60,9 +64,6 @@
         { id: 'speed-up', scope: 'youtube', kind: 'key', label: 'Increase playback speed', combo: { shift: true, code: 'Period', key: '>', char: true } },
         { id: 'speed-down', scope: 'youtube', kind: 'key', label: 'Decrease playback speed', combo: { shift: true, code: 'Comma', key: '<', char: true } },
         { id: 'speed-reset', scope: 'youtube', kind: 'key', label: 'Reset playback speed to 1x', combo: { key: '+', char: true } },
-        // Ctrl+Alt, the cluster chess and LeetCode already use: the bare-Shift
-        // letters belong to Skim, and Ctrl+Shift+R is the browser's reload.
-        { id: 'reader-mode', scope: 'youtube', kind: 'key', label: 'Open or close the distraction-free reader', combo: { ctrl: true, alt: true, code: 'KeyR', key: 'r' } },
         // Bare arrows, which is a large claim — but they are only ever
         // claimed on a Shorts page with the setting on. Everywhere else the
         // dispatcher matches them, sees the feature is not running here, and
