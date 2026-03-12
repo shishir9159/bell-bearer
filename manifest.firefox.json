@@ -129,6 +129,7 @@
       "src/background/prompt-queue.js",
       "src/background/ci-watch.js",
       "src/background/downloads.js",
+      "src/background/reader-loader.js",
       "src/background/party-loader.js",
       "src/background/party.js"
     ]
@@ -142,18 +143,12 @@
     {
       "resources": [
         "icons/*.png",
-        "fonts/*.woff2"
+        "fonts/*.woff2",
+        "textures/*.png",
+        "content-reader.css"
       ],
       "matches": [
         "<all_urls>"
-      ]
-    },
-    {
-      "resources": [
-        "textures/*.png"
-      ],
-      "matches": [
-        "*://*.youtube.com/*"
       ]
     }
   ]

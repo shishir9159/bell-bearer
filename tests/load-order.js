@@ -128,6 +128,13 @@ function lists() {
     }
     for (const [site, files] of Object.entries(Loader.PAGE_FILES)) out[`PartyLoader.PAGE_FILES.${site}`] = [...files];
 
+    // The text reader lands on a page's core list too, or brings the core with it.
+    const Reader = require('../src/background/reader-loader.js');
+    const generic = manifest.content_scripts.find((entry) => entry.matches.includes('<all_urls>'));
+    for (const [site, files] of Object.entries(Reader.SITE_FILES)) {
+        out[`core list, then ReaderLoader.BASE_FILES and SITE_FILES.${site}`] = [...generic.js, ...Reader.BASE_FILES, ...files];
+    }
+
     for (const page of fs.readdirSync(__dirname).filter((name) => name.endsWith('.html'))) {
         out[`tests/${page}`] = scriptsIn(read(`tests/${page}`), 'tests/');
     }

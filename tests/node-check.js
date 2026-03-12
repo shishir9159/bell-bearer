@@ -10482,6 +10482,77 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(code, 'signed-out');
     });
 
+    // --------------------------------------------------- the text reader
+
+    section('reader loader — the text reader is brought in when it is asked for');
+    const ReaderLoader = require('../src/background/reader-loader.js');
+
+    /** The worker's API, as far as the loader uses it, with the tab answering as told. */
+    function readerApi({ core = true, reader = false, fail = false, answer = { ok: true } } = {}) {
+        const calls = [];
+        const api = {
+            runtime: { getManifest: () => JSON.parse(readRepo('manifest.json')), lastError: null },
+            scripting: {
+                executeScript: async (options) => {
+                    calls.push(options.files ? ['files', ...options.files] : ['probe']);
+                    if (fail) throw new Error('Cannot access contents of the page');
+                    return options.func ? [{ result: { core, reader } }] : [{}];
+                },
+            },
+            tabs: {
+                sendMessage: (tabId, message, done) => {
+                    calls.push(['tell', tabId, message.action, message.op || '']);
+                    done(answer);
+                },
+            },
+        };
+        return { api, calls };
+    }
+
+    checkAsync('a page with the core gets the reader\'s files, then is told to open it', async () => {
+        const { api, calls } = readerApi();
+        eq(await ReaderLoader.createLoader(api).open(3, 'https://example.com/post', { op: 'open' }), { ok: true, reason: '' });
+        eq(calls, [['probe'], ['files', ...ReaderLoader.BASE_FILES, ...ReaderLoader.SITE_FILES.other], ['tell', 3, 'textReader', 'open']]);
+    });
+    checkAsync('a page that has the reader is only told; one whose scripts died with a reload gets the core first', async () => {
+        const has = readerApi({ reader: true });
+        await ReaderLoader.createLoader(has.api).open(3, 'https://example.com/post');
+        eq(has.calls, [['probe'], ['tell', 3, 'textReader', 'toggle']]);
+
+        const stale = readerApi({ core: false });
+        await ReaderLoader.createLoader(stale.api).open(3, 'https://example.com/post');
+        const generic = JSON.parse(readRepo('manifest.json')).content_scripts[0].js;
+        eq(stale.calls[1], ['files', ...generic], 'the reader would stand on a core that is not there');
+        eq(generic[generic.length - 1], 'src/content/main.js', 'nothing would answer the tell');
+        eq(stale.calls.length, 4);
+    });
+    checkAsync('youtube is the video reader\'s, and a page nothing may run on says so', async () => {
+        const tube = readerApi();
+        eq(await ReaderLoader.createLoader(tube.api).open(3, 'https://www.youtube.com/watch?v=x'), { ok: true, reason: 'youtube' });
+        eq(tube.calls, [['tell', 3, 'openReader', '']]);
+
+        const store = readerApi({ fail: true });
+        eq(await ReaderLoader.createLoader(store.api).open(3, 'https://chromewebstore.google.com/detail/x'), { ok: false, reason: 'unscriptable' });
+        const local = readerApi();
+        eq(await ReaderLoader.createLoader(local.api).open(3, 'chrome://extensions/'), { ok: false, reason: 'unscriptable' });
+        eq(local.calls, [], 'a chrome:// page was probed');
+    });
+    check('the reader is in no list every page loads, and the worker carries the loader', () => {
+        for (const name of ['manifest.json', 'manifest.firefox.json']) {
+            const manifest = JSON.parse(readRepo(name));
+            const listed = manifest.content_scripts.flatMap((one) => one.js || []);
+            eq(listed.filter((file) => ReaderLoader.BASE_FILES.includes(file)), [], name);
+            const shared = manifest.web_accessible_resources.find((one) => one.matches.includes('<all_urls>')).resources;
+            assert(shared.includes('content-reader.css') && shared.includes('textures/*.png'), `${name}: the reader's shadow root cannot have its sheet or its paper`);
+        }
+        const worker = [.../importScripts\(([\s\S]*?)\);/.exec(readRepo('background.js'))[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+        assert(worker.indexOf('src/background/reader-loader.js') > worker.indexOf('src/background/router.js'), 'it answers through the router');
+        assert(JSON.parse(readRepo('manifest.firefox.json')).background.scripts.includes('src/background/reader-loader.js'), 'not in Firefox\'s worker');
+        for (const file of [...ReaderLoader.BASE_FILES, ...Object.values(ReaderLoader.SITE_FILES).flat()]) {
+            assert(require('fs').existsSync(`${__dirname}/../${file}`), `${file} is missing`);
+        }
+    });
+
     // ---------------------------------------------------- party loader
 
     section('party loader — nothing loads until a party starts');

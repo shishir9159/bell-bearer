@@ -236,6 +236,16 @@
                 sendResponse({ ok: !!reader && reader.open() });
                 break;
 
+            // The worker, having brought the text reader into this page or
+            // found it here already: the key, the popup or the menu asked.
+            case 'textReader': {
+                const text = getTextReader();
+                if (text && message.op === 'open') text.open();
+                else if (text) text.toggle();
+                sendResponse({ ok: !!text, open: !!(text && text.isOpen) });
+                break;
+            }
+
             case 'copyMarkdownLink':
                 copyPageLink();
                 sendResponse({ ok: true });
@@ -312,6 +322,26 @@
         options: () => ({ ask: settings.downloadAskWhere === true, folder: settings.downloadFolder || '' }),
         send: askWorker,
     }) : { ended: () => {} };
+
+    /**
+     * The text reader, on any page but YouTube's, built the first time it is
+     * asked for out of what is loaded. It is in no page's list but
+     * Wikipedia's: everywhere else the worker brings it in first
+     * (src/background/reader-loader.js), and only then asks for it here.
+     */
+    let textReader = null;
+
+    function getTextReader() {
+        if (textReader) return textReader;
+        const { ArticleReader, ArticleExtract } = BB;
+        const adapter = ArticleExtract && ArticleExtract.adapter;
+        if (!ArticleReader || !adapter) return null;
+        textReader = ArticleReader.createArticleReader({
+            adapter, notify, getSettings: () => settings,
+            copyText: (text) => markdown.copy(text),
+        });
+        return textReader;
+    }
 
     /**
      * Whichever site's pouch surface this page has, or null for the rest. On

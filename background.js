@@ -37,6 +37,7 @@ importScripts(
     'src/background/prompt-queue.js',
     'src/background/ci-watch.js',
     'src/background/downloads.js',
+    'src/background/reader-loader.js',
     'src/background/party-loader.js',
     'src/background/party.js',
 );

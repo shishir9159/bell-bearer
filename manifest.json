@@ -110,18 +110,12 @@
     {
       "resources": [
         "icons/*.png",
-        "fonts/*.woff2"
+        "fonts/*.woff2",
+        "textures/*.png",
+        "content-reader.css"
       ],
       "matches": [
         "<all_urls>"
-      ]
-    },
-    {
-      "resources": [
-        "textures/*.png"
-      ],
-      "matches": [
-        "*://*.youtube.com/*"
       ]
     }
   ]
