@@ -261,6 +261,21 @@
         // starts under the header instead, so search stays in reach.
         readerHideChrome: true,
 
+        // The text reader (src/content/article-reader.js), on any page but
+        // YouTube's, set in Settings › Reader. Its type is the three above,
+        // shared with the YouTube reader; these are its own.
+        //
+        // Day or night: as the page underneath is, or always the one.
+        readerTheme: 'page', // 'page' | 'light' | 'dark'
+        // Dark Reader's sepia: how far, in percent (0–60), the paper and the
+        // ink are tinted toward a warm pair.
+        readerWarmth: 0,
+        // The skin's own face, or a plain serif or sans — ArticleReader.FONTS.
+        readerFont: 'skin', // 'skin' | 'serif' | 'sans'
+        // At night, photographs a little dimmer, and formulas and diagrams
+        // turned light on dark where the page marks them safe to turn.
+        readerDimImages: true,
+
         // YouTube Shorts has no way to skip within a short — ↑ and ↓ change
         // short, and nothing seeks. On, ← and → skip back and forward by
         // shortsSeekSeconds (1–30) while a Shorts page is open, and are left

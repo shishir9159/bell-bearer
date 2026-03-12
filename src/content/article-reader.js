@@ -73,6 +73,34 @@
     const WPM = 230;
     const CPM = 500;
 
+    /**
+     * The typography settings, each clamped to what its control offers, as
+     * the YouTube reader clamps the same three. The size is the setting
+     * plus two — prose wants to be larger than a transcript set beside a
+     * video — and the line length is in ems of 16px, so a larger size puts
+     * fewer words on a line rather than widening the column off the screen.
+     */
+    const TYPE = Object.freeze({
+        readerFontSize: Object.freeze({ min: 12, max: 24 }),
+        readerLineHeight: Object.freeze({ min: 1.2, max: 2 }),
+        readerLineWidth: Object.freeze({ min: 30, max: 60 }),
+    });
+
+    function typeOf(settings) {
+        const value = (key) => {
+            const { min, max } = TYPE[key];
+            const number = Number(settings && settings[key]);
+            return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : Settings.DEFAULTS[key];
+        };
+        return { size: value('readerFontSize') + 2, lead: value('readerLineHeight'), measure: value('readerLineWidth') * 16 };
+    }
+
+    /** The faces Settings › Reader offers besides the skin's own. */
+    const FONTS = Object.freeze({
+        serif: "Charter, 'Bitstream Charter', 'Iowan Old Style', 'Source Serif Pro', Georgia, Cambria, serif",
+        sans: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+    });
+
     const ICON = Object.freeze({
         close: Icons.svg('x', { size: 18 }),
         out: Icons.svg('arrow-square-out', { size: 14 }),
@@ -212,7 +240,8 @@
             };
             const mine = session;
 
-            dress(mine, { theme: Theme.pageTheme(), skin: 'default' });
+            dress(mine, { theme: themeOf(), skin: 'default' });
+            applyType(mine);
             document.body.appendChild(host);
             mine.release = holdPage();
             show(mine, article, counted, { force });
@@ -236,10 +265,17 @@
             window.addEventListener('popstate', onPopState);
 
             Theme.appearance().then((look) => {
-                if (mine.alive) dress(mine, look);
+                if (!mine.alive) return;
+                dress(mine, { ...look, theme: themeOf() });
             }).catch(() => {});
             mine.scroll.focus({ preventScroll: true });
             return true;
+        }
+
+        /** The theme Settings › Reader asks for: the page's own, or day or night whatever the page is. */
+        function themeOf() {
+            const chosen = settings().readerTheme;
+            return chosen === 'light' || chosen === 'dark' ? chosen : Theme.pageTheme();
         }
 
         function dress(mine, look) {
@@ -254,6 +290,21 @@
             } catch (_) {
                 // The extension reloaded under this page: plain paper it is.
             }
+        }
+
+        function applyType(mine) {
+            const now = settings();
+            const type = typeOf(now);
+            const style = mine.element.style;
+            style.setProperty('--tr-size', `${type.size}px`);
+            style.setProperty('--tr-lead', String(type.lead));
+            style.setProperty('--tr-measure', `${type.measure}px`);
+            const face = FONTS[now.readerFont];
+            if (face) style.setProperty('--tr-font', face);
+            else style.removeProperty('--tr-font');
+            const warmth = Math.min(60, Math.max(0, Number(now.readerWarmth) || 0));
+            style.setProperty('--tr-warmth', `${warmth}%`);
+            mine.element.classList.toggle('is-dimming', now.readerDimImages !== false);
         }
 
         // ----------------------------------------------------- drawing
@@ -333,12 +384,13 @@
 
         // ------------------------------------------------- the settings
 
-        /** A setting changed: the skin follows without the reader closing. */
+        /** A setting changed: the type, the theme and the skin follow without the reader closing. */
         function refresh() {
             const mine = session;
             if (!mine) return;
+            applyType(mine);
             Theme.appearance().then((look) => {
-                if (mine.alive) dress(mine, look);
+                if (mine.alive) dress(mine, { ...look, theme: themeOf() });
             }).catch(() => {});
         }
 
@@ -372,7 +424,7 @@
         };
     }
 
-    const ArticleReader = { createArticleReader, measure, keyOf, dateLabel, ROOT_ID, OPEN_CLASS, MIN_WORDS, SHEET };
+    const ArticleReader = { createArticleReader, measure, keyOf, dateLabel, typeOf, TYPE, FONTS, ROOT_ID, OPEN_CLASS, MIN_WORDS, SHEET };
 
     root.BB = root.BB || {};
     root.BB.ArticleReader = ArticleReader;

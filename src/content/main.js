@@ -851,6 +851,10 @@
     /** And what an open YouTube reader has to follow without being closed. */
     const READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'readerHideChrome', 'skin'];
 
+    /** And an open text reader: the type it shares with that one, and Settings › Reader. */
+    const TEXT_READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'readerTheme', 'readerWarmth',
+        'readerFont', 'readerDimImages', 'skin'];
+
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&
             values.pouchButtonStyle !== settings.pouchButtonStyle;
@@ -863,6 +867,8 @@
         const typerSurfacesChanged = TYPER_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
         const readerSurfacesChanged = READER_SURFACES.some((key) =>
+            key in values && values[key] !== settings[key]);
+        const textSurfacesChanged = TEXT_READER_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
         const chatSurfacesChanged = CHAT_SURFACES.some((key) =>
             key in values && values[key] !== settings[key]);
@@ -887,6 +893,7 @@
         // already in progress rather than waiting for the next page.
         if (typerSurfacesChanged && typerUi) typerUi.refreshSurfaces();
         if (readerSurfacesChanged && reader) reader.refresh();
+        if (textSurfacesChanged && textReader) textReader.refresh();
         if (chatSurfacesChanged && chatUi) chatUi.refreshSurfaces();
         if (forgeSurfacesChanged && forgeUi) forgeUi.refreshSurfaces();
         if (forgeSurfacesChanged && folderUi) folderUi.refreshSurfaces();

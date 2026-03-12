@@ -209,6 +209,55 @@
                     </div>
                 </div>
 
+                <!-- The text reader's own settings, and the type it shares with
+                     YouTube's. None of these is on the reader itself, which
+                     carries only what is done to the article. -->
+                <div class="settings-section" data-plate="Reader">
+                    <p>Any page can be read in one quiet column, in the skin you picked: <kbd class="kbd-chip">Ctrl</kbd> <kbd class="kbd-chip">Alt</kbd> <kbd class="kbd-chip">R</kbd>, Reading mode in the popup, or Open in reader on the right-click menu. On YouTube the same key opens the video reader.</p>
+
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="readerTheme">Day or night</label>
+                        <select id="readerTheme">
+                            <option value="page">As the page is</option>
+                            <option value="light">Always day</option>
+                            <option value="dark">Always night</option>
+                        </select>
+                    </div>
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="readerWarmth">Warmth — paper and ink tinted toward sepia</label>
+                        <input type="range" id="readerWarmth" min="0" max="60" step="5">
+                    </div>
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="readerFont">Typeface</label>
+                        <select id="readerFont">
+                            <option value="skin">The skin's own</option>
+                            <option value="serif">Serif</option>
+                            <option value="sans">Sans-serif</option>
+                        </select>
+                    </div>
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="readerDimImages">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <label class="setting-label" for="readerDimImages">At night, dim pictures a little, and turn formulas and diagrams light on dark where the page marks them safe to</label>
+                    </div>
+
+                    <p class="settings-hint">Size, spacing and line length are the YouTube reader's too, for its transcript.</p>
+                    <div class="settings-option" style="margin-top: 8px;">
+                        <label class="setting-label" for="readerFontSize">Text size (px)</label>
+                        <input type="number" id="readerFontSize" min="12" max="24" step="1">
+                    </div>
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="readerLineHeight">Line spacing</label>
+                        <input type="range" id="readerLineHeight" min="1.2" max="2" step="0.1">
+                    </div>
+                    <div class="settings-option" style="margin-top: 16px;">
+                        <label class="setting-label" for="readerLineWidth">Line length (em)</label>
+                        <input type="number" id="readerLineWidth" min="30" max="60" step="1">
+                    </div>
+                </div>
+
                 <!-- Every scope's shortcuts in one place, on one keyboard with
                      a tab per site. They used to sit inside each site's own
                      panel, which meant looking in four places to answer "what
@@ -834,18 +883,7 @@
                             </label>
                             <label class="setting-label" for="readerHideChrome">Cover YouTube's header too — off, the reader starts under it so search stays in reach</label>
                         </div>
-                        <div class="settings-option">
-                            <label class="setting-label" for="readerFontSize">Transcript text size (px)</label>
-                            <input type="number" id="readerFontSize" min="12" max="24" step="1">
-                        </div>
-                        <div class="settings-option">
-                            <label class="setting-label" for="readerLineHeight">Line spacing</label>
-                            <input type="range" id="readerLineHeight" min="1.2" max="2" step="0.1">
-                        </div>
-                        <div class="settings-option">
-                            <label class="setting-label" for="readerLineWidth">Line length (em)</label>
-                            <input type="number" id="readerLineWidth" min="30" max="60" step="1">
-                        </div>
+                        <p class="settings-hint">The transcript's size, spacing and line length are set under Reader, at the top of Settings: the two readers share them.</p>
                     </div>
                 </div>
             </div>

@@ -3202,17 +3202,43 @@ check('nothing measured yet is no drill rather than an empty one', () => {
 });
 
 section('typeracer — the settings panel');
-check('every reader setting has a control carrying its key as an id', () => {
+check('every reader setting has a control carrying its key as an id, where its reader is set', () => {
     const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
     const keys = globalThis.BB.Settings.KEYS.filter((key) => /^reader/.test(key));
     assert(keys.length, 'no reader settings at all');
-    // In the YouTube panel, which is where the reader is — the panel runs
-    // from its own id to the next settings section or the scripts.
-    const from = html.indexOf('id="youtubeSettingsPanel"');
-    const next = html.indexOf('class="settings-section"', from);
-    const panel = html.slice(from, next === -1 ? html.indexOf('<script', from) : next);
-    const controls = new Set([...panel.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
-    for (const key of keys) assert(controls.has(key), `${key} has no control in the YouTube panel`);
+    // A panel runs from its marker to the next settings section or the scripts.
+    const controlsIn = (marker) => {
+        const from = html.indexOf(marker);
+        assert(from > 0, `no ${marker}`);
+        const next = html.indexOf('class="settings-section"', from);
+        const panel = html.slice(from, next === -1 ? html.indexOf('<script', from) : next);
+        return new Set([...panel.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
+    };
+    // The video reader's own under YouTube; the rest, the shared type
+    // included, under Settings › Reader.
+    const VIDEO = ['readerLayout', 'readerFollow', 'readerHideChrome'];
+    const youtube = controlsIn('id="youtubeSettingsPanel"');
+    const reader = controlsIn('data-plate="Reader"');
+    for (const key of keys) {
+        const [where, name] = VIDEO.includes(key) ? [youtube, 'the YouTube panel'] : [reader, 'Settings › Reader'];
+        assert(where.has(key), `${key} has no control in ${name}`);
+    }
+});
+check('the text reader clamps the shared type to the same ranges, and follows every setting it reads', () => {
+    const Reader = require('../src/content/reader.js');
+    const ArticleReader = require('../src/content/article-reader.js');
+    for (const [key, { min, max }] of Object.entries(Reader.TYPE)) eq(ArticleReader.TYPE[key], { min, max }, key);
+    eq(ArticleReader.typeOf(globalThis.BB.Settings.DEFAULTS), { size: 18, lead: 1.6, measure: 704 });
+    eq(ArticleReader.typeOf({ readerFontSize: 99, readerLineHeight: 'x', readerLineWidth: 10 }), { size: 26, lead: 1.6, measure: 480 });
+    const main = require('fs').readFileSync(`${__dirname}/../src/content/main.js`, 'utf8');
+    const list = /TEXT_READER_SURFACES = \[([^\]]*)\]/.exec(main)[1];
+    for (const key of [...Object.keys(ArticleReader.TYPE), 'readerTheme', 'readerWarmth', 'readerFont', 'readerDimImages', 'skin']) {
+        assert(list.includes(`'${key}'`), `${key} only reaches an open text reader after a reload`);
+    }
+    for (const value of ['serif', 'sans']) assert(ArticleReader.FONTS[value], `${value} is offered with no face behind it`);
+    const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+    const offered = [.../<select id="readerFont">([\s\S]*?)<\/select>/.exec(html)[1].matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
+    eq(offered, ['skin', ...Object.keys(ArticleReader.FONTS)]);
 });
 check('the reader layout list offers exactly the layouts the reader draws', () => {
     const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');

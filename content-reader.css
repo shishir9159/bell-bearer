@@ -1422,10 +1422,16 @@ html.bb-reader-open body { overflow: hidden !important; }
    inline styles of its own: no rule here is for the page.
    ===================================================================== */
 
+/* Warmth (Settings › Reader) is Dark Reader's sepia, as one control: the
+   paper and the ink are mixed toward a warm pair, by day toward cream and
+   brown, by night toward a dim amber, so a skin keeps its own colours at 0
+   and is tinted rather than replaced at 60. */
 .bb-text-reader {
-    --tr-page: var(--rd-page);
-    --tr-text: var(--rd-text);
-    --tr-muted: var(--rd-muted);
+    --tr-warm-page: #f1e3c4;
+    --tr-warm-text: #4b3a26;
+    --tr-page: color-mix(in oklab, var(--rd-page), var(--tr-warm-page) var(--tr-warmth, 0%));
+    --tr-text: color-mix(in oklab, var(--rd-text), var(--tr-warm-text) calc(var(--tr-warmth, 0%) * .7));
+    --tr-muted: color-mix(in oklab, var(--rd-muted), var(--tr-warm-text) calc(var(--tr-warmth, 0%) * .5));
     --tr-link: var(--rd-knob);
     --tr-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
 
@@ -1442,6 +1448,11 @@ html.bb-reader-open body { overflow: hidden !important; }
     -webkit-font-smoothing: antialiased;
     opacity: 1;
     transition: opacity .18s ease;
+}
+
+.bb-text-reader[data-bb-theme="dark"] {
+    --tr-warm-page: #2b2215;
+    --tr-warm-text: #ecd9b4;
 }
 
 /* The default skin's night is YouTube's near-black, which is what a video
@@ -1768,6 +1779,12 @@ html.bb-reader-open body { overflow: hidden !important; }
     font-size: .82em;
     text-decoration: none;
 }
+
+/* Photographs are dimmed a little at night, as Dark Reader does. Only what
+   the page marks as safe to turn — Wikipedia's formulas and line art — is
+   inverted: an inverted photograph is a negative. */
+.bb-text-reader.is-dimming[data-bb-theme="dark"] .tr-body img:not(.tr-math):not(.skin-invert):not(.skin-invert-image) { filter: brightness(.86) contrast(1.04); }
+.bb-text-reader.is-dimming[data-bb-theme="dark"] .tr-body :is(img.tr-math, img.skin-invert, .skin-invert-image img) { filter: invert(1) hue-rotate(180deg); }
 
 @media (max-width: 640px) {
     .tr-page { padding: 72px 18px 96px; column-gap: 0; grid-template-columns: 0 minmax(0, 1fr) 0; }
