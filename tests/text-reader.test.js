@@ -355,4 +355,76 @@
             }
         });
     });
+
+    const SECTIONS = `<p>Lead.</p>${prose(2)}<h2>First part</h2>${prose(3)}<h3>A detail</h3>${prose(3)}<h2>Second part</h2>${prose(3)}
+        <details><summary>References</summary><h2>Sources</h2><p>Folded.</p></details>`;
+    const frame = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    const settled = (scroll) => new Promise((done) => {
+        let last = -1;
+        const wait = () => (scroll.scrollTop === last ? done() : (last = scroll.scrollTop, setTimeout(wait, 60)));
+        setTimeout(wait, 60);
+    });
+
+    suite('text reader — the contents and the bar', () => {
+        test('the sections are the article\'s own headings, folded end matter left out', async () => {
+            closeAll();
+            const { reader } = makeReader(articleOf(SECTIONS));
+            reader.open();
+            await styled(reader);
+            const items = [...reader.element.querySelectorAll('.tr-toc a')].map((a) => a.textContent);
+            assertDeepEqual(items, ['First part', 'A detail', 'Second part']);
+            const heading = reader.element.querySelector('.tr-body h3');
+            assertEqual(reader.element.querySelector('.tr-toc li.is-h3 a').getAttribute('href'), `#${heading.id}`, 'a heading with no id cannot be jumped to');
+            closeAll();
+        });
+
+        test('reading down marks the section being read, and ] and [ move between sections', async () => {
+            closeAll();
+            const { reader } = makeReader(articleOf(SECTIONS));
+            reader.open();
+            await styled(reader);
+            const scroll = reader.element.querySelector('.tr-scroll');
+            const press = (key) => scroll.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
+            press(']');
+            await settled(scroll);
+            await frame();
+            const on = () => (reader.element.querySelector('.tr-toc a.is-on') || {}).textContent;
+            assertEqual(on(), 'First part');
+            press(']');
+            await settled(scroll);
+            await frame();
+            assertEqual(on(), 'A detail');
+            press('[');
+            await settled(scroll);
+            await frame();
+            assertEqual(on(), 'First part');
+            assert(reader.element.querySelector('.tr-progress span').style.transform.startsWith('scaleX(0.'), 'the hairline did not follow');
+            closeAll();
+        });
+
+        test('an article of one section has no contents, and a narrow window keeps them behind the bar', async () => {
+            closeAll();
+            const one = makeReader(articleOf(`${prose(4)}<h2>Only</h2>${prose(2)}`)).reader;
+            one.open();
+            await styled(one);
+            assertEqual(one.element.querySelector('.tr-toc').hidden, true);
+            assertEqual(one.element.querySelector('.tr-toc-btn').hidden, true);
+            closeAll();
+
+            const { reader } = makeReader(articleOf(SECTIONS));
+            reader.open();
+            await styled(reader);
+            reader.host.style.setProperty('width', '700px', 'important');
+            await frame();
+            await frame();
+            const button = reader.element.querySelector('.tr-toc-btn');
+            assertEqual(reader.element.classList.contains('is-wide'), false);
+            assertEqual(reader.element.querySelector('.tr-toc').hidden, true, 'the rail over a narrow column');
+            button.click();
+            assertEqual(reader.element.querySelector('.tr-toc').hidden, false);
+            reader.element.querySelector('.tr-body p').click();
+            assertEqual(reader.element.querySelector('.tr-toc').hidden, true, 'the sheet stayed over the article');
+            closeAll();
+        });
+    });
 })();

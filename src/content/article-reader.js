@@ -73,6 +73,14 @@
     const WPM = 230;
     const CPM = 500;
 
+    /** How far down the column has to go before the bar steps out of the way. */
+    const BAR_HIDE_AFTER = 120;
+    /** The contents rail's width, and the room either side of the column it needs before it is drawn. */
+    const RAIL = 220;
+    const RAIL_GAP = 40;
+    /** Where a heading lands when it is jumped to: under the bar, not behind it. */
+    const LANDING = 72;
+
     /**
      * The typography settings, each clamped to what its control offers, as
      * the YouTube reader clamps the same three. The size is the setting
@@ -103,6 +111,7 @@
 
     const ICON = Object.freeze({
         close: Icons.svg('x', { size: 18 }),
+        contents: Icons.svg('list', { size: 18 }),
         out: Icons.svg('arrow-square-out', { size: 14 }),
     });
 
@@ -144,7 +153,9 @@
     function shellHtml() {
         return `
             <div class="tr-tex"></div>
+            <div class="tr-progress" aria-hidden="true"><span></span></div>
             <header class="tr-bar">
+                <button type="button" class="tr-btn tr-toc-btn" title="Contents" aria-label="Contents" aria-expanded="false" hidden>${ICON.contents}</button>
                 <span class="tr-where"></span>
                 <span class="tr-flex"></span>
                 <div class="tr-tools"></div>
@@ -152,6 +163,7 @@
             </header>
             <div class="tr-scroll" tabindex="-1">
                 <div class="tr-page">
+                    <nav class="tr-toc" aria-label="Contents" hidden></nav>
                     <article class="tr-article">
                         <header class="tr-head"></header>
                         <div class="tr-body"></div>
@@ -236,6 +248,10 @@
                 article: null,
                 url: keyOf(location.href),
                 focus: document.activeElement,
+                lastTop: 0,
+                headings: [],
+                current: -1,
+                frame: 0,
                 release: null,
             };
             const mine = session;
@@ -256,7 +272,21 @@
             });
 
             part('.tr-close').addEventListener('click', close);
+            part('.tr-toc-btn').addEventListener('click', () => setToc(mine, !element.classList.contains('is-toc-open')));
+            part('.tr-toc').addEventListener('click', (event) => {
+                const link = event.target.closest('a[data-at]');
+                if (!link) return;
+                event.preventDefault();
+                jumpTo(mine, mine.headings[Number(link.dataset.at)]);
+                setToc(mine, false);
+            });
+            mine.scroll.addEventListener('scroll', () => onScroll(mine), { passive: true });
+            element.addEventListener('mousemove', (event) => { if (event.clientY < 48) setBar(mine, true); }, { passive: true });
             element.addEventListener('click', (event) => onClick(mine, event));
+            // The rail is drawn only where there is room beside the column,
+            // and the room changes with the window and with the measure.
+            mine.resize = new ResizeObserver(() => fit(mine));
+            mine.resize.observe(mine.scroll);
             // The page's own shortcuts stop at the reader: a key pressed in
             // here is the reader's, or the browser's. Ours are on window's
             // capture phase, ahead of this, and still run.
@@ -347,6 +377,120 @@
             element.querySelector('.tr-foot').innerHTML = host
                 ? `<a class="tr-source" href="${Dom.safeUrlAttr(article.url)}">${ICON.out}<span>${esc(host)}</span></a>` : '';
             mine.scroll.scrollTop = 0;
+            buildToc(mine);
+            onScroll(mine);
+        }
+
+        // ---------------------------------------------- the contents rail
+
+        /**
+         * The article's sections, from its own h2s and h3s, beside the column
+         * when the window has room for them and behind the bar's button when
+         * it does not. A heading without an id is given one, so a section can
+         * be jumped to; a heading folded away in end matter is not listed.
+         */
+        function buildToc(mine) {
+            mine.headings = [...mine.body.querySelectorAll('h2, h3')].filter((h) => !h.closest('details') && h.textContent.trim());
+            mine.headings.forEach((h, i) => { if (!h.id) h.id = `bbr-section-${i}`; });
+            const toc = mine.element.querySelector('.tr-toc');
+            const enough = mine.headings.length >= 2;
+            toc.innerHTML = enough ? `<p class="tr-toc-title">Contents</p><ol>${mine.headings.map((h, i) => `
+                <li class="is-${h.tagName.toLowerCase()}"><a href="#${Dom.escapeAttr(h.id)}" data-at="${i}">${Dom.escapeHtml(h.textContent.trim())}</a></li>`).join('')}</ol>` : '';
+            mine.element.classList.toggle('has-toc', enough);
+            mine.current = -1;
+            fit(mine);
+        }
+
+        /** The rail beside the column if it fits there, the bar's button if it does not. */
+        function fit(mine) {
+            if (!mine.alive) return;
+            const measure = parseFloat(mine.element.style.getPropertyValue('--tr-measure')) || 704;
+            const wide = mine.scroll.clientWidth >= measure + 2 * (RAIL + RAIL_GAP) + 48;
+            mine.element.classList.toggle('is-wide', wide);
+            if (wide) mine.element.classList.remove('is-toc-open');
+            showToc(mine);
+        }
+
+        function setToc(mine, open) {
+            mine.element.classList.toggle('is-toc-open', open);
+            showToc(mine);
+        }
+
+        function showToc(mine) {
+            const { classList } = mine.element;
+            const has = classList.contains('has-toc');
+            const wide = classList.contains('is-wide');
+            const open = classList.contains('is-toc-open');
+            mine.element.querySelector('.tr-toc').hidden = !has || (!wide && !open);
+            const button = mine.element.querySelector('.tr-toc-btn');
+            button.hidden = !has || wide;
+            button.setAttribute('aria-expanded', String(open));
+        }
+
+        /** The column scrolled so `target` is just under the bar. Never scrollIntoView, which scrolls the page under the reader too. */
+        function jumpTo(mine, target) {
+            if (!target) return;
+            const scroll = mine.scroll;
+            const top = target.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop - LANDING;
+            const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            scroll.scrollTo({ top: Math.max(0, top), behavior: still ? 'auto' : 'smooth' });
+        }
+
+        /** The section being read: the last heading the top of the column has passed. */
+        function markSection(mine) {
+            const line = mine.scroll.getBoundingClientRect().top + LANDING + 24;
+            let at = -1;
+            for (let i = 0; i < mine.headings.length; i++) {
+                if (mine.headings[i].getBoundingClientRect().top > line) break;
+                at = i;
+            }
+            if (at === mine.current) return;
+            mine.current = at;
+            const toc = mine.element.querySelector('.tr-toc');
+            toc.querySelectorAll('a[data-at]').forEach((link) => link.classList.toggle('is-on', Number(link.dataset.at) === at));
+            const on = toc.querySelector('a.is-on');
+            // The rail scrolled by hand, for jumpTo's reason.
+            if (on && (on.offsetTop < toc.scrollTop || on.offsetTop > toc.scrollTop + toc.clientHeight - 40)) {
+                toc.scrollTop = on.offsetTop - toc.clientHeight / 2;
+            }
+        }
+
+        /** `[` and `]`: back to the start of the section being read, or on to the next one. */
+        function step(mine, by) {
+            const own = mine.headings[mine.current];
+            const into = own && own.getBoundingClientRect().top < mine.scroll.getBoundingClientRect().top + LANDING - 8;
+            if (by < 0 && into) return jumpTo(mine, own);
+            jumpTo(mine, mine.headings[Math.min(mine.headings.length - 1, Math.max(0, mine.current + by))]);
+            return undefined;
+        }
+
+        // ------------------------------------------------- the bar
+
+        /**
+         * The bar steps up out of the way as the column is read down, and
+         * comes back on the way up or when the pointer goes to the top. The
+         * hairline over it is how far through the article the column is.
+         * One frame's work per frame, however many scroll events it brings.
+         */
+        function onScroll(mine) {
+            if (mine.frame) return;
+            mine.frame = requestAnimationFrame(() => {
+                mine.frame = 0;
+                if (!mine.alive) return;
+                const scroll = mine.scroll;
+                const top = scroll.scrollTop;
+                const room = scroll.scrollHeight - scroll.clientHeight;
+                mine.element.querySelector('.tr-progress span').style.transform = `scaleX(${room > 0 ? Math.min(1, top / room) : 1})`;
+                if (top < BAR_HIDE_AFTER) setBar(mine, true);
+                else if (top > mine.lastTop + 4) setBar(mine, false);
+                else if (top < mine.lastTop - 4) setBar(mine, true);
+                mine.lastTop = top;
+                markSection(mine);
+            });
+        }
+
+        function setBar(mine, shown) {
+            mine.element.classList.toggle('is-bar-hidden', !shown);
         }
 
         const squash = (text) => String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -354,6 +498,8 @@
         // ------------------------------------------------------ keys
 
         function onClick(mine, event) {
+            // The contents sheet, on a narrow window, goes at a click anywhere else.
+            if (mine.element.classList.contains('is-toc-open') && !event.target.closest('.tr-toc, .tr-toc-btn')) setToc(mine, false);
             const source = event.target.closest('.tr-source');
             // The source of an article read where it was opened is the page
             // right under the reader: closing is the way there.
@@ -372,7 +518,15 @@
             if (event.key === 'Escape') {
                 event.stopPropagation();
                 if (typing) active.blur();
+                else if (mine.element.classList.contains('is-toc-open')) setToc(mine, false);
                 else close();
+                return;
+            }
+            if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
+            if (event.key === '[' || event.key === ']') {
+                event.preventDefault();
+                event.stopPropagation();
+                step(mine, event.key === ']' ? 1 : -1);
             }
         }
 
@@ -402,6 +556,8 @@
             session = null;
             document.removeEventListener('keydown', onKey, true);
             window.removeEventListener('popstate', onPopState);
+            if (done.resize) done.resize.disconnect();
+            cancelAnimationFrame(done.frame);
             done.host.remove();
             if (done.release) done.release();
             if (done.focus && done.focus.isConnected && typeof done.focus.focus === 'function') {

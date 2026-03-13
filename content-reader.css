@@ -1499,7 +1499,26 @@ html.bb-reader-open body { overflow: hidden !important; }
     opacity: var(--rd-tex-opacity);
 }
 
-/* ---- The bar: quiet, a name and the reader's few tools */
+/* ---- The bar: quiet, and out of the way once reading starts */
+
+.tr-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    z-index: 12;
+    pointer-events: none;
+}
+
+.tr-progress span {
+    display: block;
+    height: 100%;
+    background: var(--rd-accent-ink);
+    opacity: .7;
+    transform: scaleX(0);
+    transform-origin: 0 50%;
+}
 
 .tr-bar {
     position: absolute;
@@ -1514,7 +1533,10 @@ html.bb-reader-open body { overflow: hidden !important; }
     padding: 0 10px 0 18px;
     background: color-mix(in oklab, var(--tr-page) 88%, transparent);
     backdrop-filter: blur(8px);
+    transition: transform .22s ease, opacity .22s ease;
 }
+
+.bb-text-reader.is-bar-hidden:not(.is-toc-open) .tr-bar { transform: translateY(-100%); opacity: 0; }
 
 .tr-where {
     min-width: 0;
@@ -1571,7 +1593,68 @@ html.bb-reader-open body { overflow: hidden !important; }
     padding: 88px 24px 120px;
 }
 
-.tr-article { grid-column: 2; min-width: 0; }
+.tr-article { grid-column: 2; grid-row: 1; min-width: 0; }
+
+/* ---- The contents: a rail left of the column where the window has room
+   for one (article-reader.js measures it), a sheet under the bar where it
+   does not. Quiet either way — the section being read is the only one in
+   ink. */
+
+.tr-toc {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: end;
+    align-self: start;
+    position: sticky;
+    top: 88px;
+    width: 220px;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rd-chip-2) transparent;
+    font-family: var(--rd-font);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.bb-text-reader:not(.is-wide) .tr-toc {
+    position: fixed;
+    top: 52px;
+    left: 12px;
+    z-index: 11;
+    width: min(320px, calc(100% - 24px));
+    max-height: min(70vh, calc(100% - 72px));
+    padding: 12px 10px 12px 14px;
+    background: var(--rd-card);
+    border: var(--rd-card-border);
+    border-radius: var(--rd-r);
+    box-shadow: var(--rd-card-shadow);
+}
+
+.tr-toc-title {
+    margin: 0 0 8px;
+    font-family: var(--rd-font-tab);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--rd-faint);
+}
+
+.tr-toc ol { list-style: none; margin: 0; padding: 0; }
+.tr-toc li { margin: 0; }
+.tr-toc li.is-h3 { padding-left: 12px; }
+
+.bb-text-reader .tr-toc a {
+    display: block;
+    padding: 4px 8px 4px 10px;
+    border-left: 2px solid transparent;
+    color: var(--rd-faint);
+    text-decoration: none;
+}
+
+.bb-text-reader .tr-toc a:hover { color: var(--tr-text); }
+.bb-text-reader .tr-toc a.is-on { color: var(--tr-text); border-left-color: var(--rd-accent-ink); }
 
 .tr-head { margin-bottom: 2.2em; font-size: var(--tr-size, 18px); }
 
@@ -1792,5 +1875,6 @@ html.bb-reader-open body { overflow: hidden !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .bb-text-reader { transition: none; }
+    .bb-text-reader,
+    .tr-bar { transition: none; }
 }
