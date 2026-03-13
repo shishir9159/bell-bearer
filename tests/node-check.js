@@ -635,6 +635,53 @@ check('a link\'s address cannot end the link early, and a balanced pair is left 
     eq(Markdown.escapeUrl('file:///C:/my notes.txt'), 'file:///C:/my%20notes.txt');
 });
 
+// ------------------------------------------------------- text anchors
+
+const TextAnchor = require('../src/shared/text-anchor.js');
+
+section('text reader — a highlight in the article\'s text');
+
+const ARTICLE = 'The cache forgets. It forgets the oldest\n  entry first, and the oldest entry is rarely the one you want.';
+check('a stroke let go inside a word takes the word, and none of the space around it', () => {
+    const at = ARTICLE.indexOf('orgets.');
+    eq(TextAnchor.snap(ARTICLE, at, at + 3), { start: at - 1, end: at + 6 });
+    const span = TextAnchor.snap(ARTICLE, ARTICLE.indexOf(' It') - 1, ARTICLE.indexOf('oldest') + 2);
+    eq(ARTICLE.slice(span.start, span.end), '. It forgets the oldest');
+    const gap = ARTICLE.indexOf('\n');
+    eq(TextAnchor.snap(ARTICLE, gap, gap + 3), null, 'a stroke over nothing but space is no highlight');
+    eq(TextAnchor.snap("we don't know", 4, 6), { start: 3, end: 8 }, 'an apostrophe inside a word is the word');
+    eq(TextAnchor.snap('naïve café', 1, 2), { start: 0, end: 5 }, 'any script\'s letters are a word\'s');
+});
+check('highlights that touch, overlap or stand a space apart become one, their notes kept', () => {
+    const text = 'one two three four five six';
+    const a = { id: 'a', start: 0, end: 3, note: 'first' };
+    const c = { id: 'c', start: 19, end: 23, note: '' };
+    const { marks, made } = TextAnchor.merge([a, c], { id: 'b', start: 4, end: 13, note: 'second' }, text);
+    eq(marks.map((m) => [m.start, m.end]), [[0, 13], [19, 23]]);
+    eq([made.exact, made.note], ['one two three', 'first\n\nsecond']);
+    eq(TextAnchor.merge(marks, { id: 'd', start: 14, end: 18 }, text).marks.length, 1, 'a word between two highlights joins them');
+    eq(TextAnchor.merge([c], { id: 'e', start: 0, end: 3 }, text).marks.map((m) => m.id), ['e', 'c'], 'kept in the order they read');
+});
+check('a highlight is found again where its words went, and is gone where they did', () => {
+    const mark = { start: 4, end: 7, exact: 'two' };
+    eq(TextAnchor.locate('one two three', mark), { start: 4, end: 7 });
+    eq(TextAnchor.locate('zero one two three', mark), { start: 9, end: 12 }, 'text came in before it');
+    eq(TextAnchor.locate('two one two', { start: 8, end: 11, exact: 'two' }), { start: 8, end: 11 });
+    eq(TextAnchor.locate('two one xxx two', { start: 9, end: 12, exact: 'two' }), { start: 12, end: 15 }, 'the nearer of two');
+    eq(TextAnchor.locate('one three', mark), null, 'drawn over the wrong words');
+});
+check('a link to a passage names it so a browser can find it, and says which where it occurs twice', () => {
+    const text = 'Cache lines are 64 bytes. A cache-friendly loop, for one, walks memory in order.';
+    const at = text.indexOf('cache-friendly');
+    eq(TextAnchor.fragment(text, at, at + 'cache-friendly loop, for one'.length), '#:~:text=cache%2Dfriendly%20loop%2C%20for%20one',
+        'its own hyphen and comma read as the syntax');
+    const long = 'w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12';
+    eq(TextAnchor.fragment(long, 0, long.length), '#:~:text=w1%20w2%20w3%20w4%20w5,w8%20w9%20w10%20w11%20w12');
+    const twice = 'the end. And the end of it.';
+    eq(TextAnchor.fragment(twice, 13, 20), '#:~:text=the%20end.%20And-,the%20end,-of%20it.');
+    eq(TextAnchor.fragment('  ', 0, 2), '');
+});
+
 // ---------------------------------------------------------------- time
 
 const Time = require('../src/shared/time.js');
