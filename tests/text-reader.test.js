@@ -427,4 +427,60 @@
             closeAll();
         });
     });
+
+    /** An article as the cleaner leaves one: footnotes and their marks under our prefix. */
+    const NOTED = `<p>A claim.<sup><a href="#bbr-fn1">1</a></sup> See <a href="#bbr-later">the later part</a>.</p>${prose(3)}
+        <h2 id="bbr-later">Later</h2>${prose(3)}<ol><li id="bbr-fn1"><a href="#bbr-ref1">^</a> The source, <em>page 4</em>.</li></ol>`;
+
+    suite('text reader — footnotes beside their marks', () => {
+        test('a click on a mark opens its note beside it, without the way back; a second click or escape closes it', async () => {
+            closeAll();
+            const { reader } = makeReader(articleOf(NOTED));
+            reader.open();
+            await styled(reader);
+            const mark = reader.element.querySelector('sup a');
+            mark.click();
+            const pop = reader.element.querySelector('.tr-pop');
+            assert(pop, 'no note');
+            assertEqual(pop.textContent.trim(), 'The source, page 4.');
+            assertEqual(pop.querySelector('[id]'), null, 'the note\'s copy kept an id the article already has');
+            mark.click();
+            assertEqual(reader.element.querySelector('.tr-pop'), null);
+            mark.click();
+            reader.element.querySelector('.tr-scroll').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+            assertEqual(reader.element.querySelector('.tr-pop'), null, 'escape closed the reader instead of the note');
+            assertEqual(reader.isOpen, true);
+            closeAll();
+        });
+
+        test('a pointer resting on a mark opens the note, and leaving lets it go', async () => {
+            closeAll();
+            const { reader } = makeReader(articleOf(NOTED));
+            reader.open();
+            await styled(reader);
+            const mark = reader.element.querySelector('sup a');
+            mark.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, composed: true, pointerType: 'mouse' }));
+            await new Promise((done) => setTimeout(done, 400));
+            assert(reader.element.querySelector('.tr-pop'), 'resting on the mark opened nothing');
+            mark.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, composed: true, pointerType: 'mouse' }));
+            await new Promise((done) => setTimeout(done, 350));
+            assertEqual(reader.element.querySelector('.tr-pop'), null);
+            closeAll();
+        });
+
+        test('a link to a part of the article scrolls the column there, and opens no note', async () => {
+            closeAll();
+            const { reader } = makeReader(articleOf(NOTED));
+            reader.open();
+            await styled(reader);
+            const scroll = reader.element.querySelector('.tr-scroll');
+            reader.element.querySelector('a[href="#bbr-later"]').click();
+            await settled(scroll);
+            assertEqual(reader.element.querySelector('.tr-pop'), null);
+            assert(scroll.scrollTop > 100, 'the column did not move');
+            const top = reader.element.querySelector('#bbr-later').getBoundingClientRect().top;
+            assert(top > 0 && top < 120, `the heading landed at ${top}`);
+            closeAll();
+        });
+    });
 })();

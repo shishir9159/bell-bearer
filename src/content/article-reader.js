@@ -80,6 +80,11 @@
     const RAIL_GAP = 40;
     /** Where a heading lands when it is jumped to: under the bar, not behind it. */
     const LANDING = 72;
+    /** How long the pointer rests on a footnote's mark before its note opens, and outlives leaving it. */
+    const POP_SHOW_MS = 300;
+    const POP_HIDE_MS = 250;
+    /** The prefix ArticleClean puts on the page's ids, and so on every link within the article. */
+    const OWN_LINK = '#bbr-';
 
     /**
      * The typography settings, each clamped to what its control offers, as
@@ -281,6 +286,8 @@
                 setToc(mine, false);
             });
             mine.scroll.addEventListener('scroll', () => onScroll(mine), { passive: true });
+            mine.body.addEventListener('pointerover', (event) => onHover(mine, event));
+            mine.body.addEventListener('pointerout', (event) => onLeave(mine, event));
             element.addEventListener('mousemove', (event) => { if (event.clientY < 48) setBar(mine, true); }, { passive: true });
             element.addEventListener('click', (event) => onClick(mine, event));
             // The rail is drawn only where there is room beside the column,
@@ -473,6 +480,7 @@
          * One frame's work per frame, however many scroll events it brings.
          */
         function onScroll(mine) {
+            if (mine.pop) hidePop(mine);
             if (mine.frame) return;
             mine.frame = requestAnimationFrame(() => {
                 mine.frame = 0;
@@ -493,6 +501,98 @@
             mine.element.classList.toggle('is-bar-hidden', !shown);
         }
 
+        // ------------------------------------------------------ popovers
+
+        /**
+         * A card beside the link it belongs to, over the column: a footnote's
+         * note, so reading it does not mean leaving the sentence. One at a
+         * time, below the link or above it where there is no room below, and
+         * gone as soon as the column moves.
+         */
+        function showPop(mine, anchor, content, { kind = 'note' } = {}) {
+            hidePop(mine);
+            const pop = document.createElement('div');
+            pop.className = `tr-pop is-${kind}`;
+            pop.setAttribute('role', 'tooltip');
+            pop.appendChild(content);
+            mine.element.appendChild(pop);
+            const box = mine.element.getBoundingClientRect();
+            const at = anchor.getBoundingClientRect();
+            const width = Math.min(380, box.width - 24);
+            pop.style.width = `${width}px`;
+            pop.style.left = `${Math.max(12, Math.min(at.left - box.left + at.width / 2 - width / 2, box.width - width - 12))}px`;
+            const below = at.bottom - box.top + 8;
+            const above = at.top - box.top - pop.offsetHeight - 8;
+            pop.style.top = `${below + pop.offsetHeight > box.height - 12 && above > 12 ? above : below}px`;
+            pop.addEventListener('pointerenter', () => clearTimeout(mine.popTimer));
+            pop.addEventListener('pointerleave', () => hidePopSoon(mine));
+            mine.pop = { el: pop, anchor };
+            return pop;
+        }
+
+        function hidePop(mine) {
+            clearTimeout(mine.popTimer);
+            if (mine.pop) mine.pop.el.remove();
+            mine.pop = null;
+        }
+
+        function hidePopSoon(mine) {
+            clearTimeout(mine.popTimer);
+            mine.popTimer = setTimeout(() => hidePop(mine), POP_HIDE_MS);
+        }
+
+        /**
+         * The note a link points to, when the link is a footnote's mark: a
+         * superscript, or a link of a few characters — "1", "[2]", "*" — to
+         * something in the article that is not a heading. Any other link
+         * within the article is a place to go, not a note to read.
+         */
+        function noteOf(mine, link) {
+            const href = (link && link.getAttribute('href')) || '';
+            if (!href.startsWith(OWN_LINK)) return null;
+            let target = null;
+            try { target = mine.body.querySelector(`#${CSS.escape(href.slice(1))}`); } catch (_) { return null; }
+            if (!target || /^H[1-6]$/.test(target.tagName) || target.contains(link)) return null;
+            return link.closest('sup') || link.textContent.trim().length <= 4 ? target : null;
+        }
+
+        /** A note's copy for its card: no ids, and without the way back to the mark it is already beside. */
+        function noteCard(target) {
+            const copy = target.cloneNode(true);
+            copy.removeAttribute('id');
+            copy.querySelectorAll('[id]').forEach((el) => el.removeAttribute('id'));
+            copy.querySelectorAll(`a[href^="${OWN_LINK}"]`).forEach((a) => {
+                if (/^[\s^↑↩⤴a-z]{0,3}$/u.test(a.textContent)) a.remove();
+            });
+            const card = document.createElement('div');
+            card.className = 'tr-pop-body';
+            // A list item's content rather than the item: out of its list it draws a bullet.
+            if (copy.tagName === 'LI') while (copy.firstChild) card.appendChild(copy.firstChild);
+            else card.appendChild(copy);
+            return card;
+        }
+
+        /** A pointer resting on a footnote's mark opens its note; a touch has the click for that. */
+        function onHover(mine, event) {
+            if (event.pointerType && event.pointerType !== 'mouse') return;
+            const link = event.target.closest('a[href]');
+            const note = noteOf(mine, link);
+            if (!note) return;
+            clearTimeout(mine.hoverTimer);
+            if (mine.pop && mine.pop.anchor === link) {
+                clearTimeout(mine.popTimer);
+                return;
+            }
+            mine.hoverTimer = setTimeout(() => { if (mine.alive) showPop(mine, link, noteCard(note)); }, POP_SHOW_MS);
+        }
+
+        function onLeave(mine, event) {
+            const link = event.target.closest('a[href]');
+            if (!link || (event.relatedTarget && link.contains(event.relatedTarget))) return;
+            clearTimeout(mine.hoverTimer);
+            if (mine.pop && mine.pop.anchor === link) hidePopSoon(mine);
+        }
+
         const squash = (text) => String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
 
         // ------------------------------------------------------ keys
@@ -500,6 +600,24 @@
         function onClick(mine, event) {
             // The contents sheet, on a narrow window, goes at a click anywhere else.
             if (mine.element.classList.contains('is-toc-open') && !event.target.closest('.tr-toc, .tr-toc-btn')) setToc(mine, false);
+            // A footnote's mark opens its note, and a click on it again
+            // closes it; any other link within the article scrolls the
+            // column there, rather than the page under the reader.
+            const own = event.target.closest(`a[href^="${OWN_LINK}"]`);
+            if (own && mine.body.contains(own)) {
+                event.preventDefault();
+                const note = noteOf(mine, own);
+                clearTimeout(mine.hoverTimer);
+                if (note && mine.pop && mine.pop.anchor === own) hidePop(mine);
+                else if (note) showPop(mine, own, noteCard(note));
+                else {
+                    let target = null;
+                    try { target = mine.body.querySelector(`#${CSS.escape(own.getAttribute('href').slice(1))}`); } catch (_) { /* no such id */ }
+                    jumpTo(mine, target);
+                }
+                return;
+            }
+            if (mine.pop && !event.target.closest('.tr-pop')) hidePop(mine);
             const source = event.target.closest('.tr-source');
             // The source of an article read where it was opened is the page
             // right under the reader: closing is the way there.
@@ -518,6 +636,7 @@
             if (event.key === 'Escape') {
                 event.stopPropagation();
                 if (typing) active.blur();
+                else if (mine.pop) hidePop(mine);
                 else if (mine.element.classList.contains('is-toc-open')) setToc(mine, false);
                 else close();
                 return;
@@ -558,6 +677,8 @@
             window.removeEventListener('popstate', onPopState);
             if (done.resize) done.resize.disconnect();
             cancelAnimationFrame(done.frame);
+            clearTimeout(done.hoverTimer);
+            clearTimeout(done.popTimer);
             done.host.remove();
             if (done.release) done.release();
             if (done.focus && done.focus.isConnected && typeof done.focus.focus === 'function') {

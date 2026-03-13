@@ -1863,6 +1863,37 @@ html.bb-reader-open body { overflow: hidden !important; }
     text-decoration: none;
 }
 
+/* A footnote's mark: a quiet link, the note a hover or a click away. */
+.tr-body sup a { text-decoration: none; padding: 0 .08em; }
+
+/* ---- A card beside a link: a footnote's note, over the column */
+
+.tr-pop {
+    position: absolute;
+    z-index: 30;
+    max-height: min(320px, 60vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px 14px;
+    background: var(--rd-card);
+    color: var(--tr-text);
+    border: var(--rd-card-border);
+    border-radius: var(--rd-r);
+    box-shadow: var(--rd-card-shadow);
+    font-family: var(--tr-font, var(--rd-font));
+    font-size: 14px;
+    line-height: 1.5;
+    animation: tr-pop-in .12s ease-out;
+}
+
+@keyframes tr-pop-in { from { opacity: 0; transform: translateY(-3px); } }
+
+.tr-pop-body > :first-child { margin-top: 0; }
+.tr-pop-body > :last-child { margin-bottom: 0; }
+.tr-pop-body :is(p, ul, ol) { margin: 0 0 .6em; }
+.tr-pop a { color: var(--tr-link); text-underline-offset: .18em; }
+.tr-pop :is(code, kbd) { font-family: var(--tr-mono); font-size: .9em; }
+
 /* Photographs are dimmed a little at night, as Dark Reader does. Only what
    the page marks as safe to turn — Wikipedia's formulas and line art — is
    inverted: an inverted photograph is a negative. */
@@ -1877,4 +1908,5 @@ html.bb-reader-open body { overflow: hidden !important; }
 @media (prefers-reduced-motion: reduce) {
     .bb-text-reader,
     .tr-bar { transition: none; }
+    .tr-pop { animation: none; }
 }
