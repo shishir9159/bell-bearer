@@ -1877,6 +1877,7 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 .tr-body mark.tr-mark.is-start { border-top-left-radius: var(--rd-r-mark); border-bottom-left-radius: var(--rd-r-mark); }
 .tr-body mark.tr-mark.is-end { border-top-right-radius: var(--rd-r-mark); border-bottom-right-radius: var(--rd-r-mark); }
+.tr-body mark.tr-mark.is-picked,
 .tr-body mark.tr-mark:hover { background: var(--rd-mark-hot); }
 
 .bb-text-reader.is-erasing .tr-body mark.tr-mark:hover {
@@ -1889,6 +1890,68 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 /* The pen's button lights while it is on. */
 .bb-text-reader .tr-pen[aria-pressed="true"] { color: var(--rd-accent-ink); }
+
+/* ---- The toolbar over a highlight */
+
+.tr-tb {
+    position: absolute;
+    z-index: 25;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    background: var(--rd-tb-bg);
+    color: var(--rd-tb-fg);
+    border: var(--rd-tb-border);
+    border-radius: var(--rd-r-sm);
+    box-shadow: var(--rd-tb-shadow);
+}
+
+.bb-text-reader .tr-tb button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 28px;
+    border-radius: var(--rd-r-sm);
+}
+
+.bb-text-reader .tr-tb button:hover { background: var(--rd-tb-hover); }
+
+/* ---- A note, under the passage it is on */
+
+.tr-body .tr-note {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin: -.4em 0 1.05em;
+    font-family: var(--rd-font);
+    font-size: .8em;
+    line-height: 1.5;
+    font-style: var(--rd-note-style);
+    color: var(--tr-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+.tr-body :is(li, td, th, dd, dt) > .tr-note { margin: .3em 0 0; }
+.tr-body .tr-note svg { flex: none; margin-top: .25em; color: var(--rd-accent-ink); }
+.tr-body .tr-note.is-editing { cursor: auto; }
+
+.tr-body .tr-note textarea {
+    width: 100%;
+    resize: none;
+    field-sizing: content;
+    min-height: 2.6em;
+    padding: 6px 10px;
+    font: inherit;
+    font-style: normal;
+    color: var(--tr-text);
+    background: var(--rd-chip);
+    border: 1px solid var(--rd-divider);
+    border-radius: var(--rd-r-sm);
+    outline: none;
+}
 
 /* ---- The toast, with its Undo */
 

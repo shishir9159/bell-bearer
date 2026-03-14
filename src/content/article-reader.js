@@ -437,6 +437,8 @@
                 tools: mine.element.querySelector('.tr-tools'),
                 selection: () => selectionOf(mine),
                 toast: (text, undo) => showToast(mine, text, undo),
+                copyText: (text) => Promise.resolve(copyText ? copyText(text) : false),
+                article: () => ({ url: article.url, title: article.title }),
                 onChange: (marks, text) => {
                     if (marks.length) kept.set(key, { title: article.title, url: article.url, text, marks });
                     else kept.delete(key);
@@ -573,6 +575,7 @@
          */
         function onScroll(mine) {
             if (mine.pop) hidePop(mine);
+            if (mine.hl) mine.hl.onScroll();
             if (mine.frame) return;
             mine.frame = requestAnimationFrame(() => {
                 mine.frame = 0;
@@ -732,12 +735,18 @@
             if (event.key === 'Escape') {
                 event.stopPropagation();
                 if (typing) active.blur();
+                else if (mine.hl && mine.hl.escape()) return;
                 else if (mine.pop) hidePop(mine);
                 else if (mine.element.classList.contains('is-toc-open')) setToc(mine, false);
                 else close();
                 return;
             }
             if (typing || event.ctrlKey || event.metaKey || event.altKey) return;
+            if ((event.key === 'Backspace' || event.key === 'Delete') && mine.hl && mine.hl.removePicked()) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
             if (event.key === '[' || event.key === ']') {
                 event.preventDefault();
                 event.stopPropagation();

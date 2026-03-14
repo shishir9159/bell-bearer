@@ -1,5 +1,6 @@
 /**
- * Highlighting in the text reader: a pen over the article.
+ * Highlighting in the text reader: a pen over the article, and a note under
+ * a passage.
  *
  * **Nothing is stored.** A highlight lives in the page it was made on, as
  * long as that page is open — closing the reader and opening it again finds
@@ -29,23 +30,32 @@
     const Ids = ns.Ids || req('../shared/ids.js');
     const TextAnchor = ns.TextAnchor || req('../shared/text-anchor.js');
 
-    /** The blocks the text is counted in: a line break between two of them. */
+    /** How long the toolbar outlives the pointer leaving its highlight: long enough to reach it. */
+    const HIDE_MS = 280;
+
+    /** The blocks the text is counted in: a line break between two of them, and a note goes under one. */
     const BLOCKS = 'p, li, h2, h3, h4, h5, h6, blockquote, pre, td, th, dt, dd, figcaption, caption, summary';
     /** Containers whose own white space is layout, not text: no ink on it. */
     const LAYOUT = /^(UL|OL|DL|TABLE|THEAD|TBODY|TFOOT|TR|DIV|FIGURE|DETAILS|BLOCKQUOTE|SECTION)$/;
 
     const ICON = Object.freeze({
         pen: Icons.svg('highlighter', { size: 18 }),
+        note: Icons.svg('note-pencil', { size: 16 }),
+        link: Icons.svg('link-simple', { size: 16 }),
+        trash: Icons.svg('trash', { size: 16 }),
     });
 
     // ------------------------------------------------------- the text
 
     /**
-     * The article's text and where each of its text nodes starts in it. A
-     * text node in another block than the one before is a line further on.
+     * The article's text and where each of its text nodes starts in it.
+     * A note drawn under a passage is not the article's text; a text node
+     * in another block than the one before is a line further on.
      */
     function modelOf(body) {
-        const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+        const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+            acceptNode: (node) => (node.parentElement && node.parentElement.closest('.tr-note') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+        });
         const segments = [];
         const at = new Map();
         let text = '';
@@ -123,11 +133,22 @@
 
     // ---------------------------------------------------- the pen
 
-    function createHighlights({ element, body, tools, selection, toast, onChange }) {
+    function createHighlights({ element, body, tools, selection, toast, copyText, onChange, article }) {
         let marks = [];
         let pen = true;
         let alt = false;
+        let picked = null;
+        let editing = null;
+        let hideTimer = 0;
         let alive = true;
+
+        const toolbar = document.createElement('div');
+        toolbar.className = 'tr-tb';
+        toolbar.hidden = true;
+        toolbar.innerHTML = `<button type="button" class="tr-tb-note" title="Note" aria-label="Note">${ICON.note}</button>
+            <button type="button" class="tr-tb-link" title="Copy a link to this passage" aria-label="Copy a link to this passage">${ICON.link}</button>
+            <button type="button" class="tr-tb-remove" title="Remove (Backspace)" aria-label="Remove">${ICON.trash}</button>`;
+        element.appendChild(toolbar);
 
         const penButton = document.createElement('button');
         penButton.type = 'button';
@@ -157,7 +178,9 @@
             // order, a second highlight in the same paragraph was looked for
             // in a node the first had already cut short, and never drawn.
             for (const mark of marks.slice().reverse()) paint(now, mark);
+            if (picked && !marks.some((one) => one.id === picked)) picked = null;
             element.classList.toggle('has-marks', marks.length > 0);
+            renderNotes();
             if (onChange) onChange(marks.map((one) => ({ ...one })), now.text);
         }
 
@@ -185,6 +208,7 @@
 
         function remove(id) {
             const before = marks.slice();
+            hideToolbar(true);
             redraw(marks.filter((one) => one.id !== id));
             toast('Highlight removed', () => redraw(before));
         }
@@ -214,6 +238,114 @@
             else add(Math.min(a, b), Math.max(a, b));
         }
 
+        // ------------------------------------------------- the toolbar
+
+        const inksOf = (id) => [...body.querySelectorAll(`mark.tr-mark[data-h="${id}"]`)];
+
+        function showToolbar(id, near) {
+            clearTimeout(hideTimer);
+            toolbar.dataset.h = id;
+            toolbar.hidden = false;
+            const box = element.getBoundingClientRect();
+            const at = (near || inksOf(id)[0]).getBoundingClientRect();
+            const width = toolbar.offsetWidth;
+            toolbar.style.left = `${Math.max(8, Math.min(at.left - box.left + at.width / 2 - width / 2, box.width - width - 8))}px`;
+            toolbar.style.top = `${Math.max(56, at.top - box.top - toolbar.offsetHeight - 6)}px`;
+        }
+
+        function hideToolbar(now) {
+            clearTimeout(hideTimer);
+            const go = () => {
+                toolbar.hidden = true;
+                if (picked) inksOf(picked).forEach((ink) => ink.classList.remove('is-picked'));
+                picked = null;
+            };
+            if (now) go();
+            else hideTimer = setTimeout(go, HIDE_MS);
+        }
+
+        function pick(id, near) {
+            if (picked && picked !== id) inksOf(picked).forEach((ink) => ink.classList.remove('is-picked'));
+            picked = id;
+            inksOf(id).forEach((ink) => ink.classList.add('is-picked'));
+            showToolbar(id, near);
+        }
+
+        async function copyLink(id) {
+            const mark = marks.find((one) => one.id === id);
+            if (!mark) return;
+            const { text } = model();
+            const url = String(article().url || '').split('#')[0] + TextAnchor.fragment(text, mark.start, mark.end);
+            toast((await copyText(url)) ? 'Copied a link to the passage' : 'Could not reach the clipboard');
+        }
+
+        toolbar.addEventListener('pointerenter', () => clearTimeout(hideTimer));
+        toolbar.addEventListener('pointerleave', () => { if (!picked) hideToolbar(); });
+        Dom.holdFocus(toolbar);
+        toolbar.addEventListener('click', (event) => {
+            const id = toolbar.dataset.h;
+            if (event.target.closest('.tr-tb-note')) startNote(id);
+            else if (event.target.closest('.tr-tb-link')) copyLink(id);
+            else if (event.target.closest('.tr-tb-remove')) remove(id);
+        });
+
+        // ---------------------------------------------------- notes
+
+        /** Under the block a highlight ends in: a list item's or a cell's own end, else after the block. */
+        function placeNote(note, mark) {
+            const inks = inksOf(mark.id);
+            const last = inks[inks.length - 1];
+            if (!last) return;
+            const block = last.closest(BLOCKS);
+            if (!block || !body.contains(block)) last.after(note);
+            else if (/^(LI|TD|TH|DD|DT)$/.test(block.tagName)) block.appendChild(note);
+            else block.after(note);
+        }
+
+        function renderNotes() {
+            body.querySelectorAll('.tr-note').forEach((note) => note.remove());
+            for (const mark of marks) {
+                if (!(mark.note && mark.note.trim()) && editing !== mark.id) continue;
+                const note = document.createElement('div');
+                note.className = 'tr-note';
+                note.dataset.h = mark.id;
+                if (editing === mark.id) {
+                    note.classList.add('is-editing');
+                    note.innerHTML = `<textarea rows="2" placeholder="A note on this passage" aria-label="Note"></textarea>`;
+                    const field = note.querySelector('textarea');
+                    field.value = mark.note || '';
+                    field.addEventListener('input', () => {
+                        mark.note = field.value;
+                        if (onChange) onChange(marks.map((one) => ({ ...one })), model().text);
+                    });
+                    field.addEventListener('keydown', (event) => {
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                            event.preventDefault();
+                            field.blur();
+                        }
+                    });
+                    field.addEventListener('blur', () => {
+                        if (editing !== mark.id) return;
+                        editing = null;
+                        renderNotes();
+                    });
+                    placeNote(note, mark);
+                    field.focus({ preventScroll: true });
+                } else {
+                    note.innerHTML = `${ICON.note}<span></span>`;
+                    note.querySelector('span').textContent = mark.note.trim();
+                    note.title = 'Edit the note';
+                    placeNote(note, mark);
+                }
+            }
+        }
+
+        function startNote(id) {
+            hideToolbar(true);
+            editing = id;
+            renderNotes();
+        }
+
         // --------------------------------------------------- events
 
         body.addEventListener('pointerup', (event) => {
@@ -222,11 +354,25 @@
             // After the browser has settled the selection the press made.
             setTimeout(() => take(erasing), 0);
         });
-        // Alt and a click on a highlight takes it off.
         body.addEventListener('click', (event) => {
             const ink = event.target.closest('mark.tr-mark');
             const sel = selection();
-            if (ink && event.altKey && (!sel || !sel.range || sel.range.collapsed)) remove(ink.dataset.h);
+            if (ink && (!sel || !sel.range || sel.range.collapsed)) {
+                if (event.altKey) remove(ink.dataset.h);
+                else pick(ink.dataset.h, ink);
+                return;
+            }
+            const note = event.target.closest('.tr-note:not(.is-editing)');
+            if (note) startNote(note.dataset.h);
+            else if (picked && !event.target.closest('.tr-tb')) hideToolbar(true);
+        });
+        body.addEventListener('pointerover', (event) => {
+            const ink = event.target.closest('mark.tr-mark');
+            if (ink && !picked && !editing) showToolbar(ink.dataset.h, ink);
+        });
+        body.addEventListener('pointerout', (event) => {
+            const ink = event.target.closest('mark.tr-mark');
+            if (ink && !picked && !(event.relatedTarget && event.relatedTarget.closest && event.relatedTarget.closest('mark.tr-mark'))) hideToolbar();
         });
         penButton.addEventListener('click', () => setPen(!pen));
 
@@ -240,11 +386,31 @@
                 alt = !!on;
                 element.classList.toggle('is-erasing', alt && pen);
             },
+            /** Escape: lets go of a picked highlight first. Answers whether it did anything. */
+            escape() {
+                if (picked || !toolbar.hidden) {
+                    hideToolbar(true);
+                    return true;
+                }
+                return false;
+            },
+            removePicked() {
+                if (!picked) return false;
+                remove(picked);
+                return true;
+            },
+            /** The column moved: the toolbar over a word that is no longer there goes. */
+            onScroll() {
+                if (!toolbar.hidden) hideToolbar(true);
+            },
             /** Highlighting switched off in Settings: the ink comes off the article, and what was highlighted is kept for its return. */
             destroy() {
                 alive = false;
                 for (const mark of marks) unpaint(body, mark.id);
+                body.querySelectorAll('.tr-note').forEach((note) => note.remove());
                 element.classList.remove('has-marks', 'is-pen', 'is-erasing');
+                clearTimeout(hideTimer);
+                toolbar.remove();
                 penButton.remove();
             },
             get records() { return marks.map((one) => ({ ...one })); },
@@ -252,7 +418,7 @@
         };
     }
 
-    const ArticleHighlights = { createHighlights, modelOf, offsetOf, paint, unpaint, ICON };
+    const ArticleHighlights = { createHighlights, modelOf, offsetOf, paint, unpaint, HIDE_MS, ICON };
 
     root.BB = root.BB || {};
     root.BB.ArticleHighlights = ArticleHighlights;
