@@ -275,6 +275,11 @@
         // At night, photographs a little dimmer, and formulas and diagrams
         // turned light on dark where the page marks them safe to turn.
         readerDimImages: true,
+        // The pen: letting go of a selection in the article inks it, and
+        // what is highlighted is copied out as Markdown. Nothing is stored —
+        // highlights last as long as the page does. Off, a selection is
+        // only a selection.
+        readerHighlight: true,
 
         // YouTube Shorts has no way to skip within a short — ↑ and ↓ change
         // short, and nothing seeks. On, ← and → skip back and forward by

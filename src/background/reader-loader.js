@@ -19,7 +19,9 @@
 
     /** What every text reader is made of, after the core list. */
     const BASE_FILES = Object.freeze([
+        'src/shared/text-anchor.js',
         'src/content/article-clean.js',
+        'src/content/article-highlights.js',
         'src/content/article-reader.js',
     ]);
 

@@ -34,6 +34,7 @@
     const Icons = ns.Icons || req('../shared/icons.js');
     const Theme = ns.Theme || req('./theme.js');
     const Settings = ns.Settings || req('../shared/settings.js');
+    const ArticleHighlights = ns.ArticleHighlights || req('./article-highlights.js');
 
     const ROOT_ID = 'bb-text-reader';
     /** On <html> while the reader is up. */
@@ -85,6 +86,8 @@
     const POP_HIDE_MS = 250;
     /** The prefix ArticleClean puts on the page's ids, and so on every link within the article. */
     const OWN_LINK = '#bbr-';
+    /** How long a toast, and its Undo, stays up. */
+    const TOAST_MS = 5000;
 
     /**
      * The typography settings, each clamped to what its control offers, as
@@ -175,7 +178,9 @@
                         <footer class="tr-foot"></footer>
                     </article>
                 </div>
-            </div>`;
+            </div>
+            <div class="tr-toast" role="status" aria-live="polite" hidden><span class="tr-toast-text"></span><button
+                 type="button" class="tr-toast-undo">Undo</button></div>`;
     }
 
     /**
@@ -205,6 +210,14 @@
          * started — can see it belongs to a reader that is gone.
          */
         let session = null;
+
+        /**
+         * The highlights of every article read in this page, by key — the
+         * page's own article, and on Wikipedia each one reached from it —
+         * with each article's title, address and text. Held as long as the
+         * page is; never stored.
+         */
+        const kept = new Map();
 
         const settings = () => (getSettings ? getSettings() : Settings.DEFAULTS);
 
@@ -277,6 +290,11 @@
             });
 
             part('.tr-close').addEventListener('click', close);
+            part('.tr-toast-undo').addEventListener('click', () => {
+                const undo = mine.undo;
+                hideToast(mine);
+                if (undo) undo();
+            });
             part('.tr-toc-btn').addEventListener('click', () => setToc(mine, !element.classList.contains('is-toc-open')));
             part('.tr-toc').addEventListener('click', (event) => {
                 const link = event.target.closest('a[data-at]');
@@ -299,6 +317,8 @@
             // capture phase, ahead of this, and still run.
             host.addEventListener('keydown', (event) => event.stopPropagation());
             document.addEventListener('keydown', onKey, true);
+            document.addEventListener('keyup', onKeyUp, true);
+            window.addEventListener('blur', onBlur);
             window.addEventListener('popstate', onPopState);
 
             Theme.appearance().then((look) => {
@@ -371,8 +391,14 @@
                 ${article.hero ? `<figure class="tr-hero"><img src="${Dom.escapeAttr(article.hero)}" alt="" decoding="async"></figure>` : ''}`;
 
             const body = mine.body;
+            // The pen is on the article it was made for, which is about to go.
+            if (mine.hl) {
+                mine.hl.destroy();
+                mine.hl = null;
+            }
             body.textContent = '';
-            if (counted.words < MIN_WORDS && !force) {
+            mine.thin = counted.words < MIN_WORDS && !force;
+            if (mine.thin) {
                 body.innerHTML = `<div class="tr-thin"><p>This page does not look like an article — ${counted.words} words to read.</p>
                     <button type="button" class="tr-anyway">Open anyway</button></div>`;
                 body.querySelector('.tr-anyway').addEventListener('click', () => show(mine, article, counted, { force: true }));
@@ -385,7 +411,73 @@
                 ? `<a class="tr-source" href="${Dom.safeUrlAttr(article.url)}">${ICON.out}<span>${esc(host)}</span></a>` : '';
             mine.scroll.scrollTop = 0;
             buildToc(mine);
+            arm(mine);
             onScroll(mine);
+        }
+
+        // --------------------------------------------------- highlights
+
+        /**
+         * The pen on the article shown, as Settings › Reader has it: on, it
+         * draws again whatever was highlighted in this article before; off,
+         * there is no pen, and what was highlighted waits for it to be back.
+         */
+        function arm(mine) {
+            const want = settings().readerHighlight !== false && !mine.thin;
+            if (mine.hl && (!want || mine.hl.key !== mine.key)) {
+                mine.hl.destroy();
+                mine.hl = null;
+            }
+            if (!want || mine.hl) return;
+            const key = mine.key;
+            const article = mine.article;
+            mine.hl = ArticleHighlights.createHighlights({
+                element: mine.element,
+                body: mine.body,
+                tools: mine.element.querySelector('.tr-tools'),
+                selection: () => selectionOf(mine),
+                toast: (text, undo) => showToast(mine, text, undo),
+                onChange: (marks, text) => {
+                    if (marks.length) kept.set(key, { title: article.title, url: article.url, text, marks });
+                    else kept.delete(key);
+                },
+            });
+            mine.hl.key = key;
+            mine.hl.load(kept.has(key) ? kept.get(key).marks : []);
+        }
+
+        /**
+         * What is selected in the article. The reader is in a shadow root,
+         * which Chrome answers for itself; elsewhere the document's selection
+         * is asked for the ranges inside it.
+         */
+        function selectionOf(mine) {
+            if (mine.shadow.getSelection) {
+                const sel = mine.shadow.getSelection();
+                return sel ? { range: sel.rangeCount ? sel.getRangeAt(0) : null, clear: () => sel.removeAllRanges() } : null;
+            }
+            const sel = document.getSelection();
+            if (!sel) return null;
+            let range = null;
+            try { [range] = sel.getComposedRanges({ shadowRoots: [mine.shadow] }); } catch (_) { range = null; }
+            return { range: range || null, clear: () => sel.removeAllRanges() };
+        }
+
+        /** Inside the reader rather than the page's toast: it carries an Undo, which belongs where the ink went on. */
+        function showToast(mine, text, undo) {
+            const toast = mine.element.querySelector('.tr-toast');
+            toast.querySelector('.tr-toast-text').textContent = text;
+            toast.querySelector('.tr-toast-undo').hidden = !undo;
+            mine.undo = undo || null;
+            toast.hidden = false;
+            clearTimeout(mine.toastTimer);
+            mine.toastTimer = setTimeout(() => hideToast(mine), TOAST_MS);
+        }
+
+        function hideToast(mine) {
+            clearTimeout(mine.toastTimer);
+            mine.undo = null;
+            mine.element.querySelector('.tr-toast').hidden = true;
         }
 
         // ---------------------------------------------- the contents rail
@@ -630,6 +722,10 @@
         function onKey(event) {
             const mine = session;
             if (!mine || event.defaultPrevented) return;
+            if (event.key === 'Alt') {
+                if (mine.hl) mine.hl.setAlt(true);
+                return;
+            }
             // Focus inside the shadow root reads, from outside, as the host.
             const active = mine.shadow.activeElement;
             const typing = active && (/^(TEXTAREA|INPUT|SELECT)$/.test(active.tagName) || active.isContentEditable);
@@ -649,6 +745,14 @@
             }
         }
 
+        function onKeyUp(event) {
+            if (session && session.hl && event.key === 'Alt') session.hl.setAlt(false);
+        }
+
+        function onBlur() {
+            if (session && session.hl) session.hl.setAlt(false);
+        }
+
         /** A navigation of the page's own (an app moving to another page) leaves the reader behind. */
         function onPopState() {
             const mine = session;
@@ -662,6 +766,7 @@
             const mine = session;
             if (!mine) return;
             applyType(mine);
+            arm(mine);
             Theme.appearance().then((look) => {
                 if (mine.alive) dress(mine, { ...look, theme: themeOf() });
             }).catch(() => {});
@@ -674,7 +779,10 @@
             done.alive = false;
             session = null;
             document.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('keyup', onKeyUp, true);
+            window.removeEventListener('blur', onBlur);
             window.removeEventListener('popstate', onPopState);
+            clearTimeout(done.toastTimer);
             if (done.resize) done.resize.disconnect();
             cancelAnimationFrame(done.frame);
             clearTimeout(done.hoverTimer);
@@ -698,6 +806,7 @@
             /** For the specs: the shadow root is closed to everyone else. */
             get element() { return session ? session.element : null; },
             get host() { return session ? session.host : null; },
+            get highlights() { return session ? session.hl : null; },
         };
     }
 

@@ -3282,7 +3282,7 @@ check('the text reader clamps the shared type to the same ranges, and follows ev
     eq(ArticleReader.typeOf({ readerFontSize: 99, readerLineHeight: 'x', readerLineWidth: 10 }), { size: 26, lead: 1.6, measure: 480 });
     const main = require('fs').readFileSync(`${__dirname}/../src/content/main.js`, 'utf8');
     const list = /TEXT_READER_SURFACES = \[([^\]]*)\]/.exec(main)[1];
-    for (const key of [...Object.keys(ArticleReader.TYPE), 'readerTheme', 'readerWarmth', 'readerFont', 'readerDimImages', 'skin']) {
+    for (const key of [...Object.keys(ArticleReader.TYPE), 'readerTheme', 'readerWarmth', 'readerFont', 'readerDimImages', 'readerHighlight', 'skin']) {
         assert(list.includes(`'${key}'`), `${key} only reaches an open text reader after a reload`);
     }
     for (const value of ['serif', 'sans']) assert(ArticleReader.FONTS[value], `${value} is offered with no face behind it`);

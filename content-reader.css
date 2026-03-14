@@ -1863,6 +1863,64 @@ html.bb-reader-open body { overflow: hidden !important; }
     text-decoration: none;
 }
 
+/* ---- Ink: the skin's own highlighter, as the YouTube reader draws it. A
+   picked one darkens, and under the eraser one fades and is struck. */
+
+.tr-body mark.tr-mark {
+    color: inherit;
+    background: var(--rd-mark);
+    padding: .08em 0;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    cursor: pointer;
+}
+
+.tr-body mark.tr-mark.is-start { border-top-left-radius: var(--rd-r-mark); border-bottom-left-radius: var(--rd-r-mark); }
+.tr-body mark.tr-mark.is-end { border-top-right-radius: var(--rd-r-mark); border-bottom-right-radius: var(--rd-r-mark); }
+.tr-body mark.tr-mark:hover { background: var(--rd-mark-hot); }
+
+.bb-text-reader.is-erasing .tr-body mark.tr-mark:hover {
+    background: var(--rd-mark-erase);
+    text-decoration: line-through;
+    text-decoration-color: var(--rd-now);
+}
+
+.tr-body ::selection { background: var(--rd-mark-wet); }
+
+/* The pen's button lights while it is on. */
+.bb-text-reader .tr-pen[aria-pressed="true"] { color: var(--rd-accent-ink); }
+
+/* ---- The toast, with its Undo */
+
+.tr-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 20px;
+    z-index: 40;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: calc(100% - 24px);
+    padding: 8px 8px 8px 14px;
+    background: var(--rd-toast-bg);
+    color: var(--rd-toast-fg);
+    border-radius: var(--rd-r-sm);
+    box-shadow: var(--rd-tb-shadow);
+    font-family: var(--rd-font);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.bb-text-reader .tr-toast-undo {
+    padding: 4px 8px;
+    border-radius: var(--rd-r-sm);
+    font-weight: 700;
+    color: var(--rd-toast-act);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
 /* A footnote's mark: a quiet link, the note a hover or a click away. */
 .tr-body sup a { text-decoration: none; padding: 0 .08em; }
 

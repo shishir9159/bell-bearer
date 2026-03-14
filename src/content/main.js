@@ -853,7 +853,7 @@
 
     /** And an open text reader: the type it shares with that one, and Settings › Reader. */
     const TEXT_READER_SURFACES = ['readerFontSize', 'readerLineHeight', 'readerLineWidth', 'readerTheme', 'readerWarmth',
-        'readerFont', 'readerDimImages', 'skin'];
+        'readerFont', 'readerDimImages', 'readerHighlight', 'skin'];
 
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&
