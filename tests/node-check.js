@@ -661,6 +661,9 @@ check('highlights that touch, overlap or stand a space apart become one, their n
     eq([made.exact, made.note], ['one two three', 'first\n\nsecond']);
     eq(TextAnchor.merge(marks, { id: 'd', start: 14, end: 18 }, text).marks.length, 1, 'a word between two highlights joins them');
     eq(TextAnchor.merge([c], { id: 'e', start: 0, end: 3 }, text).marks.map((m) => m.id), ['e', 'c'], 'kept in the order they read');
+    const paras = 'end of one\nstart of two';
+    eq(TextAnchor.merge([{ id: 'p', start: 7, end: 10 }], { id: 'q', start: 11, end: 16 }, paras).marks.length, 2,
+        'the last words of a paragraph and the first of the next are two passages');
 });
 check('a highlight is found again where its words went, and is gone where they did', () => {
     const mark = { start: 4, end: 7, exact: 'two' };

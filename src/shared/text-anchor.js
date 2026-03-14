@@ -59,10 +59,11 @@
         const notes = [];
         const kept = [];
         for (const one of marks) {
-            // Touching counts, and so does a gap of nothing but space.
+            // Touching counts, and so does a gap of nothing but spaces — but
+            // not a line break: two passages in two paragraphs stay two.
             const between = one.end <= start ? text.slice(one.end, start) : one.start >= end ? text.slice(end, one.start) : '';
             if (one.end < start || one.start > end) {
-                if (!(between && !/\S/.test(between))) { kept.push(one); continue; }
+                if (!(between && /^[^\S\n]*$/.test(between))) { kept.push(one); continue; }
             }
             start = Math.min(start, one.start);
             end = Math.max(end, one.end);
