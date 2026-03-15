@@ -177,6 +177,7 @@
                         <div class="tr-body"></div>
                         <footer class="tr-foot"></footer>
                     </article>
+                    <aside class="tr-aside" aria-label="Highlights"></aside>
                 </div>
             </div>
             <div class="tr-toast" role="status" aria-live="polite" hidden><span class="tr-toast-text"></span><button
@@ -214,8 +215,8 @@
         /**
          * The highlights of every article read in this page, by key — the
          * page's own article, and on Wikipedia each one reached from it —
-         * with each article's title, address and text. Held as long as the
-         * page is; never stored.
+         * with each article's title, address and text, so Copy can quote
+         * and link them all. Held as long as the page is; never stored.
          */
         const kept = new Map();
 
@@ -434,11 +435,13 @@
             mine.hl = ArticleHighlights.createHighlights({
                 element: mine.element,
                 body: mine.body,
+                aside: mine.element.querySelector('.tr-aside'),
                 tools: mine.element.querySelector('.tr-tools'),
                 selection: () => selectionOf(mine),
                 toast: (text, undo) => showToast(mine, text, undo),
                 copyText: (text) => Promise.resolve(copyText ? copyText(text) : false),
-                article: () => ({ url: article.url, title: article.title }),
+                jumpTo: (target) => jumpTo(mine, target),
+                article: () => ({ url: article.url, title: article.title, all: () => [...kept.values()] }),
                 onChange: (marks, text) => {
                     if (marks.length) kept.set(key, { title: article.title, url: article.url, text, marks });
                     else kept.delete(key);

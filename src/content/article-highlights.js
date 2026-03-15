@@ -1,10 +1,11 @@
 /**
- * Highlighting in the text reader: a pen over the article, and a note under
- * a passage.
+ * Highlighting in the text reader: a pen over the article, a note under a
+ * passage, and all of it copied out as Markdown when the reading is done.
  *
  * **Nothing is stored.** A highlight lives in the page it was made on, as
  * long as that page is open — closing the reader and opening it again finds
- * it where it was, a reload does not.
+ * it where it was, a reload does not. What is kept of a reading is what is
+ * copied out of it: the passages, their notes and a link back to each.
  *
  * **The pen is the browser's own selection.** Unlike the YouTube reader,
  * whose transcript is words with times and drawn word by word, an article is
@@ -40,9 +41,11 @@
 
     const ICON = Object.freeze({
         pen: Icons.svg('highlighter', { size: 18 }),
+        list: Icons.svg('quotes', { size: 18 }),
         note: Icons.svg('note-pencil', { size: 16 }),
         link: Icons.svg('link-simple', { size: 16 }),
         trash: Icons.svg('trash', { size: 16 }),
+        copy: Icons.svg('copy', { size: 14 }),
     });
 
     // ------------------------------------------------------- the text
@@ -130,10 +133,37 @@
         }
     }
 
+    /** A passage as Markdown quotes it: a line of the quote for each block it crosses. */
+    function quoteLines(text) {
+        return text.split('\n').map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    }
+
+    /**
+     * Every highlight of a reading as Markdown: under each article's title,
+     * linked, each passage quoted with a link that opens the page at it, and
+     * its note under it. `articles` is `[{ title, url, text, marks }]`.
+     */
+    function markdownOf(articles) {
+        const out = [];
+        for (const { title, url, text, marks } of articles) {
+            if (!marks.length) continue;
+            const base = String(url || '').split('#')[0];
+            out.push(`## [${String(title || base).replace(/([[\]])/g, '\\$1')}](${base})`, '');
+            for (const mark of marks) {
+                const lines = quoteLines(text.slice(mark.start, mark.end));
+                if (!lines.length) continue;
+                const link = TextAnchor.fragment(text, mark.start, mark.end);
+                lines[lines.length - 1] += link ? ` [↗](${base}${link})` : '';
+                out.push(...lines.map((line) => `> ${line}`), '');
+                if (mark.note && mark.note.trim()) out.push(mark.note.trim(), '');
+            }
+        }
+        return out.join('\n').trim();
+    }
 
     // ---------------------------------------------------- the pen
 
-    function createHighlights({ element, body, tools, selection, toast, copyText, onChange, article }) {
+    function createHighlights({ element, body, aside, tools, selection, toast, copyText, jumpTo, onChange, article }) {
         let marks = [];
         let pen = true;
         let alt = false;
@@ -156,7 +186,13 @@
         penButton.title = 'Pen — letting go of a selection inks it (Alt to erase)';
         penButton.setAttribute('aria-label', 'Pen');
         penButton.innerHTML = ICON.pen;
-        tools.prepend(penButton);
+        const listButton = document.createElement('button');
+        listButton.type = 'button';
+        listButton.className = 'tr-btn tr-list-btn';
+        listButton.title = 'Highlights';
+        listButton.setAttribute('aria-label', 'Highlights');
+        listButton.innerHTML = `${ICON.list}<span class="tr-list-count"></span>`;
+        tools.prepend(penButton, listButton);
 
         const model = () => modelOf(body);
 
@@ -179,8 +215,8 @@
             // in a node the first had already cut short, and never drawn.
             for (const mark of marks.slice().reverse()) paint(now, mark);
             if (picked && !marks.some((one) => one.id === picked)) picked = null;
-            element.classList.toggle('has-marks', marks.length > 0);
             renderNotes();
+            renderList();
             if (onChange) onChange(marks.map((one) => ({ ...one })), now.text);
         }
 
@@ -317,6 +353,7 @@
                     field.addEventListener('input', () => {
                         mark.note = field.value;
                         if (onChange) onChange(marks.map((one) => ({ ...one })), model().text);
+                        renderList();
                     });
                     field.addEventListener('keydown', (event) => {
                         if (event.key === 'Enter' && !event.shiftKey) {
@@ -344,6 +381,50 @@
             hideToolbar(true);
             editing = id;
             renderNotes();
+        }
+
+        // ------------------------------------------------------ list
+
+        /** The highlights beside the column: each passage, its note, and Copy for them all. */
+        function renderList() {
+            const count = marks.length;
+            listButton.querySelector('.tr-list-count').textContent = count ? String(count) : '';
+            element.classList.toggle('has-marks', count > 0);
+            if (!count) {
+                aside.innerHTML = '';
+                return;
+            }
+            const { text } = model();
+            aside.innerHTML = `<div class="tr-aside-head"><p class="tr-aside-title">Highlights <span>${count}</span></p>
+                <button type="button" class="tr-copy" title="Copy every highlight as Markdown">${ICON.copy}<span>Copy</span></button></div>
+                <ol class="tr-hl-list">${marks.map((mark) => `<li><button type="button" class="tr-hl" data-h="${Dom.escapeAttr(mark.id)}">
+                    <span class="tr-hl-quote">${Dom.escapeHtml(TextAnchor.quote(text, mark.start, mark.end))}</span>
+                    ${mark.note && mark.note.trim() ? `<span class="tr-hl-note">${Dom.escapeHtml(mark.note.trim())}</span>` : ''}</button></li>`).join('')}</ol>`;
+        }
+
+        aside.addEventListener('click', (event) => {
+            if (event.target.closest('.tr-copy')) {
+                copyAll();
+                return;
+            }
+            const item = event.target.closest('.tr-hl');
+            if (!item) return;
+            const first = inksOf(item.dataset.h)[0];
+            if (first) {
+                jumpTo(first);
+                pick(item.dataset.h, first);
+            }
+        });
+
+        async function copyAll() {
+            const label = aside.querySelector('.tr-copy span');
+            const ok = await copyText(markdownOf(article().all()));
+            if (!alive) return;
+            toast(ok ? 'Copied the highlights as Markdown' : 'Could not reach the clipboard');
+            if (ok && label) {
+                label.textContent = 'Copied';
+                setTimeout(() => { if (label.isConnected) label.textContent = 'Copy'; }, 1600);
+            }
         }
 
         // --------------------------------------------------- events
@@ -375,8 +456,10 @@
             if (ink && !picked && !(event.relatedTarget && event.relatedTarget.closest && event.relatedTarget.closest('mark.tr-mark'))) hideToolbar();
         });
         penButton.addEventListener('click', () => setPen(!pen));
+        listButton.addEventListener('click', () => element.classList.toggle('is-list-open'));
 
         setPen(true);
+        renderList();
 
         return {
             load,
@@ -403,22 +486,25 @@
             onScroll() {
                 if (!toolbar.hidden) hideToolbar(true);
             },
-            /** Highlighting switched off in Settings: the ink comes off the article, and what was highlighted is kept for its return. */
+            copyAll,
+            /** Highlighting switched off in Settings: the ink comes off the article, and the list is kept. */
             destroy() {
                 alive = false;
                 for (const mark of marks) unpaint(body, mark.id);
                 body.querySelectorAll('.tr-note').forEach((note) => note.remove());
-                element.classList.remove('has-marks', 'is-pen', 'is-erasing');
+                aside.innerHTML = '';
+                element.classList.remove('has-marks', 'is-pen', 'is-erasing', 'is-list-open');
                 clearTimeout(hideTimer);
                 toolbar.remove();
                 penButton.remove();
+                listButton.remove();
             },
             get records() { return marks.map((one) => ({ ...one })); },
             get pen() { return pen; },
         };
     }
 
-    const ArticleHighlights = { createHighlights, modelOf, offsetOf, paint, unpaint, HIDE_MS, ICON };
+    const ArticleHighlights = { createHighlights, modelOf, offsetOf, paint, unpaint, markdownOf, quoteLines, HIDE_MS, ICON };
 
     root.BB = root.BB || {};
     root.BB.ArticleHighlights = ArticleHighlights;

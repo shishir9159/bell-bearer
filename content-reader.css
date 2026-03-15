@@ -1888,8 +1888,11 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 .tr-body ::selection { background: var(--rd-mark-wet); }
 
-/* The pen's button lights while it is on. */
+/* The pen's button lights while it is on; the list's carries the count. */
 .bb-text-reader .tr-pen[aria-pressed="true"] { color: var(--rd-accent-ink); }
+.tr-list-count { font-size: 12px; font-variant-numeric: tabular-nums; }
+.bb-text-reader:not(.has-marks) .tr-list-btn,
+.bb-text-reader.is-wide .tr-list-btn { display: none; }
 
 /* ---- The toolbar over a highlight */
 
@@ -1952,6 +1955,94 @@ html.bb-reader-open body { overflow: hidden !important; }
     border-radius: var(--rd-r-sm);
     outline: none;
 }
+
+/* ---- The highlights: a rail right of the column where there is room for
+   it, a sheet from the bar where there is not, and nothing at all until
+   something is highlighted. */
+
+.tr-aside {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: start;
+    align-self: start;
+    position: sticky;
+    top: 88px;
+    width: 260px;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--rd-chip-2) transparent;
+    font-family: var(--rd-font);
+}
+
+.bb-text-reader:not(.has-marks) .tr-aside,
+.bb-text-reader:not(.is-wide):not(.is-list-open) .tr-aside { display: none; }
+
+.bb-text-reader:not(.is-wide).is-list-open .tr-aside {
+    position: fixed;
+    top: 52px;
+    right: 12px;
+    left: auto;
+    z-index: 11;
+    width: min(340px, calc(100% - 24px));
+    max-height: min(70vh, calc(100% - 72px));
+    padding: 12px 14px;
+    background: var(--rd-card);
+    border: var(--rd-card-border);
+    border-radius: var(--rd-r);
+    box-shadow: var(--rd-card-shadow);
+}
+
+.tr-aside-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+
+.tr-aside-title {
+    margin: 0;
+    font-family: var(--rd-font-tab);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--rd-faint);
+}
+
+.tr-aside-title span { margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+.bb-text-reader .tr-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--rd-r-chip);
+    background: var(--rd-chip);
+    color: var(--tr-text);
+    font-size: 12px;
+}
+
+.bb-text-reader .tr-copy:hover { background: var(--rd-chip-2); }
+
+.tr-hl-list { list-style: none; margin: 0; padding: 0; }
+.tr-hl-list li { border-top: 1px solid var(--rd-divider); }
+
+.bb-text-reader .tr-hl {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    padding: 10px 2px;
+    text-align: left;
+}
+
+.tr-hl-quote {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--tr-text);
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.tr-hl-note { font-size: 12px; line-height: 1.45; color: var(--tr-muted); font-style: var(--rd-note-style); }
 
 /* ---- The toast, with its Undo */
 
