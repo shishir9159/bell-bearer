@@ -1607,7 +1607,7 @@ html.bb-reader-open body { overflow: hidden !important; }
     align-self: start;
     position: sticky;
     top: 88px;
-    width: 220px;
+    width: min(220px, 100%);
     max-height: calc(100vh - 140px);
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -1967,7 +1967,8 @@ html.bb-reader-open body { overflow: hidden !important; }
     align-self: start;
     position: sticky;
     top: 88px;
-    width: 260px;
+    /* No wider than its column: at the narrowest window that has rails, 224px. */
+    width: min(260px, 100%);
     max-height: calc(100vh - 140px);
     overflow-y: auto;
     overscroll-behavior: contain;
