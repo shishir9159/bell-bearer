@@ -483,4 +483,142 @@
             closeAll();
         });
     });
+
+    // ---------------------------------------------------------- highlights
+
+    const PASSAGES = `<p>Every cache has to forget, sooner or later</p><p>The oldest entry goes first.</p>${prose(3)}`;
+
+    /** Select `from`–`to` of a text node in the reader, and let go, as a pointer would. */
+    function stroke(reader, node, from, to, { alt = false, endNode = node } = {}) {
+        const sel = reader.element.getRootNode().getSelection();
+        const range = document.createRange();
+        range.setStart(node, from);
+        range.setEnd(endNode, to);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        reader.element.querySelector('.tr-body').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, composed: true, button: 0, altKey: alt }));
+        return new Promise((done) => setTimeout(done, 20));
+    }
+
+    /** The text node holding `words`, and where in it they start. */
+    function find(reader, words) {
+        const walker = document.createTreeWalker(reader.element.querySelector('.tr-body'), NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const at = node.data.indexOf(words);
+            if (at >= 0) return { node, at };
+        }
+        throw new Error('no ' + words);
+    }
+
+    const inked = (reader) => [...reader.element.querySelectorAll('mark.tr-mark')].map((m) => m.textContent).join('|');
+    const paragraph = (reader, i) => reader.element.querySelectorAll('.tr-body p')[i].firstChild;
+
+    suite('text reader — highlighting with the pen', () => {
+        test('letting go of a selection inks it, grown to whole words, and Undo takes it off', async () => {
+            closeAll();
+            const { reader } = makeReader(articleOf(PASSAGES));
+            reader.open();
+            await styled(reader);
+            await stroke(reader, paragraph(reader, 0), 8, 22);
+            assertEqual(inked(reader), 'cache has to forget', 'a stroke let go mid-word did not take the word');
+            const toast = reader.element.querySelector('.tr-toast');
+            assertEqual(toast.hidden, false);
+            toast.querySelector('.tr-toast-undo').click();
+            assertEqual(inked(reader), '');
+            assertEqual(reader.element.querySelector('.tr-body p').textContent, 'Every cache has to forget, sooner or later', 'the text was cut up and not put back');
+            closeAll();
+        });
+
+        test('two strokes over one passage are one highlight; two paragraphs\' are two', async () => {
+            closeAll();
+            const { reader } = makeReader(articleOf(PASSAGES));
+            reader.open();
+            await styled(reader);
+            await stroke(reader, paragraph(reader, 0), 6, 15);
+            const rest = find(reader, 'to forget');
+            await stroke(reader, rest.node, rest.at, rest.at + 9);
+            assertEqual(reader.highlights.records.length, 1);
+            assertEqual(reader.highlights.records[0].exact, 'cache has to forget');
+            const later = find(reader, 'later');
+            await stroke(reader, later.node, later.at, later.at + 5);
+            const next = find(reader, 'The oldest');
+            await stroke(reader, next.node, next.at, next.at + 3);
+            assertEqual(inked(reader), 'cache has to forget|later|The', 'a paragraph\'s end and the next one\'s start ran together');
+            closeAll();
+        });
+
+        test('with the pen off a selection stays a selection; alt erases, and backspace takes the one picked', async () => {
+            closeAll();
+            const { reader } = makeReader(articleOf(PASSAGES));
+            reader.open();
+            await styled(reader);
+            reader.element.querySelector('.tr-pen').click();
+            await stroke(reader, paragraph(reader, 0), 0, 5);
+            assertEqual(inked(reader), '', 'the pen inked while it was off');
+            reader.element.querySelector('.tr-pen').click();
+            await stroke(reader, paragraph(reader, 0), 0, 5);
+            await stroke(reader, paragraph(reader, 1), 4, 10);
+            assertEqual(reader.highlights.records.length, 2);
+            const every = find(reader, 'Every');
+            await stroke(reader, every.node, 1, 3, { alt: true });
+            assertEqual(inked(reader), 'oldest', 'alt did not erase what it crossed');
+            reader.element.querySelector('mark.tr-mark').click();
+            reader.element.querySelector('.tr-scroll').dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, composed: true, cancelable: true }));
+            assertEqual(inked(reader), '');
+            closeAll();
+        });
+
+        test('a note goes under its passage, and closing the reader keeps both for the page — nothing is stored', async () => {
+            closeAll();
+            const stored = JSON.stringify(window.MockChrome.state.localStore);
+            const { reader } = makeReader(articleOf(PASSAGES));
+            reader.open();
+            await styled(reader);
+            await stroke(reader, paragraph(reader, 1), 4, 10);
+            reader.element.querySelector('mark.tr-mark').click();
+            reader.element.querySelector('.tr-tb-note').click();
+            const field = reader.element.querySelector('.tr-note textarea');
+            assert(field, 'no field for the note');
+            field.value = 'Usually.';
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('blur'));
+            assertEqual(reader.element.querySelector('.tr-note').textContent.trim(), 'Usually.');
+            assertEqual(reader.element.querySelector('.tr-note').previousElementSibling.textContent, 'The oldest entry goes first.');
+            reader.close();
+            reader.open();
+            await styled(reader);
+            assertEqual(inked(reader), 'oldest');
+            assertEqual(reader.highlights.records[0].note, 'Usually.');
+            assertEqual(JSON.stringify(window.MockChrome.state.localStore), stored, 'a highlight went into storage');
+            closeAll();
+        });
+
+        test('copy gives every highlight as markdown: the title, the passage with a link to it, and its note', async () => {
+            closeAll();
+            let copied = '';
+            const reader = ArticleReader().createArticleReader({
+                adapter: { read: articleOf(PASSAGES, { title: 'On [caches]', url: 'https://example.com/post#top' }) },
+                getSettings: () => window.BB.Settings.DEFAULTS, notify() {}, loadStyles: loadSheet,
+                copyText: async (text) => { copied = text; return true; },
+            });
+            readers.push(reader);
+            reader.open();
+            await styled(reader);
+            await stroke(reader, paragraph(reader, 1), 4, 10);
+            await reader.highlights.copyAll();
+            assertEqual(copied, '## [On \\[caches\\]](https://example.com/post)\n\n> oldest [↗](https://example.com/post#:~:text=oldest)');
+            closeAll();
+        });
+
+        test('with highlighting off in settings there is no pen, and a selection is left alone', async () => {
+            closeAll();
+            const { reader } = makeReader(articleOf(PASSAGES), { settings: { readerHighlight: false } });
+            reader.open();
+            await styled(reader);
+            assertEqual(reader.element.querySelector('.tr-pen'), null);
+            await stroke(reader, paragraph(reader, 0), 0, 5);
+            assertEqual(inked(reader), '');
+            closeAll();
+        });
+    });
 })();
