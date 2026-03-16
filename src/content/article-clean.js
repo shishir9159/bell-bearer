@@ -438,7 +438,17 @@
             return out;
         }
 
-        return { clean: (el) => tidy(el.tagName && CONTAINER.has(el.tagName.toUpperCase()) ? blocks(el) : children(el, doc.createDocumentFragment())), image, largest: (set) => largest(set, base) };
+        return {
+            clean: (el) => tidy(el.tagName && CONTAINER.has(el.tagName.toUpperCase()) ? blocks(el) : children(el, doc.createDocumentFragment())),
+            /** `el` itself cleaned, not only what is in it: a table taken out of an article, say. */
+            cleanNode: (el) => {
+                const out = doc.createDocumentFragment();
+                node(el, out);
+                return tidy(out);
+            },
+            image,
+            largest: (set) => largest(set, base),
+        };
     }
 
     const isBlock = (one) => one.nodeType === 1 && (BLOCK.has(one.tagName) || /^(PRE|VIDEO|AUDIO|DIV)$/.test(one.tagName));
@@ -493,7 +503,12 @@
         return createCleaner(options).clean(el);
     }
 
-    const ArticleClean = { clean, createCleaner, linkOf, sourceOf, candidates, largest, ID_PREFIX };
+    /** `el` itself, cleaned, as a fragment of `doc`. */
+    function cleanNode(el, options = {}) {
+        return createCleaner(options).cleanNode(el);
+    }
+
+    const ArticleClean = { clean, cleanNode, createCleaner, linkOf, sourceOf, candidates, largest, ID_PREFIX };
 
     root.BB = root.BB || {};
     root.BB.ArticleClean = ArticleClean;

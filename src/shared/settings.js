@@ -281,6 +281,13 @@
         // only a selection.
         readerHighlight: true,
 
+        // Wikipedia in the reader (src/content/wiki-read.js): what an
+        // article shows. The infobox as a card beside the article, folded
+        // under its first paragraph, or not at all; and the citation marks,
+        // quiet and a hover from their source, or none.
+        wikipediaInfobox: 'side', // 'side' | 'fold' | 'hide'
+        wikipediaCitations: true,
+
         // YouTube Shorts has no way to skip within a short — ↑ and ↓ change
         // short, and nothing seeks. On, ← and → skip back and forward by
         // shortsSeekSeconds (1–30) while a Shorts page is open, and are left

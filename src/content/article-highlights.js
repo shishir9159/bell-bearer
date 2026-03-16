@@ -52,12 +52,13 @@
 
     /**
      * The article's text and where each of its text nodes starts in it.
-     * A note drawn under a passage is not the article's text; a text node
-     * in another block than the one before is a line further on.
+     * A note drawn under a passage, or a card folded into the article, is
+     * not the article's text; a text node in another block than the one
+     * before is a line further on.
      */
     function modelOf(body) {
         const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
-            acceptNode: (node) => (node.parentElement && node.parentElement.closest('.tr-note') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+            acceptNode: (node) => (node.parentElement && node.parentElement.closest('.tr-note, .tr-glance-fold') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
         });
         const segments = [];
         const at = new Map();

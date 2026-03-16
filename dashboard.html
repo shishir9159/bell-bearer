@@ -461,7 +461,22 @@
                     </div>
                     <div class="settings-section" id="wikipediaSettingsPanel" data-site-settings="wikipedia"
                          data-plate="Wikipedia" data-plate-proper hidden>
-                        <p class="settings-hint">On Wikipedia the reader is the site's own, ready on every article: the article as it is written, without the edit links, navigation boxes and banners around it. How it looks — day or night, warmth, typeface, size — is set for every page under Reader, at the top of Settings.</p>
+                        <p class="settings-hint">On Wikipedia the reader is the site's own, ready on every article: the article as it is written, without the edit links, navigation boxes and banners around it. How it looks — day or night, warmth, typeface, size — is set for every page under Reader, at the top of Settings. What an article shows is set here.</p>
+                        <div class="settings-option">
+                            <label class="setting-label" for="wikipediaInfobox">The infobox</label>
+                            <select id="wikipediaInfobox">
+                                <option value="side">At a glance, beside the article</option>
+                                <option value="fold">Folded under the first paragraph</option>
+                                <option value="hide">Not shown</option>
+                            </select>
+                        </div>
+                        <div class="settings-option">
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="wikipediaCitations">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <label class="setting-label" for="wikipediaCitations">Citation marks in the text, each showing its source on a hover — off, the references are still at the article's end</label>
+                        </div>
                     </div>
                     <div class="settings-section" id="netflixSettingsPanel" data-site-settings="netflix"
                          data-plate="Netflix" data-plate-proper hidden>

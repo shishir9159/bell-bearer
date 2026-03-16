@@ -177,7 +177,7 @@
                         <div class="tr-body"></div>
                         <footer class="tr-foot"></footer>
                     </article>
-                    <aside class="tr-aside" aria-label="Highlights"></aside>
+                    <aside class="tr-aside"><section class="tr-glance" hidden></section><section class="tr-marks" aria-label="Highlights"></section></aside>
                 </div>
             </div>
             <div class="tr-toast" role="status" aria-live="polite" hidden><span class="tr-toast-text"></span><button
@@ -233,7 +233,7 @@
             if (session) return true;
             let article = null;
             try {
-                article = adapter.read(document, location.href);
+                article = adapter.read(document, location.href, settings());
             } catch (error) {
                 console.error('Bell Bearer: the reader could not read this page', error);
             }
@@ -266,6 +266,8 @@
                 body: part('.tr-body'),
                 article: null,
                 url: keyOf(location.href),
+                // What the article shown was read from, to read it again when its layout changes.
+                source: { doc: document, url: location.href },
                 focus: document.activeElement,
                 lastTop: 0,
                 headings: [],
@@ -373,6 +375,8 @@
             mine.key = article.key || keyOf(article.url);
             const esc = Dom.escapeHtml;
             const element = mine.element;
+            element.dataset.kind = article.kind || 'article';
+            element.classList.toggle('hide-cites', !!(article.meta && article.meta.hideCitations));
             element.querySelector('.tr-where').textContent = article.siteName || '';
             const column = element.querySelector('.tr-article');
             if (article.lang) column.setAttribute('lang', article.lang);
@@ -407,6 +411,14 @@
                 body.appendChild(article.body);
             }
 
+            mine.glance = null;
+            element.querySelector('.tr-glance').textContent = '';
+            if (article.aside && !mine.thin) {
+                mine.glance = document.createElement('div');
+                mine.glance.className = 'tr-glance-box';
+                mine.glance.appendChild(article.aside);
+            }
+
             const host = (() => { try { return new URL(article.url).hostname.replace(/^www\./, ''); } catch (_) { return ''; } })();
             element.querySelector('.tr-foot').innerHTML = host
                 ? `<a class="tr-source" href="${Dom.safeUrlAttr(article.url)}">${ICON.out}<span>${esc(host)}</span></a>` : '';
@@ -435,7 +447,7 @@
             mine.hl = ArticleHighlights.createHighlights({
                 element: mine.element,
                 body: mine.body,
-                aside: mine.element.querySelector('.tr-aside'),
+                aside: mine.element.querySelector('.tr-marks'),
                 tools: mine.element.querySelector('.tr-tools'),
                 selection: () => selectionOf(mine),
                 toast: (text, undo) => showToast(mine, text, undo),
@@ -513,6 +525,37 @@
             mine.element.classList.toggle('is-wide', wide);
             if (wide) mine.element.classList.remove('is-toc-open');
             showToc(mine);
+            placeGlance(mine);
+        }
+
+        /**
+         * An article's "at a glance" card — Wikipedia's infobox — beside the
+         * column where there is room and its adapter asks for it there, else
+         * folded under the article's first paragraph. Folded, it is in the
+         * article but not of its text: a highlight counts no word of it.
+         */
+        function placeGlance(mine) {
+            const box = mine.glance;
+            const rail = mine.element.querySelector('.tr-glance');
+            const side = !!box && mine.article.asidePlace !== 'fold' && mine.element.classList.contains('is-wide');
+            let fold = mine.body.querySelector(':scope > .tr-glance-fold');
+            if (box && side && box.parentNode !== rail) {
+                rail.innerHTML = `<p class="tr-glance-title">${Dom.escapeHtml(mine.article.asideTitle || 'At a glance')}</p>`;
+                rail.appendChild(box);
+            } else if (box && !side && !(fold && fold.contains(box))) {
+                if (!fold) {
+                    fold = document.createElement('details');
+                    fold.className = 'tr-glance-fold';
+                    fold.innerHTML = `<summary>${Dom.escapeHtml(mine.article.asideTitle || 'At a glance')}</summary>`;
+                    const lead = [...mine.body.children].find((el) => el.tagName === 'P' && el.textContent.trim());
+                    if (lead) lead.after(fold);
+                    else mine.body.prepend(fold);
+                }
+                fold.appendChild(box);
+            }
+            if (side && fold) fold.remove();
+            rail.hidden = !side;
+            mine.element.classList.toggle('has-glance', side);
         }
 
         function setToc(mine, open) {
@@ -534,6 +577,8 @@
         /** The column scrolled so `target` is just under the bar. Never scrollIntoView, which scrolls the page under the reader too. */
         function jumpTo(mine, target) {
             if (!target) return;
+            // Into folded end matter: the fold opens first, or there is nothing to see.
+            for (let fold = target.closest('details'); fold; fold = fold.parentElement && fold.parentElement.closest('details')) fold.open = true;
             const scroll = mine.scroll;
             const top = target.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop - LANDING;
             const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -700,9 +745,11 @@
             if (mine.element.classList.contains('is-toc-open') && !event.target.closest('.tr-toc, .tr-toc-btn')) setToc(mine, false);
             // A footnote's mark opens its note, and a click on it again
             // closes it; any other link within the article scrolls the
-            // column there, rather than the page under the reader.
-            const own = event.target.closest(`a[href^="${OWN_LINK}"]`);
-            if (own && mine.body.contains(own)) {
+            // column there, rather than the page under the reader — from the
+            // glance card or a note as much as from the text: followed, an
+            // in-page link would write our id into the page's own address.
+            const own = !event.defaultPrevented && event.target.closest(`a[href^="${OWN_LINK}"]`);
+            if (own) {
                 event.preventDefault();
                 const note = noteOf(mine, own);
                 clearTimeout(mine.hoverTimer);
@@ -778,6 +825,16 @@
             const mine = session;
             if (!mine) return;
             applyType(mine);
+            // A setting that changes what the article shows — Wikipedia's
+            // infobox, its citations — draws it again, where it was.
+            if (adapter.layoutOf && adapter.layoutOf(settings()) !== mine.article.layout) {
+                const next = adapter.read(mine.source.doc, mine.source.url, settings());
+                if (next) {
+                    const top = mine.scroll.scrollTop;
+                    show(mine, next);
+                    mine.scroll.scrollTop = top;
+                }
+            }
             arm(mine);
             Theme.appearance().then((look) => {
                 if (mine.alive) dress(mine, { ...look, theme: themeOf() });

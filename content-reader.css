@@ -1977,8 +1977,9 @@ html.bb-reader-open body { overflow: hidden !important; }
     font-family: var(--rd-font);
 }
 
-.bb-text-reader:not(.has-marks) .tr-aside,
+.bb-text-reader:not(.has-marks):not(.has-glance) .tr-aside,
 .bb-text-reader:not(.is-wide):not(.is-list-open) .tr-aside { display: none; }
+.bb-text-reader:not(.has-marks) .tr-marks { display: none; }
 
 .bb-text-reader:not(.is-wide).is-list-open .tr-aside {
     position: fixed;
@@ -2078,6 +2079,81 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 /* A footnote's mark: a quiet link, the note a hover or a click away. */
 .tr-body sup a { text-decoration: none; padding: 0 .08em; }
+
+/* Wikipedia's citation marks, quieter still — an article can have three
+   hundred — and none at all where Settings › Wikipedia says so. */
+.bb-text-reader :is(.tr-body, .tr-glance-box) sup.reference a { color: var(--rd-faint); font-size: .8em; }
+.bb-text-reader :is(.tr-body, .tr-glance-box) sup.reference a:hover { color: var(--tr-link); }
+.bb-text-reader.hide-cites :is(.tr-body, .tr-glance-box) sup.reference { display: none; }
+
+/* An encyclopedia article is links from end to end; underlined, a page of
+   them reads as a page of links. They stay a link's colour, softened, and
+   the line comes back under the one the pointer is on. */
+.bb-text-reader[data-kind="wiki"] .tr-body a { color: color-mix(in oklab, var(--tr-link) 72%, var(--tr-text)); text-decoration-color: transparent; }
+.bb-text-reader[data-kind="wiki"] .tr-body a:hover { text-decoration-color: currentColor; }
+
+/* ---- End matter, folded at the article's end: References, Notes, See also */
+
+.tr-body details.tr-end {
+    margin: 1.2em 0 0;
+    padding-top: .6em;
+    border-top: 1px solid var(--rd-divider);
+    font-size: .86em;
+}
+
+.tr-body details.tr-end > summary {
+    font-family: var(--tr-font-head, var(--rd-font-head));
+    font-weight: var(--rd-head-weight);
+    letter-spacing: var(--rd-head-track);
+    font-size: 1.1em;
+    color: var(--tr-muted);
+}
+
+.tr-body details.tr-end[open] > summary { color: var(--tr-text); margin-bottom: .7em; }
+.tr-body ol.references { padding-left: 1.6em; font-size: .92em; }
+
+/* ---- At a glance: Wikipedia's infobox, as a card beside the article or
+   folded under its first paragraph */
+
+.tr-glance { margin-bottom: 24px; }
+
+.tr-glance-title {
+    margin: 0 0 8px;
+    font-family: var(--rd-font-tab);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--rd-faint);
+}
+
+.tr-body details.tr-glance-fold {
+    margin: 0 0 1.05em;
+    padding: .55em .9em;
+    border: 1px solid var(--rd-divider);
+    border-radius: var(--rd-r);
+}
+
+.tr-body details.tr-glance-fold > summary {
+    font-family: var(--rd-font-tab);
+    font-size: .74em;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--rd-faint);
+}
+
+.tr-body details.tr-glance-fold[open] > summary { margin-bottom: .7em; }
+
+.bb-text-reader .tr-glance-box { font-family: var(--rd-font); font-size: 12.5px; line-height: 1.45; color: var(--tr-text); }
+.bb-text-reader .tr-glance-box .tr-table { margin: 0; overflow-x: auto; }
+.bb-text-reader .tr-glance-box table { width: 100%; border-collapse: collapse; font-size: 1em; }
+.bb-text-reader .tr-glance-box :is(th, td) { padding: 5px 6px; border: 0; border-top: 1px solid var(--rd-divider); background: none; text-align: left; vertical-align: top; }
+.bb-text-reader .tr-glance-box tr:first-child > :is(th, td) { border-top: 0; }
+.bb-text-reader .tr-glance-box th[colspan] { text-align: center; font-family: var(--rd-font-head); font-size: 1.1em; font-weight: var(--rd-head-weight); }
+.bb-text-reader .tr-glance-box th:not([colspan]) { width: 38%; color: var(--tr-muted); font-weight: 500; }
+.bb-text-reader .tr-glance-box img { display: block; max-width: 100%; height: auto; margin: 0 auto; border-radius: var(--rd-r-sm); }
+.bb-text-reader .tr-glance-box a { color: var(--tr-link); text-decoration: none; }
+.bb-text-reader .tr-glance-box :is(ul, ol) { margin: 0; padding-left: 1.1em; }
+.bb-text-reader .tr-glance-box p { margin: 0; }
 
 /* ---- A card beside a link: a footnote's note, over the column */
 

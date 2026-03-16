@@ -14,6 +14,12 @@
  * written in. And the article's short description, hidden on the desktop
  * site, is the line under its title.
  *
+ * What Settings › Wikipedia shows is decided here: the infobox beside the
+ * article as an "at a glance" card, folded under its first paragraph, or
+ * not at all; the citation marks, quiet, or none. End matter — References,
+ * Notes, See also, External links — is folded away at the article's end, its
+ * footnotes still a hover away from their marks.
+ *
  * One selector table, with the spellings of each skin, as every site's
  * reading here has.
  */
@@ -44,8 +50,15 @@
 
     /** Kept, though the page hides it: a formula's picture. */
     const FORMULA = 'img.mwe-math-fallback-image-inline, img.mwe-math-fallback-image-display';
-    /** Classes the reader acts on: what is safe to turn light on dark, and what is a formula. */
-    const KEEP_CLASS = /^(skin-invert(-image)?|mwe-math-fallback-image-(inline|display))$/;
+    /** Classes the reader acts on: what is safe to turn light on dark, a formula, a citation mark and the list it points into. */
+    const KEEP_CLASS = /^(skin-invert(-image)?|mwe-math-fallback-image-(inline|display)|reference|references)$/;
+
+    /**
+     * End matter by the English names of its sections. In any other
+     * language a section is end matter by what is in it — mostly footnotes,
+     * or mostly lists of links — so the rule does not depend on these.
+     */
+    const END_MATTER = /^(References|Notes|Notes_and_references|Footnotes|Citations|Sources|Works_cited|Bibliography|Further_reading|External_links|See_also)$/i;
     /**
      * Parsoid gives nearly every element an id of its own — mwAQ, mwB_Q —
      * and nothing links to them; kept, each would be an anchor the cleaner
@@ -95,17 +108,61 @@
     /** One key for an article whichever of its addresses it was read at — the mobile site's too. */
     const keyOf = (url) => `wikipedia:${langOf(url)}:${titleOf(url)}`;
 
-    function read(doc = root.document, url = doc.baseURI) {
+    /** What of Settings › Wikipedia changes the article drawn: the reader draws it again when this does. */
+    const layoutOf = (settings = {}) => `${settings.wikipediaInfobox || 'side'}|${settings.wikipediaCitations !== false}`;
+
+    function isEndMatter(heading, run) {
+        if (END_MATTER.test(heading.id.replace(/^bbr-/, ''))) return true;
+        const length = run.reduce((sum, one) => sum + (one.textContent || '').trim().length, 0);
+        if (!length) return false;
+        let notes = 0;
+        let links = 0;
+        let lists = false;
+        for (const one of run) {
+            if (one.nodeType !== 1) continue;
+            for (const list of [one, ...one.querySelectorAll('ol.references')]) if (list.matches('ol.references')) notes += list.textContent.length;
+            for (const a of one.querySelectorAll('a')) links += a.textContent.length;
+            lists = lists || /^(UL|OL)$/.test(one.tagName);
+        }
+        return notes / length > 0.5 || (lists && links / length > 0.6);
+    }
+
+    /**
+     * Each end-matter section folded into a <details> under its own name,
+     * which keeps its heading's id: a footnote's mark still finds its note
+     * in there, and the reader opens it when a link goes to one.
+     */
+    function foldEndMatter(body) {
+        for (const heading of [...body.children].filter((el) => el.tagName === 'H2')) {
+            const run = [];
+            for (let next = heading.nextSibling; next && !(next.nodeType === 1 && next.tagName === 'H2'); next = next.nextSibling) run.push(next);
+            if (!isEndMatter(heading, run)) continue;
+            const details = document.createElement('details');
+            details.className = 'tr-end';
+            const summary = document.createElement('summary');
+            summary.textContent = heading.textContent.trim();
+            if (heading.id) summary.id = heading.id;
+            details.append(summary, ...run);
+            heading.replaceWith(details);
+        }
+    }
+
+    function read(doc = root.document, url = doc.baseURI, settings = {}) {
         if (!isArticle(doc)) return null;
         const content = find('content', doc);
         if (!content) return null;
         const canonical = doc.querySelector('link[rel="canonical"]');
         const where = (canonical && canonical.href) || String(url).split('#')[0];
-        const body = ArticleClean.clean(content, {
+        const options = {
             doc: root.document, base: where, drop: NOISE, keep: FORMULA, keepClass: KEEP_CLASS,
             keepId: (id) => !PARSOID_ID.test(id),
-        });
-        body.querySelectorAll('img[class*="mwe-math"]').forEach((img) => img.classList.add('tr-math'));
+        };
+        const body = ArticleClean.clean(content, options);
+        foldEndMatter(body);
+        const place = settings.wikipediaInfobox || 'side';
+        const infobox = place !== 'hide' && content.querySelector('table.infobox');
+        const aside = infobox ? ArticleClean.cleanNode(infobox, { ...options, drop: '.mw-editsection, .navbox, .noprint, .mw-empty-elt' }) : null;
+        for (const part of [body, aside].filter(Boolean)) part.querySelectorAll('img[class*="mwe-math"]').forEach((img) => img.classList.add('tr-math'));
         const heading = find('title', doc);
         const short = find('description', doc);
         const edited = /\bon (\d{1,2} \S+ \d{4}|\S+ \d{1,2}, \d{4})/.exec((find('edited', doc) || {}).textContent || '');
@@ -121,14 +178,20 @@
             lang: content.getAttribute('lang') || doc.documentElement.getAttribute('lang') || '',
             dir: content.getAttribute('dir') || doc.documentElement.getAttribute('dir') || '',
             body,
-            aside: null,
-            meta: { revision: Number((/"wgRevisionId":(\d+)/.exec(configOf(doc)) || [])[1]) || null },
+            aside: aside && aside.firstChild ? aside : null,
+            asidePlace: place,
+            asideTitle: 'At a glance',
+            layout: layoutOf(settings),
+            meta: {
+                revision: Number((/"wgRevisionId":(\d+)/.exec(configOf(doc)) || [])[1]) || null,
+                hideCitations: settings.wikipediaCitations === false,
+            },
         };
     }
 
-    const adapter = { id: 'wikipedia', read };
+    const adapter = { id: 'wikipedia', read, layoutOf };
 
-    const WikiRead = { read, adapter, isArticle, keyOf, langOf, titleOf, SELECTORS, NOISE };
+    const WikiRead = { read, adapter, isArticle, keyOf, langOf, titleOf, layoutOf, foldEndMatter, isEndMatter, SELECTORS, NOISE };
 
     root.BB = root.BB || {};
     root.BB.WikiRead = WikiRead;
