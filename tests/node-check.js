@@ -7385,7 +7385,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Site.detectSite('en.wikiversity.org'), 'other', 'a sister project is not the encyclopedia');
         const entry = SiteScripts.ENTRIES.find((one) => one.id === 'wikipedia');
         assert(entry.js.includes('src/content/article-reader.js'), 'the reader would have to be brought in on every article');
-        assert(/site === 'wikipedia' && WikiRead \? WikiRead\.adapter/.test(readRepo('src/content/main.js')), 'the extractor reads Wikipedia');
+        assert(/site === 'wikipedia' && WikiRead \? \{ \.\.\.WikiRead\.adapter, enhance: BB\.WikiUi/.test(readRepo('src/content/main.js')), 'the extractor reads Wikipedia');
         const WikiRead = require('../src/content/wiki-read.js');
         eq(WikiRead.keyOf('https://en.m.wikipedia.org/wiki/Alan%20Turing#Death'), WikiRead.keyOf('https://en.wikipedia.org/wiki/Alan_Turing'),
             'the mobile site and the desktop one are one article');

@@ -329,7 +329,40 @@
                 dress(mine, { ...look, theme: themeOf() });
             }).catch(() => {});
             mine.scroll.focus({ preventScroll: true });
+            // What a site adds to its articles (Wikipedia's, src/content/wiki-ui.js).
+            mine.enhanced = adapter.enhance ? adapter.enhance(apiOf(mine)) || null : null;
             return true;
+        }
+
+        /**
+         * The reader as a site's own module sees it: the article shown, the
+         * means to show another in its place, and the reader's own pieces —
+         * its bar, its popovers, its toast. Held only while this reader is
+         * open: `alive` says when it no longer is.
+         */
+        function apiOf(mine) {
+            return {
+                get alive() { return mine.alive; },
+                get element() { return mine.element; },
+                get body() { return mine.body; },
+                get scroll() { return mine.scroll; },
+                get article() { return mine.article; },
+                tools: mine.element.querySelector('.tr-tools'),
+                settings,
+                notify,
+                copyText: (text) => Promise.resolve(copyText ? copyText(text) : false),
+                /** Another article in this one's place, read from `source` — `{ doc, url }` — and drawn at its top. */
+                show(article, source) {
+                    if (!mine.alive) return;
+                    hidePop(mine);
+                    if (source) mine.source = source;
+                    show(mine, article);
+                },
+                jumpTo: (target) => jumpTo(mine, target),
+                popover: { show: (anchor, content, options) => showPop(mine, anchor, content, options), hide: () => hidePop(mine) },
+                toast: (text, undo) => showToast(mine, text, undo),
+                close,
+            };
         }
 
         /** The theme Settings › Reader asks for: the page's own, or day or night whatever the page is. */
@@ -813,9 +846,13 @@
         }
 
         /** A navigation of the page's own (an app moving to another page) leaves the reader behind. */
-        function onPopState() {
+        function onPopState(event) {
             const mine = session;
-            if (mine && keyOf(location.href) !== mine.url) close();
+            if (!mine) return;
+            // A site that moves between its own articles inside the reader
+            // answers its own Back and Forward.
+            if (mine.enhanced && mine.enhanced.popstate && mine.enhanced.popstate(event)) return;
+            if (keyOf(location.href) !== mine.url) close();
         }
 
         // ------------------------------------------------- the settings
@@ -861,6 +898,7 @@
             if (done.focus && done.focus.isConnected && typeof done.focus.focus === 'function') {
                 try { done.focus.focus({ preventScroll: true }); } catch (_) { /* not focusable any more */ }
             }
+            if (done.enhanced && done.enhanced.closed) done.enhanced.closed();
         }
 
         function toggle(options) {

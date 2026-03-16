@@ -208,6 +208,7 @@
                 'src/content/article-highlights.js',
                 'src/content/article-reader.js',
                 'src/content/wiki-read.js',
+                'src/content/wiki-ui.js',
             ],
         },
     ]);

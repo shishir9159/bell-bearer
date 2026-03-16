@@ -337,7 +337,8 @@
         const { ArticleReader, ArticleExtract, WikiRead } = BB;
         // Wikipedia's own reading on Wikipedia; the extractor on any page
         // no adapter knows — Wikipedia switched off among them.
-        const adapter = site === 'wikipedia' && WikiRead ? WikiRead.adapter : ArticleExtract && ArticleExtract.adapter;
+        const adapter = site === 'wikipedia' && WikiRead ? { ...WikiRead.adapter, enhance: BB.WikiUi && BB.WikiUi.enhance }
+            : ArticleExtract && ArticleExtract.adapter;
         if (!ArticleReader || !adapter) return null;
         textReader = ArticleReader.createArticleReader({
             adapter, notify, getSettings: () => settings,
