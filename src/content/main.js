@@ -47,7 +47,7 @@
         youtube: 'YouTubeUi', twitter: 'TwitterUi', reddit: 'RosterContent', chess: 'ChessContent', lichess: 'ChessContent',
         leetcode: 'LeetUi', typeracer: 'TyperUi', chatgpt: 'ChatUi', claude: 'ChatUi',
         github: 'CiWatchContent', gitlab: 'CiWatchContent', forgejo: 'CiWatchContent', vimeo: 'VimeoDownload',
-        netflix: 'NetflixUi',
+        netflix: 'NetflixUi', wikipedia: 'WikiRead',
     };
     const host = Site.detectSite();
     const site = !OWN[host] || BB[OWN[host]] ? host : 'other';
@@ -334,8 +334,10 @@
 
     function getTextReader() {
         if (textReader) return textReader;
-        const { ArticleReader, ArticleExtract } = BB;
-        const adapter = ArticleExtract && ArticleExtract.adapter;
+        const { ArticleReader, ArticleExtract, WikiRead } = BB;
+        // Wikipedia's own reading on Wikipedia; the extractor on any page
+        // no adapter knows — Wikipedia switched off among them.
+        const adapter = site === 'wikipedia' && WikiRead ? WikiRead.adapter : ArticleExtract && ArticleExtract.adapter;
         if (!ArticleReader || !adapter) return null;
         textReader = ArticleReader.createArticleReader({
             adapter, notify, getSettings: () => settings,

@@ -195,6 +195,21 @@
                 'src/content/netflix-subs.js',
             ],
         },
+        {
+            // The text reader is this site's own: in its entry, rather than
+            // brought in when asked for as on every other page, so an
+            // article opens in the reader at once.
+            id: 'wikipedia',
+            sites: { wikipedia: ['*://*.wikipedia.org/*'] },
+            js: [
+                'src/shared/selectors.js',
+                'src/shared/text-anchor.js',
+                'src/content/article-clean.js',
+                'src/content/article-highlights.js',
+                'src/content/article-reader.js',
+                'src/content/wiki-read.js',
+            ],
+        },
     ]);
 
     /**

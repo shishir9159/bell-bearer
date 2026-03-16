@@ -51,7 +51,8 @@
         "*://codeberg.org/*",
         "*://vimeo.com/*",
         "*://www.vimeo.com/*",
-        "*://*.netflix.com/*"
+        "*://*.netflix.com/*",
+        "*://*.wikipedia.org/*"
       ],
       "js": [
         "src/shared/time.js",

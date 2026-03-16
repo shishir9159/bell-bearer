@@ -63,6 +63,8 @@
         // vimeo.com alone: player.vimeo.com is the player's frame on other
         // sites' pages, where a content script does not run.
         if (host === 'vimeo.com') return 'vimeo';
+        // Every language's, and the mobile site's: en.m.wikipedia.org.
+        if (/(^|\.)wikipedia\.org$/.test(host)) return 'wikipedia';
         return 'other';
     }
 

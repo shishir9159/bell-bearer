@@ -32,7 +32,7 @@
         youtube: 'src/content/youtube-ui.js', twitter: 'src/content/twitter-ui.js', reddit: 'src/content/roster.js',
         chess: 'src/content/chess.js', lichess: 'src/content/chess.js', leetcode: 'src/content/leet-ui.js',
         typeracer: 'src/content/typeracer-ui.js', chatgpt: 'src/content/chat-ui.js', claude: 'src/content/chat-ui.js',
-        netflix: 'src/content/netflix-ui.js',
+        netflix: 'src/content/netflix-ui.js', wikipedia: 'src/content/wiki-read.js',
     };
 
     /** Every isolated-world entry, with the sites in `off` switched off. */

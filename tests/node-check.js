@@ -3440,7 +3440,7 @@ check('every page gets exactly one isolated-world entry, and it is the one for i
         chess: 'src/content/chess.js', lichess: 'src/content/chess.js', leetcode: 'src/content/leet-ui.js',
         typeracer: 'src/content/typeracer-ui.js', chatgpt: 'src/content/chat-ui.js', claude: 'src/content/chat-ui.js',
         github: 'src/content/github-read.js', gitlab: 'src/content/gitlab-read.js', forgejo: 'src/content/forgejo-read.js',
-        vimeo: 'src/content/vimeo-download.js', netflix: 'src/content/netflix-ui.js',
+        vimeo: 'src/content/vimeo-download.js', netflix: 'src/content/netflix-ui.js', wikipedia: 'src/content/wiki-read.js',
     };
     const entries = isolatedEntries();
     for (const url of [
@@ -3452,6 +3452,7 @@ check('every page gets exactly one isolated-world entry, and it is the one for i
         'https://github.com/microsoft/vscode/actions/runs/1', 'https://gist.github.com/a/b',
         'https://gitlab.com/gitlab-org/gitlab-runner/-/pipelines/1', 'https://docs.gitlab.com/ci/', 'https://codeberg.org/forgejo/forgejo/pulls/1',
         'https://docs.codeberg.org/', 'https://vimeo.com/1231817291', 'https://www.vimeo.com/channels/staffpicks/1', 'https://player.vimeo.com/video/1',
+        'https://en.wikipedia.org/wiki/Alan_Turing', 'https://de.m.wikipedia.org/wiki/Alan_Turing', 'https://wikipedia.org/',
     ]) {
         const taking = entries.filter((entry) => entryTakes(entry, url));
         eq(taking.length, 1, url);
@@ -7378,6 +7379,19 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/return youtubeUi \|\| twitterUi \|\| leetUi \|\| chatUi;/.test(main), 'Shift+P would not reach the chat panel');
     });
 
+    check('wikipedia is a site of its own in every language, and its own reading carries the reader', () => {
+        for (const host of ['en.wikipedia.org', 'de.m.wikipedia.org', 'www.wikipedia.org', 'wikipedia.org']) eq(Site.detectSite(host), 'wikipedia', host);
+        eq(Site.detectSite('wikipedia.org.example.com'), 'other');
+        eq(Site.detectSite('en.wikiversity.org'), 'other', 'a sister project is not the encyclopedia');
+        const entry = SiteScripts.ENTRIES.find((one) => one.id === 'wikipedia');
+        assert(entry.js.includes('src/content/article-reader.js'), 'the reader would have to be brought in on every article');
+        assert(/site === 'wikipedia' && WikiRead \? WikiRead\.adapter/.test(readRepo('src/content/main.js')), 'the extractor reads Wikipedia');
+        const WikiRead = require('../src/content/wiki-read.js');
+        eq(WikiRead.keyOf('https://en.m.wikipedia.org/wiki/Alan%20Turing#Death'), WikiRead.keyOf('https://en.wikipedia.org/wiki/Alan_Turing'),
+            'the mobile site and the desktop one are one article');
+        eq(WikiRead.keyOf('https://de.wikipedia.org/w/index.php?title=Alan_Turing&oldid=1'), 'wikipedia:de:Alan_Turing');
+    });
+
     check('leetcode.com is a site of its own', () => {
         eq(Site.detectSite('leetcode.com'), 'leetcode');
         eq(Site.detectSite('www.leetcode.com'), 'leetcode');
@@ -7438,7 +7452,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     check('vimeo and netflix have a card under the id they are detected by, and a page behind each', () => {
         const html = readRepo('dashboard.html');
         const dashboard = readRepo('dashboard.js');
-        eq(SiteIcons.ORDER.slice(-2), ['vimeo', 'netflix'], 'after every site a saved order already names');
+        eq(SiteIcons.ORDER.slice(-3), ['vimeo', 'netflix', 'wikipedia'], 'after every site a saved order already names');
         for (const [id, host, name] of [['vimeo', 'vimeo.com', 'Vimeo'], ['netflix', 'www.netflix.com', 'Netflix']]) {
             eq(Site.detectSite(host), id);
             eq(SiteIcons.get(id).name, name);
@@ -7846,7 +7860,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             eq(SiteIcons.get(site.id) && SiteIcons.get(site.id).name, site.name, site.id);
             assert(html.includes(`id="${site.id}WatchingPanel"`) && dashboard.includes(`'${site.id}WatchingPanel'`), `${site.id} opens on nothing`);
         }
-        eq(SiteIcons.ORDER.slice(-5, -2), ['github', 'gitlab', 'forgejo'], 'after every site a saved order already names');
+        eq(SiteIcons.ORDER.slice(-6, -3), ['github', 'gitlab', 'forgejo'], 'after every site a saved order already names');
     });
     check('a github run is the same run on any of its tabs, and a pull request on any of its', () => {
         const run = ForgeSites.pageOfUrl('https://github.com/microsoft/vscode/actions/runs/37600934749');

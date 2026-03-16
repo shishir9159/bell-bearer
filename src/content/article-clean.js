@@ -119,14 +119,24 @@
     /** A placeholder some lazy loader drew while the real image waited: a 1×1 gif, or nothing. */
     const isPlaceholder = (src) => !src || /^data:image\/(gif|png|svg)/i.test(src) && src.length < 600;
 
-    function createCleaner({ doc = root.document, base = '', drop = '', keepClass = null } = {}) {
+    /**
+     * `drop`, a selector for what a site's adapter knows is not the article;
+     * `keep`, for what it knows is, though the page hides it from sight —
+     * Wikipedia's formulas are images it hides from screen readers, beside
+     * MathML it hides from everyone else. `keepClass` names classes worth
+     * keeping, and `keepId` says which of the page's ids are worth keeping:
+     * Wikipedia gives nearly every element one, and nothing links to most.
+     */
+    function createCleaner({ doc = root.document, base = '', drop = '', keep = '', keepClass = null, keepId = null } = {}) {
         const make = (tag) => doc.createElement(tag);
 
+        const matching = (el, selector) => {
+            if (!selector) return false;
+            try { return el.matches(selector); } catch (_) { return false; }
+        };
         /** Does the site's adapter want this one gone? */
-        function dropped(el) {
-            if (!drop) return false;
-            try { return el.matches(drop); } catch (_) { return false; }
-        }
+        const dropped = (el) => matching(el, drop);
+        const ownId = (id) => !!id && (!keepId || keepId(id));
 
         function copyAttrs(from, to) {
             for (const name of [...EVERYWHERE, ...(ATTRS[from.tagName] || [])]) {
@@ -134,7 +144,7 @@
                 if (value != null && value !== '') to.setAttribute(name, value);
             }
             const id = from.getAttribute('id') || (from.tagName === 'A' && from.getAttribute('name'));
-            if (id) to.id = ID_PREFIX + id;
+            if (ownId(id)) to.id = ID_PREFIX + id;
             if (from.getAttribute('title') && !to.hasAttribute('title') && from.tagName !== 'A') to.title = from.getAttribute('title');
             // Classes a site's adapter knows the meaning of — Wikipedia's
             // `skin-invert`, say — kept so the reader can act on them.
@@ -320,7 +330,7 @@
                 return;
             }
             if (tag === 'NOSCRIPT') { noscript(one, out); return; }
-            if (DROP.has(tag) || isHidden(one) || dropped(one)) return;
+            if (DROP.has(tag) || (!matching(one, keep) && (isHidden(one) || dropped(one)))) return;
             // MathJax 3 draws in elements of its own, with the MathML beside them for screen readers.
             if (tag === 'MJX-CONTAINER') {
                 const mml = one.querySelector('math');
@@ -358,14 +368,14 @@
                 const made = blocks(one);
                 // Its id goes to its first block, where a link to it lands.
                 const first = made.firstElementChild;
-                if (one.getAttribute('id') && first && !first.id) first.id = ID_PREFIX + one.getAttribute('id');
+                if (ownId(one.getAttribute('id')) && first && !first.id) first.id = ID_PREFIX + one.getAttribute('id');
                 out.appendChild(made);
                 return;
             }
             // A span, a font, a custom element: its children, unwrapped. An
             // id it carried stays reachable, on an empty anchor.
             const id = one.getAttribute('id');
-            if (id) {
+            if (ownId(id)) {
                 const anchor = make('span');
                 anchor.id = ID_PREFIX + id;
                 out.appendChild(anchor);

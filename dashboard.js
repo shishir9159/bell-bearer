@@ -83,6 +83,7 @@
         // has a view of its own.
         vimeo: [{ id: 'home', label: 'Vimeo', panel: 'vimeoHomePanel' }],
         netflix: [{ id: 'home', label: 'Netflix', panel: 'netflixHomePanel' }],
+        wikipedia: [{ id: 'home', label: 'Wikipedia', panel: 'wikipediaHomePanel' }],
     };
 
     /**
