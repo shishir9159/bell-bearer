@@ -2177,6 +2177,55 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 @keyframes tr-pop-in { from { opacity: 0; transform: translateY(-3px); } }
 
+/* ---- A picture, large over the article; and a formula, copied on a click */
+
+.tr-body img.tr-math { cursor: copy; vertical-align: middle; }
+.bb-text-reader[data-kind="wiki"] .tr-body img:not(.tr-math),
+.bb-text-reader .tr-glance-box img { cursor: zoom-in; }
+
+.tr-viewer {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 72px;
+    background: rgba(10, 10, 12, .92);
+    animation: tr-pop-in .14s ease-out;
+}
+
+.tr-viewer-figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 100%; max-height: 100%; }
+.tr-viewer-figure img { max-width: 100%; max-height: calc(100vh - 160px); object-fit: contain; background: #fff; border-radius: 2px; }
+
+.tr-viewer-figure figcaption {
+    max-width: 760px;
+    font-family: var(--rd-font);
+    font-size: 13.5px;
+    line-height: 1.5;
+    text-align: center;
+    color: rgba(255, 255, 255, .78);
+}
+
+.bb-text-reader .tr-viewer :is(.tr-viewer-step, .tr-viewer-close) {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, .85);
+    font-size: 30px;
+    line-height: 1;
+}
+
+.bb-text-reader .tr-viewer :is(.tr-viewer-step, .tr-viewer-close):hover { background: rgba(255, 255, 255, .12); }
+.bb-text-reader .tr-viewer .is-prev { left: 14px; top: 50%; transform: translateY(-50%); }
+.bb-text-reader .tr-viewer .is-next { right: 14px; top: 50%; transform: translateY(-50%); }
+.bb-text-reader .tr-viewer .tr-viewer-close { top: 10px; right: 12px; font-size: 26px; }
+.tr-viewer-count { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); font: 12px var(--rd-font); color: rgba(255, 255, 255, .6); }
+
 /* A link's preview: Wikipedia's summary of where it goes. */
 .tr-pop.is-preview { padding: 0; overflow: hidden; max-height: none; }
 .tr-preview-img { display: block; width: 100%; max-height: 190px; object-fit: cover; }
@@ -2226,5 +2275,6 @@ html.bb-reader-open body { overflow: hidden !important; }
 @media (prefers-reduced-motion: reduce) {
     .bb-text-reader,
     .tr-bar { transition: none; }
-    .tr-pop { animation: none; }
+    .tr-pop,
+    .tr-viewer { animation: none; }
 }

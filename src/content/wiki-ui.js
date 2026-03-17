@@ -18,6 +18,10 @@
  * Resting the pointer on a link shows the article's summary beside it, from
  * the endpoint Wikipedia's own Page Previews use: one request for one look,
  * kept for the rest of the page. Settings › Wikipedia turns them off.
+ *
+ * A picture opens large over the article, the arrows stepping through the
+ * article's pictures, rather than on its own file page; and a formula, which
+ * is a picture too, is copied as the LaTeX it was written in.
  */
 (function (root) {
     'use strict';
@@ -191,6 +195,81 @@
             api.popover.hideSoon(link);
         }
 
+        // ---------------------------------------------- pictures and formulas
+
+        /** The article's pictures, in order: not formulas, and not the icons a table carries. */
+        const pictures = () => [...api.element.querySelectorAll('.tr-body img:not(.tr-math), .tr-glance-box img')]
+            .filter((img) => (Number(img.getAttribute('width')) || img.naturalWidth || 0) >= 80);
+
+        function view(list, at) {
+            const viewer = document.createElement('div');
+            viewer.className = 'tr-viewer';
+            viewer.setAttribute('role', 'dialog');
+            viewer.setAttribute('aria-label', 'Picture');
+            viewer.innerHTML = `<figure class="tr-viewer-figure"><img alt=""><figcaption></figcaption></figure>
+                <button type="button" class="tr-viewer-step is-prev" aria-label="Previous picture">‹</button>
+                <button type="button" class="tr-viewer-step is-next" aria-label="Next picture">›</button>
+                <button type="button" class="tr-viewer-close" aria-label="Close">×</button>
+                <span class="tr-viewer-count"></span>`;
+            const img = viewer.querySelector('img');
+            const go = (to) => {
+                at = (to + list.length) % list.length;
+                const one = list[at];
+                // Wikipedia's larger rendering, else the best the page offered.
+                const fallback = one.currentSrc || one.src;
+                img.onerror = () => { img.onerror = null; img.src = fallback; };
+                img.src = one.dataset.full || fallback;
+                img.alt = one.alt || '';
+                const caption = one.closest('figure') && one.closest('figure').querySelector('figcaption');
+                viewer.querySelector('figcaption').textContent = caption ? caption.textContent.trim() : one.alt || '';
+                viewer.querySelector('.tr-viewer-count').textContent = list.length > 1 ? `${at + 1} / ${list.length}` : '';
+            };
+            const shut = () => {
+                document.removeEventListener('keydown', onKey, true);
+                viewer.remove();
+                api.element.classList.remove('has-modal');
+            };
+            const onKey = (event) => {
+                if (event.key === 'Escape') shut();
+                else if (event.key === 'ArrowLeft') go(at - 1);
+                else if (event.key === 'ArrowRight') go(at + 1);
+                else return;
+                event.preventDefault();
+                event.stopPropagation();
+            };
+            viewer.addEventListener('click', (event) => {
+                if (event.target.closest('.is-prev')) go(at - 1);
+                else if (event.target.closest('.is-next')) go(at + 1);
+                else if (!event.target.closest('img')) shut();
+            });
+            viewer.querySelectorAll('.tr-viewer-step').forEach((button) => { button.hidden = list.length < 2; });
+            document.addEventListener('keydown', onKey, true);
+            api.element.classList.add('has-modal');
+            api.element.appendChild(viewer);
+            go(at);
+            return shut;
+        }
+
+        /** A formula's LaTeX, as its picture's alt text carries it, without the display wrapper. */
+        const latexOf = (img) => String(img.alt || '').trim().replace(/^\{\\displaystyle\s*/, '').replace(/\}$/, '').trim();
+
+        function onPicture(event) {
+            if (event.defaultPrevented || event.button !== 0) return;
+            const img = event.target.closest('img');
+            if (!img || !(api.body.contains(img) || img.closest('.tr-glance-box'))) return;
+            if (img.classList.contains('tr-math')) {
+                event.preventDefault();
+                const latex = latexOf(img);
+                if (latex) api.copyText(latex).then((ok) => api.toast(ok ? 'Copied the formula as LaTeX' : 'Could not reach the clipboard'));
+                return;
+            }
+            const list = pictures();
+            const at = list.indexOf(img);
+            if (at < 0) return;
+            event.preventDefault();
+            view(list, at);
+        }
+
         /** Back and Forward between the articles of this reading; anything else is not ours to answer. */
         function popstate(event) {
             const state = event.state && event.state[STATE];
@@ -213,6 +292,7 @@
             return true;
         }
 
+        api.element.addEventListener('click', onPicture);
         api.element.addEventListener('click', onClick);
         api.body.addEventListener('pointerover', onHover);
         api.body.addEventListener('pointerout', onLeave);
@@ -228,7 +308,7 @@
         };
     }
 
-    const WikiUi = { enhance, wikiLink, KEEP };
+    const WikiUi = { enhance, wikiLink, KEEP, PREVIEW_MS };
 
     root.BB = root.BB || {};
     root.BB.WikiUi = WikiUi;

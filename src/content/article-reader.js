@@ -813,6 +813,8 @@
         function onKey(event) {
             const mine = session;
             if (!mine || event.defaultPrevented) return;
+            // Something over the article — a picture, large — has the keys to itself.
+            if (mine.element.classList.contains('has-modal')) return;
             if (event.key === 'Alt') {
                 if (mine.hl) mine.hl.setAlt(true);
                 return;

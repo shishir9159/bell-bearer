@@ -162,7 +162,19 @@
         const place = settings.wikipediaInfobox || 'side';
         const infobox = place !== 'hide' && content.querySelector('table.infobox');
         const aside = infobox ? ArticleClean.cleanNode(infobox, { ...options, drop: '.mw-editsection, .navbox, .noprint, .mw-empty-elt' }) : null;
-        for (const part of [body, aside].filter(Boolean)) part.querySelectorAll('img[class*="mwe-math"]').forEach((img) => img.classList.add('tr-math'));
+        for (const part of [body, aside].filter(Boolean)) {
+            part.querySelectorAll('img[class*="mwe-math"]').forEach((img) => {
+                img.classList.add('tr-math');
+                img.title = 'Copy as LaTeX';
+            });
+            // A picture's larger rendering, for the image viewer: Wikimedia
+            // draws a thumbnail at whatever width its address asks for, up
+            // to the original's own (past it, the viewer falls back).
+            part.querySelectorAll('img[src*="/thumb/"]:not(.tr-math)').forEach((img) => {
+                const full = img.getAttribute('src').replace(/\/\d+px-([^/?]+)(?:\?.*)?$/, '/1280px-$1');
+                if (full !== img.getAttribute('src')) img.dataset.full = full;
+            });
+        }
         const heading = find('title', doc);
         const short = find('description', doc);
         const edited = /\bon (\d{1,2} \S+ \d{4}|\S+ \d{1,2}, \d{4})/.exec((find('edited', doc) || {}).textContent || '');
