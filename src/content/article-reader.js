@@ -359,7 +359,12 @@
                     show(mine, article);
                 },
                 jumpTo: (target) => jumpTo(mine, target),
-                popover: { show: (anchor, content, options) => showPop(mine, anchor, content, options), hide: () => hidePop(mine) },
+                popover: {
+                    show: (anchor, content, options) => showPop(mine, anchor, content, options),
+                    hide: () => hidePop(mine),
+                    /** Let go of the card beside `anchor` in a moment, unless the pointer is on its way into it. */
+                    hideSoon: (anchor) => { if (mine.pop && mine.pop.anchor === anchor) hidePopSoon(mine); },
+                },
                 toast: (text, undo) => showToast(mine, text, undo),
                 close,
             };

@@ -287,6 +287,9 @@
         // quiet and a hover from their source, or none.
         wikipediaInfobox: 'side', // 'side' | 'fold' | 'hide'
         wikipediaCitations: true,
+        // Resting on a link shows the article's summary beside it, from
+        // Wikipedia's own preview endpoint: a request for each look.
+        wikipediaPreviews: true,
 
         // YouTube Shorts has no way to skip within a short — ↑ and ↓ change
         // short, and nothing seeks. On, ← and → skip back and forward by

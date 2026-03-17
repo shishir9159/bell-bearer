@@ -1,6 +1,6 @@
 /**
  * What the reader gains on Wikipedia: following the encyclopedia's own links
- * without leaving the reader.
+ * without leaving the reader, and a look at where one goes before following.
  *
  * A link to another article is fetched — the same page the click would have
  * loaded, from Wikipedia itself, one request for one click — read by the
@@ -14,6 +14,10 @@
  * article for real, since that is what the address already says. A link to
  * anything that is not an article — a talk page, a category, an image's own
  * page — is followed as a link.
+ *
+ * Resting the pointer on a link shows the article's summary beside it, from
+ * the endpoint Wikipedia's own Page Previews use: one request for one look,
+ * kept for the rest of the page. Settings › Wikipedia turns them off.
  */
 (function (root) {
     'use strict';
@@ -26,6 +30,8 @@
     const KEEP = 10;
     /** A state of ours on the history, told apart from one of Wikipedia's own. */
     const STATE = 'bbReader';
+    /** How long the pointer rests on a link before its preview is asked for: passing over one is not a look. */
+    const PREVIEW_MS = 450;
 
     /** `href` as an address on this Wikipedia under /wiki/, or null: an article, perhaps, until it is read. */
     function wikiLink(href, origin = root.location.origin) {
@@ -43,6 +49,9 @@
         const suffix = home.title.startsWith(api.article.title) ? home.title.slice(api.article.title.length) : ' - Wikipedia';
         let shown = home.key;
         let ticket = 0;
+        /** Summaries asked for, by title: a promise each, so a second look asks nothing. */
+        const summaries = new Map();
+        let hover = 0;
 
         kept.set(home.key, { doc: root.document, url: root.location.href.split('#')[0], top: 0 });
 
@@ -115,6 +124,73 @@
             follow(at);
         }
 
+        // ------------------------------------------------- previews
+
+        function summaryOf(at) {
+            const title = at.pathname.slice('/wiki/'.length);
+            if (!summaries.has(title)) {
+                summaries.set(title, fetch(`${at.origin}/api/rest_v1/page/summary/${title}`, { credentials: 'same-origin' })
+                    .then((answer) => (answer.ok ? answer.json() : null))
+                    .catch(() => null));
+            }
+            return summaries.get(title);
+        }
+
+        /** The card: built from the summary's plain fields, never its HTML. */
+        function previewCard(summary, at) {
+            const card = document.createElement('div');
+            card.className = 'tr-preview';
+            const image = summary.thumbnail && /^https:\/\//.test(summary.thumbnail.source) ? summary.thumbnail.source : '';
+            if (image) {
+                const img = document.createElement('img');
+                img.className = 'tr-preview-img';
+                img.src = image;
+                img.alt = '';
+                card.appendChild(img);
+            }
+            const words = document.createElement('div');
+            words.className = 'tr-preview-words';
+            const title = document.createElement('p');
+            title.className = 'tr-preview-title';
+            title.textContent = summary.title || decodeURIComponent(at.pathname.slice(6)).replace(/_/g, ' ');
+            const text = document.createElement('p');
+            text.className = 'tr-preview-text';
+            text.textContent = summary.extract || '';
+            const open = document.createElement('button');
+            open.type = 'button';
+            open.className = 'tr-preview-open';
+            open.textContent = 'Read it here';
+            open.addEventListener('click', () => {
+                api.popover.hide();
+                follow(at);
+            });
+            words.append(title, text, open);
+            card.appendChild(words);
+            return card;
+        }
+
+        function onHover(event) {
+            if (event.pointerType !== 'mouse' || event.buttons || api.settings().wikipediaPreviews === false) return;
+            const link = event.target.closest('a[href]');
+            if (!link || !api.body.contains(link) || link.closest('sup')) return;
+            const at = wikiLink(link.getAttribute('href'));
+            if (!at || WikiRead.keyOf(at.href) === shown) return;
+            clearTimeout(hover);
+            hover = setTimeout(async () => {
+                const summary = await summaryOf(at);
+                // Still on it, and on an article: a page with no summary has no card.
+                if (!api.alive || !link.matches(':hover') || !summary || summary.type === 'no-extract' || !summary.extract) return;
+                api.popover.show(link, previewCard(summary, at), { kind: 'preview' });
+            }, PREVIEW_MS);
+        }
+
+        function onLeave(event) {
+            const link = event.target.closest('a[href]');
+            if (!link || (event.relatedTarget && link.contains(event.relatedTarget))) return;
+            clearTimeout(hover);
+            api.popover.hideSoon(link);
+        }
+
         /** Back and Forward between the articles of this reading; anything else is not ours to answer. */
         function popstate(event) {
             const state = event.state && event.state[STATE];
@@ -138,12 +214,15 @@
         }
 
         api.element.addEventListener('click', onClick);
+        api.body.addEventListener('pointerover', onHover);
+        api.body.addEventListener('pointerout', onLeave);
 
         return {
             popstate,
             /** Closed on another article than the page's: the address says that one, so it is loaded. */
             closed() {
                 ticket++;
+                clearTimeout(hover);
                 if (shown !== home.key) root.location.replace(root.location.href);
             },
         };

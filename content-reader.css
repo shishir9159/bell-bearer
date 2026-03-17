@@ -2177,6 +2177,35 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 @keyframes tr-pop-in { from { opacity: 0; transform: translateY(-3px); } }
 
+/* A link's preview: Wikipedia's summary of where it goes. */
+.tr-pop.is-preview { padding: 0; overflow: hidden; max-height: none; }
+.tr-preview-img { display: block; width: 100%; max-height: 190px; object-fit: cover; }
+.bb-text-reader.is-dimming[data-bb-theme="dark"] .tr-preview-img { filter: brightness(.86) contrast(1.04); }
+.tr-preview-words { padding: 12px 14px 14px; }
+.tr-preview-title { margin: 0 0 4px; font-family: var(--rd-font-head); font-weight: var(--rd-head-weight); font-size: 15px; }
+
+.tr-preview-text {
+    margin: 0 0 10px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--tr-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 6;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.bb-text-reader .tr-preview-open {
+    display: inline-flex;
+    padding: 4px 10px;
+    border-radius: var(--rd-r-chip);
+    background: var(--rd-chip);
+    color: var(--tr-text);
+    font-size: 12.5px;
+}
+
+.bb-text-reader .tr-preview-open:hover { background: var(--rd-chip-2); }
+
 .tr-pop-body > :first-child { margin-top: 0; }
 .tr-pop-body > :last-child { margin-bottom: 0; }
 .tr-pop-body :is(p, ul, ol) { margin: 0 0 .6em; }
