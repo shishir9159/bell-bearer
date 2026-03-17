@@ -36,8 +36,9 @@
         title: ['#firstHeading .mw-page-title-main', '#firstHeading', 'h1.firstHeading', '#section_0'],
         description: ['.shortdescription'],
         edited: ['#footer-info-lastmod', '.last-modified-bar', '#mw-mf-last-modified'],
+        languages: ['#p-lang a.interlanguage-link-target', 'a.interlanguage-link-target', '#p-lang a[hreflang]'],
     });
-    const { find } = Selectors.table(SELECTORS);
+    const { find, findAll } = Selectors.table(SELECTORS);
 
     /** What Wikipedia puts inside an article that is not the article. */
     const NOISE = Object.freeze([
@@ -103,6 +104,17 @@
         } catch (_) {
             return '';
         }
+    }
+
+    /** The article in the other languages it is written in, as the page lists them. */
+    function languagesOf(doc) {
+        return findAll('languages', doc).map((a) => ({
+            lang: a.getAttribute('hreflang') || a.getAttribute('lang') || '',
+            name: a.getAttribute('data-language-autonym') || a.textContent.trim(),
+            english: a.getAttribute('data-language-local-name') || '',
+            title: a.getAttribute('data-title') || '',
+            href: a.href,
+        })).filter((one) => one.lang && /^https:\/\/[\w-]+(\.m)?\.wikipedia\.org\//.test(one.href));
     }
 
     /** One key for an article whichever of its addresses it was read at — the mobile site's too. */
@@ -196,6 +208,7 @@
             layout: layoutOf(settings),
             meta: {
                 revision: Number((/"wgRevisionId":(\d+)/.exec(configOf(doc)) || [])[1]) || null,
+                languages: languagesOf(doc),
                 hideCitations: settings.wikipediaCitations === false,
             },
         };
@@ -203,7 +216,7 @@
 
     const adapter = { id: 'wikipedia', read, layoutOf };
 
-    const WikiRead = { read, adapter, isArticle, keyOf, langOf, titleOf, layoutOf, foldEndMatter, isEndMatter, SELECTORS, NOISE };
+    const WikiRead = { read, adapter, isArticle, keyOf, langOf, titleOf, layoutOf, foldEndMatter, isEndMatter, languagesOf, SELECTORS, NOISE };
 
     root.BB = root.BB || {};
     root.BB.WikiRead = WikiRead;

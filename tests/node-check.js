@@ -7392,6 +7392,22 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(WikiRead.keyOf('https://de.wikipedia.org/w/index.php?title=Alan_Turing&oldid=1'), 'wikipedia:de:Alan_Turing');
     });
 
+    check('a wikipedia citation names the exact revision read, as markdown and as wikipedia\'s own bibtex', () => {
+        const WikiUi = require('../src/content/wiki-ui.js');
+        const article = { title: 'Alan Turing', url: 'https://en.wikipedia.org/wiki/Alan_Turing', meta: { revision: 1380709724 } };
+        const url = WikiUi.revisionUrl(article);
+        eq(url, 'https://en.wikipedia.org/w/index.php?title=Alan_Turing&oldid=1380709724');
+        eq(WikiUi.markdownCite(article, url), `[Alan Turing — Wikipedia](${url})`);
+        eq(WikiUi.markdownCite({ title: 'Brackets [in] a title' }, 'u'), '[Brackets \\[in\\] a title — Wikipedia](u)');
+        eq(WikiUi.revisionUrl({ ...article, meta: {} }), article.url, 'a page that did not say its revision is cited by its address');
+        eq(WikiUi.bibtexCite(article, url, new Date(2026, 9, 18)), [
+            '@misc{wiki:Alan_Turing,', '  author = "{Wikipedia contributors}",',
+            '  title = "Alan Turing --- {Wikipedia}{,} The Free Encyclopedia",', '  year = "2026",',
+            `  url = "${url}",`, '  note = "[Online; accessed 18-October-2026]"', '}',
+        ].join('\n'));
+        assert(/BB\.WikiUi\.openAsked\(/.test(readRepo('src/content/main.js')), 'another language\'s article opens on the page, not in the reader');
+    });
+
     check('leetcode.com is a site of its own', () => {
         eq(Site.detectSite('leetcode.com'), 'leetcode');
         eq(Site.detectSite('www.leetcode.com'), 'leetcode');

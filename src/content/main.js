@@ -908,7 +908,11 @@
         if (timeLimit) timeLimit.sync();
     }
 
-    Settings.get().then(applySettings);
+    Settings.get().then(applySettings).then(() => {
+        // An article opened from another language's, straight into the
+        // reader — once the settings it opens in are in.
+        if (site === 'wikipedia' && BB.WikiUi) BB.WikiUi.openAsked(() => getTextReader() && getTextReader().open());
+    });
     Settings.watch(null, applySettings);
 
     // The watch party takes the player off this (party-media.js boot()), and

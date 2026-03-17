@@ -22,12 +22,20 @@
  * A picture opens large over the article, the arrows stepping through the
  * article's pictures, rather than on its own file page; and a formula, which
  * is a picture too, is copied as the LaTeX it was written in.
+ *
+ * Three tools on the bar: search (or `/`), read in place like a link; the
+ * article in another language, which opens on that language's Wikipedia
+ * straight into the reader; and a citation of the exact revision read, as a
+ * Markdown link — or, with Alt, as BibTeX, the way Wikipedia's own "Cite
+ * this page" gives it.
  */
 (function (root) {
     'use strict';
 
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
+    const Dom = ns.Dom || req('../shared/dom.js');
+    const Icons = ns.Icons || req('../shared/icons.js');
     const WikiRead = ns.WikiRead || req('./wiki-read.js');
 
     /** How many articles of a reading are kept to step back to without fetching. */
@@ -36,6 +44,43 @@
     const STATE = 'bbReader';
     /** How long the pointer rests on a link before its preview is asked for: passing over one is not a look. */
     const PREVIEW_MS = 450;
+    /** How long typing in the search rests before Wikipedia is asked. */
+    const SEARCH_MS = 220;
+    /** The address that opens an article straight into the reader: another language's, chosen from this one. */
+    const OPEN_HASH = '#bb-reader';
+
+    const ICON = Object.freeze({
+        search: Icons.svg('magnifying-glass', { size: 18 }),
+        languages: Icons.svg('translate', { size: 18 }),
+        cite: Icons.svg('book-bookmark', { size: 18 }),
+    });
+
+    /** "Alan Turing — Wikipedia", as a Markdown link to the revision read. */
+    function markdownCite(article, url) {
+        return `[${`${article.title} — Wikipedia`.replace(/([[\]])/g, '\\$1')}](${url})`;
+    }
+
+    /** As Special:CiteThisPage gives it. */
+    function bibtexCite(article, url, now = new Date()) {
+        const day = `${now.getDate()}-${now.toLocaleString('en', { month: 'long' })}-${now.getFullYear()}`;
+        return [
+            `@misc{wiki:${WikiRead.titleOf(article.url) || 'article'},`,
+            '  author = "{Wikipedia contributors}",',
+            `  title = "${article.title.replace(/"/g, "''")} --- {Wikipedia}{,} The Free Encyclopedia",`,
+            `  year = "${now.getFullYear()}",`,
+            `  url = "${url}",`,
+            `  note = "[Online; accessed ${day}]"`,
+            '}',
+        ].join('\n');
+    }
+
+    /** The address of the exact revision of `article` read, or its own address where the page did not say which. */
+    function revisionUrl(article) {
+        const revision = article.meta && article.meta.revision;
+        if (!revision) return article.url;
+        const at = new URL(article.url);
+        return `${at.origin}/w/index.php?title=${encodeURIComponent(WikiRead.titleOf(article.url))}&oldid=${revision}`;
+    }
 
     /** `href` as an address on this Wikipedia under /wiki/, or null: an article, perhaps, until it is read. */
     function wikiLink(href, origin = root.location.origin) {
@@ -78,7 +123,9 @@
             const article = WikiRead.read(entry.doc, entry.url, api.settings());
             if (!article) return false;
             shown = key;
+            closeMenu();
             api.show(article, { doc: entry.doc, url: entry.url });
+            fitTools();
             root.document.title = key === home.key ? home.title : `${article.title}${suffix}`;
             const target = hash && api.body.querySelector(`#${CSS.escape(`bbr-${decodeURIComponent(hash.slice(1))}`)}`);
             if (target) api.jumpTo(target);
@@ -270,6 +317,141 @@
             view(list, at);
         }
 
+        // ------------------------------------------------ the bar's tools
+
+        function tool(icon, label, title) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'tr-btn';
+            button.title = title;
+            button.setAttribute('aria-label', label);
+            button.innerHTML = icon;
+            return button;
+        }
+
+        const searchButton = tool(ICON.search, 'Search Wikipedia', 'Search Wikipedia, and read what you pick here ( / )');
+        const languageButton = tool(ICON.languages, 'Other languages', 'This article in another language');
+        const citeButton = tool(ICON.cite, 'Cite', 'Copy a citation of this revision as a Markdown link — Alt-click for BibTeX');
+        api.tools.prepend(searchButton, languageButton, citeButton);
+
+        /** A small panel under the bar: a field over a list, gone with Escape or a click elsewhere. */
+        let menu = null;
+        function openMenu(kind, placeholder, fill, pick) {
+            closeMenu();
+            menu = document.createElement('div');
+            menu.className = `tr-menu is-${kind}`;
+            menu.innerHTML = `<input type="search" class="tr-menu-field" autocomplete="off" spellcheck="false"><ol class="tr-menu-list"></ol>`;
+            const field = menu.querySelector('input');
+            field.placeholder = placeholder;
+            field.setAttribute('aria-label', placeholder);
+            const list = menu.querySelector('ol');
+            let items = [];
+            let active = 0;
+            const draw = (next) => {
+                items = next;
+                active = 0;
+                list.innerHTML = items.map((item, i) => `<li><button type="button" class="tr-menu-item${i ? '' : ' is-on'}" data-i="${i}">
+                    <span class="tr-menu-name">${Dom.escapeHtml(item.name)}</span>${item.note ? `<span class="tr-menu-note">${Dom.escapeHtml(item.note)}</span>` : ''}</button></li>`).join('');
+            };
+            const mark = () => list.querySelectorAll('.tr-menu-item').forEach((one, i) => one.classList.toggle('is-on', i === active));
+            field.addEventListener('input', () => fill(field.value, draw));
+            field.addEventListener('keydown', (event) => {
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    active = Math.max(0, Math.min(items.length - 1, active + (event.key === 'ArrowDown' ? 1 : -1)));
+                    mark();
+                } else if (event.key === 'Enter' && items[active]) {
+                    event.preventDefault();
+                    const item = items[active];
+                    closeMenu();
+                    pick(item);
+                }
+            });
+            list.addEventListener('click', (event) => {
+                const button = event.target.closest('.tr-menu-item');
+                if (!button) return;
+                const item = items[Number(button.dataset.i)];
+                closeMenu();
+                pick(item);
+            });
+            // Taking the panel out moves the focus out of it too, and that
+            // focusout comes after `menu` has let go of it.
+            const panel = menu;
+            panel.addEventListener('focusout', (event) => {
+                if (menu === panel && !panel.contains(event.relatedTarget)) closeMenu();
+            });
+            api.element.appendChild(menu);
+            fill('', draw);
+            field.focus();
+        }
+
+        function closeMenu() {
+            if (!menu) return;
+            const done = menu;
+            menu = null;
+            done.remove();
+        }
+
+        let searching = 0;
+        function search() {
+            const origin = new URL(api.article.url).origin;
+            openMenu('search', 'Search Wikipedia', (query, draw) => {
+                clearTimeout(searching);
+                if (!query.trim()) {
+                    draw([]);
+                    return;
+                }
+                searching = setTimeout(async () => {
+                    let pages = [];
+                    try {
+                        const answer = await fetch(`${origin}/w/rest.php/v1/search/title?q=${encodeURIComponent(query)}&limit=8`, { credentials: 'same-origin' });
+                        pages = answer.ok ? (await answer.json()).pages || [] : [];
+                    } catch (_) { /* nothing found is what is shown */ }
+                    if (menu && menu.classList.contains('is-search')) draw(pages.map((page) => ({ name: page.title, note: page.description || '', key: page.key })));
+                }, SEARCH_MS);
+            }, (item) => {
+                const path = encodeURIComponent(item.key).replace(/%2F/g, '/').replace(/%3A/g, ':');
+                follow(new URL(`/wiki/${path}`, origin));
+            });
+        }
+
+        const languagesOf = () => (api.article.meta && api.article.meta.languages) || [];
+
+        function languages() {
+            // Simple English first, for a reader who came for an easier telling.
+            const all = languagesOf().slice().sort((a, b) => (b.lang === 'simple') - (a.lang === 'simple'));
+            openMenu('languages', `${all.length} languages`, (query, draw) => {
+                const want = query.trim().toLowerCase();
+                draw(all.filter((one) => !want || [one.name, one.english, one.lang].some((word) => word.toLowerCase().includes(want)))
+                    .map((one) => ({ name: one.name, note: one.title && one.title !== api.article.title ? one.title : one.english, href: one.href })));
+            }, (item) => root.location.assign(`${item.href.split('#')[0]}${OPEN_HASH}`));
+        }
+
+        async function cite(event) {
+            const article = api.article;
+            const url = revisionUrl(article);
+            const text = event.altKey ? bibtexCite(article, url) : markdownCite(article, url);
+            const ok = await api.copyText(text);
+            api.toast(ok ? `Copied the citation${event.altKey ? ' as BibTeX' : ''}` : 'Could not reach the clipboard');
+        }
+
+        /** A tool that has nothing to offer for the article shown is not on the bar. */
+        function fitTools() {
+            languageButton.hidden = !languagesOf().length;
+        }
+
+        searchButton.addEventListener('click', search);
+        languageButton.addEventListener('click', languages);
+        citeButton.addEventListener('click', cite);
+        api.element.addEventListener('keydown', (event) => {
+            const active = api.element.getRootNode().activeElement;
+            const typing = active && (/^(TEXTAREA|INPUT|SELECT)$/.test(active.tagName) || active.isContentEditable);
+            if (event.key !== '/' || typing || event.ctrlKey || event.metaKey || event.altKey) return;
+            event.preventDefault();
+            search();
+        });
+        fitTools();
+
         /** Back and Forward between the articles of this reading; anything else is not ours to answer. */
         function popstate(event) {
             const state = event.state && event.state[STATE];
@@ -303,12 +485,25 @@
             closed() {
                 ticket++;
                 clearTimeout(hover);
+                clearTimeout(searching);
                 if (shown !== home.key) root.location.replace(root.location.href);
             },
         };
     }
 
-    const WikiUi = { enhance, wikiLink, KEEP, PREVIEW_MS };
+    /**
+     * An article opened from another language's: the page loads with our
+     * hash on it, which is taken off as the reader opens. Answers whether
+     * it was there.
+     */
+    function openAsked(open) {
+        if (root.location.hash !== OPEN_HASH) return false;
+        root.history.replaceState(root.history.state, '', root.location.href.split('#')[0]);
+        open();
+        return true;
+    }
+
+    const WikiUi = { enhance, openAsked, wikiLink, markdownCite, bibtexCite, revisionUrl, KEEP, PREVIEW_MS, OPEN_HASH };
 
     root.BB = root.BB || {};
     root.BB.WikiUi = WikiUi;

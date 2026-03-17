@@ -2177,6 +2177,62 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 @keyframes tr-pop-in { from { opacity: 0; transform: translateY(-3px); } }
 
+/* ---- Wikipedia's search and languages: a field over a list, under the bar */
+
+.tr-menu {
+    position: absolute;
+    top: 52px;
+    right: 12px;
+    z-index: 26;
+    width: min(360px, calc(100% - 24px));
+    padding: 10px;
+    background: var(--rd-card);
+    border: var(--rd-card-border);
+    border-radius: var(--rd-r);
+    box-shadow: var(--rd-card-shadow);
+    font-family: var(--rd-font);
+    animation: tr-pop-in .12s ease-out;
+}
+
+.tr-menu-field {
+    width: 100%;
+    padding: 8px 10px;
+    font: 14px var(--rd-font);
+    color: var(--tr-text);
+    background: var(--rd-chip);
+    border: 1px solid var(--rd-divider);
+    border-radius: var(--rd-r-sm);
+    outline: none;
+}
+
+.tr-menu-field:focus { border-color: var(--rd-knob); }
+
+.tr-menu-list {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    max-height: min(340px, 60vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.tr-menu-list:empty { display: none; }
+
+.bb-text-reader .tr-menu-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 100%;
+    padding: 7px 8px;
+    border-radius: var(--rd-r-sm);
+    text-align: left;
+}
+
+.bb-text-reader .tr-menu-item:hover,
+.bb-text-reader .tr-menu-item.is-on { background: var(--rd-chip); }
+.tr-menu-name { font-size: 14px; color: var(--tr-text); }
+.tr-menu-note { font-size: 12px; color: var(--rd-faint); }
+
 /* ---- A picture, large over the article; and a formula, copied on a click */
 
 .tr-body img.tr-math { cursor: copy; vertical-align: middle; }
@@ -2276,5 +2332,6 @@ html.bb-reader-open body { overflow: hidden !important; }
     .bb-text-reader,
     .tr-bar { transition: none; }
     .tr-pop,
-    .tr-viewer { animation: none; }
+    .tr-viewer,
+    .tr-menu { animation: none; }
 }
