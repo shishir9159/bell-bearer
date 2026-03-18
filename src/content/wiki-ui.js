@@ -97,6 +97,8 @@
         // " - Wikipedia", or however this language's Wikipedia ends a title.
         const suffix = home.title.startsWith(api.article.title) ? home.title.slice(api.article.title.length) : ' - Wikipedia';
         let shown = home.key;
+        /** The wiki the reading is on: its links are this one's, wherever the page was opened. */
+        const origin = () => new URL(api.article.url).origin;
         let ticket = 0;
         /** Summaries asked for, by title: a promise each, so a second look asks nothing. */
         const summaries = new Map();
@@ -120,7 +122,7 @@
         }
 
         function draw(key, entry, { hash = '', top = 0 } = {}) {
-            const article = WikiRead.read(entry.doc, entry.url, api.settings());
+            const article = api.read(entry.doc, entry.url);
             if (!article) return false;
             shown = key;
             closeMenu();
@@ -167,7 +169,7 @@
             if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
             const link = event.target.closest('a[href]');
             if (!link || !api.body.contains(link)) return;
-            const at = wikiLink(link.getAttribute('href'));
+            const at = wikiLink(link.getAttribute('href'), origin());
             if (!at) return;
             // A link to the article shown, to a part of it, is the reader's own.
             if (WikiRead.keyOf(at.href) === shown) return;
@@ -224,7 +226,7 @@
             if (event.pointerType !== 'mouse' || event.buttons || api.settings().wikipediaPreviews === false) return;
             const link = event.target.closest('a[href]');
             if (!link || !api.body.contains(link) || link.closest('sup')) return;
-            const at = wikiLink(link.getAttribute('href'));
+            const at = wikiLink(link.getAttribute('href'), origin());
             if (!at || WikiRead.keyOf(at.href) === shown) return;
             clearTimeout(hover);
             hover = setTimeout(async () => {
@@ -394,7 +396,7 @@
 
         let searching = 0;
         function search() {
-            const origin = new URL(api.article.url).origin;
+            const wiki = origin();
             openMenu('search', 'Search Wikipedia', (query, draw) => {
                 clearTimeout(searching);
                 if (!query.trim()) {
@@ -404,14 +406,14 @@
                 searching = setTimeout(async () => {
                     let pages = [];
                     try {
-                        const answer = await fetch(`${origin}/w/rest.php/v1/search/title?q=${encodeURIComponent(query)}&limit=8`, { credentials: 'same-origin' });
+                        const answer = await fetch(`${wiki}/w/rest.php/v1/search/title?q=${encodeURIComponent(query)}&limit=8`, { credentials: 'same-origin' });
                         pages = answer.ok ? (await answer.json()).pages || [] : [];
                     } catch (_) { /* nothing found is what is shown */ }
                     if (menu && menu.classList.contains('is-search')) draw(pages.map((page) => ({ name: page.title, note: page.description || '', key: page.key })));
                 }, SEARCH_MS);
             }, (item) => {
                 const path = encodeURIComponent(item.key).replace(/%2F/g, '/').replace(/%3A/g, ':');
-                follow(new URL(`/wiki/${path}`, origin));
+                follow(new URL(`/wiki/${path}`, wiki));
             });
         }
 
@@ -486,7 +488,7 @@
                 ticket++;
                 clearTimeout(hover);
                 clearTimeout(searching);
-                if (shown !== home.key) root.location.replace(root.location.href);
+                if (shown !== home.key && WikiRead.keyOf(root.location.href) === shown) root.location.replace(root.location.href);
             },
         };
     }

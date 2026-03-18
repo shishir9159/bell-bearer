@@ -350,6 +350,8 @@
                 tools: mine.element.querySelector('.tr-tools'),
                 settings,
                 notify,
+                /** Another page read the way this one was, by the same adapter. */
+                read: (doc, url) => adapter.read(doc, url, settings()),
                 copyText: (text) => Promise.resolve(copyText ? copyText(text) : false),
                 /** Another article in this one's place, read from `source` — `{ doc, url }` — and drawn at its top. */
                 show(article, source) {
