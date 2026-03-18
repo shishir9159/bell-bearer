@@ -621,4 +621,139 @@
             closeAll();
         });
     });
+    // ----------------------------------------------------------- wikipedia
+
+    const WikiRead = () => window.BB.WikiRead;
+    const WIKI = 'https://en.wikipedia.org/wiki/Fixture';
+    const parse = (html) => new DOMParser().parseFromString(html, 'text/html');
+    const holder = (fragment) => {
+        const div = document.createElement('div');
+        div.appendChild(fragment);
+        return div;
+    };
+
+    /** A Wikipedia article as Parsoid's read view serves one, cut down to the parts the adapter reads. */
+    function wikiPage(title, links = '') {
+        return `<!doctype html><html lang="en"><head><title>${title} - Wikipedia</title>
+            <link rel="canonical" href="https://en.wikipedia.org/wiki/${title}">
+            <script>RLCONF={"wgRevisionId":1234,"wgIsMainPage":false};</script></head>
+            <body class="skin-vector-2022 mediawiki ns-0 action-view">
+            <h1 id="firstHeading"><span class="mw-page-title-main">${title}</span></h1>
+            <div id="mw-content-text"><div class="mw-parser-output" lang="en" dir="ltr">
+            <section id="mwAQ"><div class="shortdescription" style="display:none">A thing written about</div>
+            <div role="note" class="hatnote">For other uses, see elsewhere.</div>
+            <table class="infobox"><tbody><tr><th colspan="2">${title}</th></tr><tr><th>Born</th><td>1912</td></tr></tbody></table>
+            <p id="mwAg">${title} is a subject.<sup class="mw-ref reference" id="cite_ref-1"><a href="#cite_note-1"><span class="mw-reflink-text">[1]</span></a></sup> ${links} ${PARA}</p>
+            <p>So <span class="mwe-math-element"><span class="mwe-math-mathml-a11y" style="display:none"><math><mi>x</mi></math></span><img
+                src="https://wikimedia.org/api/rest_v1/media/math/render/svg/abc" class="mwe-math-fallback-image-inline mw-invert skin-invert"
+                aria-hidden="true" alt="{\\displaystyle x^{2}}"></span>.</p>${prose(2)}</section>
+            <section id="mwBQ"><div class="mw-heading mw-heading2"><h2 id="Life">Life<span class="mw-editsection">[edit]</span></h2></div>${prose(3)}
+            <div class="navbox"><a href="https://en.wikipedia.org/wiki/Nav">Nav</a></div></section>
+            <section><div class="mw-heading mw-heading2"><h2 id="References">References</h2></div><div class="mw-references-wrap"><ol class="mw-references references">
+            <li id="cite_note-1"><span class="mw-cite-backlink"><a href="#cite_ref-1">↑</a></span> <span class="mw-reference-text">A source, p. 4.</span></li></ol></div></section>
+            <section><div class="mw-heading mw-heading2"><h2 id="Weiterlesen">Weiterlesen</h2></div>
+            <ul><li><a href="https://example.org/a">One site</a></li><li><a href="https://example.org/b">Another site</a></li></ul></section>
+            </div></div>
+            <div id="footer-info-lastmod">This page was last edited on 12 October 2026, at 10:12 (UTC).</div>
+            <div id="p-lang"><a class="interlanguage-link-target" href="https://de.wikipedia.org/wiki/${title}" hreflang="de" lang="de"
+                data-title="${title}" data-language-autonym="Deutsch" data-language-local-name="German">Deutsch</a></div>
+            </body></html>`;
+    }
+
+    /** A reader on the Fixture article, with Wikipedia's module, as if the test page were it. */
+    function wikiReader(settings = {}) {
+        const fixture = parse(wikiPage('Fixture', '<a href="/wiki/Other" title="Other">the other one</a>'));
+        const adapter = {
+            ...WikiRead().adapter,
+            read: (doc, url, values) => WikiRead().read(doc === document ? fixture : doc, doc === document ? WIKI : url, values),
+            enhance: window.BB.WikiUi.enhance,
+        };
+        const reader = ArticleReader().createArticleReader({
+            adapter, getSettings: () => ({ ...window.BB.Settings.DEFAULTS, ...settings }),
+            copyText: async () => true, notify() {}, loadStyles: loadSheet,
+        });
+        readers.push(reader);
+        return reader;
+    }
+
+    suite('text reader — reading wikipedia', () => {
+        test('the article as written: its title, short description and last edit, without what is around it', () => {
+            const article = WikiRead().read(parse(wikiPage('Fixture')), WIKI, {});
+            assertDeepEqual([article.title, article.description, article.byline, article.meta.revision],
+                ['Fixture', 'A thing written about', 'Last edited 12 October 2026', 1234]);
+            const body = holder(article.body);
+            for (const gone of ['For other uses', '[edit]', 'Nav']) assertEqual(body.textContent.includes(gone), false, gone);
+            assertEqual(body.querySelector('[id^="bbr-mw"]'), null, 'Parsoid\'s own ids came along');
+            assert(body.querySelector('#bbr-Life'), 'a heading lost the id its links use');
+            const formula = body.querySelector('img.tr-math');
+            assert(formula, 'the formula went with what the page hides');
+            assertEqual(formula.alt, '{\\displaystyle x^{2}}');
+            assertDeepEqual(article.meta.languages.map((one) => one.name), ['Deutsch']);
+        });
+
+        test('the infobox is beside the article, folded, or not there at all, as settings say', () => {
+            const read = (place) => WikiRead().read(parse(wikiPage('Fixture')), WIKI, { wikipediaInfobox: place });
+            const side = read('side');
+            assertEqual(side.asidePlace, 'side');
+            assert(holder(side.aside).querySelector('table'), 'no infobox');
+            assertEqual(holder(side.body).textContent.includes('Born'), false, 'the infobox stayed in the text as well');
+            assertEqual(read('fold').asidePlace, 'fold');
+            assertEqual(read('hide').aside, null);
+        });
+
+        test('end matter is folded at the end, by its name or, in any language, by what is in it', () => {
+            const body = holder(WikiRead().read(parse(wikiPage('Fixture')), WIKI, {}).body);
+            assertDeepEqual([...body.querySelectorAll('details.tr-end > summary')].map((one) => one.textContent), ['References', 'Weiterlesen']);
+            assertEqual(body.querySelector('details.tr-end > summary').id, 'bbr-References');
+            assert(body.querySelector('details.tr-end #bbr-cite_note-1'), 'the footnote left its list');
+        });
+
+        test('in the reader the infobox folds under the lead on a narrow window, and is no part of the text', async () => {
+            closeAll();
+            const reader = wikiReader();
+            reader.open();
+            await styled(reader);
+            const fold = reader.element.querySelector('.tr-body > details.tr-glance-fold');
+            assert(fold && fold.previousElementSibling.textContent.startsWith('Fixture is a subject'), 'not under the first paragraph');
+            assertEqual(window.BB.ArticleHighlights.modelOf(reader.element.querySelector('.tr-body')).text.includes('Born'), false);
+            closeAll();
+            const quiet = wikiReader({ wikipediaCitations: false });
+            quiet.open();
+            await styled(quiet);
+            assertEqual(getComputedStyle(quiet.element.querySelector('sup.reference')).display, 'none', 'the marks stayed with citations off');
+            closeAll();
+        });
+
+        test('a link is read in place, and back returns to the article where it was left', async () => {
+            closeAll();
+            const pushed = [];
+            const realPush = history.pushState;
+            const realFetch = window.fetch;
+            const title = document.title;
+            history.pushState = (state, unused, url) => pushed.push([state, url]);
+            window.fetch = async () => ({ ok: true, text: async () => wikiPage('Other') });
+            const reader = wikiReader();
+            const back = () => window.dispatchEvent(new PopStateEvent('popstate', { state: { bbReader: WikiRead().keyOf(WIKI) } }));
+            try {
+                reader.open();
+                await styled(reader);
+                const scroll = reader.element.querySelector('.tr-scroll');
+                scroll.scrollTop = 300;
+                reader.element.querySelector('a[href="https://en.wikipedia.org/wiki/Other"]').click();
+                await new Promise((done) => setTimeout(done, 50));
+                assertEqual(reader.element.querySelector('.tr-title').textContent, 'Other');
+                assertDeepEqual(pushed, [[{ bbReader: 'wikipedia:en:Other' }, 'https://en.wikipedia.org/wiki/Other']]);
+                assertEqual(document.title, 'Other - Wikipedia');
+                back();
+                assertEqual(reader.element.querySelector('.tr-title').textContent, 'Fixture');
+                assertEqual(scroll.scrollTop, 300, 'back did not come back to where the article was left');
+            } finally {
+                back();
+                history.pushState = realPush;
+                window.fetch = realFetch;
+                document.title = title;
+                closeAll();
+            }
+        });
+    });
 })();
