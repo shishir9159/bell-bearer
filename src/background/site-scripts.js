@@ -215,9 +215,10 @@
 
     /**
      * What has to run in the page's own world, by the site it is for: the
-     * chess.com board, LeetCode's and claude.ai's fetch, and Netflix's player
-     * exist only there. claude.ai's goes in before the page can take its
-     * fetch, and Netflix's subtitle reader before the player's first manifest.
+     * chess.com board, LeetCode's and claude.ai's fetch, Netflix's player and
+     * X's conversation responses exist only there. claude.ai's and X's go in
+     * before the page can take its fetch, and Netflix's subtitle reader
+     * before the player's first manifest.
      */
     const PAGE = Object.freeze([
         { id: 'chess-page', site: 'chess', matches: ['*://*.chess.com/*'], js: ['src/content/chess-page.js'] },
@@ -225,6 +226,7 @@
         { id: 'claude-page', site: 'claude', matches: ['*://claude.ai/*'], js: ['src/content/claude-page.js'], runAt: 'document_start' },
         { id: 'netflix-page', site: 'netflix', matches: ['*://*.netflix.com/*'], js: ['src/content/netflix-page.js'] },
         { id: 'netflix-subs-page', site: 'netflix', matches: ['*://*.netflix.com/*'], js: ['src/content/netflix-subs-page.js'], runAt: 'document_start' },
+        { id: 'twitter-thread-page', site: 'twitter', matches: ['*://*.x.com/*', '*://*.twitter.com/*'], js: ['src/content/twitter-thread-page.js'], runAt: 'document_start' },
     ]);
 
     /** The manifest's entry for every other page: its scripts are the core list, then main.js. */
