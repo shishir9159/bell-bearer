@@ -685,6 +685,108 @@ check('a link to a passage names it so a browser can find it, and says which whe
     eq(TextAnchor.fragment('  ', 0, 2), '');
 });
 
+// ------------------------------------------------------------ x threads
+
+const XThread = require('../src/shared/x-thread.js');
+
+section('x threads — the conversation x sent, read as the author\'s thread');
+
+/** A post as X's GraphQL answers with one: the new shape of user unless `oldUser`. */
+function xPost({ id, by = 'ada', text = `post ${id}`, replyTo = null, replyToHandle = '', conversation = '100', note = null,
+    entities = {}, range = null, media = null, replies = 0, oldUser = false, wrap = false }) {
+    const user = oldUser
+        ? { __typename: 'User', rest_id: `u-${by}`, legacy: { screen_name: by, name: by.toUpperCase(), profile_image_url_https: 'https://pbs.twimg.com/a.jpg' } }
+        : { __typename: 'User', rest_id: `u-${by}`, core: { screen_name: by, name: by.toUpperCase() }, legacy: {} };
+    const post = {
+        __typename: 'Tweet',
+        rest_id: id,
+        core: { user_results: { result: user } },
+        legacy: {
+            full_text: text, created_at: 'Wed Oct 01 10:00:00 +0000 2025', conversation_id_str: conversation, lang: 'en',
+            in_reply_to_status_id_str: replyTo, in_reply_to_screen_name: replyToHandle, reply_count: replies,
+            entities, display_text_range: range || [0, Array.from(text).length],
+            ...(media ? { extended_entities: { media } } : {}),
+        },
+        ...(note ? { note_tweet: { note_tweet_results: { result: { text: note, entity_set: {} } } } } : {}),
+    };
+    return wrap ? { __typename: 'TweetWithVisibilityResults', tweet: post } : post;
+}
+
+const xItem = (result) => ({ itemContent: { itemType: 'TimelineTweet', tweet_results: { result } } });
+const xCursor = (cursorType) => ({ itemContent: { itemType: 'TimelineTimelineCursor', cursorType } });
+/** A TweetDetail response: the focal entry, then a module per chain, as X lays a conversation out. */
+function xDetail(entries) {
+    return { data: { threaded_conversation_with_injections_v2: { instructions: [{ type: 'TimelineAddEntries', entries: entries.map((entry, i) => (Array.isArray(entry)
+        ? { entryId: `conversationthread-${i}`, content: { entryType: 'TimelineTimelineModule', items: entry.map((item, j) => ({ entryId: `item-${j}`, item })) } }
+        : { entryId: `tweet-${i}`, content: { entryType: 'TimelineTimelineItem', ...entry } })) }] } } };
+}
+
+check('a post\'s text: the long one whole, its reply mentions and media link left out, its links where they go', () => {
+    eq(XThread.normalize(xPost({ id: '1', text: 'short', note: 'the whole long text' })).segments, [{ type: 'text', text: 'the whole long text' }],
+        'a long post was cut at 280 characters');
+    const reply = XThread.normalize(xPost({ id: '2', text: '@bob @cy fair point https://t.co/m', range: [9, 19],
+        entities: { user_mentions: [{ screen_name: 'bob', indices: [0, 4] }, { screen_name: 'cy', indices: [5, 8] }] } }));
+    eq(reply.segments, [{ type: 'text', text: 'fair point' }]);
+    // The emoji is two UTF-16 units and one code point: sliced as a string,
+    // the link came out a character early and took the space before it.
+    const text = '😀 see https://t.co/x &amp; more';
+    const post = XThread.normalize(xPost({ id: '3', text, entities: { urls: [{ url: 'https://t.co/x', expanded_url: 'https://example.com/a', display_url: 'example.com/a', indices: [6, 20] }] } }));
+    eq(post.segments, [{ type: 'text', text: '😀 see ' }, { type: 'link', text: 'example.com/a', href: 'https://example.com/a' }, { type: 'text', text: ' & more' }]);
+    eq([post.author.handle, XThread.normalize(xPost({ id: '4', oldUser: true })).author.handle], ['ada', 'ada'], 'one of the two shapes of a user');
+});
+
+check('a post\'s media: photos large, a video\'s mp4 no wider than a column needs, and nothing from anywhere else', () => {
+    const [photo, video, gif, stray] = XThread.mediaOf({ extended_entities: { media: [
+        { type: 'photo', media_url_https: 'https://pbs.twimg.com/media/A.jpg', ext_alt_text: 'a cat', original_info: { width: 800, height: 600 } },
+        { type: 'video', media_url_https: 'https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/B.jpg', video_info: { variants: [
+            { content_type: 'application/x-mpegURL', url: 'https://video.twimg.com/ext_tw_video/1/pu/pl/B.m3u8' },
+            { content_type: 'video/mp4', bitrate: 256000, url: 'https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/480x270/a.mp4' },
+            { content_type: 'video/mp4', bitrate: 2176000, url: 'https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/1280x720/b.mp4' },
+            { content_type: 'video/mp4', bitrate: 10368000, url: 'https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/1920x1080/c.mp4' }] } },
+        { type: 'animated_gif', media_url_https: 'https://pbs.twimg.com/tweet_video_thumb/C.jpg', video_info: { variants: [
+            { content_type: 'video/mp4', bitrate: 0, url: 'https://video.twimg.com/tweet_video/C.mp4' }] } },
+        { type: 'photo', media_url_https: 'https://evil.example/D.jpg' },
+    ] } });
+    eq([photo.type, photo.url, photo.alt], ['photo', 'https://pbs.twimg.com/media/A.jpg?name=large', 'a cat']);
+    eq([video.type, video.url, video.poster], ['video', 'https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/1280x720/b.mp4', 'https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/B.jpg']);
+    eq([gif.type, gif.url], ['gif', 'https://video.twimg.com/tweet_video/C.mp4']);
+    eq(stray, undefined, 'a picture from another host was kept');
+});
+
+check('the thread is the author\'s own chain, from its first post, wherever the page was opened on it', () => {
+    const response = xDetail([
+        xItem(xPost({ id: '100', by: 'bob', text: 'a question' })),
+        [xItem(xPost({ id: '101', replyTo: '100', replyToHandle: 'bob', text: 'first' }))],
+        [xItem(xPost({ id: '102', replyTo: '101', text: 'second', wrap: true })), xItem(xPost({ id: '103', by: 'cy', replyTo: '102', text: 'interjection' }))],
+        [xItem(xPost({ id: '104', replyTo: '102', text: 'third' })), xItem(xPost({ id: '105', replyTo: '103', text: 'an answer to cy' }))],
+        [xItem({ __typename: 'TweetTombstone', tombstone: { text: { text: 'This post is unavailable.' } } })],
+    ]);
+    const { posts, heldAfter } = XThread.parse(response);
+    const read = XThread.unroll(posts, '102', { heldAfter });
+    eq(read.thread.map((post) => post.id), ['101', '102', '104'], 'the chain broke at somebody else\'s reply');
+    eq(read.context && read.context.id, '100', 'what the first post answers');
+    eq(read.others.map(({ post, answers }) => [post.id, answers && answers.id]), [['105', '103']]);
+    eq([read.author.handle, read.incomplete], ['ada', false]);
+    eq(XThread.unroll(posts, '999'), null, 'a post not in the conversation');
+});
+
+check('a thread is said to be cut short where x held the rest back, or where its last post\'s replies never came', () => {
+    const held = XThread.parse(xDetail([
+        xItem(xPost({ id: '201', text: 'one' })),
+        [xItem(xPost({ id: '202', replyTo: '201', text: 'two' })), xCursor('ShowMoreThreads')],
+        [xItem(xPost({ id: '203', by: 'cy', replyTo: '201' })), xCursor('ShowMore')],
+    ]));
+    eq(held.heldAfter, ['202', '203']);
+    eq(XThread.unroll(held.posts, '201', held).incomplete, true);
+    const quiet = XThread.parse(xDetail([xItem(xPost({ id: '301', replies: 4 }))]));
+    eq(XThread.unroll(quiet.posts, '301', quiet).incomplete, true, 'four replies, none of them sent');
+    const lone = XThread.parse({ data: { tweetResult: { result: xPost({ id: '401', note: 'all of it' }) } } });
+    eq(XThread.unroll(lone.posts, '401', lone).thread[0].segments[0].text, 'all of it', 'TweetResultByRestId');
+    const joined = XThread.fromResponses([JSON.stringify(xDetail([xItem(xPost({ id: '501', text: 'cut…' }))])), 'not json',
+        JSON.stringify({ data: { tweetResult: { result: xPost({ id: '501', text: 'cut…', note: 'cut, but whole here' }) } } })]);
+    eq(XThread.unroll(joined.posts, '501', joined).thread[0].segments[0].text, 'cut, but whole here', 'the fuller copy of one post');
+});
+
 // ---------------------------------------------------------------- time
 
 const Time = require('../src/shared/time.js');
