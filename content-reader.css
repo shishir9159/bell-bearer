@@ -2177,6 +2177,92 @@ html.bb-reader-open body { overflow: hidden !important; }
 
 @keyframes tr-pop-in { from { opacity: 0; transform: translateY(-3px); } }
 
+/* ---- An X thread: one post after another, its place in the thread and its
+   time over each, its pictures and videos in the column */
+
+.tr-body .tr-x-post { margin: 0 0 1.5em; }
+.tr-body .tr-x-post + .tr-x-post { padding-top: 1.2em; border-top: 1px solid var(--rd-divider); }
+.tr-body .tr-x-post p { margin: 0 0 .7em; }
+
+.tr-body .tr-x-head {
+    display: flex;
+    align-items: baseline;
+    gap: .7em;
+    margin: 0 0 .45em;
+    font-family: var(--rd-font-tab);
+    font-size: .72em;
+    color: var(--rd-faint);
+}
+
+.tr-x-place { font-variant-numeric: tabular-nums; letter-spacing: .04em; color: var(--rd-accent-ink); }
+.bb-text-reader .tr-body a.tr-x-time { color: var(--rd-faint); text-decoration: none; }
+.bb-text-reader .tr-body a.tr-x-time:hover { color: var(--tr-text); }
+.bb-text-reader .tr-body :is(a.tr-x-mention, a.tr-x-tag) { text-decoration: none; }
+
+.tr-body .tr-x-media {
+    display: grid;
+    gap: 3px;
+    margin: .4em 0 .9em;
+    border-radius: var(--rd-r);
+    overflow: hidden;
+}
+
+.tr-body .tr-x-media:is(.is-2, .is-3, .is-4) { grid-template-columns: 1fr 1fr; }
+.tr-body .tr-x-media.is-3 > :first-child { grid-row: span 2; }
+
+.tr-body .tr-x-media :is(img, video) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-height: 440px;
+    object-fit: cover;
+    border-radius: 0;
+    background: #000;
+}
+
+.tr-body .tr-x-media.is-1 :is(img, video) { height: auto; max-height: 640px; object-fit: contain; }
+.tr-body .tr-x-still { margin: 0; }
+.tr-body .tr-x-still figcaption { padding: .5em .2em 0; font-size: .78em; text-align: left; color: var(--tr-muted); }
+
+.tr-body blockquote.tr-x-quote {
+    margin: .5em 0 1em;
+    padding: .7em .9em;
+    border: 1px solid var(--rd-divider);
+    border-radius: var(--rd-r);
+    font-size: .9em;
+    color: var(--tr-text);
+}
+
+.tr-body blockquote.tr-x-quote.is-answered { margin-bottom: .5em; font-size: .82em; color: var(--tr-muted); }
+.tr-body blockquote.tr-x-quote p { margin: 0 0 .4em; }
+.tr-body .tr-x-who { font-family: var(--rd-font-tab); font-size: .82em; color: var(--tr-muted); }
+.bb-text-reader .tr-body a.tr-x-open { font-family: var(--rd-font-tab); font-size: .8em; }
+.tr-body .tr-x-gone { font-style: italic; color: var(--tr-muted); }
+
+.tr-body .tr-x-label {
+    margin: 0 0 .3em;
+    font-family: var(--rd-font-tab);
+    font-size: .7em;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--rd-faint);
+}
+
+.tr-body .tr-x-context { margin-bottom: 1.6em; }
+.tr-body :is(.tr-x-card, .tr-x-poll) { font-size: .9em; }
+.tr-body .tr-x-domain { color: var(--rd-faint); }
+.tr-body h2.tr-x-others { margin-top: 2em; font-size: 1.05em; color: var(--tr-muted); }
+
+.tr-body .tr-x-more {
+    margin: 1.6em 0 0;
+    padding: .8em 1em;
+    border-radius: var(--rd-r);
+    background: var(--rd-chip);
+    font-family: var(--rd-font);
+    font-size: .84em;
+    color: var(--tr-muted);
+}
+
 /* ---- Wikipedia's search and languages: a field over a list, under the bar */
 
 .tr-menu {

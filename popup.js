@@ -256,8 +256,17 @@
         async setupReaderBar() {
             const button = document.getElementById('openReaderBtn');
             if (this.site !== 'youtube') {
-                button.disabled = false;
-                button.title = 'Read this page in one quiet column (Ctrl+Alt+R)';
+                // On X the reader reads a thread, which only a post's own page has.
+                const tab = await TabActions.activeTab();
+                let onX = false;
+                let onPost = false;
+                try {
+                    const at = new URL(tab.url);
+                    onX = /(^|\.)(x|twitter)\.com$/.test(at.hostname);
+                    onPost = /^\/[A-Za-z0-9_]{1,15}\/status\/\d+/.test(at.pathname);
+                } catch (_) { /* no tab, or not a URL */ }
+                button.disabled = onX && !onPost;
+                button.title = button.disabled ? 'Open a post to read its whole thread' : 'Read this page in one quiet column (Ctrl+Alt+R)';
                 return;
             }
             const tab = await TabActions.activeTab();

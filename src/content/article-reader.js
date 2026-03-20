@@ -68,8 +68,13 @@
 
     const loadSheet = () => fetch(chrome.runtime.getURL(SHEET)).then((answer) => (answer.ok ? answer.text() : ''));
 
-    /** Fewer words than this is not an article: a front page, a login, a feed. */
+    /**
+     * Fewer words than this is not an article: a front page, a login, a
+     * feed. Only for a page the extractor guessed at — an adapter knows what
+     * it read, and a thread of three posts is still a thread.
+     */
     const MIN_WORDS = 140;
+    const isThin = (article, counted) => (article.kind || 'article') === 'article' && counted.words < MIN_WORDS;
     /** Words a minute, and characters a minute for scripts written without spaces. */
     const WPM = 230;
     const CPM = 500;
@@ -242,7 +247,7 @@
                 return false;
             }
             const counted = measure(article.body.textContent);
-            if (counted.words < MIN_WORDS && !force && auto) return false;
+            if (isThin(article, counted) && !force && auto) return false;
 
             const host = document.createElement('bb-text-reader');
             host.id = ROOT_ID;
@@ -442,7 +447,7 @@
                 mine.hl = null;
             }
             body.textContent = '';
-            mine.thin = counted.words < MIN_WORDS && !force;
+            mine.thin = isThin(article, counted) && !force;
             if (mine.thin) {
                 body.innerHTML = `<div class="tr-thin"><p>This page does not look like an article — ${counted.words} words to read.</p>
                     <button type="button" class="tr-anyway">Open anyway</button></div>`;

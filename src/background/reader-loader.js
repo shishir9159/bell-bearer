@@ -25,8 +25,9 @@
         'src/content/article-reader.js',
     ]);
 
-    /** And what reads the page, by where it is: the extractor for anywhere no adapter knows. */
+    /** And what reads the page, by where it is: X's thread, and the extractor for anywhere no adapter knows. */
     const SITE_FILES = Object.freeze({
+        twitter: Object.freeze(['src/content/bridge.js', 'src/shared/x-thread.js', 'src/content/x-thread-read.js']),
         other: Object.freeze(['src/content/article-extract.js']),
     });
 
@@ -36,6 +37,7 @@
         try { at = new URL(url); } catch (_) { return null; }
         if (!/^https?:$/.test(at.protocol)) return null;
         if (/(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be)$/.test(at.hostname)) return 'youtube';
+        if (/(^|\.)(x|twitter)\.com$/.test(at.hostname)) return 'twitter';
         return 'other';
     }
 

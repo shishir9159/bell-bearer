@@ -164,7 +164,8 @@
         stopRecording: () => recorder && recorder.stopRecording(),
         toggleSegment: () => recorder && recorder.toggleSegment(),
         toggleReader: () => toggleReader(),
-        canRead: () => (site === 'youtube' ? !!getVideo() : /^https?:$/.test(location.protocol)),
+        // On X a post's own page alone: anywhere else there, the key is X's.
+        canRead: () => (site === 'youtube' ? !!getVideo() : ON_X ? X_STATUS.test(location.pathname) : /^https?:$/.test(location.protocol)),
         onShorts: () => site === 'youtube' && Site.isShortsPath(),
         shortsSkip: (direction) => skipShort(direction),
         // Resolved on each press, like the pouch: netflixUi is built further down.
@@ -332,13 +333,19 @@
      */
     let textReader = null;
 
+    /** X by its host: a thread is X's whether or not its own features are switched on there. */
+    const ON_X = /(^|\.)(x|twitter)\.com$/.test(location.hostname);
+    const X_STATUS = /^\/[A-Za-z0-9_]{1,15}\/status\/\d+/;
+
     function getTextReader() {
         if (textReader) return textReader;
-        const { ArticleReader, ArticleExtract, WikiRead } = BB;
-        // Wikipedia's own reading on Wikipedia; the extractor on any page
-        // no adapter knows — Wikipedia switched off among them.
+        const { ArticleReader, ArticleExtract, WikiRead, XThreadRead } = BB;
+        // Wikipedia's own reading on Wikipedia, an X thread on X, and the
+        // extractor on any page no adapter knows — Wikipedia switched off
+        // among them.
         const adapter = site === 'wikipedia' && WikiRead ? { ...WikiRead.adapter, enhance: BB.WikiUi && BB.WikiUi.enhance }
-            : ArticleExtract && ArticleExtract.adapter;
+            : ON_X && XThreadRead ? XThreadRead.adapter
+                : ArticleExtract && ArticleExtract.adapter;
         if (!ArticleReader || !adapter) return null;
         textReader = ArticleReader.createArticleReader({
             adapter, notify, getSettings: () => settings,

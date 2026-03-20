@@ -10760,6 +10760,21 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             assert(require('fs').existsSync(`${__dirname}/../${file}`), `${file} is missing`);
         }
     });
+    check('an x thread is read from x\'s own responses, kept from the page\'s start, and only looked at', () => {
+        const page = SiteScripts.PAGE.find((one) => one.id === 'twitter-thread-page');
+        eq([page.site, page.runAt, page.js], ['twitter', 'document_start', ['src/content/twitter-thread-page.js']],
+            'a wrapper put on after X took its own fetch never sees a request');
+        eq(SiteScripts.scripts(SiteScripts.genericOf(JSON.parse(readRepo('manifest.json'))), ['twitter']).some((one) => one.id === 'bb-twitter-thread-page'), false,
+            'kept on an X switched off');
+        for (const url of ['https://x.com/ada/status/1', 'https://mobile.twitter.com/ada/status/1']) eq(ReaderLoader.siteOf(url), 'twitter', url);
+        assert(ReaderLoader.SITE_FILES.twitter.includes('src/content/x-thread-read.js'), 'the extractor would read X');
+        // Its code, without the comments that say what it does not do.
+        const capture = readRepo('src/content/twitter-thread-page.js').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+        assert(!/new XMLHttpRequest|fetched\((?!\s*\))|chrome\./.test(capture.replace(/fetched\.apply\(this, arguments\)/g, '')), 'the capture asks X for something of its own');
+        const main = readRepo('src/content/main.js');
+        assert(/ON_X && XThreadRead \? XThreadRead\.adapter/.test(main), 'X is read by the extractor');
+        assert(/ON_X \? X_STATUS\.test\(location\.pathname\)/.test(main), 'the key is claimed on every X page, not only a post\'s');
+    });
 
     // ---------------------------------------------------- party loader
 
