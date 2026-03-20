@@ -756,4 +756,86 @@
             }
         });
     });
+    // ------------------------------------------------------------ x threads
+
+    const XThreadRead = () => window.BB.XThreadRead;
+
+    /** A post as X's conversation response carries one. */
+    function xPost(id, by, text, replyTo, legacy = {}) {
+        return {
+            __typename: 'Tweet', rest_id: id,
+            core: { user_results: { result: { __typename: 'User', rest_id: `u-${by}`, core: { screen_name: by, name: by.toUpperCase() }, legacy: {} } } },
+            legacy: { full_text: text, created_at: 'Wed Oct 01 10:00:00 +0000 2025', conversation_id_str: '1', lang: 'en',
+                in_reply_to_status_id_str: replyTo, reply_count: 0, entities: {}, display_text_range: [0, Array.from(text).length], ...legacy },
+        };
+    }
+
+    const xEntry = (result) => ({ item: { itemContent: { itemType: 'TimelineTweet', tweet_results: { result } } } });
+    const xResponse = (modules) => JSON.stringify({ data: { threaded_conversation_with_injections_v2: { instructions: [{ type: 'TimelineAddEntries',
+        entries: modules.map((items, i) => ({ entryId: `conversationthread-${i}`, content: { entryType: 'TimelineTimelineModule', items } })) }] } } });
+
+    /** The page world's side, as twitter-thread-page.js answers the reader. */
+    function answering(texts, run) {
+        const answer = () => document.dispatchEvent(new CustomEvent('bb:x:thread:ok', { detail: JSON.stringify(texts.map((text) => ({ url: 'TweetDetail', text }))) }));
+        document.addEventListener('bb:x:thread', answer);
+        try {
+            return run();
+        } finally {
+            document.removeEventListener('bb:x:thread', answer);
+        }
+    }
+
+    const VIDEO = { type: 'video', media_url_https: 'https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/p.jpg', video_info: { variants: [
+        { content_type: 'video/mp4', bitrate: 832000, url: 'https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/640x360/v.mp4' }] } };
+    const GIF = { type: 'animated_gif', media_url_https: 'https://pbs.twimg.com/tweet_video_thumb/g.jpg', video_info: { variants: [
+        { content_type: 'video/mp4', bitrate: 0, url: 'https://video.twimg.com/tweet_video/g.mp4' }] } };
+
+    suite('text reader — an x thread, from what x sent', () => {
+        test('every post of the author\'s, in order, from wherever the page was opened on the thread', () => {
+            const thread = xResponse([
+                [xEntry(xPost('1', 'ada', 'One.\n\nStill one.', null))],
+                [xEntry(xPost('2', 'ada', 'Two.', '1')), xEntry(xPost('3', 'bob', 'Hm?', '2'))],
+                [xEntry(xPost('4', 'ada', 'Three, with a clip.', '2', { extended_entities: { media: [VIDEO, GIF] } }))],
+            ]);
+            const article = answering([thread], () => XThreadRead().read(document, 'https://x.com/ada/status/2'));
+            assertDeepEqual([article.title, article.key, article.url], ['Thread by @ada', 'x:1', 'https://x.com/ada/status/1']);
+            const body = holder(article.body);
+            assertDeepEqual([...body.querySelectorAll('.tr-x-place')].map((one) => one.textContent), ['1/3', '2/3', '3/3']);
+            assertEqual(body.querySelector('.tr-x-post').querySelectorAll('p:not(.tr-x-head)').length, 2, 'a blank line is a new paragraph');
+            assertEqual(body.textContent.includes('Hm?'), false, 'somebody else\'s reply was taken into the thread');
+            const [video, gif] = body.querySelectorAll('video');
+            assertDeepEqual([video.src, video.poster, video.controls, video.preload, video.autoplay],
+                ['https://video.twimg.com/ext_tw_video/1/pu/vid/avc1/640x360/v.mp4', 'https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/p.jpg', true, 'none', false]);
+            assertDeepEqual([gif.loop, gif.muted], [true, true], 'a GIF does not loop silently as on X');
+            assertEqual(body.querySelector('.tr-x-more'), null, 'a whole thread said to be cut short');
+        });
+
+        test('a thread x held back says where the rest is, and nothing is clicked for it', () => {
+            const thread = xResponse([[xEntry(xPost('1', 'ada', 'One.', null)), xEntry(xPost('2', 'ada', 'Two.', '1')),
+                { item: { itemContent: { itemType: 'TimelineTimelineCursor', cursorType: 'ShowMoreThreads' } } }]]);
+            const body = holder(answering([thread], () => XThreadRead().read(document, 'https://x.com/ada/status/1')).body);
+            assert(/X has sent 2 posts of this thread so far/.test(body.querySelector('.tr-x-more').textContent), 'no word of the rest');
+        });
+
+        test('with nothing kept, the posts x has drawn are read, a video as its poster', () => {
+            const page = parse(`<main>
+                <article data-testid="tweet"><a href="/ada/status/9"><time datetime="2025-10-01T10:00:00Z">Oct 1</time></a>
+                    <div data-testid="User-Name"><a href="/ada">Ada</a></div><div data-testid="tweetText">Drawn one.</div>
+                    <div data-testid="videoPlayer"><video poster="https://pbs.twimg.com/p.jpg" src="blob:https://x.com/1"></video></div></article>
+                <article data-testid="tweet"><a href="/ada/status/10"><time datetime="2025-10-01T10:01:00Z">Oct 1</time></a>
+                    <div data-testid="User-Name"><a href="/ada">Ada</a></div><div data-testid="tweetText">Drawn two.</div></article>
+                <article data-testid="tweet"><a href="/bob/status/11"><time datetime="2025-10-01T10:02:00Z">Oct 1</time></a>
+                    <div data-testid="tweetText">Not hers.</div></article></main>`);
+            const body = holder(answering([], () => XThreadRead().read(page, 'https://x.com/ada/status/9')).body);
+            assertEqual(body.querySelectorAll('.tr-x-post').length, 2);
+            assertEqual(body.querySelector('video'), null, 'a blob: stream was put in a player that cannot play it');
+            assert(/plays on X/.test(body.querySelector('.tr-x-still').textContent), 'no word of where it plays');
+            assert(/what X has drawn/.test(body.querySelector('.tr-x-more').textContent));
+        });
+
+        test('only a post\'s own page is a thread to read', () => {
+            assertEqual(answering([], () => XThreadRead().read(document, 'https://x.com/home')), null);
+            assertDeepEqual(XThreadRead().statusOf('https://x.com/ada/status/123?s=20'), { handle: 'ada', id: '123' });
+        });
+    });
 })();
