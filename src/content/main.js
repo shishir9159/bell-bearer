@@ -33,7 +33,7 @@
     // plus its own files and then this one — so they are taken off BB inside
     // that site's block below, and are simply not there anywhere else.
     const { Settings, Speed, Site, Notify, Player, Shortcuts, Markdown, PageInfo, DomWatch, Theme,
-        CookieSites, CookieBanner, Keybindings, SkimContent, LinkHints, TimeLimitContent } = BB;
+        CookieSites, CookieBanner, Keybindings, SkimContent, LinkHints, TimeLimitContent, Hosts } = BB;
 
     /**
      * One module only each site's own entry loads. A site switched off in
@@ -243,6 +243,7 @@
             case 'textReader': {
                 const text = getTextReader();
                 if (text && message.op === 'open') text.open();
+                else if (text && message.op === 'auto') text.open({ auto: true });
                 else if (text) text.toggle();
                 sendResponse({ ok: !!text, open: !!(text && text.isOpen) });
                 break;
@@ -352,6 +353,21 @@
             copyText: (text) => markdown.copy(text),
         });
         return textReader;
+    }
+
+    /**
+     * A page of a site listed in Settings › Reader, opened in the reader as
+     * it loads; through the worker where the reader is not here yet. Opened
+     * this way, a page with nothing to read on it stays as it is.
+     */
+    function autoRead() {
+        if (site === 'youtube' || !settings.readerAutoHosts) return;
+        const listed = Object.fromEntries(String(settings.readerAutoHosts).split(/[\s,]+/)
+            .map((one) => Hosts.normalize(one)).filter(Boolean).map((host) => [host, {}]));
+        if (!Hosts.lookup(listed, location.hostname) || (ON_X && !X_STATUS.test(location.pathname))) return;
+        const text = getTextReader();
+        if (text) text.open({ auto: true });
+        else askWorker({ action: 'openTextReader', op: 'auto' });
     }
 
     /** The key: the video reader on YouTube, the text reader anywhere else — asked of the worker while it is not here. */
@@ -917,8 +933,10 @@
 
     Settings.get().then(applySettings).then(() => {
         // An article opened from another language's, straight into the
-        // reader — once the settings it opens in are in.
-        if (site === 'wikipedia' && BB.WikiUi) BB.WikiUi.openAsked(() => getTextReader() && getTextReader().open());
+        // reader — once the settings it opens in are in — or a page of a
+        // site listed to be read as it loads.
+        const asked = site === 'wikipedia' && BB.WikiUi && BB.WikiUi.openAsked(() => getTextReader() && getTextReader().open());
+        if (!asked) autoRead();
     });
     Settings.watch(null, applySettings);
 

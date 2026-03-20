@@ -280,6 +280,11 @@
         // highlights last as long as the page does. Off, a selection is
         // only a selection.
         readerHighlight: true,
+        // Sites read in the reader as their pages load — Dark Reader's site
+        // list, as "always read here" — by host, a host's subdomains with
+        // it: "wikipedia.org" is every language's. Separated by spaces or
+        // commas. A listed page with nothing to read opens nothing.
+        readerAutoHosts: '',
 
         // Wikipedia in the reader (src/content/wiki-read.js): what an
         // article shows. The infobox as a card beside the article, folded

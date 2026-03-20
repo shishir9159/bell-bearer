@@ -3388,6 +3388,8 @@ check('the text reader clamps the shared type to the same ranges, and follows ev
         assert(list.includes(`'${key}'`), `${key} only reaches an open text reader after a reload`);
     }
     for (const value of ['serif', 'sans']) assert(ArticleReader.FONTS[value], `${value} is offered with no face behind it`);
+    assert(/Hosts\.lookup\(listed, location\.hostname\)/.test(main), 'a listed site is matched by its exact host alone, not its subdomains');
+    assert(/op === 'auto'\) text\.open\(\{ auto: true \}\)/.test(main), 'a page opened by the list would say it has nothing to read');
     const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
     const offered = [.../<select id="readerFont">([\s\S]*?)<\/select>/.exec(html)[1].matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
     eq(offered, ['skin', ...Object.keys(ArticleReader.FONTS)]);
