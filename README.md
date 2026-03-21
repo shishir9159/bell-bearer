@@ -24,6 +24,7 @@ It's hard to keep up with newly published videos from all of your youtube's subs
 
 - **Checkpoint Creation**: Hold Ctrl+B to create checkpoints while watching YouTube videos
 - **Reader**: YouTube's own player beside the video's transcript — draw over a passage to keep it, with your note at the end of it
+- **Text reader**: Any page's article in one quiet column over it, in your skin — its contents beside it, its footnotes beside their marks, and a pen whose highlights copy out as Markdown. On Wikipedia it is the site's own; on X it reads a post's whole thread, videos included
 - **Visual Feedback**: Snappy notifications for bookmark duration
 - **Bookmark Management**: Clean interface to view and manage all bookmarks
 - **Quick Navigation**: Jump to the bookmarked timestamp with a single click
@@ -92,7 +93,7 @@ them, the keys act on the one on screen.
 | --- | --- |
 | Hold `Ctrl + B` | Create a checkpoint over the passage you held it for |
 | `Ctrl + Shift + S` | Mark a segment start; press again to mark its end |
-| `Ctrl + Alt + R` | Open or close the reader on a YouTube video |
+| `Ctrl + Alt + R` | Open or close the reader — beside a YouTube video's transcript, or any other page's article as text |
 | `←` / `→` | Shorts: skip back / forward within the short — off until **Settings › YouTube** turns it on, and only ever on a Shorts page |
 | `Alt + 1…9` | Skip forward that many seconds |
 | `Shift + 1…9` | Skip back that many seconds |
@@ -254,10 +255,137 @@ while it was held.
 Each skin dresses the reader its own way: riso's two inks on newsprint,
 medieval's rubricated manuscript, deco's gilt, framed in the same fan corners as
 its settings. YouTube's player keeps its own look in all of them — the reader's
-styles stop at its edge. The transcript's text size, line
-spacing and line length are in Settings — each layout keeps its own proportions,
-and these scale them — beside whether the reader covers YouTube's header or
-starts under it so search stays in reach.
+styles stop at its edge. The transcript's text size, line spacing and line
+length are in **Settings › Reader**, shared with the text reader below — each
+layout keeps its own proportions, and these scale them — and Settings › YouTube
+says whether the reader covers YouTube's header or starts under it so search
+stays in reach.
+
+## The text reader
+
+Any page with an article on it opens as one quiet column over the page:
+`Ctrl + Alt + R`, **Reading mode** in the popup, or **Open in reader** on the
+right-click menu. `Esc` or the × puts the page back where it was — nothing of
+it is removed or changed while the reader is up. On YouTube the same key opens
+the video reader above.
+
+**What is read.** On a page Bell Bearer has no reader of its own for, the
+article is found the way a reader mode finds one: first in the places pages put
+an article, of which the tightest that holds nearly all the text wins — the
+`article` rather than the `main` around it and its sidebar — and on a page with
+none of them, by Readability's scoring, each paragraph voting for its parent.
+It is rebuilt from an allowlist rather than copied, so no script, handler or
+style of the page's comes along. The title, author, date and site come from
+what the page publishes for link previews. A page with little on it — a front
+page, a login — says so, with **Open anyway**.
+
+**Drawn in a shadow root of its own**, so a site's styles never reach the
+article, and the reader's never reach the site. It wears the same four skins as
+the YouTube reader, from the same palette.
+
+**The column.** The article's own headings are a contents rail beside it when
+the window has room, and a sheet behind the bar's button when it has not; the
+section being read is marked as you go, and `[` and `]` move to the section
+before and after. A hairline at the top is how far through you are. The bar
+steps out of the way as you read down and comes back on the way up, or when
+the pointer goes to the top. A footnote's mark opens its note beside it, on a
+hover or a click, rather than sending you to the bottom of the page.
+
+**Highlights, kept nowhere.** With **Highlight with a pen** on in Settings ›
+Reader (it is by default), letting go of a selection in the article inks it,
+grown to whole words, with an **Undo**; the pen's button in the bar turns it off
+for a plain selection, and `Alt` makes it an eraser. Hover a highlight for its
+toolbar — a note, a link to the passage, remove — or pick it and press
+`Backspace`. A note sits under the paragraph its highlight ends in. **Nothing
+is stored**: highlights last as long as the page is open — closing the reader
+and opening it again finds them, a reload does not. When you are done,
+**Copy** in the highlights list puts every one on the clipboard as Markdown:
+each passage quoted under its article's linked title, with a link that opens
+the page at that very passage (a `#:~:text=` fragment), and its note under it.
+
+**Settings › Reader** holds all of the reader's settings, and the reader
+itself holds none of them:
+
+| Setting | |
+| --- | --- |
+| Day or night | As the page underneath is, or always one of them |
+| Warmth | Dark Reader's sepia: paper and ink tinted toward a warm pair, by day or by night |
+| Typeface | The skin's own, a serif, or a sans |
+| Night pictures | At night photographs a little dimmer, and formulas and diagrams turned light on dark only where the page marks them safe to — an inverted photograph is a negative |
+| Highlight with a pen | The pen, its notes and Copy |
+| Text size, spacing, line length | Shared with the YouTube reader's transcript |
+| Open in the reader as they load | Dark Reader's site list, as "always read here": hosts, each with its subdomains — `wikipedia.org` is every language's |
+
+The reader is not in the list of files every page loads. Wikipedia's entry
+carries it; on any other page the worker brings it into the tab the moment it
+is asked for (`src/background/reader-loader.js`), as the watch party is
+brought in.
+
+### Wikipedia
+
+On Wikipedia the reader is the site's own — the site has a card, and a switch,
+like the others — and opens at once on any article: the article as it is
+written, without its edit links, navigation boxes, maintenance banners and
+"for other uses" notes. Its short description is the line under the title, and
+the date of its last edit is in the byline. **Settings › Wikipedia** says what
+an article shows:
+
+- **The infobox** as an "at a glance" card beside the article, folded under its
+  first paragraph, or not at all. On a narrow window the card folds anyway.
+- **Citation marks**, quiet, each showing its source beside it on a hover — or
+  none at all. Either way the end matter — References, Notes, See also, External
+  links — is folded away at the article's end; a section is end matter by its
+  name in English and, in any language, by being mostly footnotes or lists of
+  links.
+- **Link previews**: resting on a link shows the article it goes to, from the
+  endpoint Wikipedia's own Page Previews use, with **Read it here**.
+
+**Links are followed inside the reader.** Another article is fetched — the page
+the click would have loaded — and drawn in place; the address follows, so Back
+and Forward step through what you read, and an article you go back to comes
+back where you left it. That is the one place the reader keeps, and only within
+one reading. Closing the reader on an article other than the page underneath
+loads that article.
+
+A picture opens large over the article, `←` and `→` stepping through the
+article's pictures. A formula, clicked, is copied as the LaTeX it was written
+in. `/` searches Wikipedia, and what you pick is read in place. The languages
+button opens the article in another language's Wikipedia, straight into the
+reader there; Simple English comes first where there is one. **Cite** copies a
+Markdown link to the exact revision you read — `/w/index.php?…&oldid=` — and
+`Alt`-click gives BibTeX, the way Wikipedia's own "Cite this page" does.
+Copied highlights from a reading that went through several articles come out
+under each article's title.
+
+Every request is to Wikipedia's own public endpoints, one for each thing you
+do: the click, the look, the search.
+
+### X threads
+
+Open the reader on any post of a thread and it reads the author's whole
+thread: from its first post, every one in order, numbered, with its photos, its
+link cards and polls, the posts it quotes, and its videos playing in the
+column (a GIF loops as on X, unless you have asked for less motion). If the
+first post answers someone, that post is shown above it; everything else the
+author said in the conversation follows the thread, each under the post it
+answers.
+
+A clipper that reads X's page gets one post and loses the video, for two
+reasons: X draws only part of a conversation, a list it fills as you scroll and
+empties behind you, and it plays its videos from a `blob:` stream no other
+element can play. So the reader does not read the page. A script in the page's
+own world (`src/content/twitter-thread-page.js`), there from the moment the
+page starts, keeps the text of X's own answer when the page asks X for the
+conversation — every post's full text, and its video's mp4 files on
+video.twimg.com — and hands it over when the reader opens. **It sends nothing
+and changes nothing**: it never asks X for anything, never clicks and never
+scrolls, and it reads nothing until you open the reader.
+
+Where X has not sent all of a thread yet, the reader says so at the end: X's own
+**Show more** under the last post brings the rest, and the reader opened again
+reads it. A page that was open before the extension was loaded or reloaded has
+nothing kept; it is read off what X has drawn instead, a video as its poster,
+and says so. Elsewhere on X — the timeline, a profile — the key is X's.
 
 ## Skim
 
@@ -1068,6 +1196,9 @@ src/shared/     pure logic, used by every surface
   hosts.js         a URL's host, and a host looked up in a list that covers subdomains
   ids.js           ids for the records the stores mint
   selectors.js     a site's page read through its table of selector spellings
+  text-anchor.js   a highlight as a span of an article's text: its words, merging two,
+                   finding it again, and a #:~:text= link to it
+  x-thread.js      X's conversation responses read into the author's whole thread
   transcript.js    BB.TranscriptApi: captions from YouTube's own player API
   youtube.js       URL parsing
   chess-sites.js   chess.com and Lichess: names, settings keys, time controls
@@ -1125,6 +1256,13 @@ src/content/    injected into pages: a core on every page (main.js, player, shor
   reader-layout.js  where each piece of the reader goes, in each of its five layouts
   reader-highlights.js  the pen: highlights, their toolbar and knobs, notes, the list of them
   reader-transcript.js  the transcript as paragraphs of timed words, and which words a checkpoint covers
+  article-reader.js  the text reader: its shadow root, the column, contents, bar, notes beside marks
+  article-clean.js  a page's article rebuilt from an allowlist into the reader's own markup
+  article-extract.js  finding the article on any page, and what the page says of it
+  article-highlights.js  the text reader's pen: highlights, notes, the list, Copy as Markdown
+  wiki-read.js     Wikipedia's adapter: an article, its infobox, its end matter folded
+  wiki-ui.js       links read in place, previews, pictures, formulas, search, languages, Cite
+  x-thread-read.js an X thread drawn for the reader, from what twitter-thread-page.js kept
   site.js          which site, and which <video> on it
   chess.js         in a chess game: clock warning, spoken moves, clear arrows
   youtube-ui.js    the pouch button, the drawer entry, the topics sheet, the pouch panel
@@ -1159,6 +1297,7 @@ src/content/    injected into pages: a core on every page (main.js, player, shor
   chess-page.js    the board's own state, which the isolated world cannot see
   leet-page.js     watches LeetCode's fetches for verdicts; drives Monaco
   claude-page.js   reads Claude's completion stream off a clone: its end, and its exact limit
+  twitter-thread-page.js  keeps the text of X's own conversation responses, for the reader
 
   Injected into a party's one tab by src/background/party-loader.js
   (CONTENT_FILES, PAGE_FILES, CSS_FILES), never listed in a manifest:
@@ -1172,11 +1311,12 @@ src/background/ the service worker, pulled in by background.js
   site-scripts.js  each site's content scripts, registered unless it is switched off
   proto.js         the sowon wire format
   sowon.js         focus reporting
-  context-menus.js "Copy as Markdown"
+  context-menus.js "Copy as Markdown", and "Open in reader"
   commands.js      keyboard commands and messages, chess moves spoken
   activity-heartbeat.js  the alarm that feeds the activity store
   skim.js          tabs, history, and the actions Skim can run
   prompt-queue.js  the one alarm a scheduled prompt needs, and waking its chat
+  reader-loader.js the text reader brought into a tab when it is asked for
   party-loader.js  the party's gate: binds it to one tab and injects it there
   party.js         opens and closes the party's offscreen document; start, join, leave
 
@@ -1217,6 +1357,8 @@ offscreen.html  the party session's script list; Firefox reads it into the backg
 party.css       the popup's party screens, for every skin
 party-page.css  the chip, toast and chat on the page, inserted with them
 skins.css       the token layer for every skin — linked before popup/dashboard css
+content-reader.css  both readers: the palette they share, YouTube's reader, and the
+                text reader, adopted into its shadow root
 skin-fonts.css  @font-face for the skin families, in the popup and the dashboard;
                 pages get the same faces from theme.js, by FontFace
 fonts/          the woff2 subsets those faces load
@@ -1244,7 +1386,7 @@ Importing writes those keys back, replacing what is there.
 - `alarms`: The activity heartbeat — an MV3 worker is suspended a few seconds after it goes idle, taking any setInterval with it — and the one alarm a scheduled chat prompt needs
 - `activeTab`: To interact with YouTube pages
 - `scripting`: To inject content scripts
-- `contextMenus`: For the "Copy as Markdown" right-click items
+- `contextMenus`: For the "Copy as Markdown" and "Open in reader" right-click items
 - `tabs` / `tabGroups`: For the sowon focus report
 - `tts`: To read chess moves aloud (Chrome only; Firefox has no such API)
 - `history` / `sessions`: Skim’s history search and its “reopen the last tab I closed” action, both read only when you ask for them
