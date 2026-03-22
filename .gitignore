@@ -31,6 +31,7 @@
 # generated write-ups do not belong in the tree, and a whitelist is the only
 # way to keep them out without naming each one.
 !README.md
+!/TODO.md
 
 # ---------------------------------------------------------------------------
 # Doors the whitelist above would otherwise leave open.
