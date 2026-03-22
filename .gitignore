@@ -24,6 +24,9 @@
 !LICENSE
 !.gitignore
 
+# The checks run by GitHub on pushes to master.
+!/.github/workflows/ci.yml
+
 # Prose. Every other .md stays ignored on purpose: notes, plans, summaries and
 # generated write-ups do not belong in the tree, and a whitelist is the only
 # way to keep them out without naming each one.
