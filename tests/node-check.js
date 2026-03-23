@@ -9230,6 +9230,58 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         try { await YoutubeDownload.adapter.offer({ videoId: 'x', doc: { scripts: [] }, fetchImpl: async () => ({ ok: false, status: 429 }) }); } catch (error) { message = error.message; }
         eq(message, 'YouTube refused to list the streams (429)');
     });
+    /** A browse answer for a playlist in the shape YouTube gave in October 2026, cut to what is read. */
+    const lockup = (id, title, contentType = 'LOCKUP_CONTENT_TYPE_VIDEO') => ({ lockupViewModel: { contentId: id, contentType, metadata: { lockupMetadataViewModel: { title: { content: title } } } } });
+    const more = (token) => ({ continuationItemViewModel: { continuationCommand: { innertubeCommand: { continuationCommand: { token } } } } });
+    const firstPage = (items, title = 'Uploads from Blender') => ({
+        metadata: { playlistMetadataRenderer: { title } },
+        contents: { twoColumnBrowseResultsRenderer: { tabs: [{ tabRenderer: { content: { sectionListRenderer: { contents: [{ itemSectionRenderer: {
+            // The sort chips carry commands of their own, and are not the next page.
+            header: { chipBarViewModel: { chips: [{ chipViewModel: { tapCommand: { innertubeCommand: { continuationCommand: { token: 'SORT' } } } } }] } },
+            contents: items,
+        } }] } } } }] } },
+    });
+    const laterPage = (items) => ({ onResponseReceivedActions: [{ appendContinuationItemsAction: { continuationItems: items } }] });
+
+    check('a playlist page is read for its videos in order, the next page\'s token, and its title', () => {
+        const read = YoutubeDownload.readPlaylist(firstPage([lockup('a1', 'One'), lockup('PLx', 'A playlist', 'LOCKUP_CONTENT_TYPE_PLAYLIST'), lockup('a2', 'Two'), more('NEXT')]));
+        eq(read, { ok: true, title: 'Uploads from Blender', videos: [{ id: 'a1', title: 'One' }, { id: 'a2', title: 'Two' }], next: 'NEXT' });
+        eq(YoutubeDownload.readPlaylist(laterPage([lockup('a3', 'Three')])), { ok: true, title: '', videos: [{ id: 'a3', title: 'Three' }], next: '' });
+        const older = { contents: { playlistVideoListRenderer: { contents: [
+            { playlistVideoRenderer: { videoId: 'b1', title: { runs: [{ text: 'Old ' }, { text: 'shape' }] } } },
+            { playlistVideoRenderer: { videoId: 'b2', title: { simpleText: 'Gone' }, isPlayable: false } },
+            { continuationItemRenderer: { continuationEndpoint: { continuationCommand: { token: 'OLD' } } } },
+        ] } } };
+        eq(YoutubeDownload.readPlaylist(older), { ok: true, title: '', videos: [{ id: 'b1', title: 'Old shape' }], next: 'OLD' }, 'the shape before lockups, and a deleted entry left out');
+        eq(YoutubeDownload.readPlaylist({ alerts: [{ alertRenderer: { type: 'ERROR', text: { runs: [{ text: 'The playlist does not exist.' }] } } }] }),
+            { ok: false, reason: 'The playlist does not exist.' });
+        eq(YoutubeDownload.readPlaylist(null).ok, false);
+    });
+    check('a playlist is asked for as the web client, by its VL browse id, then by each page\'s token', () => {
+        const first = YoutubeDownload.browseRequest({ playlistId: 'PLcourse' }, 'Cgt-visitor', '2.20261016.01.00');
+        eq([first.url, first.init.method, first.init.credentials], ['/youtubei/v1/browse?prettyPrint=false', 'POST', 'omit']);
+        eq([first.init.headers['X-YouTube-Client-Name'], first.init.headers['X-YouTube-Client-Version'], first.init.headers['X-Goog-Visitor-Id']], ['1', '2.20261016.01.00', 'Cgt-visitor']);
+        const body = JSON.parse(first.init.body);
+        eq([body.browseId, body.context.client.clientName, body.continuation], ['VLPLcourse', 'WEB', undefined]);
+        const next = JSON.parse(YoutubeDownload.browseRequest({ continuation: 'NEXT' }, '').init.body);
+        eq([next.continuation, next.browseId, next.context.client.clientVersion], ['NEXT', undefined, YoutubeDownload.WEB_VERSION]);
+    });
+    await checkAsync('a whole playlist is every page\'s videos, each once, in the version the page names', async () => {
+        const pages = { '': firstPage([lockup('a1', 'One'), lockup('a2', 'Two'), more('P2')]), P2: laterPage([lockup('a2', 'Two'), lockup('a3', 'Three'), more('P3')]), P3: laterPage([lockup('a4', 'Four')]) };
+        const asked = [];
+        const fetchImpl = async (url, init) => {
+            const body = JSON.parse(init.body);
+            asked.push([body.browseId || body.continuation, body.context.client.clientVersion]);
+            return { ok: true, json: async () => pages[body.continuation || ''] };
+        };
+        const doc = { scripts: [{ textContent: 'ytcfg.set({"INNERTUBE_CLIENT_VERSION":"2.20990101.00.00","VISITOR_DATA":"Cgt"});' }] };
+        const got = await YoutubeDownload.adapter.list({ listId: 'PLcourse', doc, fetchImpl });
+        eq([got.title, got.videos.map((one) => one.id)], ['Uploads from Blender', ['a1', 'a2', 'a3', 'a4']]);
+        eq(asked, [['VLPLcourse', '2.20990101.00.00'], ['P2', '2.20990101.00.00'], ['P3', '2.20990101.00.00']]);
+        let message = '';
+        try { await YoutubeDownload.adapter.list({ listId: 'x', doc: { scripts: [] }, fetchImpl: async () => ({ ok: true, json: async () => ({ alerts: [{ alertRenderer: { type: 'ERROR', text: { simpleText: 'This playlist is private.' } } }] }) }) }); } catch (error) { message = error.message; }
+        eq(message, 'YouTube would not give the playlist: This playlist is private.');
+    });
     check('a watch page, a short or a live page has a video to save, and the home page does not', () => {
         const at = (pathname) => YoutubeDownload.adapter.onVideo({ location: { pathname } }, 'abc');
         eq(['/watch', '/shorts/abc', '/live/abc', '/', '/results', '/@channel'].map(at), [true, true, true, false, false, false]);

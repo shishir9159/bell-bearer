@@ -1,6 +1,6 @@
 /**
  * youtube.com, for src/content/video-download.js: where a video's streams
- * are, and what each of them is. Everything that will break when YouTube
+ * are, what each of them is, and which videos a playlist holds. Everything that will break when YouTube
  * changes is in this file; `node tools/yt-check.js` says which part broke,
  * and its header how each has been mended before.
  *
@@ -93,14 +93,18 @@
         return { ok: true, title: details.title || '', video, audio };
     }
 
-    /** The visitor id the page was given, from the ytcfg it sets in an inline script. */
-    function visitorData(doc) {
+    /** A value of the ytcfg the page sets in an inline script, or ''. */
+    function fromYtcfg(doc, key) {
+        const pattern = new RegExp(`"${key}":"([^"]+)"`);
         for (const script of doc.scripts || []) {
-            const found = /"VISITOR_DATA":"([^"]+)"/.exec(script.textContent || '');
+            const found = pattern.exec(script.textContent || '');
             if (found) return found[1];
         }
         return '';
     }
+
+    /** The visitor id the page was given. */
+    const visitorData = (doc) => fromYtcfg(doc, 'VISITOR_DATA');
 
     /**
      * The quality the player was last told to keep: YouTube writes the
@@ -129,9 +133,110 @@
         return player;
     }
 
-    const adapter = { site: 'youtube', name: 'YouTube', onVideo, storedQuality, offer };
+    // ------------------------------------------------------------ a playlist
 
-    const YoutubeDownload = { CLIENT, playerRequest, readPlayer, visitorData, storedQuality, adapter };
+    /**
+     * A playlist is asked for as the page's own web client asks, in the
+     * version the page's ytcfg names, else this one. Only its video ids come
+     * from here — each video's streams are then asked for as CLIENT above.
+     */
+    const WEB_VERSION = '2.20261016.01.00';
+    const BROWSE_URL = '/youtubei/v1/browse?prettyPrint=false';
+    /** A page is a hundred entries: fifty is further than YouTube lets any list run. */
+    const MAX_PAGES = 50;
+
+    /** The browse request for a playlist's first page (`playlistId`), or for the page after (`continuation`). */
+    function browseRequest({ playlistId, continuation }, visitorData, version = WEB_VERSION) {
+        const client = { clientName: 'WEB', clientVersion: version, hl: 'en', timeZone: 'UTC', utcOffsetMinutes: 0, ...(visitorData ? { visitorData } : {}) };
+        return {
+            url: BROWSE_URL,
+            init: {
+                method: 'POST',
+                credentials: 'omit',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-YouTube-Client-Name': '1',
+                    'X-YouTube-Client-Version': version,
+                    ...(visitorData ? { 'X-Goog-Visitor-Id': visitorData } : {}),
+                },
+                body: JSON.stringify({ context: { client }, ...(continuation ? { continuation } : { browseId: `VL${playlistId}` }) }),
+            },
+        };
+    }
+
+    /** YouTube's text in any of its spellings: a string, `content`, `simpleText` or `runs`. */
+    function textOf(text) {
+        if (!text) return '';
+        if (typeof text === 'string') return text;
+        if (text.content) return text.content;
+        if (text.simpleText) return text.simpleText;
+        return (text.runs || []).map((run) => run.text).join('');
+    }
+
+    /**
+     * One page of a playlist: `{ ok, title, videos: [{ id, title }], next }`,
+     * `next` the token for the page after and '' on the last. The entries are
+     * found by their shape wherever they are — a lockup since 2026, a
+     * playlistVideoRenderer before — since YouTube moves the path to them
+     * more often than it renames them. The token is taken from the
+     * continuation item alone: the sort chips above the list carry commands
+     * of their own.
+     */
+    function readPlaylist(answer) {
+        if (!answer) return { ok: false, reason: 'YouTube gave no answer' };
+        const alert = (answer.alerts || []).map((one) => one.alertRenderer).find((one) => one && one.type === 'ERROR');
+        if (alert) return { ok: false, reason: textOf(alert.text) || 'it is not there' };
+        const videos = [];
+        let next = '';
+        const walk = (node, key, inContinuation) => {
+            if (!node || typeof node !== 'object') return;
+            if (key === 'lockupViewModel') {
+                const meta = node.metadata && node.metadata.lockupMetadataViewModel;
+                if (node.contentType === 'LOCKUP_CONTENT_TYPE_VIDEO' && node.contentId) videos.push({ id: node.contentId, title: textOf(meta && meta.title) });
+                return;
+            }
+            if (key === 'playlistVideoRenderer') {
+                if (node.videoId && node.isPlayable !== false) videos.push({ id: node.videoId, title: textOf(node.title) });
+                return;
+            }
+            const within = inContinuation || key === 'continuationItemViewModel' || key === 'continuationItemRenderer';
+            if (within && key === 'continuationCommand' && node.token) next = node.token;
+            for (const [inner, value] of Object.entries(node)) walk(value, inner, within);
+        };
+        walk(answer.contents, 'contents', false);
+        walk(answer.onResponseReceivedActions, 'onResponseReceivedActions', false);
+        const meta = answer.metadata && answer.metadata.playlistMetadataRenderer;
+        return { ok: true, title: (meta && meta.title) || '', videos, next };
+    }
+
+    /** Every video of the playlist `listId`, page after page, each once and in the list's order: `{ title, videos }`. */
+    async function list({ listId, doc, fetchImpl, signal }) {
+        const visitor = visitorData(doc);
+        const version = fromYtcfg(doc, 'INNERTUBE_CLIENT_VERSION') || WEB_VERSION;
+        const seen = new Set();
+        const videos = [];
+        let title = '';
+        let next = '';
+        for (let page = 0; page < MAX_PAGES; page++) {
+            const { url, init } = browseRequest(page ? { continuation: next } : { playlistId: listId }, visitor, version);
+            const response = await fetchImpl(url, { ...init, signal });
+            if (!response.ok) throw new Error(`YouTube refused to list the playlist (${response.status})`);
+            const read = readPlaylist(await response.json());
+            if (!read.ok) throw new Error(`YouTube would not give the playlist: ${read.reason}`);
+            title = title || read.title;
+            for (const video of read.videos.filter((one) => !seen.has(one.id))) {
+                seen.add(video.id);
+                videos.push(video);
+            }
+            if (!read.next || read.next === next) break;
+            next = read.next;
+        }
+        return { title, videos };
+    }
+
+    const adapter = { site: 'youtube', name: 'YouTube', onVideo, storedQuality, offer, list };
+
+    const YoutubeDownload = { CLIENT, WEB_VERSION, playerRequest, readPlayer, visitorData, storedQuality, browseRequest, readPlaylist, adapter };
 
     root.BB = root.BB || {};
     root.BB.YoutubeDownload = YoutubeDownload;
