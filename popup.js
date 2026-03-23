@@ -300,9 +300,10 @@
 
         /**
          * Download, on a page whose video can be saved — on YouTube once
-         * Settings › YouTube has asked for it. The button names the quality
-         * the player is on, as the tab reads it, which is what it will save.
-         * The work is the tab's: this only starts it, follows it and stops it.
+         * Settings › YouTube has asked for it. The button is the glyph alone,
+         * and its tooltip names the quality the player is on, as the tab
+         * reads it, which is what it will save. The work is the tab's: this
+         * only starts it, follows it and stops it.
          */
         async setupDownloadBar() {
             if (this.site === 'youtube' && !(await Settings.get(['youtubeDownload'])).youtubeDownload) return;
@@ -322,10 +323,16 @@
             // A tab opened before the extension was installed or reloaded has
             // no content script to answer.
             button.disabled = !info;
-            button.title = info ? '' : 'Reload the tab first — Bell Bearer is not running in it yet';
             this.downloadBusy = !!(info && info.busy);
+            const said = !info ? 'Reload the tab first — Bell Bearer is not running in it yet'
+                : info.busy ? `Cancel the download (${info.percent}%)` : `Download${info.label ? ` ${info.label}` : ''}`;
+            button.title = said;
+            button.setAttribute('aria-label', said);
+            button.classList.toggle('is-busy', this.downloadBusy);
             // How far it has got is on the button that stops it.
-            document.getElementById('downloadLabel').textContent = !info ? 'Download' : info.busy ? `Cancel (${info.percent}%)` : `Download${info.label ? ` ${info.label}` : ''}`;
+            const label = document.getElementById('downloadLabel');
+            label.hidden = !this.downloadBusy;
+            label.textContent = this.downloadBusy ? `${info.percent}%` : '';
         }
 
         async toggleDownload() {

@@ -9266,6 +9266,15 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         }
         assert(/enabled: \(\) => settings\.youtubeDownload === true/.test(main), 'the tab would download with the switch off');
     });
+    check('the popup\'s download is its glyph alone, the quality it saves its tooltip, and a stop while it runs', () => {
+        const html = readRepo('popup.html');
+        const button = html.slice(html.indexOf('<button id="downloadBtn"'), html.indexOf('</button>', html.indexOf('<button id="downloadBtn"')));
+        assert(button.includes('data-icon="download-simple"') && button.includes('data-icon="x"'), 'no glyph to start or to stop');
+        assert(/<span id="downloadLabel" hidden><\/span>/.test(button), 'the button still has words at rest');
+        const popup = readRepo('popup.js');
+        assert(/`Download\$\{info\.label \? ` \$\{info\.label\}` : ''\}`/.test(popup) && popup.includes('button.title = said;'), 'the quality is not in the tooltip');
+        assert(popup.includes("button.classList.toggle('is-busy', this.downloadBusy)"), 'a running download does not turn into a stop');
+    });
     check('download, the party, the reader and the speed share one row in the popup, with no line of description', () => {
         const html = readRepo('popup.html');
         const row = html.slice(html.indexOf('id="pageActions"'), html.indexOf('id="youtubePanel"'));

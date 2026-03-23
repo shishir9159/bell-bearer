@@ -279,6 +279,12 @@ header h1 {
 .act-btn:hover:not(:disabled) .act-icon, .party-start:hover .act-icon { color: currentColor; }
 .act-btn:disabled .act-icon { color: inherit; }
 
+/* Download is its glyph alone, a square capsule; the quality it would save
+   is its tooltip. Running, it is a stop with how far it has got beside it. */
+.act-glyph { justify-content: center; min-width: 30px; padding: 0 7px; }
+.act-glyph.is-busy { padding: 0 12px 0 10px; }
+#downloadBtn:not(.is-busy) .dl-stop, #downloadBtn.is-busy .dl-start { display: none; }
+
 /* Start and Join, two buttons in one capsule: Join is the chip inside it. */
 .party-split {
     display: inline-flex;
