@@ -1,5 +1,6 @@
 /**
- * Saving the video on the page as one .mp4, at the quality it is playing at.
+ * Saving the video on the page as one .mp4, at the quality it is playing at
+ * — or every video of a list, where the adapter can read one (`list`).
  * The site is the adapter's business — src/content/youtube-download.js and
  * the Vimeo one beside it say what a video is offered as; this file chooses
  * from that, fetches it, merges it with src/shared/mp4-mux.js and hands the
@@ -101,11 +102,13 @@
         return out;
     }
 
-    /** A title as a file name Windows, macOS and Linux all take, with the quality after it. */
+    /** A title as a name Windows, macOS and Linux all take, for a file or a folder. */
+    const cleanName = (title, fallback) => String(title || fallback).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim()
+        .replace(/[. ]+$/, '').slice(0, 150) || fallback;
+
+    /** A title as a file name, with the quality after it. */
     function fileName(title, label, ext = 'mp4') {
-        const clean = String(title || 'video').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim()
-            .replace(/[. ]+$/, '').slice(0, 150) || 'video';
-        return `${clean}${label ? ` (${label})` : ''}.${ext}`;
+        return `${cleanName(title, 'video')}${label ? ` (${label})` : ''}.${ext}`;
     }
 
     const blobSource = (blob) => ({ size: blob.size, read: async (at, length) => new Uint8Array(await blob.slice(at, at + length).arrayBuffer()) });
@@ -159,13 +162,22 @@
         return new Blob(parts, { type: 'video/mp4' });
     }
 
+    /**
+     * `onChange(state())` hears each turn a download takes — begun, a
+     * percent further, the next video of a list, ended — for a button on
+     * the page to follow; the popup asks `info` instead.
+     */
     function createDownloader({ adapter, notify, getVideoElement, getVideoId = () => null, enabled = () => true,
-        fetchImpl = root.fetch, save = Dom.download, win = root, doc = root.document }) {
+        fetchImpl = root.fetch, save = Dom.download, win = root, doc = root.document, onChange = () => {} }) {
         let busy = false;
         let percent = 0;
+        /** Where a list's download is, `{ at, of }` from 1, and null for one video. */
+        let place = null;
         let controller = null;
 
-        const want = () => wanted(getVideoElement(), adapter.storedQuality ? adapter.storedQuality(win) : 0);
+        const stored = () => (adapter.storedQuality ? adapter.storedQuality(win) : 0);
+        const want = () => wanted(getVideoElement(), stored());
+        const state = () => ({ busy, percent, place });
 
         /** What the popup offers, read without a request: null where there is nothing to save. */
         function info() {
@@ -174,56 +186,117 @@
             return { ok: true, busy, percent, label: target ? `${target.p}p` : '' };
         }
 
-        async function run() {
-            controller = new AbortController();
-            const { signal } = controller;
-            notify('Finding the video\'s streams…', 'info', SHOWN_MS);
-            const offer = await adapter.offer({ videoId: getVideoId(), win, doc, fetchImpl, signal });
-            const plan = choose(offer, want(), adapter.name);
-            if (plan.note) notify(plan.note, 'info', 4000);
+        /**
+         * Fetch, merge and hand over the video `videoId`, at `target`. `head`
+         * goes before each progress line, and `path` before the file's name;
+         * `only` is what the save is told over the settings. Answers what
+         * the save did — false is a Save As closed — and the file's name.
+         */
+        async function saveOne(videoId, target, signal, { head = '', path = '', only } = {}) {
+            const offer = await adapter.offer({ videoId, win, doc, fetchImpl, signal });
+            const plan = choose(offer, target, adapter.name);
+            if (plan.note && !head) notify(plan.note, 'info', 4000);
 
             // Progress by bytes when every size is known, by pieces when not.
             const total = plan.streams.every((stream) => stream.size) ? plan.streams.reduce((sum, stream) => sum + stream.size, 0) : 0;
             let bytes = 0;
             let landed = 0;
+            percent = 0;
             const onPiece = (size, pieces) => {
                 bytes += size;
                 landed += 1;
                 const now = Math.floor(100 * (total ? bytes / total : landed / pieces));
                 if (now === percent) return;
                 percent = now;
-                notify(`Downloading ${plan.label} — ${percent}%`, 'info', SHOWN_MS);
+                notify(`${head}Downloading ${plan.label} — ${percent}%`, 'info', SHOWN_MS);
+                onChange(state());
             };
             const blobs = await fetchStreams(plan.streams, { fetchImpl, signal, onPiece });
-            notify('Putting the picture and the sound together…', 'info', SHOWN_MS);
+            notify(`${head}Putting the picture and the sound together…`, 'info', SHOWN_MS);
             const file = await assemble(blobs, plan.streams);
             percent = 100;
-            const saved = await save(plan.fileName, file, 'video/mp4');
-            if (saved === false) notify('Not saved', 'info', 4000);
-            else notify(`Saved ${plan.fileName}`, 'success', 6000);
+            return { saved: await save(path + plan.fileName, file, 'video/mp4', only), name: plan.fileName };
         }
 
-        /** Start a download, unless one is going; resolves when it has ended either way. */
-        async function start() {
-            if (busy || !info().ok) return;
+        async function run(signal) {
+            notify('Finding the video\'s streams…', 'info', SHOWN_MS);
+            const { saved, name } = await saveOne(getVideoId(), want(), signal);
+            if (saved === false) notify('Not saved', 'info', 4000);
+            else notify(`Saved ${name}`, 'success', 6000);
+        }
+
+        /**
+         * Every video of the list `listId`, one after another, into a folder
+         * named after it, each numbered by its place. At the quality the
+         * player was told to keep, there being no picture on a list's page to
+         * match, else the best up to 1080p. Never Save As video by video. One
+         * that cannot be saved — private, removed — is passed over and named
+         * at the end; cancelling stops the one going and the rest.
+         */
+        async function runList(listId, signal) {
+            notify('Reading the playlist…', 'info', SHOWN_MS);
+            const { title, videos } = await adapter.list({ listId, win, doc, fetchImpl, signal });
+            if (!videos.length) throw new Error('The playlist has no videos to save');
+            const folder = cleanName(title, listId);
+            const target = wanted(null, stored());
+            const digits = String(videos.length).length;
+            const missed = [];
+            let saved = 0;
+            for (const [index, video] of videos.entries()) {
+                place = { at: index + 1, of: videos.length };
+                onChange(state());
+                const head = `${index + 1} of ${videos.length} · `;
+                notify(`${head}Finding the video's streams…`, 'info', SHOWN_MS);
+                try {
+                    const path = `${folder}/${String(index + 1).padStart(digits, '0')} - `;
+                    if ((await saveOne(video.id, target, signal, { head, path, only: { ask: false } })).saved !== false) saved += 1;
+                } catch (error) {
+                    if (signal.aborted) throw error;
+                    missed.push(video.title || video.id);
+                }
+            }
+            if (!missed.length) return notify(`Saved ${saved} videos to ${folder}`, 'success', 8000);
+            const named = missed.slice(0, 3).join(', ') + (missed.length > 3 ? ` and ${missed.length - 3} more` : '');
+            notify(`Saved ${saved} of ${videos.length} to ${folder} — not ${named}`, 'warning', 12000);
+        }
+
+        /** Run `work(signal)` as the one download going; resolves when it has ended either way. */
+        async function begin(work) {
             busy = true;
             percent = 0;
+            const own = new AbortController();
+            controller = own;
+            onChange(state());
             try {
-                await run();
+                await work(own.signal);
             } catch (error) {
-                const cancelled = error && error.name === 'AbortError';
+                const cancelled = own.signal.aborted || (error && error.name === 'AbortError');
                 notify(cancelled ? 'Download cancelled' : (error && error.message) || 'The download failed', cancelled ? 'info' : 'error', 8000);
             } finally {
                 busy = false;
+                place = null;
                 controller = null;
+                onChange(state());
             }
+        }
+
+        /** Start a download of the video on the page, unless one is going. */
+        async function start() {
+            if (busy || !info().ok) return;
+            await begin(run);
+        }
+
+        /** Start a download of the list `listId`, on a site that has lists, unless one is going. */
+        async function startList(listId) {
+            if (busy || !enabled() || !adapter.list || !listId) return;
+            await begin((signal) => runList(listId, signal));
         }
 
         function cancel() {
             if (controller) controller.abort();
         }
 
-        return { info, start, cancel };
+        return { info, state, start, startList, cancel };
     }
 
     const VideoDownload = { CHUNK, wanted, pick, choose, chunks, fileName, piecesOf, fetchStreams, assemble, createDownloader };

@@ -9163,6 +9163,58 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(failing.info().busy, false);
     });
 
+    /** A site whose list is three videos, `fails` among them unavailable, each a 720p picture and its sound. */
+    function fakeListSite(fails = []) {
+        const video = videoStream();
+        const audio = audioStream();
+        const server = rangeServer({ 'https://v.example/video': video, 'https://v.example/audio': audio });
+        const streams = [{ url: 'https://v.example/video', size: video.length }, { url: 'https://v.example/audio', size: audio.length }];
+        const titles = { v1: 'First', v2: 'Second', v3: 'Third' };
+        const adapter = fakeVideoSite(streams, {
+            offer: async ({ videoId }) => {
+                if (fails.includes(videoId)) throw new Error('Video unavailable');
+                return { title: titles[videoId], video: [{ ...rendition(1280, 720), ...streams[0] }], audio: streams.slice(1) };
+            },
+            list: async () => ({ title: 'A: Course?', videos: Object.keys(titles).map((id) => ({ id, title: titles[id] })) }),
+        });
+        return { adapter, fetchImpl: server.fetchImpl };
+    }
+
+    await checkAsync('a list is saved video by video into its folder, numbered, never asked about, and one that fails is passed over', async () => {
+        const { adapter, fetchImpl } = fakeListSite(['v2']);
+        const notes = [];
+        const saved = [];
+        const states = [];
+        const downloader = VideoDownload.createDownloader({
+            adapter, fetchImpl, notify: (text, type) => notes.push([text, type]), getVideoElement: () => null,
+            save: (name, blob, type, only) => saved.push([name, type, only]), onChange: (one) => states.push(one),
+        });
+        await downloader.startList('PLcourse');
+        eq(saved, [['A Course/1 - First (720p).mp4', 'video/mp4', { ask: false }], ['A Course/3 - Third (720p).mp4', 'video/mp4', { ask: false }]]);
+        eq(notes.pop(), ['Saved 2 of 3 to A Course — not Second', 'warning']);
+        assert(notes.some(([text]) => text === '3 of 3 · Downloading 720p — 100%'), JSON.stringify(notes));
+        eq([...new Set(states.filter((one) => one.place).map((one) => `${one.place.at}/${one.place.of}`))], ['1/3', '2/3', '3/3']);
+        eq(states[0].busy, true);
+        eq(downloader.state(), { busy: false, percent: 100, place: null });
+    });
+    await checkAsync('cancelling a list stops the video going and every one after it, and a site without lists starts none', async () => {
+        const { adapter, fetchImpl } = fakeListSite();
+        const notes = [];
+        const saved = [];
+        const downloader = VideoDownload.createDownloader({
+            adapter, fetchImpl, notify: (text, type) => notes.push([text, type]), getVideoElement: () => null,
+            save: (name) => { saved.push(name); downloader.cancel(); },
+        });
+        await downloader.startList('PLcourse');
+        eq([saved.length, notes.pop()], [1, ['Download cancelled', 'info']]);
+        const plain = VideoDownload.createDownloader({ adapter: fakeVideoSite([]), notify: (text) => notes.push(text), getVideoElement: () => null, save: () => assert(false, 'saved') });
+        const off = VideoDownload.createDownloader({ adapter, notify: (text) => notes.push(text), getVideoElement: () => null, enabled: () => false, save: () => assert(false, 'saved') });
+        const before = notes.length;
+        await plain.startList('PLcourse');
+        await off.startList('PLcourse');
+        eq(notes.length, before, 'something was said or started');
+    });
+
     section('saving a youtube video');
 
     const YoutubeDownload = require('../src/content/youtube-download.js');
@@ -9381,6 +9433,16 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(await saving, true);
         eq(urls.revoked, ['blob:https://www.youtube.com/1']);
         eq(linked, []);
+    });
+    await checkAsync('a playlist\'s video goes under the folder asked for, in its own, without Save As even when that is on', async () => {
+        const { saver, sent } = fakeSaver({ ask: true, folder: 'YouTube' }, { ok: true, id: 7 });
+        saver.save('A Course/1 - a.mp4', new Blob(['x']), 'video/mp4', { ask: false });
+        await new Promise((done) => setTimeout(done, 0));
+        eq([sent[0].filename, sent[0].ask], ['YouTube/A Course/1 - a.mp4', false]);
+        const plain = fakeSaver({ ask: false, folder: '' }, { ok: true, id: 8 });
+        plain.saver.save('A Course/1 - a.mp4', new Blob(['x']), 'video/mp4', { ask: false });
+        await new Promise((done) => setTimeout(done, 0));
+        eq([plain.sent[0].filename, plain.linked], ['A Course/1 - a.mp4', []], 'a link would have saved "A Course_1 - a.mp4"');
     });
     await checkAsync('closing Save As is "not saved", in Chrome\'s way and in Firefox\'s, and nothing falls back to Downloads', async () => {
         const chrome = fakeSaver({ ask: true, folder: '' }, { ok: true, id: 5 });

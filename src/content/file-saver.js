@@ -29,12 +29,16 @@
         return [...parts, name].join('/');
     }
 
-    /** `save` resolves to true when saved, and false when Save As was turned down. */
+    /**
+     * `save` resolves to true when saved, and false when Save As was turned
+     * down. `only` overrides the settings for this one save: a playlist's
+     * videos go without Save As, into a folder under the one asked for.
+     */
     function createSaver({ options, send, link = Dom.download, urls = root.URL }) {
         const pending = new Map();
 
-        async function save(name, blob, type) {
-            const { ask, folder } = options();
+        async function save(name, blob, type, only = {}) {
+            const { ask, folder } = { ...options(), ...only };
             const path = savePath(folder, name);
             if (!ask && !path.includes('/')) {
                 link(name, blob, type);
