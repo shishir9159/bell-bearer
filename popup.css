@@ -279,8 +279,8 @@ header h1 {
 .act-btn:hover:not(:disabled) .act-icon { color: currentColor; }
 .act-btn:disabled .act-icon { color: inherit; }
 
-/* Download and the party are their glyphs alone, square capsules; what
-   each does is its tooltip. A running download is a stop with
+/* Download, the party and the reader are their glyphs alone, square
+   capsules; what each does is its tooltip. A running download is a stop with
    how far it has got beside it. */
 .act-glyph { justify-content: center; min-width: 30px; padding: 0 7px; }
 .act-glyph.is-busy { padding: 0 12px 0 10px; }

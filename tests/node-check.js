@@ -9409,6 +9409,12 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             assert(readRepo(file).includes(`\${p.doors('${view}')}`), `${view} has no Start and Join tabs`);
         }
     });
+    check('the reader is its glyph alone, and the rate reads beside the speed icon with the two steps after it', () => {
+        assert(wordless(rowButton('openReaderBtn')), 'the reader has words, or nothing to name it');
+        const html = readRepo('popup.html');
+        const at = ['data-icon="speedometer"', 'id="speedDisplay"', 'id="speedDownBtn"', 'id="speedUpBtn"'].map((one) => html.indexOf(one));
+        assert(at.every((one, i) => one > 0 && (i === 0 || one > at[i - 1])), `out of order: ${at}`);
+    });
 
     section('saving a video — where it goes');
 

@@ -49,15 +49,16 @@
                 <button id="partyBtn" class="act-btn act-glyph" type="button" title="Watch party: start one, or join with a code" aria-label="Watch party"><i class="act-icon" data-icon="users-three"></i></button>
             </div>
             <div class="page-action" id="readerBar" hidden>
-                <button id="openReaderBtn" class="act-btn" type="button" disabled><i class="act-icon" data-icon="book-open-text"></i>Reading mode</button>
+                <button id="openReaderBtn" class="act-btn act-glyph" type="button" aria-label="Reading mode" disabled><i class="act-icon" data-icon="book-open-text"></i></button>
             </div>
             <!-- The rate is its own reset: a separate "1x" button beside it
-                 read as a second rate. The icon carries no text of its own, so
-                 the group's label is what a screen reader announces. -->
+                 read as a second rate. It reads beside the icon, with the two
+                 steps together after it. The icon carries no text of its own,
+                 so the group's label is what a screen reader announces. -->
             <div id="speedControlBar" class="speed-control" role="group" aria-label="Playback speed" hidden>
                 <i class="speed-label" data-icon="speedometer"></i>
-                <button id="speedDownBtn" class="btn-speed" type="button" title="Slower (previous step)" aria-label="Slower"><i data-icon="minus"></i></button>
                 <button id="speedDisplay" class="speed-display" type="button" title="Reset to 1x" aria-live="polite">1x</button>
+                <button id="speedDownBtn" class="btn-speed" type="button" title="Slower (previous step)" aria-label="Slower"><i data-icon="minus"></i></button>
                 <button id="speedUpBtn" class="btn-speed" type="button" title="Faster (next step)" aria-label="Faster"><i data-icon="plus"></i></button>
             </div>
         </div>

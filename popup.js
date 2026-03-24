@@ -274,7 +274,8 @@
                 onVideo = !!window.BB.YouTube.extractVideoId(tab.url) && /^\/(watch|live)\b/.test(new URL(tab.url).pathname);
             } catch (_) { /* no tab, or not a URL */ }
             button.disabled = !onVideo;
-            button.title = onVideo ? '' : 'Open a video to read it beside its transcript';
+            // The button is its glyph alone, so the tooltip is all that says what it does.
+            button.title = onVideo ? 'Read this video beside its transcript' : 'Open a video to read it beside its transcript';
         }
 
         async openReader() {
