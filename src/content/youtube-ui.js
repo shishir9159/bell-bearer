@@ -1,6 +1,7 @@
 /**
  * Everything Bell Bearer injects into YouTube's own page: the "add to pouch"
- * button beside Subscribe, the "follow playlist" button in a playlist header,
+ * button beside Subscribe, the "follow playlist" button in a playlist header
+ * with Download beside it,
  * the entry in the left drawer, and the panel the pouch button opens.
  *
  * The sheet the drawer entry opens is not here — it is src/content/pouch-sheet.js,
@@ -35,6 +36,13 @@
 
     const BUTTON_ID = 'bb-add-to-subscriptions-btn';
     const PLAYLIST_BUTTON_ID = 'bb-follow-playlist-btn';
+    const PLAYLIST_DOWNLOAD_ID = 'bb-download-playlist-btn';
+    /**
+     * Follow and Download go into the header as one row. The /playlist
+     * header stacks its actions in a column, and Download placed after
+     * Follow there went under it rather than beside it.
+     */
+    const PLAYLIST_ROW_ID = 'bb-playlist-actions';
 
     /**
      * Kept armed for a few passes after it has placed the button, rather
@@ -176,7 +184,11 @@
         return null;
     }
 
-    function createYouTubeUi({ watcher, notify, getPouchButtonStyle }) {
+    /**
+     * `playlistDownload` is the tab's downloader, for the Download beside
+     * Follow: `{ enabled, start(listId), cancel, state }`, read on each use.
+     */
+    function createYouTubeUi({ watcher, notify, getPouchButtonStyle, playlistDownload = null }) {
 
         const sheet = PouchSheet.createPouchSheet({ notify, dress, appearance, iconUrl });
 
@@ -334,7 +346,7 @@
 
         function injectPlaylistButton(href) {
             const playlistId = currentPlaylistId(href);
-            const existing = document.getElementById(PLAYLIST_BUTTON_ID);
+            const existing = document.getElementById(PLAYLIST_ROW_ID);
             if (!playlistId) {
                 if (existing) existing.remove(); // followed something, then left
                 return true;
@@ -347,6 +359,11 @@
                 return ++playlistTries >= PLAYLIST_SETTLE;
             }
             if (existing) existing.remove();
+
+            const row = document.createElement('div');
+            row.id = PLAYLIST_ROW_ID;
+            row.className = 'bb-playlist-actions';
+            row.dataset.playlistId = playlistId;
 
             const button = document.createElement('button');
             button.id = PLAYLIST_BUTTON_ID;
@@ -361,10 +378,52 @@
             });
             Dom.holdFocus(button);
 
-            header.appendChild(button);
+            row.append(button, downloadButton(playlistId));
+            header.appendChild(row);
             markPlaylistButton();
+            markDownloadButton();
             playlistTries = 0;
             return false;
+        }
+
+        /**
+         * Download, beside Follow: every video in the playlist, through the
+         * tab's downloader. There whenever Follow is, and hidden while
+         * Settings › YouTube has the download off, so the switch reaches a
+         * page already open. Running, it is a stop.
+         */
+        function downloadButton(playlistId) {
+            const button = document.createElement('button');
+            button.id = PLAYLIST_DOWNLOAD_ID;
+            button.type = 'button';
+            button.className = 'bb-playlist-download';
+            button.dataset.playlistId = playlistId;
+            button.innerHTML = Icons.svg('download-simple', { cls: 'bb-pd-start' }) + Icons.svg('x', { cls: 'bb-pd-stop' }) +
+                '<span class="bb-pd-label"></span>';
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!playlistDownload) return;
+                if (!hasExtensionContext()) return notify(CONTEXT_LOST, 'warning');
+                if (playlistDownload.state().busy) playlistDownload.cancel();
+                else playlistDownload.start(button.dataset.playlistId);
+            });
+            Dom.holdFocus(button);
+            return button;
+        }
+
+        /** Show or hide Download, and how far a download has got: a list by its place in it, one video by its percent. */
+        function markDownloadButton() {
+            const button = document.getElementById(PLAYLIST_DOWNLOAD_ID);
+            if (!button) return;
+            button.hidden = !(playlistDownload && playlistDownload.enabled());
+            const { busy, percent, place } = playlistDownload ? playlistDownload.state() : {};
+            const said = !busy ? 'Download every video in this playlist'
+                : place ? `Cancel the download — video ${place.at} of ${place.of}, ${percent}%` : `Cancel the download (${percent}%)`;
+            button.classList.toggle('bb-busy', !!busy);
+            button.title = said;
+            button.setAttribute('aria-label', said);
+            button.querySelector('.bb-pd-label').textContent = !busy ? '' : place ? `${place.at}/${place.of}` : `${percent}%`;
         }
 
         /**
@@ -773,14 +832,14 @@
             openPouch: openTopicsDialog,
             openTopicsDialog, openAddChannelDialog, openRemoveChannelDialog,
             injectGuideEntry, injectPouchButton, injectPlaylistButton,
-            markPouchButton, markPlaylistButton,
+            markPouchButton, markPlaylistButton, markDownloadButton,
         };
     }
 
     const YouTubeUi = {
         createYouTubeUi,
         firstMatch, isVisible, hasSubscribe, PLAYLIST_HEADER_SELECTORS, SUBSCRIBE_SELECTORS,
-        BUTTON_ID, GUIDE_ID, PLAYLIST_BUTTON_ID, PLAYLIST_SETTLE,
+        BUTTON_ID, GUIDE_ID, PLAYLIST_BUTTON_ID, PLAYLIST_DOWNLOAD_ID, PLAYLIST_ROW_ID, PLAYLIST_SETTLE,
         RANGES: PouchSheet.RANGES, SORTS: PouchSheet.SORTS,
         ALL_TOPICS: PouchSheet.ALL_TOPICS, PER_CHANNEL: PouchSheet.PER_CHANNEL,
     };

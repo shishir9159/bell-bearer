@@ -9379,6 +9379,12 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(/`Download\$\{info\.label \? ` \$\{info\.label\}` : ''\}`/.test(popup) && popup.includes('button.title = said;'), 'the quality is not in the tooltip');
         assert(popup.includes("button.classList.toggle('is-busy', this.downloadBusy)"), 'a running download does not turn into a stop');
     });
+    check('the download beside a playlist\'s follow is the tab\'s downloader, and follows the switch on a page already open', () => {
+        const main = readRepo('src/content/main.js');
+        assert(/playlistDownload: \{\s*enabled: \(\) => settings\.youtubeDownload === true,\s*start: \(listId\) => downloader\.startList\(listId\)/.test(main), 'not the tab\'s downloader, or not behind the switch');
+        assert(main.includes('onChange: () => youtubeUi.markDownloadButton(),'), 'the button does not follow the download');
+        assert(main.includes('if (downloadChanged && youtubeUi) youtubeUi.markDownloadButton();'), 'the switch does not reach an open page');
+    });
     check('download, the party, the reader and the speed share one row in the popup, with no line of description', () => {
         const html = readRepo('popup.html');
         const row = html.slice(html.indexOf('id="pageActions"'), html.indexOf('id="youtubePanel"'));

@@ -403,6 +403,13 @@
             watcher,
             notify,
             getPouchButtonStyle: () => settings.pouchButtonStyle,
+            // The downloader is built below; each of these is read when used.
+            playlistDownload: {
+                enabled: () => settings.youtubeDownload === true,
+                start: (listId) => downloader.startList(listId),
+                cancel: () => downloader.cancel(),
+                state: () => downloader.state(),
+            },
         });
         youtubeUi.install();
 
@@ -420,6 +427,7 @@
             getVideoId: () => PageInfo.getVideoId(),
             enabled: () => settings.youtubeDownload === true,
             save: saver.save,
+            onChange: () => youtubeUi.markDownloadButton(),
         });
 
         // YouTube is a single-page app: it fires yt-navigate-finish instead of
@@ -884,6 +892,8 @@
     function applySettings(values) {
         const pouchStyleChanged = 'pouchButtonStyle' in values &&
             values.pouchButtonStyle !== settings.pouchButtonStyle;
+        const downloadChanged = 'youtubeDownload' in values &&
+            values.youtubeDownload !== settings.youtubeDownload;
         const hideAdsChanged = 'twitterHideAds' in values &&
             values.twitterHideAds !== settings.twitterHideAds;
         const xSurfacesChanged = X_SURFACES.some((key) =>
@@ -906,6 +916,7 @@
         Object.assign(settings, values);
 
         if (pouchStyleChanged && youtubeUi) youtubeUi.refreshPouchButton();
+        if (downloadChanged && youtubeUi) youtubeUi.markDownloadButton();
         // Both directions matter here: turning it off has to put the hidden
         // posts back on the page that is already open, or the switch looks
         // like it did nothing until the next reload.

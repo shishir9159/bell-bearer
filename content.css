@@ -1028,28 +1028,36 @@
    borrows YouTube's tokens for its resting state and falls back to fixed
    values on the day those are renamed. */
 
-.bb-playlist-follow {
+/* Follow and Download, one row in the header (PLAYLIST_ROW_ID). */
+.bb-playlist-actions {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     /* The auto on the right is what puts it on the left of the /playlist
        header: an auto margin eats the free space on the axis it is on and
        takes precedence over align-self, so in that column it pushes the
-       button to the left edge without disturbing the row case, where the
-       button is the last item and there is nothing after it to displace. */
+       row to the left edge without disturbing the row case, where the
+       row is the last item and there is nothing after it to displace. */
     margin: 6px auto 6px 0;
-    padding: 0 14px;
-    height: 32px;
     /* The /playlist header lays its actions out in a column, and a flex item
        in one is stretched to the container's width unless it says otherwise —
-       which is how the button ended up a full-width slab. These four pin it
-       to its own content whichever way the row it lands in happens to run,
+       which is how Follow ended up a full-width slab. These four pin the row
+       to its own content whichever way the header it lands in happens to run,
        including the grid YouTube uses on the watch page's panel. */
     align-self: center;
     justify-self: start;
     flex: 0 0 auto;
     width: fit-content;
     max-width: 100%;
+}
+
+.bb-playlist-follow, .bb-playlist-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 0 14px;
+    height: 32px;
     border-radius: 16px;
     font-family: 'Roboto', 'Arial', sans-serif;
     font-size: 13px;
@@ -1063,8 +1071,18 @@
     transition: filter .2s, background-color .2s;
 }
 
-.bb-playlist-follow:hover { filter: brightness(.92); }
+.bb-playlist-follow:hover, .bb-playlist-download:hover { filter: brightness(.92); }
 .bb-playlist-follow:disabled { opacity: .5; cursor: default; }
+
+/* Download is its glyph alone, a circle the height of Follow; running, it is
+   a stop with the video it is on beside it. */
+.bb-playlist-download { justify-content: center; min-width: 32px; padding: 0 8px; }
+.bb-playlist-download[hidden] { display: none; }
+.bb-playlist-download.bb-busy { padding: 0 14px 0 10px; }
+.bb-playlist-download svg { width: 16px; height: 16px; flex-shrink: 0; }
+.bb-playlist-download:not(.bb-busy) .bb-pd-stop,
+.bb-playlist-download.bb-busy .bb-pd-start,
+.bb-playlist-download:not(.bb-busy) .bb-pd-label { display: none; }
 
 /* Followed reads the way YouTube's own "Subscribed" pill does: flat, grey,
    secondary text. A button offering to do something already done is the thing

@@ -25,11 +25,12 @@
 /** The first path command of the tick glyph, Phosphor's check — what "filed" looks like. */
 const TICK_PATH = /M229\.66,77\.66/;
 
-function pouchUi(style) {
+function pouchUi(style, playlistDownload = null) {
     return window.BB.YouTubeUi.createYouTubeUi({
         watcher: { add() {}, remove() {}, has: () => false, schedule() {}, stop() {} },
         notify() {},
         getPouchButtonStyle: () => style || 'auto',
+        playlistDownload,
     });
 }
 
@@ -58,7 +59,7 @@ function watchPage(channelHref) {
 }
 
 function clearWatchPage() {
-    ['bb-test-page', 'bb-add-to-subscriptions-btn', 'bb-follow-playlist-btn']
+    ['bb-test-page', 'bb-add-to-subscriptions-btn', 'bb-playlist-actions']
         .map((id) => document.getElementById(id))
         .forEach((el) => { if (el) el.remove(); });
 }
@@ -166,7 +167,9 @@ suite('the follow-playlist button', () => {
 
             const button = document.getElementById('bb-follow-playlist-btn');
             assert(button, 'the panel header is where YouTube puts the list-s own controls');
-            assertEqual(button.parentElement.className,
+            // In a row of its own with Download, which is what goes in the header.
+            assertEqual(button.parentElement.id, 'bb-playlist-actions');
+            assertEqual(button.parentElement.parentElement.className,
                 'header style-scope ytd-playlist-panel-renderer');
             assertEqual(button.dataset.playlistId, 'PLcourse');
             assertEqual(button.querySelector('.bb-pf-label').textContent, 'Follow');
@@ -214,6 +217,97 @@ suite('the follow-playlist button', () => {
             // task armed so the watcher tries again on the next mutation.
             assertEqual(pouchUi().injectPlaylistButton(WITH_PLAYLIST), false);
             assertEqual(document.getElementById('bb-follow-playlist-btn'), null);
+        } finally { clearWatchPage(); }
+    });
+});
+
+suite('the download beside follow', () => {
+
+    /** The tab's downloader as the button sees it, recording what it is asked. */
+    function playlistDownloads(on = true) {
+        const asked = [];
+        const now = { busy: false, percent: 0, place: null };
+        const api = {
+            enabled: () => on,
+            start: (id) => asked.push(`start ${id}`),
+            cancel: () => asked.push('cancel'),
+            state: () => ({ ...now }),
+        };
+        return { asked, now, api };
+    }
+
+    test('sits right after Follow, in its row, and saves the whole playlist', async () => {
+        MockChrome.reset();
+        watchPage('/@someone');
+        const { asked, api } = playlistDownloads();
+
+        try {
+            pouchUi(null, api).injectPlaylistButton(WITH_PLAYLIST);
+            await MockChrome.settle();
+
+            const follow = document.getElementById('bb-follow-playlist-btn');
+            const download = document.getElementById('bb-download-playlist-btn');
+            assert(download && !download.hidden, 'no Download beside Follow');
+            assert(follow.nextElementSibling === download, 'Download is not right after Follow');
+            assertEqual(download.dataset.playlistId, 'PLcourse');
+            assertEqual(download.getAttribute('aria-label'), 'Download every video in this playlist');
+            assertEqual(download.querySelector('.bb-pd-label').textContent, '', 'the glyph alone at rest');
+
+            download.click();
+            assertEqual(asked.join(), 'start PLcourse');
+        } finally { clearWatchPage(); }
+    });
+
+    test('is hidden while the download is switched off, and shows when it is turned on', async () => {
+        MockChrome.reset();
+        watchPage('/@someone');
+        let on = false;
+        const { api } = playlistDownloads();
+        api.enabled = () => on;
+
+        try {
+            const ui = pouchUi(null, api);
+            ui.injectPlaylistButton(WITH_PLAYLIST);
+            await MockChrome.settle();
+            assert(document.getElementById('bb-download-playlist-btn').hidden, 'offered with the switch off');
+
+            on = true;
+            ui.markDownloadButton();
+            assert(!document.getElementById('bb-download-playlist-btn').hidden, 'the switch did not reach the page open');
+        } finally { clearWatchPage(); }
+    });
+
+    test('running, it is a stop that says how far the list has got', async () => {
+        MockChrome.reset();
+        watchPage('/@someone');
+        const { asked, now, api } = playlistDownloads();
+
+        try {
+            const ui = pouchUi(null, api);
+            ui.injectPlaylistButton(WITH_PLAYLIST);
+            await MockChrome.settle();
+
+            Object.assign(now, { busy: true, percent: 40, place: { at: 3, of: 12 } });
+            ui.markDownloadButton();
+            const download = document.getElementById('bb-download-playlist-btn');
+            assert(download.classList.contains('bb-busy'));
+            assertEqual(download.querySelector('.bb-pd-label').textContent, '3/12');
+            assertEqual(download.title, 'Cancel the download — video 3 of 12, 40%');
+
+            download.click();
+            assertEqual(asked.join(), 'cancel');
+        } finally { clearWatchPage(); }
+    });
+
+    test('a page without the downloader still gets Follow, and no Download', async () => {
+        MockChrome.reset();
+        watchPage('/@someone');
+
+        try {
+            pouchUi().injectPlaylistButton(WITH_PLAYLIST);
+            await MockChrome.settle();
+            assert(document.getElementById('bb-follow-playlist-btn'), 'Follow is gone');
+            assert(document.getElementById('bb-download-playlist-btn').hidden);
         } finally { clearWatchPage(); }
     });
 });
