@@ -75,7 +75,7 @@
             send, esc, openDashboard,
             /** Settings the views share: the name, and the start's choices. */
             prefs: null,
-            go, close, refresh, subhead, fail, failed, field, nameInput,
+            go, close, refresh, subhead, doors, fail, failed, field, nameInput,
         };
 
         function field(label, inner, extra = '') {
@@ -89,6 +89,17 @@
         function subhead({ title, note = '', back = true, extra = '' }) {
             return `<div class="party-sub">${back ? `<button class="party-back" type="button" data-act="back" aria-label="Back">${Icons.svg('arrow-left', { size: 14 })}</button>` : ''}
                 <div class="party-sub-text"><h3>${esc(title)}</h3><div class="party-sub-note">${note}</div></div>${extra}</div>`;
+        }
+
+        /**
+         * Start and Join, as tabs over either one's screen: the popup has one
+         * party button, and joining is a door inside it. Gone while a party
+         * is on, when a code guest's Join screen is the wait for the host.
+         */
+        function doors(current) {
+            if (panel.status.active) return '';
+            return `<div class="party-seg" role="tablist" aria-label="Watch party">${[['start', 'Start'], ['join', 'Join']].map(([view, label]) =>
+                `<button type="button" role="tab" aria-selected="${view === current}" class="${view === current ? 'is-on' : ''}" data-act="door" data-view="${view}">${label}</button>`).join('')}</div>`;
         }
 
         function fail(error) {
@@ -145,6 +156,8 @@
             if (!button || button.disabled) return;
             const act = button.dataset.act;
             if (act === 'back') return go(panel.status.active ? 'room' : null);
+            // The tab already open is left alone: a redraw would drop what was typed in it.
+            if (act === 'door') return button.dataset.view === panel.view ? undefined : go(button.dataset.view);
             if (act === 'copy') {
                 Ui.copyText(button.dataset.code || '');
                 const label = button.lastChild;
@@ -168,7 +181,7 @@
             if (s.active) go(s.mode === 'codes' && !s.up && s.invite ? 'join' : s.mode === 'codes' && s.invites && s.invites.length ? 'invite' : 'room');
             else if (!asked && ended) go('ended', { code: ended.code });
             else go(asked || null);
-            // The popup opens the panel again from Start and Join while it is
+            // The popup opens the panel again from its party button while it is
             // already up, and every open used to add a timer of its own, the
             // older ones asking the worker every second until the popup
             // closed. Cleared here, after the awaits, so two opens in flight

@@ -68,6 +68,7 @@
             const waiting = waitingOnHost(p.status);
             return `${p.subhead({ title: 'Join a party', note: 'Paste any code that starts with bbp1' })}
                 <div class="party-scroll">
+                    ${p.doors('join')}
                     ${waiting ? '' : `<div class="party-card is-snug">
                         <div class="party-label">Party code</div>
                         <textarea class="party-code-in" id="partyCodeIn" spellcheck="false" aria-label="Party code"></textarea>

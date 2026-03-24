@@ -72,6 +72,7 @@
                 <div class="party-mode-note">${m.note}</div></button>`).join('');
             return `${p.subhead({ title: 'Start a watch party', note: `On this tab · ${SITES[p.site] || 'this page'}` })}
                 <div class="party-scroll">
+                    ${p.doors('start')}
                     <div class="party-label">Connect through</div>
                     <div class="party-modes">${tiles}</div>
                     <div class="party-hint">Codes carry your IP and port to each guest directly. Trackers see IPs and timing, never content.</div>

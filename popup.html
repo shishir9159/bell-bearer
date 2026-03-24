@@ -43,11 +43,10 @@
             <div class="page-action" id="downloadBar" hidden>
                 <button id="downloadBtn" class="act-btn act-glyph" type="button" aria-label="Download"><i class="act-icon dl-start" data-icon="download-simple"></i><i class="act-icon dl-stop" data-icon="x"></i><span id="downloadLabel" hidden></span></button>
             </div>
-            <!-- Join sits inside the party's button: they are two doors into
-                 the same room. -->
-            <div class="party-split" id="partyBar" role="group" aria-label="Watch party" hidden>
-                <button id="partyStartBtn" class="party-start" type="button" title="Start a watch party"><i class="act-icon" data-icon="users-three"></i>Party</button>
-                <button id="partyJoinBtn" class="party-join" type="button" title="Join a watch party with its code">Join</button>
+            <!-- Join is a tab inside the party's screen, beside Start: two
+                 doors into the same room, behind the one button. -->
+            <div class="page-action" id="partyBar" hidden>
+                <button id="partyBtn" class="act-btn act-glyph" type="button" title="Watch party: start one, or join with a code" aria-label="Watch party"><i class="act-icon" data-icon="users-three"></i></button>
             </div>
             <div class="page-action" id="readerBar" hidden>
                 <button id="openReaderBtn" class="act-btn" type="button" disabled><i class="act-icon" data-icon="book-open-text"></i>Reading mode</button>

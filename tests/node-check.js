@@ -9393,6 +9393,22 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         assert(!/reader-bar-note|Note"/.test(html), 'a button still has a description beside it');
         assert(!/getElementById\('\w*Note'\)/.test(readRepo('popup.js')), 'popup.js still writes a description');
     });
+    /** A button in the popup's row, from its tag to its close; '' when it is not there. */
+    function rowButton(id) {
+        const html = readRepo('popup.html');
+        const row = html.slice(html.indexOf('id="pageActions"'), html.indexOf('id="youtubePanel"'));
+        const at = row.indexOf(`<button id="${id}"`);
+        return at < 0 ? '' : row.slice(at, row.indexOf('</button>', at));
+    }
+    const wordless = (button) => /aria-label="[^"]+"/.test(button) && button.replace(/<[^>]*>/g, '').trim() === '';
+    check('the party is its glyph alone, and Join is a tab behind its button', () => {
+        assert(wordless(rowButton('partyBtn')), 'the party button has words, or nothing to name it');
+        eq(rowButton('partyJoinBtn'), '', 'Join is still a button of its own');
+        assert(readRepo('popup.js').includes("on('partyBtn', 'click', () => this.openParty('start'));"), 'the party button does not open its screen');
+        for (const [file, view] of [['src/page/party-start-view.js', 'start'], ['src/page/party-join-view.js', 'join']]) {
+            assert(readRepo(file).includes(`\${p.doors('${view}')}`), `${view} has no Start and Join tabs`);
+        }
+    });
 
     section('saving a video — where it goes');
 
@@ -12595,6 +12611,21 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
     check('a countdown is m:ss and never goes below nothing', () => {
         eq([PartyPanel.countdown(61400, 0), PartyPanel.countdown(9000, 0), PartyPanel.countdown(0, 5000)], ['1:01', '0:09', '0:00']);
+    });
+    check('Start and Join are tabs over either screen, the open one is not redrawn, and both are gone while a party is on', () => {
+        const body = { hidden: false, innerHTML: '', addEventListener(type, fn) { this.click = fn; }, querySelector: () => null };
+        const panel = PartyPanel.createPanel({ body, site: 'youtube', onClose() {} });
+        panel.prefs = { partyName: '' };
+        const door = (view) => body.click({ target: { closest: () => ({ disabled: false, dataset: { act: 'door', view } }) } });
+        const tabs = panel.doors('join');
+        eq([...tabs.matchAll(/class="([^"]*)" data-act="door" data-view="(\w+)"/g)].map((m) => [m[2], m[1]]), [['start', ''], ['join', 'is-on']]);
+        door('join');
+        assert(body.innerHTML.includes('Join a party') && body.innerHTML.includes('data-act="door"'), 'the tab did not open Join');
+        body.innerHTML = 'a half-pasted code';
+        door('join');
+        eq(body.innerHTML, 'a half-pasted code', 'the open tab was drawn again over what was typed');
+        panel.status = { active: true };
+        eq(panel.doors('join'), '');
     });
     await checkAsync('opening the panel again keeps one status timer, and a panel with nothing to show keeps none', async () => {
         // The popup opens it from resumeParty and again from Start and Join;

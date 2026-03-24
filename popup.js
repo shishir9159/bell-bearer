@@ -71,8 +71,7 @@
             on('dashboardBtn', 'click', () => openDashboard(ChessSites.get(this.site) ? `#site/${this.site}` : ''));
             on('openReaderBtn', 'click', () => this.openReader());
             on('downloadBtn', 'click', () => this.toggleDownload());
-            on('partyStartBtn', 'click', () => this.openParty('start'));
-            on('partyJoinBtn', 'click', () => this.openParty('join'));
+            on('partyBtn', 'click', () => this.openParty('start'));
 
             // The daily-limit override. It draws itself or stays hidden, and
             // is not a chess-panel control: the limit can bite while you are
