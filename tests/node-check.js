@@ -3810,6 +3810,16 @@ check('a glyph is drawn in the text colour, and a name the table lacks draws not
     assert(x.includes('fill="currentColor"') && x.includes('width="12"') && x.includes('class="octicon"'), x);
     eq(Icons.svg('no-such-icon'), '');
 });
+check('a filed pouch keeps the list\'s bars, and only its plus turns into a tick', () => {
+    // It was a bare `check` in place of the whole list, a different mark.
+    const PouchButton = require('../src/shared/pouch-button.js');
+    const pathOf = (svg) => /<path d="([^"]+)"/.exec(svg)[1];
+    const [plus, tick] = [pathOf(PouchButton.ICON), pathOf(PouchButton.TICK)];
+    assert(tick !== plus, 'no plus was found to trade, so a filed thing still offers a "+"');
+    const bars = plus.slice(0, plus.indexOf('m88,0'));
+    assert(bars && tick.startsWith(bars) && !tick.includes('m88,0'), 'the bars changed, or the plus is still there');
+    eq(PouchButton.TICK.replace(tick, ''), PouchButton.ICON.replace(plus, ''), 'drawn at a different size or class');
+});
 
 section('the chess low-clock tone, on the sound module');
 check('the tone is the same two notes it always was', () => {

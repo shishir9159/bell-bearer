@@ -35,8 +35,18 @@
      * grey — rather than going on offering a "+" for something already done.
      * X's bookmark button does the same thing with a filled glyph, so the tick
      * reads correctly there too.
+     *
+     * Only the "+" turns into the tick; the list's bars stay put. A bare
+     * `check` in its place swapped the whole mark for a different one, and
+     * Phosphor has no list with a tick at its foot (`list-checks` puts one
+     * before every bar). So this is list-plus with its last subpath, the plus,
+     * traded for a tick drawn the way Phosphor draws `check` — a 16-unit
+     * stroke, 8-unit round ends — in the plus's own 64-unit box, so the mark
+     * keeps its size when it flips.
      */
-    const TICK = Icons.svg('check', { cls: 'bb-pouch-glyph' });
+    const PLUS = /m88,0H216V168[^Z]*Z/;
+    const CHECK = 'M237.66,180.66l-34,34a8,8,0,0,1-11.32,0l-14-14a8,8,0,0,1,11.32-11.32L198,197.69l28.34-28.35a8,8,0,0,1,11.32,11.32Z';
+    const TICK = ICON.replace(PLUS, CHECK);
 
     /** Marks a button as ours, whatever page it was injected into. */
     const CLASS = 'bb-pouch-button';

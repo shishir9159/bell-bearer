@@ -22,8 +22,8 @@
  * built while its own drawer leaks into the next test.
  */
 
-/** The first path command of the tick glyph, Phosphor's check — what "filed" looks like. */
-const TICK_PATH = /M229\.66,77\.66/;
+/** The first path command of the tick that takes the list's plus — what "filed" looks like. */
+const TICK_PATH = /M237\.66,180\.66/;
 
 function pouchUi(style, playlistDownload = null) {
     return window.BB.YouTubeUi.createYouTubeUi({
