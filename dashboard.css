@@ -456,6 +456,18 @@ html.is-dragging-site .site-slot > .site-switch { transform: none; }
 .btn-secondary.btn-danger { color: var(--danger); border-color: var(--danger-border); }
 .btn-secondary.btn-danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 
+/* A button that is its glyph alone, square at the sort field's height; what it
+   does is its tooltip, and the confirm that follows it. */
+.btn-secondary.btn-glyph-only {
+    width: 35px;
+    height: 35px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.btn-glyph-only svg { width: 17px; height: 17px; }
+
 .btn-primary {
     background: var(--accent);
     border: 1px solid var(--accent);
