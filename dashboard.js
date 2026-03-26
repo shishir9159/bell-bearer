@@ -154,7 +154,7 @@
      * while the video is unpinned.
      */
     const PIN_ICON = Icons.svg('push-pin-simple-fill');
-    const COPY_ICON = Icons.svg('copy', { cls: 'btn-glyph' });
+    const COPY_ICON = Icons.svg('copy-simple', { cls: 'btn-glyph' });
 
     // Tab id / view id stems. 'stats' is the Activity view: its tab stays
     // hidden until the trackActivity setting is on, but the switching wiring
@@ -984,7 +984,7 @@
                 ${subtitle ? `<div class="bookmark-subtitle">"${Dom.escapeHtml(subtitle)}"</div>` : ''}
                 ${bookmark.note ? `<div class="bookmark-note">${Dom.escapeHtml(bookmark.note)}</div>` : ''}
                 <div class="bookmark-actions">
-                    ${subtitle ? `<button class="btn-small copy-bookmark-subtitle" title="Copy subtitle" aria-label="Copy subtitle">${Icons.svg('copy')}</button>` : ''}
+                    ${subtitle ? `<button class="btn-small copy-bookmark-subtitle" title="Copy subtitle" aria-label="Copy subtitle">${Icons.svg('copy-simple')}</button>` : ''}
                     <button class="btn-small seek-btn" data-time="${time}">Go to time</button>
                     <button class="btn-small delete delete-btn">Delete</button>
                 </div>
