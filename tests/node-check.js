@@ -9425,6 +9425,13 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const at = ['data-icon="speedometer"', 'id="speedDisplay"', 'id="speedDownBtn"', 'id="speedUpBtn"'].map((one) => html.indexOf(one));
         assert(at.every((one, i) => one > 0 && (i === 0 || one > at[i - 1])), `out of order: ${at}`);
     });
+    check('the dashboard button is the air traffic control glyph alone, named by its label', () => {
+        const html = readRepo('popup.html');
+        const at = html.indexOf('<button id="dashboardBtn"');
+        const button = html.slice(at, html.indexOf('</button>', at));
+        assert(at > 0 && wordless(button), 'the dashboard button has words, or nothing to name it');
+        assert(button.includes('data-icon="air-traffic-control"'), 'not the air traffic control glyph');
+    });
 
     section('saving a video — where it goes');
 

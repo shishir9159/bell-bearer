@@ -178,6 +178,17 @@ header h1 {
 
 .controls .btn-secondary.is-primary:hover { background: var(--accent-hover); color: var(--on-accent); }
 
+/* The dashboard is its glyph alone; what it opens is its tooltip. Padded to
+   the height the worded buttons beside it get from their line of text. */
+.controls .btn-glyph-only {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+}
+
+.controls .btn-glyph-only svg { display: block; width: 16px; height: 16px; }
+
 .controls .btn-danger { color: var(--danger); background: var(--danger-bg); }
 .controls .btn-danger:hover { background: var(--danger); color: #fff; }
 
