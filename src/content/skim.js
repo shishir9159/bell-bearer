@@ -124,17 +124,77 @@
             return out;
         }
 
+        // ---------------------------------------------- what a match sits on
+
+        /** Each element's background as seen, kept for as long as the launcher is up. */
+        let behind = new Map();
+        let probe = null;
+
+        /**
+         * A computed colour as rgba. oklch(), color() and the like are left
+         * to a canvas to turn into sRGB, which is what it paints in anyway.
+         */
+        function readColor(text) {
+            const parsed = Skim.parseColor(text);
+            if (parsed || !text) return parsed;
+            try {
+                probe = probe || document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+                probe.clearRect(0, 0, 1, 1);
+                probe.fillStyle = '#000';
+                probe.fillStyle = text;
+                probe.fillRect(0, 0, 1, 1);
+                const [r, g, b, a] = probe.getImageData(0, 0, 1, 1).data;
+                return { r, g, b, a: a / 255 };
+            } catch (_) {
+                return null;
+            }
+        }
+
+        /** What shows through where the page paints nothing: white, or the dark canvas of a dark page. */
+        function canvasColor() {
+            const scheme = getComputedStyle(document.documentElement).colorScheme || '';
+            const dark = /dark/.test(scheme)
+                && (!/light/.test(scheme) || window.matchMedia('(prefers-color-scheme: dark)').matches);
+            return dark ? { r: 18, g: 18, b: 18, a: 1 } : { r: 255, g: 255, b: 255, a: 1 };
+        }
+
+        /**
+         * The colour an element is seen on: its own background over its
+         * parent's, down to the first opaque one. By the document tree, so a
+         * box positioned over some other part of the page, or a background
+         * that is only an image, is read as what its ancestors paint.
+         */
+        function backgroundOf(element) {
+            if (!element) return canvasColor();
+            if (behind.has(element)) return behind.get(element);
+            const own = readColor(getComputedStyle(element).backgroundColor);
+            const out = own && own.a >= 0.99 ? own : Skim.over(own, backgroundOf(element.parentElement));
+            behind.set(element, out);
+            return out;
+        }
+
+        const inkOf = (hit) => {
+            if (hit.ink === undefined) hit.ink = Skim.hitInk(backgroundOf(hit.node.parentElement));
+            return hit.ink;
+        };
+
+        /** One highlight per ink, so each match is marked against its own background. */
         function paintHits() {
             if (!highlightsAvailable()) return;
             try {
-                if (!hits.length) {
-                    CSS.highlights.delete(HIGHLIGHT);
-                    CSS.highlights.delete(HIGHLIGHT_ACTIVE);
-                    return;
-                }
-                CSS.highlights.set(HIGHLIGHT, new Highlight(...hits.map((hit) => hit.range)));
+                const groups = Skim.HIT_INKS.map(() => []);
+                for (const hit of hits) groups[inkOf(hit)].push(hit.range);
+                groups.forEach((ranges, i) => {
+                    if (ranges.length) CSS.highlights.set(`${HIGHLIGHT}-${i}`, new Highlight(...ranges));
+                    else CSS.highlights.delete(`${HIGHLIGHT}-${i}`);
+                });
                 const active = rows[selected];
                 if (active && active.kind === 'page') {
+                    // The arrival ring reads the same variable, so it rings
+                    // in the ink the match is filled with.
+                    const ink = Skim.HIT_INKS[inkOf(active.hit)];
+                    document.documentElement.style.setProperty('--bb-skim-hit-on', ink.ink);
+                    document.documentElement.style.setProperty('--bb-skim-hit-on-text', ink.text);
                     CSS.highlights.set(HIGHLIGHT_ACTIVE, new Highlight(active.hit.range));
                 } else {
                     CSS.highlights.delete(HIGHLIGHT_ACTIVE);
@@ -146,7 +206,7 @@
             hits = [];
             if (!highlightsAvailable()) return;
             try {
-                CSS.highlights.delete(HIGHLIGHT);
+                Skim.HIT_INKS.forEach((_, i) => CSS.highlights.delete(`${HIGHLIGHT}-${i}`));
                 CSS.highlights.delete(HIGHLIGHT_ACTIVE);
             } catch (_) { /* nothing was painted */ }
         }
@@ -540,19 +600,20 @@
 
         /**
          * The hit colours are painted by ::highlight() onto the page's own
-         * elements, which cannot see the tokens on our panel — so the skin
-         * and the light/dark go on <html> for as long as the launcher is up,
-         * and come off with it. See the note in content.css.
+         * elements, which cannot see the tokens on our panel — so the inks go
+         * on <html> for as long as the launcher is up, and come off with it.
+         * See the note in content.css.
          */
         function dressRoot(on) {
-            const html = document.documentElement;
+            const style = document.documentElement.style;
+            Skim.HIT_INKS.forEach((one, i) => {
+                if (on) style.setProperty(`--bb-skim-ink-${i}`, one.soft);
+                else style.removeProperty(`--bb-skim-ink-${i}`);
+            });
             if (!on) {
-                delete html.dataset.bbSkimSkin;
-                delete html.dataset.bbSkimTheme;
-                return;
+                style.removeProperty('--bb-skim-hit-on');
+                style.removeProperty('--bb-skim-hit-on-text');
             }
-            html.dataset.bbSkimSkin = panel.dataset.bbSkin || 'default';
-            html.dataset.bbSkimTheme = panel.dataset.bbTheme || 'light';
         }
 
         async function show(from) {
@@ -576,6 +637,7 @@
                 panel.dataset.bbSkin = look.skin;
             }
             dressRoot(true);
+            behind = new Map();
             open = true;
             window.addEventListener('keydown', onKey, true);
             query = '';

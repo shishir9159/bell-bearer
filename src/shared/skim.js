@@ -53,6 +53,25 @@
     /** Home-row first, so one keystroke eliminates most of the board. */
     const HINT_CHARS = 'fjdkslaghwnv';
 
+    /**
+     * What a hit can be marked in, each chosen against what that match sits
+     * on (hitInk). `ink` fills the match being looked at and rings it as it
+     * arrives, with `text` over it; `soft` marks every other match.
+     *
+     * The marks used to wear the skin's own red, which vanished on a red
+     * banner and turned to a dark smudge on a dark page or a code block.
+     * Crimson by day and yellow by night carry most pages; cyan is for
+     * yellowish darks, and the two neutrals for mid-tones none of the three
+     * stands out on.
+     */
+    const HIT_INKS = Object.freeze([
+        { ink: '#c8102e', text: '#ffffff', soft: 'rgba(200, 16, 46, .26)' },
+        { ink: '#ffd60a', text: '#141414', soft: 'rgba(255, 214, 10, .42)' },
+        { ink: '#00c8ff', text: '#141414', soft: 'rgba(0, 200, 255, .4)' },
+        { ink: '#141414', text: '#ffffff', soft: 'rgba(20, 20, 20, .2)', neutral: true },
+        { ink: '#ffffff', text: '#141414', soft: 'rgba(255, 255, 255, .34)', neutral: true },
+    ]);
+
     /** The sources, in the order the list shows them when none is picked. */
     const SOURCES = Object.freeze(['page', 'tabs', 'history', 'actions']);
 
@@ -211,6 +230,86 @@
         };
     }
 
+    // ---------------------------------------------------- the hit colours
+
+    /**
+     * A computed colour as `{ r, g, b, a }`: the rgb()/rgba() a browser
+     * gives for most colours, commas or spaces, and 'transparent'. Anything
+     * else — oklch(), color() — is null, for the caller to convert.
+     */
+    function parseColor(text) {
+        const value = String(text || '').trim();
+        if (value === 'transparent') return { r: 0, g: 0, b: 0, a: 0 };
+        const m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+)(%?))?\s*\)$/.exec(value);
+        if (!m) return null;
+        const alpha = m[4] === undefined ? 1 : Number(m[4]) / (m[5] ? 100 : 1);
+        return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]), a: clamp(alpha, 0, 1) };
+    }
+
+    /** `top` laid over an opaque `base`; a missing or clear top is the base. */
+    function over(top, base) {
+        if (!top || !(top.a > 0)) return base;
+        const mix = (key) => Math.round(top[key] * top.a + base[key] * (1 - top.a));
+        return { r: mix('r'), g: mix('g'), b: mix('b'), a: 1 };
+    }
+
+    const channel = (value) => {
+        const c = value / 255;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const luminance = ({ r, g, b }) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+    const hexColor = (hex) => {
+        const n = parseInt(hex.slice(1), 16);
+        return { r: n >> 16, g: (n >> 8) & 255, b: n & 255 };
+    };
+
+    /** WCAG contrast between two opaque colours, 1 to 21. */
+    function contrast(one, two) {
+        const a = luminance(one);
+        const b = luminance(two);
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }
+
+    /** Hue in degrees and saturation 0–1, for telling a red page from a grey one. */
+    function hueOf({ r, g, b }) {
+        const max = Math.max(r, g, b) / 255;
+        const min = Math.min(r, g, b) / 255;
+        const d = max - min;
+        const sat = d === 0 ? 0 : d / (1 - Math.abs(max + min - 1));
+        if (!d) return { hue: 0, sat };
+        const [R, G, B] = [r / 255, g / 255, b / 255];
+        const h = max === R ? ((G - B) / d) % 6 : max === G ? (B - R) / d + 2 : (R - G) / d + 4;
+        return { hue: (h * 60 + 360) % 360, sat };
+    }
+
+    /**
+     * Which of HIT_INKS stands out on `background` (opaque `{ r, g, b }`), as
+     * its index. The coloured ink with the most contrast wins, discounted on
+     * a page of nearly its own hue — yellow on an olive band has the numbers
+     * and still reads as part of it. Short of 3:1, the least a mark needs to
+     * be seen at all, the better neutral is used instead.
+     */
+    function hitInk(background) {
+        const back = hueOf(background);
+        let best = -1;
+        let score = 0;
+        HIT_INKS.forEach((one, i) => {
+            if (one.neutral) return;
+            const ink = hexColor(one.ink);
+            const gap = Math.abs(hueOf(ink).hue - back.hue) % 360;
+            const near = back.sat > 0.3 && Math.min(gap, 360 - gap) < 40;
+            const value = contrast(ink, background) * (near ? 0.6 : 1);
+            if (value > score) {
+                best = i;
+                score = value;
+            }
+        });
+        if (contrast(hexColor(HIT_INKS[best].ink), background) >= 3) return best;
+        const neutrals = HIT_INKS.map((one, i) => i).filter((i) => HIT_INKS[i].neutral);
+        return neutrals.reduce((a, b) => (
+            contrast(hexColor(HIT_INKS[b].ink), background) > contrast(hexColor(HIT_INKS[a].ink), background) ? b : a));
+    }
+
     /**
      * One label per target. Up to the length of the alphabet they are single
      * characters; past that the first character is spread across the set, so
@@ -273,8 +372,9 @@
 
     const Skim = {
         EDGE, GAP, FOOT, FAR, LEAD, MIN_QUERY, MAX_HITS, MAX_PAGE_ROWS, VISIBLE_ROWS, HINT_CHARS,
-        SOURCES, SOURCE_LABELS, ACTIONS,
-        overlayTop, landing, readable, plan, glide, hintLabels, filterRows, snippet, nextSource, orderGroups,
+        SOURCES, SOURCE_LABELS, ACTIONS, HIT_INKS,
+        overlayTop, landing, readable, plan, glide, parseColor, over, contrast, hitInk,
+        hintLabels, filterRows, snippet, nextSource, orderGroups,
     };
 
     root.BB = root.BB || {};

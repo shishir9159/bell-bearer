@@ -7007,6 +7007,40 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Skim.glide(0, 1100, 900).ms, 380, 'and a long glide is capped');
     });
 
+    section('skim — the hit colours');
+
+    const rgbOf = (hex) => ({ r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16), a: 1 });
+    const inkOn = (hex) => Skim.HIT_INKS[Skim.hitInk(rgbOf(hex))].ink;
+
+    check('a match is marked in an ink that stands out on what it sits on, not the skin\'s', () => {
+        eq(inkOn('#ffffff'), '#c8102e', 'a white page');
+        eq(inkOn('#0f0f0f'), '#ffd60a', 'a dark page');
+        eq(inkOn('#1e1e1e'), '#ffd60a', 'a code block');
+        eq(inkOn('#c62828'), '#ffd60a', 'red on a red banner vanished');
+        eq(inkOn('#5a4a00'), '#00c8ff', 'yellow on an olive band reads as part of it');
+        eq(inkOn('#808080'), '#141414', 'a mid grey none of the colours stands out on');
+        for (const hex of ['#ffffff', '#0f0f0f', '#fff3b0', '#c62828', '#1a73e8', '#808080', '#ff9800', '#ecdcb8', '#36393f']) {
+            const ink = rgbOf(inkOn(hex));
+            assert(Skim.contrast(ink, rgbOf(hex)) >= 3, `under 3:1 on ${hex}`);
+        }
+    });
+
+    check('the colour behind a match is read through translucent layers', () => {
+        eq(Skim.parseColor('rgba(0, 0, 0, 0)'), { r: 0, g: 0, b: 0, a: 0 });
+        eq(Skim.parseColor('rgb(10 20 30 / 50%)'), { r: 10, g: 20, b: 30, a: 0.5 });
+        eq(Skim.parseColor('oklch(0.5 0.1 20)'), null, 'left for the page to convert');
+        eq(Skim.over({ r: 0, g: 0, b: 0, a: 0.5 }, rgbOf('#ffffff')), { r: 128, g: 128, b: 128, a: 1 });
+        eq(Skim.over(null, rgbOf('#ffffff')), rgbOf('#ffffff'), 'a clear element is what is under it');
+    });
+
+    check('every ink has its highlight in content.css, and no skin colours the hits', () => {
+        const css = readRepo('content.css');
+        Skim.HIT_INKS.forEach((_, i) => {
+            assert(css.includes(`::highlight(bb-skim-hit-${i}) { background-color: var(--bb-skim-ink-${i}); }`), `no highlight for ink ${i}`);
+        });
+        assert(!/data-bb-skim-skin/.test(css + readRepo('src/content/skim.js')), 'the hits still follow the skin');
+    });
+
     check('a match in a sticky panel moves the launcher, never the page', () => {
         const high = Skim.plan({ ...window900, scrollTop: 500, target: 560, pinned: true });
         eq(high.pos, 'bottom', 'the match is near the top, so the launcher goes low');

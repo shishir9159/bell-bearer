@@ -1264,45 +1264,25 @@
    wears whatever skin is on and follows the page's own light/dark, like the
    rest of the injected UI.
 
-   The one thing that cannot: ::highlight() paints ranges in the page, and a
-   highlight pseudo-element resolves custom properties against the element it
-   is painted over — the page's, not ours. So the hit colours are declared on
-   :root instead, keyed off attributes src/content/skim.js puts on <html>
-   while the launcher is open and takes off again when it closes.
+   The one thing that does not: the marks on the matches. They are painted
+   over the page, so they are coloured against what each match sits on, not
+   the skin (Skim.HIT_INKS). ::highlight() resolves custom properties against
+   the page's element it is painted over, so src/content/skim.js writes them
+   on <html> while the launcher is open — one highlight per ink, and the
+   active match's ink — and takes them off again when it closes.
    ============================================================ */
 
+/* Until the launcher writes its own; the link hints' flash uses these too. */
 :root {
-    --bb-skim-hit: rgba(184, 24, 8, .26);
     --bb-skim-hit-on: #b81808;
     --bb-skim-hit-on-text: #ffffff;
 }
 
-:root[data-bb-skim-theme="dark"] {
-    --bb-skim-hit: rgba(224, 51, 26, .34);
-    --bb-skim-hit-on: #e0331a;
-}
-
-:root[data-bb-skim-skin="riso"] {
-    --bb-skim-hit: rgba(255, 198, 11, .55);
-    --bb-skim-hit-on: #ff48b0;
-    --bb-skim-hit-on-text: #fffdf6;
-}
-
-:root[data-bb-skim-skin="medieval"] {
-    --bb-skim-hit: rgba(168, 121, 31, .34);
-    --bb-skim-hit-on: #9c2b16;
-    --bb-skim-hit-on-text: #f6ecd4;
-}
-
-:root[data-bb-skim-skin="deco"] {
-    --bb-skim-hit: rgba(185, 148, 71, .38);
-    --bb-skim-hit-on: #a67c2e;
-    --bb-skim-hit-on-text: #f7f3e8;
-}
-
-::highlight(bb-skim-hit) {
-    background-color: var(--bb-skim-hit);
-}
+::highlight(bb-skim-hit-0) { background-color: var(--bb-skim-ink-0); }
+::highlight(bb-skim-hit-1) { background-color: var(--bb-skim-ink-1); }
+::highlight(bb-skim-hit-2) { background-color: var(--bb-skim-ink-2); }
+::highlight(bb-skim-hit-3) { background-color: var(--bb-skim-ink-3); }
+::highlight(bb-skim-hit-4) { background-color: var(--bb-skim-ink-4); }
 
 ::highlight(bb-skim-hit-active) {
     background-color: var(--bb-skim-hit-on);
