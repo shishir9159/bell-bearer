@@ -54,6 +54,59 @@
         scroller.scrollTo({ top: scroller.scrollTop + (rect.top - box.top) - offset, behavior });
     }
 
+    /** The window's glide in progress, so the next one can take over from it. */
+    let gliding = null;
+
+    /**
+     * Scroll the window to `top` over `ms` — from `start`, if given, where
+     * the page is put at once first.
+     *
+     * By hand rather than `behavior: 'smooth'`, because whether a smooth
+     * scroll animates is the browser's call: Chrome lands it in one frame
+     * when the system has its animations turned off (Windows' "Animation
+     * effects"), and then every jump is a cut. Each frame is an 'instant'
+     * scroll so a page's own `scroll-behavior: smooth` cannot drag it out.
+     * A new glide takes over from wherever this one has got to, and the
+     * reader's own wheel or touch ends it where it is.
+     *
+     * @returns {Promise<boolean>} true once it has arrived
+     */
+    function glide(top, { start = null, ms = 300 } = {}) {
+        if (gliding) gliding.stop(false);
+        const doc = document.scrollingElement || document.documentElement;
+        const set = (y) => window.scrollTo({ top: y, behavior: 'instant' });
+        return new Promise((done) => {
+            if (start !== null) set(start);
+            const from = doc.scrollTop;
+            const began = performance.now();
+            let frame = 0;
+            let timer = 0;
+            const self = {
+                stop(arrived) {
+                    cancelAnimationFrame(frame);
+                    clearTimeout(timer);
+                    window.removeEventListener('wheel', yieldToReader, true);
+                    window.removeEventListener('touchstart', yieldToReader, true);
+                    if (gliding === self) gliding = null;
+                    done(arrived);
+                },
+            };
+            const yieldToReader = () => self.stop(false);
+            const step = (now) => {
+                const t = Math.min(1, (now - began) / ms);
+                set(from + (top - from) * (1 - Math.pow(1 - t, 3)));
+                if (t < 1) frame = requestAnimationFrame(step);
+                else self.stop(true);
+            };
+            gliding = self;
+            window.addEventListener('wheel', yieldToReader, { capture: true, passive: true });
+            window.addEventListener('touchstart', yieldToReader, { capture: true, passive: true });
+            frame = requestAnimationFrame(step);
+            // A tab in the background runs no frames at all; this lands it.
+            timer = setTimeout(() => { set(top); self.stop(true); }, ms + 150);
+        });
+    }
+
     /** Scroll state kept per marker element, so two markers never share a timer. */
     const following = new WeakMap();
 
@@ -96,7 +149,7 @@
         following.set(pulse, { timer, draw });
     }
 
-    const ScrollTo = { PULSE_MS, innerScroller, isPinned, openDetails, bring, markArrival };
+    const ScrollTo = { PULSE_MS, innerScroller, isPinned, openDetails, bring, glide, markArrival };
 
     root.BB = root.BB || {};
     root.BB.ScrollTo = ScrollTo;

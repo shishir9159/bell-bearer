@@ -18,6 +18,11 @@
  * and from where the eye already was. GAP below the launcher is that fix.
  * The centre-of-the-band arithmetic is still used for the two cases where
  * the page has no scroll left to spend and the launcher itself has to move.
+ *
+ * A match that can already be read where it is moves nothing. Placing every
+ * match exactly under the launcher meant the page lurched on each arrow
+ * press, through matches that were all on screen, and the launcher hopped
+ * to an edge for a match it was not even covering.
  */
 (function (root) {
     'use strict';
@@ -26,6 +31,16 @@
     const EDGE = 16;
     /** How far below the launcher the match lands: close, but not touching. */
     const GAP = 40;
+    /**
+     * Space a match needs from the window's foot to count as read where it
+     * is. The top needs only EDGE: a sticky header over it is caught by the
+     * page itself (`covered`), and nothing has to be pushed down to be read.
+     */
+    const FOOT = 48;
+    /** A match further than this many windows away is not glided to all the way. */
+    const FAR = 1.25;
+    /** How much of a window the glide to a far match still covers. */
+    const LEAD = 0.4;
     /** Fewer characters than this and nothing is searched for. */
     const MIN_QUERY = 2;
     /** Page hits stop being collected here; a query this loose is not a search. */
@@ -101,6 +116,16 @@
     const clamp = (value, low, high) => Math.max(low, Math.min(value, high));
 
     /**
+     * Can a match `y` from the window's top, `size` tall, be read where it
+     * is — inside the window and clear of the launcher at `pos`?
+     */
+    function readable(pos, viewport, height, y, size = 0) {
+        const top = overlayTop(pos, viewport, height);
+        const clear = y + size < top - 8 || y > top + height + 8;
+        return clear && y >= EDGE && y + size <= viewport - FOOT;
+    }
+
+    /**
      * Where to scroll to, and where the launcher should be while it happens.
      *
      * @param {object} at
@@ -110,9 +135,12 @@
      * @param {number} at.target      the match's top, in document coordinates
      * @param {number} at.height      the launcher's own height
      * @param {boolean} [at.pinned]   the match is inside a sticky/fixed panel
+     * @param {string} [at.pos]       where the launcher is now
+     * @param {number} [at.size]      the match's own height
+     * @param {boolean} [at.covered]  something of the page's is drawn over it
      * @returns {{pos: string, scrollTop: number, moved: boolean, note: string}}
      */
-    function plan({ viewport, scrollTop, scrollMax, target, height, pinned = false }) {
+    function plan({ viewport, scrollTop, scrollMax, target, height, pinned = false, pos: now = 'center', size = 0, covered = false }) {
         // A sticky panel does not move when the page scrolls, so the match
         // cannot be brought to the launcher. The launcher leaves instead, to
         // whichever edge the match is furthest from.
@@ -126,12 +154,24 @@
             };
         }
 
+        if (!covered && readable(now, viewport, height, target - scrollTop, size)) {
+            return { pos: now, scrollTop, moved: false, note: 'already in place' };
+        }
+
         const max = Math.max(0, scrollMax);
         let pos = 'center';
         let note = '';
         let wanted = target - landing('center', viewport, height);
 
-        if (wanted > max - 1) {
+        // A launcher already pushed to an edge stays there while the page
+        // can still bring matches to it: hopping back to the centre for one
+        // match and out again for the next is the restlessness to avoid.
+        const kept = now !== 'center' ? target - landing(now, viewport, height) : NaN;
+        if (kept >= 1 && kept <= max - 1) {
+            pos = now;
+            wanted = kept;
+            note = 'placed beside the window';
+        } else if (wanted > max - 1) {
             pos = 'top';
             wanted = target - landing('top', viewport, height);
             note = 'end of the page — the window moved to the top edge';
@@ -149,6 +189,26 @@
         const moved = Math.abs(next - scrollTop) > 4;
         if (!note) note = moved ? 'placed under the window' : 'already in place';
         return { pos, scrollTop: moved ? next : scrollTop, moved, note };
+    }
+
+    /**
+     * How the page travels from `from` to `to`: where the glide starts, and
+     * how long it takes — long enough to follow, short enough not to wait on.
+     *
+     * A match several windows away would otherwise glide past screens of
+     * text that mean nothing on the way. So the page is put most of the way
+     * there at once and glides the last LEAD of a window, which is still
+     * enough to see which way it went.
+     */
+    function glide(from, to, viewport) {
+        const distance = Math.abs(to - from);
+        const lead = Math.round(viewport * LEAD);
+        const far = distance > viewport * FAR;
+        const travel = far ? lead : distance;
+        return {
+            start: far ? to - Math.sign(to - from) * lead : from,
+            ms: Math.round(clamp(140 + travel * 0.35, 200, 380)),
+        };
     }
 
     /**
@@ -212,9 +272,9 @@
     }
 
     const Skim = {
-        EDGE, GAP, MIN_QUERY, MAX_HITS, MAX_PAGE_ROWS, VISIBLE_ROWS, HINT_CHARS,
+        EDGE, GAP, FOOT, FAR, LEAD, MIN_QUERY, MAX_HITS, MAX_PAGE_ROWS, VISIBLE_ROWS, HINT_CHARS,
         SOURCES, SOURCE_LABELS, ACTIONS,
-        overlayTop, landing, plan, hintLabels, filterRows, snippet, nextSource, orderGroups,
+        overlayTop, landing, readable, plan, glide, hintLabels, filterRows, snippet, nextSource, orderGroups,
     };
 
     root.BB = root.BB || {};

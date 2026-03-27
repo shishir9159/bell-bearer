@@ -6968,10 +6968,43 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(out.scrollTop, 4000, 'and the page stops at its own end');
     });
 
-    check('at the top of the page the launcher drops', () => {
-        const out = Skim.plan({ ...window900, scrollTop: 0, target: 120 });
+    check('at the top of the page the launcher drops off a match it covers', () => {
+        const out = Skim.plan({ ...window900, scrollTop: 0, target: 300, size: 20 });
         eq(out.pos, 'bottom');
         eq(out.scrollTop, 0, 'a page that cannot scroll up is not asked to');
+    });
+
+    check('a match already readable moves nothing, above the launcher or below it', () => {
+        const above = Skim.plan({ ...window900, scrollTop: 0, target: 120, size: 20 });
+        eq([above.pos, above.moved], ['center', false], 'the launcher hopped off a match it was not covering');
+        const below = Skim.plan({ ...window900, scrollTop: 1000, target: 1800, size: 20 });
+        eq(below.moved, false, 'arrowing to the next match on screen lurched the page');
+        const foot = Skim.plan({ ...window900, scrollTop: 1000, target: 1000 + 900 - Skim.FOOT + 1, size: 0 });
+        eq(foot.moved, true, 'a match against the window\'s foot is brought up');
+    });
+
+    check('a match the page draws over is placed, though it is on screen', () => {
+        const out = Skim.plan({ ...window900, scrollTop: 1000, target: 1030, size: 20, covered: true });
+        eq([out.pos, out.scrollTop], ['center', 410], 'a sticky header over the match was taken as read');
+    });
+
+    check('a launcher at an edge stays there while the page can bring matches to it', () => {
+        const out = Skim.plan({ ...window900, scrollTop: 3000, target: 2000, size: 20, pos: 'top' });
+        eq(out.pos, 'top', 'back to the centre for one match, and out again for the next');
+        eq(out.scrollTop, 2000 - Skim.landing('top', 900, 260));
+        const stuck = Skim.plan({ ...window900, scrollTop: 0, target: 100, size: 20, pos: 'top' });
+        eq(stuck.pos, 'bottom', 'kept at the top over a match it covers, with no scroll to move it');
+    });
+
+    check('a far match is glided to over the last stretch only, in a third of a second or so', () => {
+        const near = Skim.glide(0, 600, 900);
+        eq(near, { start: 0, ms: 350 }, 'a near match glides the whole way');
+        const far = Skim.glide(0, 5000, 900);
+        eq(far.start, 5000 - 360, 'the page went most of the way at once');
+        const back = Skim.glide(5000, 0, 900);
+        eq(back.start, 360, 'and the same going up');
+        eq(Skim.glide(0, 20, 900).ms, 200, 'a short hop is still seen to move');
+        eq(Skim.glide(0, 1100, 900).ms, 380, 'and a long glide is capped');
     });
 
     check('a match in a sticky panel moves the launcher, never the page', () => {

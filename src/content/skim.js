@@ -34,6 +34,8 @@
     const HIGHLIGHT = 'bb-skim-hit';
     const HIGHLIGHT_ACTIVE = 'bb-skim-hit-active';
     const DEBOUNCE_MS = 120;
+    /** How long typing has to pause before the page goes to its first match. */
+    const SETTLE_MS = 150;
 
     // No fallback for a missing Dom: one that returned the text raw would put
     // page titles and history into innerHTML unescaped. Failing at load is
@@ -74,6 +76,8 @@
         let hits = [];          // page matches, in document order
         let remote = { tabs: [], history: [] };
         let debounce = 0;
+        let settling = 0;
+        let jumps = 0;          // the latest jump, so a glide overtaken by the next marks nothing
         // The query the worker was last asked for. null is 'never asked',
         // which is not the same as asked-for-the-empty-string: opening on
         // history with nothing typed still has to fetch the recent pages.
@@ -190,17 +194,41 @@
                 target: doc.scrollTop + rect.top,
                 height: panel ? panel.offsetHeight : 240,
                 pinned: ScrollTo.isPinned(element),
+                pos,
+                size: rect.height,
+                covered: coveredByPage(element, rect),
             });
 
             if (plan.pos !== pos) {
                 pos = plan.pos;
                 place();
             }
-            if (plan.moved) window.scrollTo({ top: plan.scrollTop, behavior: 'smooth' });
             // The highlight says where the match is; the marker says that it
-            // just arrived, which is what the eye needs after the page moved.
-            ScrollTo.markArrival(pulse, () => hit.range.getBoundingClientRect());
+            // just arrived, which is what the eye needs after the page moved
+            // — so it waits for the page to stop, where it can be seen.
+            const mine = ++jumps;
+            const arrived = () => {
+                if (open && mine === jumps) ScrollTo.markArrival(pulse, () => hit.range.getBoundingClientRect());
+            };
+            if (plan.moved) {
+                const { start, ms } = Skim.glide(doc.scrollTop, plan.scrollTop, viewport);
+                ScrollTo.glide(plan.scrollTop, { start, ms }).then(arrived);
+            } else {
+                arrived();
+            }
             setFooter(`${crumbFor(hit.node)} · ${plan.note}`);
+        }
+
+        /**
+         * Is something of the page's drawn over the match — a sticky header,
+         * a cookie bar? Then it is not read where it is, though it is on
+         * screen. Our own window does not count: plan() knows where that is,
+         * and mid-glide it is not yet where it is going.
+         */
+        function coveredByPage(element, rect) {
+            const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+            if (!top || (panel && panel.contains(top))) return false;
+            return !(top === element || element.contains(top) || top.contains(element));
         }
 
         // ------------------------------------------------------ the model
@@ -342,14 +370,24 @@
 
         // ------------------------------------------------------- behaviour
 
-        function select(next) {
+        function select(next, { settle = false } = {}) {
             if (!rows.length) return;
             selected = (next + rows.length) % rows.length;
             draw();
             scrollRowIntoView();
             paintHits();
+            clearTimeout(settling);
             const row = rows[selected];
-            if (row && row.kind === 'page') jump(row.hit);
+            if (!row || row.kind !== 'page') return;
+            // Each letter typed can change which match is first, and going to
+            // each in turn sent the page back and forth through the word.
+            if (settle) {
+                settling = setTimeout(() => {
+                    if (open && rows[selected] === row) jump(row.hit);
+                }, SETTLE_MS);
+            } else {
+                jump(row.hit);
+            }
         }
 
         async function activate(row) {
@@ -399,7 +437,7 @@
             draw();
             place();
             refreshRemote();
-            if (rows[0] && rows[0].kind === 'page') select(0);
+            if (rows[0] && rows[0].kind === 'page') select(0, { settle: true });
         }
 
         /**
@@ -566,6 +604,7 @@
             clearHits();
             dressRoot(false);
             clearTimeout(debounce);
+            clearTimeout(settling);
             if (panel) panel.classList.remove('is-open');
             if (pulse) pulse.hidden = true;
             rows = [];
