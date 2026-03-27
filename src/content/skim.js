@@ -332,7 +332,7 @@
         function place() {
             if (!panel) return;
             const viewport = window.innerHeight || 800;
-            panel.style.top = `${Skim.overlayTop(pos, viewport, panel.offsetHeight)}px`;
+            panel.style.translate = `-50% ${Skim.overlayTop(pos, viewport, panel.offsetHeight)}px`;
         }
 
         function scrollRowIntoView() {
@@ -546,10 +546,15 @@
             remote = { tabs: [], history: [] };
             asked = null;
             input.value = '';
-            panel.classList.add('is-open');
             setFooter('Skim');
+            // Placed with its glide held, so it fades in where it opens
+            // rather than sliding over from where it last closed.
+            panel.classList.add('is-placing');
             draw();
             place();
+            void panel.offsetHeight;
+            panel.classList.remove('is-placing');
+            panel.classList.add('is-open');
             input.focus();
             refreshRemote();
         }

@@ -1309,18 +1309,27 @@
     color: var(--bb-skim-hit-on-text);
 }
 
+/* The window fades in and out rather than cutting, and moves between its
+   three places on `translate` — written by src/content/skim.js#place — not
+   `top`: a translate is composited, so the glide does not lay the page out
+   on every frame. It used to snap open from display:none and then slide in
+   from wherever `top` had last been, the top edge on a first open. */
 .bb-skim {
     position: fixed;
     left: 50%;
-    top: 16px;
+    top: 0;
     /* 600 is the width the launcher wants. A window narrower than that is
        the only thing that changes it, and then it keeps a gutter either
        side rather than running to the edges. */
     width: 600px;
     max-width: calc(100vw - 48px);
-    transform: translateX(-50%);
+    translate: -50% 16px;
+    scale: .98;
+    transform-origin: 50% 0;
+    opacity: 0;
+    visibility: hidden;
     z-index: 2147483600;
-    display: none;
+    display: flex;
     flex-direction: column;
     overflow: hidden;
     font-family: var(--bb-font);
@@ -1331,10 +1340,21 @@
     border: 1px solid var(--bb-border-strong);
     border-radius: var(--bb-r);
     box-shadow: var(--bb-shadow);
-    transition: top .18s cubic-bezier(.2, .8, .3, 1);
+    /* Closing: out in .14s, and hidden only once it has faded. */
+    transition: translate .32s cubic-bezier(.22, .8, .24, 1), opacity .14s ease-in,
+        scale .14s ease-in, visibility 0s linear .14s;
 }
 
-.bb-skim.is-open { display: flex; }
+.bb-skim.is-open {
+    opacity: 1;
+    scale: 1;
+    visibility: visible;
+    transition: translate .32s cubic-bezier(.22, .8, .24, 1), opacity .2s ease-out,
+        scale .22s cubic-bezier(.2, .8, .3, 1), visibility 0s;
+}
+
+/* Put where it opens before it is seen, with no glide from the last place. */
+.bb-skim.is-placing { transition: none; }
 
 @media (max-width: 560px) {
     .bb-skim { max-width: calc(100vw - 24px); }
