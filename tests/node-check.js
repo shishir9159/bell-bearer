@@ -7406,6 +7406,35 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(TwitterPage.handleFromHref(''), '');
     });
 
+    check("a post's bookmarks are told apart from the other counts in its row's label", () => {
+        const label = '4 replies, 12 reposts, 310 likes, 25 bookmarks, 9120 views';
+        const known = { replies: 4, reposts: 12, likes: 310, views: 9120 };
+        eq(TwitterPage.bookmarksFromLabel(label, known), 25);
+        // By position, so the reader's language does not matter.
+        eq(TwitterPage.bookmarksFromLabel('4 réponses, 12 reposts, 310 J’aime, 25 signets, 9 120 vues', known), 25);
+        // Every zero is left out of the label, the bookmarks' included.
+        eq(TwitterPage.bookmarksFromLabel('4 replies, 310 likes, 9120 views', { replies: 4, likes: 310, views: 9120 }), 0);
+        eq(TwitterPage.bookmarksFromLabel('3 bookmarks, 80 views', { views: 80 }), 3);
+        eq(TwitterPage.bookmarksFromLabel('', {}), 0);
+        // With no view count to go by, two numbers left are bookmarks then
+        // views — and one could be either, so it is not a number at all.
+        eq(TwitterPage.bookmarksFromLabel('5 likes, 3 bookmarks, 80 views', { likes: 5 }), 3);
+        eq(TwitterPage.bookmarksFromLabel('5 likes, 80 views', { likes: 5 }), null);
+        // A row that does not add up shows nothing rather than a wrong number.
+        eq(TwitterPage.bookmarksFromLabel(label, { ...known, likes: 311 }), null);
+        eq(TwitterPage.bookmarksFromLabel(null, known), null);
+        eq(TwitterPage.labelNumbers('1,234 likes, 5 bookmarks'), [1234, 5]);
+    });
+
+    check('a count is written short, the way X writes one, and never rounded up', () => {
+        eq(TwitterPage.shortCount(25, 'en'), '25');
+        eq(TwitterPage.shortCount(999, 'en'), '999');
+        eq(TwitterPage.shortCount(1299, 'en'), '1.2K');
+        eq(TwitterPage.shortCount(12345, 'en'), '12K');
+        eq(TwitterPage.shortCount(1580000, 'en'), '1.5M');
+        eq(TwitterPage.shortCount(7, 'not a locale!'), '7', 'a page with a broken lang still gets its number');
+    });
+
     check('the three X surfaces are settings, and all three are off', () => {
         const { DEFAULTS } = require('../src/shared/settings.js');
         // Each of them reaches into a page somebody else designed, which is

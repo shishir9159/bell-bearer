@@ -198,6 +198,83 @@
         };
     }
 
+    /**
+     * Every whole number in a label, in order. A separator between digits is
+     * part of the number only with three digits after it, so "1,234" and a
+     * French "1 234" are both 1234.
+     */
+    function labelNumbers(label) {
+        return (String(label || '').match(/\d+(?:[,.\s]\d{3}(?!\d))*/g) || [])
+            .map((run) => Number(run.replace(/\D/g, '')));
+    }
+
+    /**
+     * The bookmarks out of the label X gives a post's whole action row —
+     * "4 replies, 12 reposts, 310 likes, 25 bookmarks, 9120 views" — or null
+     * when they cannot be told apart from the rest.
+     *
+     * Found by position, never by the word, because the label is in the
+     * reader's own language. Its counts come in that order with every zero
+     * left out, and the other four controls each carry their own count in
+     * their own label, so once those are matched off the front and the back,
+     * what is left is the bookmarks. Anything that does not match is null
+     * rather than a guess: a wrong number beside the glyph is worse than none.
+     */
+    function bookmarksFromLabel(label, { replies = 0, reposts = 0, likes = 0, views = 0 } = {}) {
+        if (label == null) return null;
+        const numbers = labelNumbers(label);
+        let at = 0;
+        for (const count of [replies, reposts, likes]) {
+            if (!count) continue;
+            if (numbers[at] !== count) return null;
+            at++;
+        }
+        const rest = numbers.slice(at);
+        if (views) {
+            if (rest.pop() !== views) return null;
+            return rest.length <= 1 ? (rest[0] || 0) : null;
+        }
+        // A row with no view count of its own to go by: two numbers left are
+        // the bookmarks and then the views, but one could be either.
+        if (!rest.length) return 0;
+        return rest.length === 2 ? rest[0] : null;
+    }
+
+    /**
+     * How many people have bookmarked a post, read off its action row, or
+     * null when the row does not say. X writes no number beside its bookmark
+     * in a timeline, so this goes by the labels instead.
+     */
+    function bookmarkCount(actions) {
+        if (!actions) return null;
+        const counted = (selector) => {
+            const control = actions.querySelector(selector);
+            return control ? (labelNumbers(control.getAttribute('aria-label'))[0] || 0) : 0;
+        };
+        // A bookmark that carries its own count is taken at its word.
+        const own = counted('[data-testid="bookmark"], [data-testid="removeBookmark"]');
+        if (own) return own;
+        return bookmarksFromLabel(actions.getAttribute('aria-label'), {
+            replies: counted('[data-testid="reply"]'),
+            reposts: counted('[data-testid="retweet"], [data-testid="unretweet"]'),
+            likes: counted('[data-testid="like"], [data-testid="unlike"]'),
+            views: counted('a[href*="/analytics"]'),
+        });
+    }
+
+    /**
+     * A count written the way X writes one beside its marks: 1,234 is
+     * "1.2K". Cut rather than rounded, so a count never reads as more than it
+     * is.
+     */
+    function shortCount(count, locale) {
+        try {
+            return new Intl.NumberFormat(locale || undefined, { notation: 'compact', roundingMode: 'trunc' }).format(count);
+        } catch (_) {
+            return String(count);
+        }
+    }
+
     /** Is this /<handle> — a profile page — and whose? '' when it is not one. */
     function profileHandle() {
         // Only the bare one-segment path is a profile. /<handle>/status/… is a
@@ -239,6 +316,7 @@
     const TwitterPage = {
         SELECTORS, find, findAll, closest,
         avatarUrl, handleFromHref, readPost, readProfile, profileHandle, isChatPath,
+        labelNumbers, bookmarksFromLabel, bookmarkCount, shortCount,
     };
 
     root.BB = root.BB || {};

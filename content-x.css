@@ -122,31 +122,50 @@
    X's theme and font size and an opened post's bigger row. It stands where
    the bookmark was, in a row of bare marks — so it is never labelled: a word
    here would make it the only captioned control in the row and read as
-   something X had added. The circle is 34px around a timeline row's glyph. */
+   something X had added. The number after it is a count, as X's are. */
 .bb-x-post-btn {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: calc(var(--bb-x-icon-size, 18.75px) * 1.8);
     height: calc(var(--bb-x-icon-size, 18.75px) * 1.8);
     padding: 0;
     border: 0;
-    border-radius: 999px;
     background: transparent;
     color: var(--bb-x-icon-color, inherit);
+    font: inherit;
     cursor: pointer;
-    transition: background-color .15s, color .15s;
+    transition: color .15s;
 }
 
 /* Over X's own glyph size: X's marks fill their 24-unit box, and the
    pouch's is a squat row of lines that reads small at the same size — and
-   still did at 1.1. */
+   still did at 1.1.
+
+   The hover circle is the glyph's own padding rather than the button's
+   background, so a count beside it stays outside the circle the way X's
+   do. 34px around a timeline row's glyph. */
 .bb-x-post-btn .bb-pouch-glyph {
+    flex: none;
+    box-sizing: content-box;
     width: calc(var(--bb-x-icon-size, 18.75px) * 1.2);
     height: calc(var(--bb-x-icon-size, 18.75px) * 1.2);
+    padding: calc(var(--bb-x-icon-size, 18.75px) * 0.3);
+    border-radius: 999px;
+    transition: background-color .15s;
 }
-.bb-x-post-btn:hover { background: var(--bb-accent-soft); color: var(--bb-accent); }
+.bb-x-post-btn:hover { color: var(--bb-accent); }
+.bb-x-post-btn:hover .bb-pouch-glyph { background: var(--bb-accent-soft); }
 .bb-x-post-btn.bb-in-pouch { color: var(--bb-accent); }
+
+/* The post's bookmark count, in the type of the row's own counts — read
+   off the row by wearRowSize, with a timeline row's as the fallback. The
+   glyph's padding is the gap before it. */
+.bb-x-post-count {
+    padding-right: 4px;
+    font-family: var(--bb-x-count-font, inherit);
+    font-size: var(--bb-x-count-size, 13px);
+    line-height: 1;
+    white-space: nowrap;
+}
 
 /* X's own bookmark button, standing down for ours. Hidden rather than
    removed: X re-renders the action row on every like, and its button

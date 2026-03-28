@@ -184,10 +184,40 @@
      * it put an oversized pouch glyph on every reply.
      */
     function wearRowSize(holder, actions) {
-        const glyph = actions && actions.querySelector('[data-testid="reply"] svg');
-        if (!glyph || typeof getComputedStyle !== 'function') return;
-        const size = parseFloat(getComputedStyle(glyph).height);
+        if (!actions || typeof getComputedStyle !== 'function') return;
+        const glyph = actions.querySelector('[data-testid="reply"] svg');
+        const size = glyph ? parseFloat(getComputedStyle(glyph).height) : 0;
         if (size > 0) holder.style.setProperty('--bb-x-icon-size', `${size}px`);
+
+        // And the type of the row's counts, for ours to be written in. A row
+        // with no count in it yet leaves content-x.css's fallback.
+        const count = actions.querySelector('[data-testid="app-text-transition-container"]');
+        if (!count) return;
+        const type = getComputedStyle(count);
+        if (type.fontSize) holder.style.setProperty('--bb-x-count-size', type.fontSize);
+        if (type.fontFamily) holder.style.setProperty('--bb-x-count-font', type.fontFamily);
+    }
+
+    /**
+     * The post's bookmark count after our glyph, the way X writes a count
+     * after each of its own marks, and left off at zero as X leaves its own.
+     *
+     * Written again after every PouchButton.mark, which rebuilds the
+     * button's markup for the filed state and takes the number with it.
+     */
+    function showCount(button) {
+        const count = TwitterPage.bookmarkCount(button.closest('[role="group"]'));
+        let text = button.querySelector('.bb-x-post-count');
+        if (!count) {
+            if (text) text.remove();
+            return;
+        }
+        if (!text) {
+            text = document.createElement('span');
+            text.className = 'bb-x-post-count';
+            button.appendChild(text);
+        }
+        text.textContent = TwitterPage.shortCount(count, document.documentElement.lang);
     }
 
     /**
@@ -753,6 +783,7 @@
             const holder = slotFor(button, rowModel(actions, before));
             wearRowSize(holder, actions);
             actions.insertBefore(holder, before);
+            showCount(button);
 
             // After the cell is in, so the row is measured at the width it
             // will actually be asked to hold.
@@ -772,6 +803,7 @@
                 filed: !!topic,
                 label: topic ? `Filed under ${name} — click to re-file` : 'Save this post to your pouch',
             });
+            showCount(button);
         }
 
         // -------------------------------------------------- profile button
