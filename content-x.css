@@ -117,17 +117,18 @@
 }
 
 /* Sized and coloured as one of X's own action glyphs — the two properties
-   are read off X's Reply glyph by wearIconLook in twitter-ui.js, so the
-   button follows X's theme and font size. It stands where the bookmark was,
-   in a row of bare marks — so it is never labelled: a word here would make
-   it the only captioned control in the row and read as something X had
-   added. */
+   are read off X's Reply glyph in twitter-ui.js, the colour once for the page
+   by wearIconLook and the size per row by wearRowSize, so the button follows
+   X's theme and font size and an opened post's bigger row. It stands where
+   the bookmark was, in a row of bare marks — so it is never labelled: a word
+   here would make it the only captioned control in the row and read as
+   something X had added. The circle is 34px around a timeline row's glyph. */
 .bb-x-post-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
+    width: calc(var(--bb-x-icon-size, 18.75px) * 1.8);
+    height: calc(var(--bb-x-icon-size, 18.75px) * 1.8);
     padding: 0;
     border: 0;
     border-radius: 999px;
@@ -137,11 +138,12 @@
     transition: background-color .15s, color .15s;
 }
 
-/* A little over X's own glyph size: X's marks fill their 24-unit box, and
-   the pouch's is a squat row of lines that reads small at the same size. */
+/* Over X's own glyph size: X's marks fill their 24-unit box, and the
+   pouch's is a squat row of lines that reads small at the same size — and
+   still did at 1.1. */
 .bb-x-post-btn .bb-pouch-glyph {
-    width: calc(var(--bb-x-icon-size, 18.75px) * 1.1);
-    height: calc(var(--bb-x-icon-size, 18.75px) * 1.1);
+    width: calc(var(--bb-x-icon-size, 18.75px) * 1.2);
+    height: calc(var(--bb-x-icon-size, 18.75px) * 1.2);
 }
 .bb-x-post-btn:hover { background: var(--bb-accent-soft); color: var(--bb-accent); }
 .bb-x-post-btn.bb-in-pouch { color: var(--bb-accent); }

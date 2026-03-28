@@ -356,6 +356,35 @@
             teardown();
         });
 
+        test('each row wears the size of its own glyphs', () => {
+            // X draws an opened post's marks bigger than the replies under
+            // it, and the one size read off the first post on the page — the
+            // opened one — put an oversized glyph on every reply.
+            const host = opened();
+            host.insertAdjacentHTML('beforeend', `
+                <article data-testid="tweet" role="article">
+                    <div data-testid="User-Name">
+                        <a href="/someone"><span>Someone</span></a>
+                        <a href="/someone/status/42"><time datetime="2026-10-20T16:00:00.000Z">1h</time></a>
+                    </div>
+                    <div role="group" id="id__reply">
+                        <div><button data-testid="reply"></button></div>
+                        <div><button data-testid="like"></button></div>
+                    </div>
+                </article>`);
+            const [big, small] = host.querySelectorAll('[data-testid="reply"]');
+            big.innerHTML = '<svg viewBox="0 0 24 24" style="width: 22.5px; height: 22.5px"></svg>';
+            small.innerHTML = '<svg viewBox="0 0 24 24" style="width: 18.75px; height: 18.75px"></svg>';
+            makeUi().injectPostButtons();
+
+            const sizes = [...host.querySelectorAll('.bb-x-post-slot')]
+                .map((slot) => slot.style.getPropertyValue('--bb-x-icon-size'));
+            assertEqual(sizes.join(' '), '22.5px 18.75px');
+            const sheet = document.getElementById(TwitterUi().ICON_LOOK_ID);
+            if (sheet) sheet.remove();
+            teardown();
+        });
+
         test('a post already fitted costs no query and no style read on the next pass', () => {
             // The injector runs on every frame X mutates in, which while
             // scrolling is all of them.

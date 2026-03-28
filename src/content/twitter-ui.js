@@ -175,6 +175,22 @@
     }
 
     /**
+     * The size of the glyphs in the row our cell sits in, written onto the
+     * cell.
+     *
+     * Per row, not once for the page along with the colour. X draws the post
+     * opened on its own page with bigger marks than the replies under it, and
+     * that post is usually the first on its page — so the one size read off
+     * it put an oversized pouch glyph on every reply.
+     */
+    function wearRowSize(holder, actions) {
+        const glyph = actions && actions.querySelector('[data-testid="reply"] svg');
+        if (!glyph || typeof getComputedStyle !== 'function') return;
+        const size = parseFloat(getComputedStyle(glyph).height);
+        if (size > 0) holder.style.setProperty('--bb-x-icon-size', `${size}px`);
+    }
+
+    /**
      * A cell of X's own action row to copy, when the bookmark's is not there
      * to use — a post whose bookmark X has not rendered still has a Reply and
      * a Like, and either is the same cell.
@@ -663,9 +679,17 @@
             const marks = themeMarks();
             const now = Date.now();
             if (!placing && marks === lookedFor && now - lookedAt < LOOK_EVERY_MS) return;
+            const moved = lookedFor !== '' && marks !== lookedFor;
             lookedFor = marks;
             lookedAt = now;
             wearIconLook(TwitterPage.find('actions', article));
+            // The size is written onto each cell, which a new root font size
+            // does not reach the way it reaches the sheet.
+            if (moved) {
+                document.querySelectorAll('.bb-x-post-slot').forEach((slot) => {
+                    wearRowSize(slot, slot.closest('[role="group"]'));
+                });
+            }
         }
 
         let iconLook = '';
@@ -727,6 +751,7 @@
             // this function's.
             const before = postSlotBefore(actions);
             const holder = slotFor(button, rowModel(actions, before));
+            wearRowSize(holder, actions);
             actions.insertBefore(holder, before);
 
             // After the cell is in, so the row is measured at the width it
