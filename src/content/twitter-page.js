@@ -121,6 +121,33 @@
     }
 
     /**
+     * The post's own timestamp: the first <time> inside a status link, and
+     * outside the card of a post it quotes.
+     *
+     * Not simply the first <time>. On a post opened on its own page X moves
+     * the post's timestamp to the foot, under whatever it quotes, so the
+     * quoted card's <time> — which is in no link — came first, and the one
+     * post the page is about read as one that cannot be filed: it was the
+     * only post there with no pouch button.
+     *
+     * X draws a quoted post as a `div[role="link"]`, where the post's own
+     * links are <a>s, and a stamp inside one is passed over. Should a quote
+     * ever be the only linked stamp there is, it is still taken, which is no
+     * worse than reading the first <time> was.
+     */
+    function ownTime(article) {
+        let quoted = null;
+        for (const time of article.querySelectorAll('time[datetime]')) {
+            const link = time.closest('a[href*="/status/"]');
+            if (!link || !article.contains(link)) continue;
+            const card = time.closest('div[role="link"]');
+            if (!card || !article.contains(card)) return time;
+            quoted = quoted || time;
+        }
+        return quoted;
+    }
+
+    /**
      * Read one post out of its <article>.
      *
      * Returns null rather than a half-filled record when there is no status
@@ -134,9 +161,8 @@
         // The timestamp link is the only reliable source of the status id.
         // The article's own testid carries no id, and a post reached from a
         // quote or a thread has several status links inside it — this takes
-        // the one wrapping the <time>, which always belongs to the post
-        // itself rather than to something it quotes.
-        const time = article.querySelector('time[datetime]');
+        // the one wrapping the post's own <time>; see ownTime for which that is.
+        const time = ownTime(article);
         const stamp = time && time.closest('a[href*="/status/"]');
         const id = stamp && (/\/status\/(\d+)/.exec(stamp.getAttribute('href') || '') || [])[1];
         if (!id) return null;

@@ -72,6 +72,38 @@
         return host;
     }
 
+    /**
+     * A post opened on its own page, quoting another, laid out the way X
+     * lays out that one post: its stamp moves from the header to the foot,
+     * under the quoted card, and the card's own <time> is in no link.
+     */
+    function opened() {
+        return stage(`
+            <article data-testid="tweet" role="article" tabindex="-1">
+                <div data-testid="User-Name">
+                    <a href="/iquilezles"><div><span>Inigo Quilez</span></div></a>
+                    <a href="/iquilezles"><span>@iquilezles</span></a>
+                </div>
+                <div data-testid="tweetText">A provocation.</div>
+                <div role="link" tabindex="0">
+                    <div data-testid="User-Name">
+                        <div><span>Shader Bot</span></div>
+                        <div><span>@shaderbot</span></div>
+                        <time datetime="2026-10-19T08:00:00.000Z">Oct 19</time>
+                    </div>
+                    <div data-testid="tweetText">One shot.</div>
+                </div>
+                <a href="/iquilezles/status/2112354505346146630"><time datetime="2026-10-20T15:12:00.000Z">3:12 PM, Oct 20, 2026</time></a>
+                <div role="group" id="id__focal">
+                    <div><button data-testid="reply"></button></div>
+                    <div><button data-testid="retweet"></button></div>
+                    <div><button data-testid="like"></button></div>
+                    <div><button data-testid="bookmark"></button></div>
+                    <div><button aria-label="Share post"></button></div>
+                </div>
+            </article>`);
+    }
+
     function teardown() {
         const host = document.getElementById('bb-x-test');
         if (host) host.remove();
@@ -568,6 +600,31 @@
             assertEqual(post.text, 'Occupancy is not throughput.');
             assertEqual(post.avatar, 'https://pbs.twimg.com/profile_images/1/ilya_bigger.jpg');
             assertEqual(post.postedAt, Date.parse('2026-09-21T06:00:00.000Z'));
+            teardown();
+        });
+
+        test('an opened post is read by its own stamp, not by the one of the post it quotes', () => {
+            opened();
+            const post = TwitterPage().readPost(document.querySelector('#bb-x-test article'));
+
+            // The quoted card's <time> comes first there and is in no link,
+            // so the post read as one with no id — and was the one post on
+            // its own page with no button.
+            assert(post, 'read at all');
+            assertEqual(post.statusId, '2112354505346146630');
+            assertEqual(post.handle, '@iquilezles');
+            assertEqual(post.text, 'A provocation.');
+            assertEqual(post.postedAt, Date.parse('2026-10-20T15:12:00.000Z'), "its own time, not the quote's");
+            teardown();
+        });
+
+        test('and it gets its button', () => {
+            opened();
+            makeUi().injectPostButtons();
+
+            const button = document.querySelector('#bb-x-test .bb-x-post-btn');
+            assert(button, 'placed');
+            assertEqual(button.dataset.bbStatus, '2112354505346146630');
             teardown();
         });
 
