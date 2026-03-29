@@ -136,18 +136,18 @@
     transition: color .15s;
 }
 
-/* Over X's own glyph size: X's marks fill their 24-unit box, and the
-   pouch's is a squat row of lines that reads small at the same size — and
-   still did at 1.1.
+/* At X's own glyph size. It was drawn over it — 1.1, then 1.2 — because
+   the pouch's squat row of lines was thought to read small beside X's
+   marks, and both times it came out the biggest mark in the row.
 
    The hover circle is the glyph's own padding rather than the button's
    background, so a count beside it stays outside the circle the way X's
-   do. 34px around a timeline row's glyph. */
+   do. */
 .bb-x-post-btn .bb-pouch-glyph {
     flex: none;
     box-sizing: content-box;
-    width: calc(var(--bb-x-icon-size, 18.75px) * 1.2);
-    height: calc(var(--bb-x-icon-size, 18.75px) * 1.2);
+    width: var(--bb-x-icon-size, 18.75px);
+    height: var(--bb-x-icon-size, 18.75px);
     padding: calc(var(--bb-x-icon-size, 18.75px) * 0.3);
     border-radius: 999px;
     transition: background-color .15s;

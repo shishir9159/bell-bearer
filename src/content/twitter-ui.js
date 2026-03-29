@@ -191,8 +191,11 @@
         if (size > 0) holder.style.setProperty('--bb-x-icon-size', `${size}px`);
 
         // And the type of the row's counts, for ours to be written in. A row
-        // with no count in it yet leaves content-x.css's fallback.
-        const count = actions.querySelector('[data-testid="app-text-transition-container"]');
+        // with no count in it yet leaves content-x.css's fallback. Read off
+        // the innermost span: the container X marks is set a size larger
+        // than the digits inside it, and ours came out 15px beside X's 13px.
+        let count = actions.querySelector('[data-testid="app-text-transition-container"]');
+        while (count && count.firstElementChild) count = count.firstElementChild;
         if (!count) return;
         const type = getComputedStyle(count);
         if (type.fontSize) holder.style.setProperty('--bb-x-count-size', type.fontSize);

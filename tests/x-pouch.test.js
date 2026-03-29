@@ -385,6 +385,23 @@
             teardown();
         });
 
+        test('a count is written in the size of X\'s digits, not of the box they are in', () => {
+            // X marks a span a size larger than the two inside it that hold
+            // the digits, and ours read that one: 15px beside X's 13px.
+            const host = timeline();
+            host.querySelector('[data-testid="reply"]').innerHTML = `
+                <span data-testid="app-text-transition-container" style="font-size: 15px">
+                    <span style="font-size: 13px"><span>4</span></span>
+                </span>`;
+            makeUi().injectPostButtons();
+
+            const slot = host.querySelector('.bb-x-post-slot');
+            assertEqual(slot.style.getPropertyValue('--bb-x-count-size'), '13px');
+            const sheet = document.getElementById(TwitterUi().ICON_LOOK_ID);
+            if (sheet) sheet.remove();
+            teardown();
+        });
+
         test('a post already fitted costs no query and no style read on the next pass', () => {
             // The injector runs on every frame X mutates in, which while
             // scrolling is all of them.
