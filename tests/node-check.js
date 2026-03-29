@@ -7435,13 +7435,15 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(TwitterPage.shortCount(7, 'not a locale!'), '7', 'a page with a broken lang still gets its number');
     });
 
-    check('the three X surfaces are settings, and all three are off', () => {
+    check('the X surfaces are settings, and all of them are off', () => {
         const { DEFAULTS } = require('../src/shared/settings.js');
         // Each of them reaches into a page somebody else designed, which is
         // not a default to assume for anyone — and the dashboard binds a
         // control by giving it the key's own id, so a typo here is a toggle
         // that silently does nothing.
-        for (const key of ['twitterHideBookmark', 'twitterPouchPeople', 'twitterPouchPosts']) {
+        const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
+        for (const key of ['twitterHideBookmark', 'twitterPouchPeople', 'twitterPouchPosts', 'twitterHideCounts']) {
+            assert(html.includes(`id="${key}"`), `${key} has a control`);
             eq(key in DEFAULTS, true, key);
             eq(DEFAULTS[key], false, key);
         }

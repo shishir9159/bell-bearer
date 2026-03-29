@@ -43,6 +43,7 @@
     const PICKER_ID = 'bb-x-picker';
     const KEEP = TwitterPanel.KEEP;
     const ICON_LOOK_ID = 'bb-x-icon-look';
+    const COUNTS_HIDDEN = 'data-bb-x-counts-hidden';
 
     const CONTEXT_LOST = 'Bell Bearer was updated — please refresh this page.';
 
@@ -1118,7 +1119,7 @@
         }
 
         /**
-         * One of the three surfaces was switched on or off in the dashboard.
+         * One of the X surfaces was switched on or off in the dashboard.
          *
          * Both directions are handled, and on the page that is already open: a
          * switch that only takes effect on the next reload reads as a switch
@@ -1140,6 +1141,11 @@
                 if (placed) placed.remove();
             }
             if (!on('twitterHideBookmark')) setBookmarkHidden(document, false);
+
+            // One mark on the page's root rather than one per post: content-x.css
+            // hides the numbers off it, so every post that arrives later is
+            // covered without a pass of its own.
+            document.documentElement.toggleAttribute(COUNTS_HIDDEN, on('twitterHideCounts'));
 
             // Anchored to a button that may have just been taken off the page.
             closePicker();

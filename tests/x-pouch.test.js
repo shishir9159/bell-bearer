@@ -598,6 +598,27 @@
             teardown();
         });
 
+        test('the numbers are hidden by one mark on the page, and come back with it', () => {
+            timeline();
+            let settings = { ...ALL_ON, twitterHideCounts: true };
+            const ui = TwitterUi().createTwitterUi({
+                watcher: NO_WATCHER, notify() {}, getSettings: () => settings,
+            });
+            const root = document.documentElement;
+            try {
+                ui.refreshSurfaces();
+                // On the root rather than on each post, so the posts that
+                // arrive as the timeline scrolls are covered too.
+                assert(root.hasAttribute('data-bb-x-counts-hidden'), 'switched on');
+                settings = { ...ALL_ON, twitterHideCounts: false };
+                ui.refreshSurfaces();
+                assertEqual(root.hasAttribute('data-bb-x-counts-hidden'), false, 'and off again on the open page');
+            } finally {
+                root.removeAttribute('data-bb-x-counts-hidden');
+            }
+            teardown();
+        });
+
         test('the bookmark is hidden after ours is measured against it', () => {
             timeline();
             makeUi().injectPostButtons();

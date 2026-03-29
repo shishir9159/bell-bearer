@@ -167,6 +167,15 @@
     white-space: nowrap;
 }
 
+/* Settings › Twitter, "Hide the numbers under posts", off one mark on the
+   page's root that refreshSurfaces in twitter-ui.js sets. X writes the
+   counts in a post's action row into these, so they go by that one hook and
+   the buttons stay where they were. Ours goes with them. */
+html[data-bb-x-counts-hidden] article [data-testid="app-text-transition-container"],
+html[data-bb-x-counts-hidden] .bb-x-post-count {
+    display: none !important;
+}
+
 /* X's own bookmark button, standing down for ours. Hidden rather than
    removed: X re-renders the action row on every like, and its button
    coming back into a slot that is still hidden is steadier than it coming

@@ -854,7 +854,7 @@
     // --------------------------------------------------------- settings
 
     /** What Bell Bearer puts into x.com's own chrome, each switchable. */
-    const X_SURFACES = ['twitterPouchPosts', 'twitterPouchPeople', 'twitterHideBookmark'];
+    const X_SURFACES = ['twitterPouchPosts', 'twitterPouchPeople', 'twitterHideBookmark', 'twitterHideCounts'];
 
     /** And the same for LeetCode's. */
     const LEET_SURFACES = ['leetNoteButton', 'leetMockMode', 'leetMockMinutes', 'leetGradePrompt'];
@@ -921,7 +921,7 @@
         // posts back on the page that is already open, or the switch looks
         // like it did nothing until the next reload.
         if (hideAdsChanged && twitterAds) twitterAds.sync();
-        // And the same for the three X surfaces, for the same reason.
+        // And the same for the X surfaces, for the same reason.
         if (xSurfacesChanged && twitterUi) twitterUi.refreshSurfaces();
         // And the same again for LeetCode's, which additionally has to undo
         // mock mode on the page that is already open.

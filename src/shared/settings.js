@@ -81,6 +81,11 @@
         // somebody else's page, which is not a default to assume.
         twitterHideAds: false,
 
+        // Hide the numbers under every post — replies, reposts, likes, views,
+        // and the bookmark count beside the pouch button — leaving the
+        // buttons themselves. Off for the same reason.
+        twitterHideCounts: false,
+
         // The three things Bell Bearer puts into x.com's own chrome, each off
         // until it is asked for. The pouch itself is always there — the row in
         // the navigation, the panel it opens, the dashboard behind it — and
