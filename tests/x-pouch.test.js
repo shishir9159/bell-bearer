@@ -356,6 +356,29 @@
             teardown();
         });
 
+        test('the pouch is phthalo green, lifted on X\'s dark themes so it does not vanish', () => {
+            const host = timeline();
+            host.querySelector('[data-testid="reply"]').innerHTML = '<svg viewBox="0 0 24 24" style="height: 18.75px"></svg>';
+            const ui = makeUi();
+            const sheet = () => document.getElementById(TwitterUi().ICON_LOOK_ID).textContent;
+            const was = document.body.style.backgroundColor;
+            try {
+                document.body.style.backgroundColor = 'rgb(255, 255, 255)';
+                ui.injectPostButtons();
+                assert(sheet().includes('--bb-x-pouch: #123524'), sheet());
+                assert(sheet().includes('--bb-x-pouch-glow: rgba(18, 53, 36, 0.1)'), sheet());
+
+                // Lights out: #123524 on black is 1.6:1.
+                document.body.style.backgroundColor = 'rgb(0, 0, 0)';
+                ui.injectPostButtons();
+                assert(sheet().includes('--bb-x-pouch: #349868'), 'the switch to a dark theme was not followed');
+            } finally {
+                document.body.style.backgroundColor = was;
+            }
+            document.getElementById(TwitterUi().ICON_LOOK_ID).remove();
+            teardown();
+        });
+
         test('each row wears the size of its own glyphs', () => {
             // X draws an opened post's marks bigger than the replies under
             // it, and the one size read off the first post on the page — the

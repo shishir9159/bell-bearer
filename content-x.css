@@ -133,7 +133,7 @@
     color: var(--bb-x-icon-color, inherit);
     font: inherit;
     cursor: pointer;
-    transition: color .15s;
+    transition: color .2s;
 }
 
 /* At X's own glyph size. It was drawn over it — 1.1, then 1.2 — because
@@ -141,26 +141,33 @@
    marks, and both times it came out the biggest mark in the row.
 
    The hover circle is the glyph's own padding rather than the button's
-   background, so a count beside it stays outside the circle the way X's
-   do. */
+   background, and it is taken back out of the layout by the same margin:
+   X's circle reaches 8px past its glyph at every size and moves nothing,
+   and the count beside it sits where it would without one.
+
+   Hover and filed are both the pouch's phthalo green, from wearIconLook,
+   the way X turns Like pink under the pointer and keeps it pink once
+   liked. The accent these used to name is only defined inside our own
+   panels, so on X the button never changed colour at all. */
 .bb-x-post-btn .bb-pouch-glyph {
     flex: none;
     box-sizing: content-box;
     width: var(--bb-x-icon-size, 18.75px);
     height: var(--bb-x-icon-size, 18.75px);
-    padding: calc(var(--bb-x-icon-size, 18.75px) * 0.3);
+    padding: 8px;
+    margin: -8px;
     border-radius: 999px;
-    transition: background-color .15s;
+    transition: background-color .2s;
 }
-.bb-x-post-btn:hover { color: var(--bb-accent); }
-.bb-x-post-btn:hover .bb-pouch-glyph { background: var(--bb-accent-soft); }
-.bb-x-post-btn.bb-in-pouch { color: var(--bb-accent); }
+.bb-x-post-btn:hover,
+.bb-x-post-btn.bb-in-pouch { color: var(--bb-x-pouch, #123524); }
+.bb-x-post-btn:hover .bb-pouch-glyph { background: var(--bb-x-pouch-glow, rgba(18, 53, 36, .1)); }
 
 /* The post's bookmark count, in the type of the row's own counts — read
-   off the row by wearRowSize, with a timeline row's as the fallback. The
-   glyph's padding is the gap before it. */
+   off the row by wearRowSize, with a timeline row's as the fallback. Set
+   off by 4px either side, as X's are. */
 .bb-x-post-count {
-    padding-right: 4px;
+    padding: 0 4px;
     font-family: var(--bb-x-count-font, inherit);
     font-size: var(--bb-x-count-size, 13px);
     line-height: 1;
@@ -224,13 +231,16 @@ html[data-bb-x-counts-hidden] .bb-x-post-count {
     transition: background-color .15s, border-color .15s, color .15s;
 }
 
+/* The post button's phthalo green, for the same reason: the accent these
+   named is only defined inside our own panels, and on X the ring neither
+   lit up under the pointer nor filled once filed. */
 .bb-x-profile-btn .bb-pouch-glyph { width: 19px; height: 19px; }
-.bb-x-profile-btn:hover { border-color: var(--bb-accent); color: var(--bb-accent); }
+.bb-x-profile-btn:hover { border-color: var(--bb-x-pouch, #123524); color: var(--bb-x-pouch, #123524); }
 
 .bb-x-profile-btn.bb-in-pouch {
-    background: var(--bb-accent);
-    border-color: var(--bb-accent);
-    color: var(--bb-on-accent);
+    background: var(--bb-x-pouch, #123524);
+    border-color: var(--bb-x-pouch, #123524);
+    color: #fff;
 }
 
 /* ----------------------------------------------------------- the panel */

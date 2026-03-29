@@ -45,6 +45,18 @@
     const ICON_LOOK_ID = 'bb-x-icon-look';
     const COUNTS_HIDDEN = 'data-bb-x-counts-hidden';
 
+    /**
+     * The pouch button's colour on X, the way Like has pink and Repost green:
+     * phthalo green, and a tenth of it for the circle behind the glyph, the
+     * share X gives its own. The pigment itself on X's white. On Dim and
+     * Lights out it is the same hue lifted, because #123524 on black is
+     * 1.6:1 — a glyph that turned that colour under the pointer would vanish.
+     */
+    const POUCH_GREEN = {
+        light: ['#123524', 'rgba(18, 53, 36, 0.1)'],
+        dark: ['#349868', 'rgba(52, 152, 104, 0.1)'],
+    };
+
     const CONTEXT_LOST = 'Bell Bearer was updated — please refresh this page.';
 
     /** chrome.* throws once the extension reloads; a live id means we are fine. */
@@ -697,7 +709,8 @@
          * pass again — repaints every button already placed.
          *
          * Reply's glyph is the one read: Like and Repost change colour once
-         * pressed, Reply never does.
+         * pressed, Reply never does. The pouch's own green goes in the same
+         * sheet, picked by the theme, so it follows the same switch.
          *
          * Read when buttons are being placed, when X's own theme marks move —
          * it sets the page's background and root font size inline, which
@@ -732,7 +745,9 @@
             if (!glyph || typeof getComputedStyle !== 'function') return;
             const style = getComputedStyle(glyph);
             const size = parseFloat(style.height);
-            const look = `--bb-x-icon-color: ${style.color};` + (size > 0 ? ` --bb-x-icon-size: ${size}px;` : '');
+            const [green, glow] = POUCH_GREEN[Theme.isPageDark() ? 'dark' : 'light'];
+            const look = `--bb-x-icon-color: ${style.color};` + (size > 0 ? ` --bb-x-icon-size: ${size}px;` : '')
+                + ` --bb-x-pouch: ${green}; --bb-x-pouch-glow: ${glow};`;
             if (look === iconLook && document.getElementById(ICON_LOOK_ID)) return;
             iconLook = look;
             let sheet = document.getElementById(ICON_LOOK_ID);
