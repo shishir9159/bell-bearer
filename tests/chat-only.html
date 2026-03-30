@@ -64,17 +64,6 @@
 <script src="../src/content/chat-queue-view.js"></script>
 <script src="../src/content/chat-ui.js"></script>
 
-<!-- ?suite=queue runs only the suites whose name has that in it: this page is
-     for working on one part, and the queue's specs alone take a minute in a
-     tab that is not on screen. -->
-<script>
-    (() => {
-        const only = new URLSearchParams(location.search).get('suite');
-        if (!only) return;
-        const register = window.suite;
-        window.suite = (name, fn) => (name.includes(only) ? register(name, fn) : undefined);
-    })();
-</script>
 <script src="chat-stage.js"></script>
 <script src="chat.test.js"></script>
 <script src="chat-queue.test.js"></script>
