@@ -1,5 +1,6 @@
 /**
- * The browser suite's framework: `suite`, `test`, `assert*`. `?suite=<word>`
+ * The browser suite's framework — `suite`, `test`, `assert*` — and the page
+ * that runs it: a suite page is a heading and its script tags. `?suite=<word>`
  * runs only the suites whose name has that word in it.
  */
 (function () {
@@ -99,4 +100,32 @@
         window.__testResults = { passed, failed, text };
         return window.__testResults;
     };
+
+    const STYLE = `
+        body { font: 13px/1.5 Consolas, ui-monospace, monospace; background: #1b1b1b; color: #ddd; margin: 0; padding: 24px; }
+        h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+        h1 + p { color: #888; margin: 0 0 16px; }
+        #out { white-space: pre; padding: 16px; border-radius: 6px; background: #141414; border: 1px solid #333; overflow-x: auto; }
+        #out.passed { border-color: #2d7d46; }
+        #out.failed { border-color: #a33; }
+        #banner { margin-top: 14px; padding: 10px 14px; border-radius: 6px; font-weight: 600; }
+        .ok { background: #16341f; color: #7ee2a0; }
+        .bad { background: #3a1717; color: #ff9b9b; }`;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        document.head.insertAdjacentHTML('beforeend', `<style>${STYLE}</style>`);
+        document.body.insertAdjacentHTML('beforeend', '<pre id="out">running…</pre><div id="banner"></div>');
+        const out = document.getElementById('out');
+        const banner = document.getElementById('banner');
+        try {
+            const r = await window.runAllTests(out);
+            banner.className = r.failed ? 'bad' : 'ok';
+            banner.textContent = r.failed ? `${r.failed} test(s) failing` : `all ${r.passed} tests passing`;
+        } catch (e) {
+            out.className = 'failed';
+            out.textContent = 'HARNESS ERROR\n\n' + (e && e.stack ? e.stack : e);
+            banner.className = 'bad';
+            banner.textContent = 'suite crashed';
+        }
+    });
 })();

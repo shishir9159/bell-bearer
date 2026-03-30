@@ -1,26 +1,9 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>bell-bearer — party specs only</title>
-<style>
-    body { font: 13px/1.5 Consolas, ui-monospace, monospace; background: #1b1b1b; color: #ddd; margin: 0; padding: 24px; }
-    h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
-    .sub { color: #888; margin-bottom: 16px; }
-    #out { white-space: pre; padding: 16px; border-radius: 6px; background: #141414; border: 1px solid #333; overflow-x: auto; }
-    #banner { margin-top: 14px; padding: 10px 14px; border-radius: 6px; font-weight: 600; }
-    .ok { background: #16341f; color: #7ee2a0; }
-    .bad { background: #3a1717; color: #ff9b9b; }
-</style>
 
 <h1>watch party specs</h1>
-<div class="sub">
-    The party's media specs, with only the modules the party loader injects
-    and the session they talk to.
-    They play real (silent) media, and Chrome does not load media in a tab
-    that has never been on screen — a hidden run sits on the first spec until
-    it times out. Run tests/index.html before committing.
-</div>
-<pre id="out">running…</pre>
-<div id="banner"></div>
+<p>The party specs with only what the party loader injects and the session it talks to. They play real media, which Chrome will not load in a tab never on screen. Run index.html before committing.</p>
 
 <script src="harness.js"></script>
 
@@ -55,19 +38,3 @@
 <script src="party-session.test.js"></script>
 <script src="party-rtc.test.js"></script>
 <script src="party-chat.test.js"></script>
-
-<script>
-    (async () => {
-        const out = document.getElementById('out');
-        const banner = document.getElementById('banner');
-        try {
-            const r = await runAllTests(out);
-            banner.className = r.failed ? 'bad' : 'ok';
-            banner.textContent = r.failed ? `${r.failed} test(s) failing` : `all ${r.passed} tests passing`;
-        } catch (e) {
-            out.textContent = 'HARNESS ERROR\n\n' + (e && e.stack ? e.stack : e);
-            banner.className = 'bad';
-            banner.textContent = 'suite crashed';
-        }
-    })();
-</script>

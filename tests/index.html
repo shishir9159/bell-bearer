@@ -1,34 +1,16 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>bell-bearer tests</title>
-<style>
-    body { font: 13px/1.5 Consolas, ui-monospace, monospace; background: #1b1b1b; color: #ddd; margin: 0; padding: 24px; }
-    h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
-    .sub { color: #888; margin-bottom: 16px; }
-    #out { white-space: pre; padding: 16px; border-radius: 6px; background: #141414; border: 1px solid #333; overflow-x: auto; }
-    #out.passed { border-color: #2d7d46; }
-    #out.failed { border-color: #a33; }
-    #banner { margin-top: 14px; padding: 10px 14px; border-radius: 6px; font-weight: 600; }
-    .ok { background: #16341f; color: #7ee2a0; }
-    .bad { background: #3a1717; color: #ff9b9b; }
-</style>
 
 <h1>bell-bearer test suite</h1>
-<div class="sub">No build step, no npm. Open this file in Chrome, or serve the folder and load it.</div>
-<pre id="out">running…</pre>
-<div id="banner"></div>
+<p>Open this file, or serve the repo with node tests/serve.js and load it.</p>
 
-<!-- 1. Test framework -->
 <script src="harness.js"></script>
 
-<!-- 2. Mock the chrome.* API BEFORE the extension scripts load, since they
-        register their listeners at load time. -->
+<!-- Before the sources: they register their listeners as they load. -->
 <script src="mock-chrome.js"></script>
 
-<!-- 3. The extension code under test, loaded unmodified.
-        background.js itself is only an importScripts() shim for the service
-        worker, so the parts are listed here the same way manifest.firefox.json
-        lists them. Keep the three lists in step. -->
+<!-- The worker's parts, as manifest.firefox.json lists them; keep both in step with background.js. -->
 <script src="../src/shared/time.js"></script>
 <script src="../src/shared/settings.js"></script>
 <script src="../src/shared/store.js"></script>
@@ -48,8 +30,7 @@
 <script src="../src/background/reader-loader.js"></script>
 <script src="../src/shared/transcript.js"></script>
 
-<!-- Shared modules, loaded in dependency order (as the manifest loads them).
-     time.js is with the worker's, above. -->
+<!-- Content scripts, in manifest order. -->
 <script src="../src/shared/dom.js"></script>
 <script src="../src/shared/icons.js"></script>
 <script src="../src/shared/selectors.js"></script>
@@ -73,7 +54,6 @@
 <script src="../src/content/scroll-to.js"></script>
 <script src="../src/content/composer.js"></script>
 
-<!-- The injected YouTube UI and the modules it leans on. -->
 <script src="../src/shared/subscriptions.js"></script>
 <script src="../src/shared/feed.js"></script>
 <script src="../src/shared/yt-subs.js"></script>
@@ -106,10 +86,7 @@
 <script src="../src/content/twitter-ads.js"></script>
 <script src="../src/content/cookie-banner.js"></script>
 
-<!-- LeetCode. leet-page.js is deliberately absent: it is the MAIN-world half
-     and it wraps window.fetch, which the mocked chrome.* and the harness's own
-     loads would then be routed through. The specs dispatch the DOM events it
-     would have sent instead. -->
+<!-- Not leet-page.js: it wraps window.fetch, which the mock and the harness load through. -->
 <script src="../src/shared/fsrs.js"></script>
 <script src="../src/shared/leetcode.js"></script>
 <script src="../src/shared/leet-templates.js"></script>
@@ -123,10 +100,7 @@
 <script src="../src/content/netflix-subs-view.js"></script>
 <script src="../src/content/netflix-subs.js"></script>
 <script src="../src/content/leet-ui.js"></script>
-<!-- A page module rather than a content script. Its arithmetic is covered in
-     tests/node-check.js; it is here so that a syntax error in it fails the
-     browser run loudly instead of only on the dashboard. The two before it
-     are what the stats views take off BB as they load. -->
+<!-- Page modules, so a syntax error fails here and not only on the dashboard. -->
 <script src="../src/shared/site-icons.js"></script>
 <script src="../src/page/ui.js"></script>
 <script src="../src/page/heat-map.js"></script>
@@ -136,23 +110,14 @@
 <script src="../src/page/roster-popup.js"></script>
 <script src="../src/page/leet-templates-view.js"></script>
 
-<!-- TypeRacer. The synthesised sound module is loaded here rather than under
-     the specs, so a syntax error in it fails the run loudly; it stays silent
-     throughout, because nothing in a test run is a user gesture and the
-     context therefore never starts. -->
 <script src="../src/shared/sfx.js"></script>
 <script src="../src/shared/typeracer.js"></script>
 <script src="../src/content/typeracer-read.js"></script>
 <script src="../src/content/typeracer-ui.js"></script>
-<!-- After the store it destructures off BB, and after spark.js above — a page
-     module here for the same reason heat-map.js is. -->
 <script src="../src/page/typeracer-stats.js"></script>
 <script src="../src/page/site-sort.js"></script>
 
-<!-- The chat sites: a site-neutral core, and one adapter per site that holds
-     everything about that site's markup and its API. In manifest order, less
-     chat-sites.js and prompt-queue.js, which are loaded above with the worker
-     that shares them. -->
+<!-- chat-sites.js and prompt-queue.js are above, with the worker. -->
 <script src="../src/shared/chat-tree.js"></script>
 <script src="../src/shared/chatgpt-format.js"></script>
 <script src="../src/shared/claude-format.js"></script>
@@ -175,8 +140,6 @@
 <script src="../src/content/chat-queue-view.js"></script>
 <script src="../src/content/chat-ui.js"></script>
 
-<!-- The git forges' CI watch: the registry, the reading every forge shares,
-     and the page side. In manifest order. -->
 <script src="../src/shared/forge-sites.js"></script>
 <script src="../src/shared/ci-watch.js"></script>
 <script src="../src/content/github-read.js"></script>
@@ -185,9 +148,7 @@
 <script src="../src/content/ci-watch.js"></script>
 <script src="../src/content/folder-download.js"></script>
 <script src="../src/content/topic-search.js"></script>
-<!-- The watch party. No manifest lists these — the party loader injects
-     them into a party's tab — so this page is the one place they load
-     together with the content scripts, in the loader's order. -->
+<!-- The party, which only the party loader injects, in its order. -->
 <script src="../src/shared/party-clock.js"></script>
 <script src="../src/shared/party-state.js"></script>
 <script src="../src/shared/party-drift.js"></script>
@@ -207,7 +168,6 @@
 <script src="../src/offscreen/party-tracker.js"></script>
 <script src="../src/offscreen/party-session.js"></script>
 
-<!-- 4. Specs -->
 <script src="background.test.js"></script>
 <script src="transcript.test.js"></script>
 <script src="speed.test.js"></script>
@@ -235,27 +195,6 @@
 <script src="party-rtc.test.js"></script>
 <script src="party-chat.test.js"></script>
 <script src="entries.test.js"></script>
-<!-- Last, because it loads content.css for the specs that need the reader
-     laid out, and a stylesheet loaded earlier would restyle every fixture
-     after it. -->
+<!-- Last: they load content.css, which would restyle every fixture after it. -->
 <script src="reader.test.js"></script>
 <script src="text-reader.test.js"></script>
-
-<script>
-    (async () => {
-        const out = document.getElementById('out');
-        const banner = document.getElementById('banner');
-        try {
-            const r = await runAllTests(out);
-            banner.className = r.failed ? 'bad' : 'ok';
-            banner.textContent = r.failed
-                ? `${r.failed} test(s) failing`
-                : `all ${r.passed} tests passing`;
-        } catch (e) {
-            out.className = 'failed';
-            out.textContent = 'HARNESS ERROR\n\n' + (e && e.stack ? e.stack : e);
-            banner.className = 'bad';
-            banner.textContent = 'suite crashed';
-        }
-    })();
-</script>

@@ -1,24 +1,9 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>bell-bearer — text reader specs only</title>
-<style>
-    body { font: 13px/1.5 Consolas, ui-monospace, monospace; background: #1b1b1b; color: #ddd; margin: 0; padding: 24px; }
-    h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
-    .sub { color: #888; margin-bottom: 16px; }
-    #out { white-space: pre; padding: 16px; border-radius: 6px; background: #141414; border: 1px solid #333; overflow-x: auto; }
-    #banner { margin-top: 14px; padding: 10px 14px; border-radius: 6px; font-weight: 600; }
-    .ok { background: #16341f; color: #7ee2a0; }
-    .bad { background: #3a1717; color: #ff9b9b; }
-</style>
 
 <h1>text reader specs</h1>
-<div class="sub">
-    The same specs index.html runs for the text reader, with only the modules
-    they touch, so a change to the reader is answered in a second. Run
-    tests/index.html before committing.
-</div>
-<pre id="out">running…</pre>
-<div id="banner"></div>
+<p>The text reader specs with only the modules they touch. Run index.html before committing.</p>
 
 <script src="harness.js"></script>
 <script src="mock-chrome.js"></script>
@@ -42,19 +27,3 @@
 <script src="../src/content/x-thread-read.js"></script>
 
 <script src="text-reader.test.js"></script>
-
-<script>
-    (async () => {
-        const out = document.getElementById('out');
-        const banner = document.getElementById('banner');
-        try {
-            const r = await runAllTests(out);
-            banner.className = r.failed ? 'bad' : 'ok';
-            banner.textContent = r.failed ? `${r.failed} test(s) failing` : `all ${r.passed} tests passing`;
-        } catch (e) {
-            out.textContent = 'HARNESS ERROR\n\n' + (e && e.stack ? e.stack : e);
-            banner.className = 'bad';
-            banner.textContent = 'suite crashed';
-        }
-    })();
-</script>
