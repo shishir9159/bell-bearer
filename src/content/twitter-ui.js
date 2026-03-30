@@ -215,14 +215,18 @@
     }
 
     /**
-     * The post's bookmark count after our glyph, the way X writes a count
-     * after each of its own marks, and left off at zero as X leaves its own.
+     * How many posts are in the pouch, after our glyph, the way X writes a
+     * count after each of its own marks, and left off at zero as X leaves
+     * its own. The same number on every post: it is the pouch's count, not
+     * the post's.
+     *
+     * It was the post's bookmark count, read out of the row, which repeated
+     * the number X writes beside its own bookmark on an opened post.
      *
      * Written again after every PouchButton.mark, which rebuilds the
      * button's markup for the filed state and takes the number with it.
      */
-    function showCount(button) {
-        const count = TwitterPage.bookmarkCount(button.closest('[role="group"]'));
+    function showCount(button, count) {
         let text = button.querySelector('.bb-x-post-count');
         if (!count) {
             if (text) text.remove();
@@ -802,7 +806,6 @@
             const holder = slotFor(button, rowModel(actions, before));
             wearRowSize(holder, actions);
             actions.insertBefore(holder, before);
-            showCount(button);
 
             // After the cell is in, so the row is measured at the width it
             // will actually be asked to hold.
@@ -814,15 +817,16 @@
 
         async function markPost(button, statusId) {
             if (!button || !button.isConnected || !hasExtensionContext()) return;
-            const topic = XPouch.topicForStatus(await state(), statusId);
+            const saved = await state();
+            const topic = XPouch.topicForStatus(saved, statusId);
             const name = topic
-                ? (XPouch.topicsOf(await state(), 'posts').find((t) => t.id === topic) || {}).name
+                ? (XPouch.topicsOf(saved, 'posts').find((t) => t.id === topic) || {}).name
                 : '';
             PouchButton.mark(button, {
                 filed: !!topic,
                 label: topic ? `Filed under ${name} — click to re-file` : 'Save this post to your pouch',
             });
-            showCount(button);
+            showCount(button, XPouch.itemsOf(saved, 'posts').length);
         }
 
         // -------------------------------------------------- profile button

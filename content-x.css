@@ -163,7 +163,7 @@
 .bb-x-post-btn.bb-in-pouch { color: var(--bb-x-pouch, #123524); }
 .bb-x-post-btn:hover .bb-pouch-glyph { background: var(--bb-x-pouch-glow, rgba(18, 53, 36, .1)); }
 
-/* The post's bookmark count, in the type of the row's own counts — read
+/* How many posts are in the pouch, in the type of the row's own counts — read
    off the row by wearRowSize, with a timeline row's as the fallback. Set
    off by 4px either side, as X's are. */
 .bb-x-post-count {

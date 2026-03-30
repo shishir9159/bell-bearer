@@ -82,7 +82,7 @@
         twitterHideAds: false,
 
         // Hide the numbers under every post — replies, reposts, likes, views,
-        // and the bookmark count beside the pouch button — leaving the
+        // bookmarks and the pouch's total beside its button — leaving the
         // buttons themselves. Off for the same reason.
         twitterHideCounts: false,
 

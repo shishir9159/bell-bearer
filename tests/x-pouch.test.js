@@ -517,52 +517,66 @@
             teardown();
         });
 
-        /** The labels X gives a row and its controls, each count exact. */
-        function labelRow(host) {
-            const row = host.querySelector('[role="group"]');
-            row.setAttribute('aria-label', '4 replies, 12 reposts, 310 likes, 1234 bookmarks, 9120 views');
-            row.querySelector('[data-testid="reply"]').setAttribute('aria-label', '4 Replies. Reply');
-            row.querySelector('[data-testid="retweet"]').setAttribute('aria-label', '12 reposts. Repost');
-            row.querySelector('[data-testid="like"]').setAttribute('aria-label', '310 Likes. Like');
-            row.insertAdjacentHTML('beforeend',
-                '<div><a href="/isorokin/status/1770/analytics" aria-label="9120 views. View post analytics"></a></div>');
-            return row;
-        }
-
         const countText = () => {
             const count = document.querySelector('#bb-x-test .bb-x-post-btn .bb-x-post-count');
             return count ? count.textContent : null;
         };
 
-        test('the post\'s bookmark count is written after the glyph, and outlives a re-mark', async () => {
-            labelRow(timeline());
-            makeUi().injectPostButtons();
-
-            // X writes no number beside its bookmark in a timeline; the row's
-            // own label is where the count is.
-            assertEqual(countText(), '1.2K');
-
-            // PouchButton.mark rebuilds the button's markup once the pouch
-            // has been read, which would take the number with it.
-            await new Promise((done) => setTimeout(done, 150));
-            assert(document.querySelector('#bb-x-test .bb-x-post-btn .bb-pouch-glyph'), 'marked');
-            assertEqual(countText(), '1.2K', 'still there after the mark');
-            teardown();
+        /** `n` posts, all filed under one topic. */
+        const savedPosts = (n) => Array.from({ length: n }, (_, i) => ({ id: String(900 + i), topic: 'xst-1', handle: '@someone' }));
+        const pouchOf = (n) => MockChrome.reset({
+            localStore: { bbXPostTopics: [{ id: 'xst-1', name: 'Shaders' }], bbXPosts: savedPosts(n) },
         });
 
-        test('a row that does not say has no count, rather than a zero', () => {
+        // The count is written once the pouch has been read, which is a
+        // round trip through the mock's deferred storage.
+        const settle = () => new Promise((done) => setTimeout(done, 150));
+
+        test('the number beside the glyph is the pouch\'s total, not the post\'s bookmarks', async () => {
+            pouchOf(3);
+            try {
+                const host = opened();
+                // What it used to show, so that an opened post read "462"
+                // twice: once beside ours and once beside X's own bookmark.
+                host.querySelector('[data-testid="bookmark"]').setAttribute('aria-label', '462 Bookmarks. Bookmark');
+                makeUi().injectPostButtons();
+                await settle();
+
+                // PouchButton.mark rebuilds the button's markup, which would
+                // take the number with it.
+                assert(document.querySelector('#bb-x-test .bb-x-post-btn .bb-pouch-glyph'), 'marked');
+                assertEqual(countText(), '3');
+            } finally {
+                MockChrome.reset();
+                teardown();
+            }
+        });
+
+        test('an empty pouch has no number, rather than a zero', async () => {
+            MockChrome.reset();
             timeline();
             makeUi().injectPostButtons();
+            await settle();
             assertEqual(countText(), null);
             teardown();
         });
 
-        test('a bookmark that carries its own count is taken at its word', () => {
-            const host = opened();
-            host.querySelector('[data-testid="bookmark"]').setAttribute('aria-label', '45 Bookmarks. Bookmark');
-            makeUi().injectPostButtons();
-            assertEqual(countText(), '45');
-            teardown();
+        test('the total follows the pouch as it fills', async () => {
+            pouchOf(1);
+            try {
+                timeline();
+                makeUi().injectPostButtons();
+                await settle();
+                assertEqual(countText(), '1');
+
+                // A post saved from another tab, or from this one.
+                await chrome.storage.local.set({ bbXPosts: savedPosts(2) });
+                await settle();
+                assertEqual(countText(), '2');
+            } finally {
+                MockChrome.reset();
+                teardown();
+            }
         });
 
         test('the button carries the status id it will file', () => {
