@@ -6381,6 +6381,164 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(Trials.lock(state, 3, 25, 100)['3'].usedAt, 50, 'locking keeps what was there');
     });
 
+    section('trials — the desk');
+
+    // tabs.move and tabGroups.move place a tab as if it were already lifted
+    // out of the strip. An off-by-one there throws nothing — it drops a tab in
+    // the wrong group — so the stubs are a strip that reorders itself the way
+    // Chrome's does, read back as `id:group`.
+    {
+        const NONE = -1;
+        let tabs = [];
+        let groups = [];
+        const store = {};
+        const strip = () => tabs.map((t) => `${t.id}${t.groupId === NONE ? '' : `:g${t.groupId}`}`).join(' ');
+        const reindex = () => tabs.forEach((tab, i) => { tab.index = i; });
+        const on = { addListener() {} };
+        const chrome = {
+            runtime: { onMessage: on, lastError: null },
+            storage: {
+                local: {
+                    get: async (keys) => Object.fromEntries([].concat(keys).filter((k) => k in store).map((k) => [k, store[k]])),
+                    set: async (values) => Object.assign(store, values),
+                },
+                onChanged: on,
+            },
+            windows: { getCurrent: async () => ({ id: 1 }), update: async () => {} },
+            tabs: {
+                query: async ({ windowId, groupId }) => tabs
+                    .filter((t) => (windowId == null || t.windowId === windowId) && (groupId == null || t.groupId === groupId))
+                    .map((t) => ({ ...t })),
+                group: async ({ tabIds, groupId }) => {
+                    const id = groupId == null ? groups.reduce((n, g) => Math.max(n, g.id), 0) + 1 : groupId;
+                    if (groupId == null) groups.push({ id, windowId: 1, title: '', color: 'grey', collapsed: false });
+                    for (const tabId of tabIds) tabs.find((t) => t.id === tabId).groupId = id;
+                    return id;
+                },
+                ungroup: async (tabIds) => { for (const id of tabIds) tabs.find((t) => t.id === id).groupId = NONE; },
+                move: async (tabId, { index }) => {
+                    const [tab] = tabs.splice(tabs.findIndex((t) => t.id === tabId), 1);
+                    tabs.splice(index, 0, tab);
+                    reindex();
+                },
+                update: async () => {},
+                remove: async (tabIds) => { tabs = tabs.filter((t) => !tabIds.includes(t.id)); reindex(); },
+                onUpdated: on, onRemoved: on, onActivated: on,
+            },
+            tabGroups: {
+                query: async () => groups.map((g) => ({ ...g })),
+                get: async (id) => {
+                    const group = groups.find((g) => g.id === id);
+                    if (!group) throw new Error('no such group');
+                    return { ...group };
+                },
+                update: async (id, changes) => { Object.assign(groups.find((g) => g.id === id), changes); },
+                // The whole group lifts out and goes back in together.
+                move: async (id, { index }) => {
+                    const rest = tabs.filter((t) => t.groupId !== id);
+                    rest.splice(index, 0, ...tabs.filter((t) => t.groupId === id));
+                    tabs = rest;
+                    reindex();
+                },
+                onRemoved: on, onUpdated: on,
+            },
+        };
+        const vm = require('vm');
+        const sandbox = vm.createContext({ chrome, console, URL, Date, Math, JSON, setTimeout, clearTimeout });
+        sandbox.self = sandbox.globalThis = sandbox;
+        for (const file of ['src/shared/settings.js', 'src/shared/trials.js', 'src/background/router.js', 'src/background/trials.js']) {
+            vm.runInContext(readRepo(file), sandbox, { filename: file });
+        }
+        const Desk = sandbox.BB.TrialsWorker;
+        const Kept = sandbox.BB.Trials;
+
+        /** Two groups in play, one parked, two loose tabs; `full` puts all three in play. */
+        const seed = (full) => {
+            for (const key of Object.keys(store)) delete store[key];
+            groups = [
+                { id: 10, windowId: 1, title: 'Coursework', color: 'blue', collapsed: false },
+                { id: 20, windowId: 1, title: 'Thesis', color: 'cyan', collapsed: false },
+                { id: 30, windowId: 1, title: 'Admin', color: 'green', collapsed: !full },
+            ];
+            tabs = [[1, 10], [2, 10], [3, 20], [4, 20], [5, 30], [6, NONE], [7, NONE]].map(([id, groupId]) => ({
+                id, windowId: 1, groupId, url: `https://s${id}.test/`, title: `tab ${id}`, active: false,
+            }));
+            reindex();
+        };
+        const used = (...touches) => Kept.update(() => touches.reduce((state, [id, at]) => Kept.touch(state, id, at), {}));
+        const openGroups = () => groups.filter((group) => !group.collapsed).map((group) => group.id);
+
+        await checkAsync('the desk lists loose tabs, reads a collapsed group as parked, and starts unlocked', async () => {
+            seed();
+            const snap = (await Desk.snapshot()).desk;
+            eq(snap.loose.map((t) => t.id), [6, 7]);
+            eq(snap.groups.map((g) => [g.id, g.parked]), [[10, false], [20, false], [30, true]]);
+            eq(snap.lockedId, null);
+        });
+        await checkAsync('a dragged tab lands where it is dropped, in a group or out of every one', async () => {
+            seed();
+            await Desk.moveTab(6, 10, 0);
+            eq(strip(), '6:g10 1:g10 2:g10 3:g20 4:g20 5:g30 7', 'the top of a group');
+            await Desk.moveTab(6, 20, 2);
+            eq(strip(), '1:g10 2:g10 3:g20 4:g20 6:g20 5:g30 7', 'the end of another');
+            await Desk.moveTab(6, null, 0);
+            eq(tabs.find((t) => t.id === 6).groupId, NONE, 'back to the left');
+            seed();
+            await Desk.moveTab(2, 10, 0);
+            eq(strip(), '2:g10 1:g10 3:g20 4:g20 5:g30 6 7', 'inside its own group');
+        });
+        await checkAsync('three groups run at a time, and a fourth parks the one left longest', async () => {
+            seed(true);
+            await used([10, 1000], [20, 3000], [30, 2000]);
+            const made = await Desk.newGroupFrom(7);
+            eq(made.ok, true);
+            const group = groups.find((g) => g.id === made.groupId);
+            eq([group.title, group.color], ['Untitled group', 'yellow']);
+            eq(openGroups(), [20, 30, made.groupId]);
+            eq(openGroups().length, Kept.SLOT_LIMIT, 'never four');
+
+            seed();
+            groups.push({ id: 40, windowId: 1, title: 'Travel', color: 'pink', collapsed: false });
+            tabs.push({ id: 8, windowId: 1, groupId: 40, url: 'https://s8.test/', title: 'tab 8', active: false });
+            reindex();
+            await used([10, 1000], [20, 3000], [40, 2000]);
+            await Desk.openGroup(30);
+            eq(openGroups(), [20, 30, 40], 'opening a parked group parks the stalest');
+        });
+        await checkAsync('a locked group holds the desk until it is unlocked', async () => {
+            seed();
+            await Desk.lockGroup(10, 25);
+            eq((await Desk.snapshot()).desk.lockedId, 10);
+            eq((await Desk.moveTab(6, 10, 0)).locked, true, 'dropped into');
+            eq((await Desk.moveTab(1, null, 0)).locked, true, 'dragged out of');
+            eq((await Desk.renameGroup(10, 'nope')).locked, true, 'renamed');
+            eq((await Desk.discardGroup(10)).locked, true, 'discarded');
+            eq((await Desk.moveGroup(20, 10)).locked, true, 'the desk order');
+            eq((await Desk.moveTab(6, 20, 0)).ok, true, 'another group still takes tabs');
+            await Desk.lockGroup(10, 0);
+            eq((await Desk.renameGroup(10, 'Renamed')).ok, true);
+            eq(groups.find((g) => g.id === 10).title, 'Renamed');
+        });
+        await checkAsync('a dragged group stays whole and takes the place it is dropped on', async () => {
+            for (const [moved, onto, want] of [
+                [20, 10, '3:g20 4:g20 1:g10 2:g10 5:g30 6 7'],
+                [10, 30, '3:g20 4:g20 1:g10 2:g10 5:g30 6 7'],
+                [30, 20, '1:g10 2:g10 5:g30 3:g20 4:g20 6 7'],
+            ]) {
+                seed();
+                await Desk.moveGroup(moved, onto);
+                eq(strip(), want, `${moved} onto ${onto}`);
+            }
+        });
+        await checkAsync('discarding a group closes its tabs and forgets its record alone', async () => {
+            seed();
+            await used([10, 1000], [20, 2000]);
+            eq((await Desk.discardGroup(10)).ok, true);
+            eq(strip(), '3:g20 4:g20 5:g30 6 7');
+            eq(Object.keys(store[Kept.KEY] || {}), ['20']);
+        });
+    }
+
     // -------------------------------------------------------- framed plate
 
     section('the framed plate');
