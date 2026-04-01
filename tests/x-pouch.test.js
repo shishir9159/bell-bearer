@@ -1,25 +1,13 @@
 /**
- * The bits of the X surfaces that only a real DOM can answer: where the pouch
- * button lands in a post's action row, what gets read out of a post, and what
- * the ad sweep hides.
+ * The X surfaces that need a DOM: the pouch button in a post's action row,
+ * reading a post, and the ad sweep. The pure logic is in node-check.js.
  *
- * The pure logic — two independent topic lists, re-filing as a move, handles,
- * avatar URLs — is in tests/node-check.js, which runs in a second. What is
- * here is everything that needs elements.
- *
- * Like the YouTube specs, these call the injectors straight off the factory
- * rather than through install(): the watcher only runs its tasks on an
- * animation frame, and a backgrounded tab may not get one for seconds.
+ * The injectors are called directly rather than through install(), whose
+ * watcher only runs on an animation frame that a hidden tab may not get.
  */
 
-/*
- * Wrapped, unlike the older specs, because these share the global scope with
- * them: this file declares a makeUi and a teardown of its own, and a bare
- * `const makeUi` beside youtube-ui.test.js's `function makeUi` is a
- * SyntaxError that takes the whole file out of the run without failing a
- * single test. The suites below register through the globals `suite` and
- * `test`, so nothing here needs to be global itself.
- */
+// Wrapped: a bare `const makeUi` beside youtube-ui.test.js's `function makeUi`
+// is a SyntaxError that drops this whole file without failing a test.
 (function () {
     'use strict';
 
@@ -29,25 +17,31 @@
 
     const NO_WATCHER = { add() {}, remove() {}, has: () => false, schedule() {}, stop() {} };
 
-    /**
-     * A stand-in post, built out of the `data-testid` hooks X's own markup uses —
-     * which is the whole reason the selectors key off those rather than off class
-     * names that change on every deploy.
-     */
-    function timeline({ promoted = false, bookmark = true } = {}) {
+    const q = (selector) => document.querySelector(`#bb-x-test ${selector}`);
+    const count = (selector) => document.querySelectorAll(`#bb-x-test ${selector}`).length;
+    const bookmarkHidden = () => q('[data-testid="bookmark"]').parentElement.classList.contains('bb-x-hidden');
+    const iconLook = () => document.getElementById(TwitterUi().ICON_LOOK_ID);
+
+    function teardown() {
+        const host = document.getElementById('bb-x-test');
+        if (host) host.remove();
+        document.querySelectorAll('#bb-x-picker, #bb-x-pouch-panel, #bb-x-pouch-scrim').forEach((el) => el.remove());
+        if (iconLook()) iconLook().remove();
+    }
+
+    // Clears first: there is no afterEach, so a test that fails early never
+    // reaches its own teardown and the next ones would read its DOM.
+    function stage(html) {
         teardown();
         const host = document.createElement('div');
         host.id = 'bb-x-test';
+        host.innerHTML = html;
+        document.body.appendChild(host);
+        return host;
+    }
 
-        const actions = `
-            <div role="group" id="id__abc">
-                <button data-testid="reply"></button>
-                <button data-testid="retweet"></button>
-                <button data-testid="like"></button>
-                ${bookmark ? '<div><button data-testid="bookmark"></button></div>' : ''}
-                <div><button aria-label="Share post"></button></div>
-            </div>`;
-
+    /** A timeline post, built from the `data-testid` hooks X's own markup uses. */
+    function timeline({ promoted = false, bookmark = true } = {}) {
         const article = `
             <article data-testid="tweet" role="article">
                 <div data-testid="Tweet-User-Avatar">
@@ -60,22 +54,23 @@
                     <a href="/isorokin/status/1770"><time datetime="2026-09-21T06:00:00.000Z">6h</time></a>
                 </div>
                 <div data-testid="tweetText">Occupancy is not throughput.</div>
-                ${actions}
+                <div role="group" id="id__abc">
+                    <button data-testid="reply"></button>
+                    <button data-testid="retweet"></button>
+                    <button data-testid="like"></button>
+                    ${bookmark ? '<div><button data-testid="bookmark"></button></div>' : ''}
+                    <div><button aria-label="Share post"></button></div>
+                </div>
             </article>`;
-
-        host.innerHTML = `
+        return stage(`
             <div data-testid="cellInnerDiv">
                 ${promoted ? `<div data-testid="placementTracking">${article}</div>` : article}
-            </div>`;
-
-        document.body.appendChild(host);
-        return host;
+            </div>`);
     }
 
     /**
-     * A post opened on its own page, quoting another, laid out the way X
-     * lays out that one post: its stamp moves from the header to the foot,
-     * under the quoted card, and the card's own <time> is in no link.
+     * A post opened on its own page, quoting another: its stamp moves to the
+     * foot, under the quoted card, whose own <time> is in no link.
      */
     function opened() {
         return stage(`
@@ -104,62 +99,17 @@
             </article>`);
     }
 
-    function teardown() {
-        const host = document.getElementById('bb-x-test');
-        if (host) host.remove();
-        document.querySelectorAll('#bb-x-picker, #bb-x-pouch-panel, #bb-x-pouch-scrim').forEach((el) => el.remove());
-    }
-
-    /**
-     * Put raw markup on the page, clearing whatever was there.
-     *
-     * Clearing FIRST rather than only in teardown() is the point: the harness
-     * has no afterEach, so a test that fails at its first assertion never
-     * reaches its own teardown, and the next three read the DOM it left
-     * behind. One real failure used to report as four.
-     */
-    function stage(html) {
-        teardown();
-        const host = document.createElement('div');
-        host.id = 'bb-x-test';
-        host.innerHTML = html;
-        document.body.appendChild(host);
-        return host;
-    }
-
-    /**
-     * All three X surfaces are off in the schema, so a spec about where a
-     * button lands has to ask for it. Pass an override to turn one back off:
-     * `makeUi({ twitterHideBookmark: false })`.
-     */
-    const ALL_ON = {
-        twitterPouchPosts: true,
-        twitterPouchPeople: true,
-        twitterHideBookmark: true,
-    };
-
-    const makeUi = (settings) => TwitterUi().createTwitterUi({
-        watcher: NO_WATCHER,
-        notify() {},
-        getSettings: () => ({ ...ALL_ON, ...settings }),
-    });
-
-    /** The factory with no settings at all — the extension as it ships. */
+    // All three surfaces are off in the schema, so the specs ask for them.
+    const ALL_ON = { twitterPouchPosts: true, twitterPouchPeople: true, twitterHideBookmark: true };
+    const uiWith = (getSettings) => TwitterUi().createTwitterUi({ watcher: NO_WATCHER, notify() {}, getSettings });
+    const makeUi = (settings) => uiWith(() => ({ ...ALL_ON, ...settings }));
     const defaultUi = () => TwitterUi().createTwitterUi({ watcher: NO_WATCHER, notify() {} });
 
     /**
-     * X's navigation column, cut down to the two rows ours is measured
-     * against: the one you are on, and one you are not.
-     *
-     * Both are needed, and that is the whole point of the fixture. X draws the
-     * current row in its bold weight and the rest in the body weight, and the
-     * row this used to measure was Home — which is the row you are on nearly
-     * always, so the Pouch row wore the selected weight permanently and read
-     * as a tab that would not let go.
-     *
-     * The badge sits in a `div[dir]` of its own ahead of the label on purpose:
-     * that is the arrangement that made the Pouch row come out in 11px type
-     * before navLabel learned to step over a number.
+     * X's navigation, cut to the row you are on and one you are not. X draws
+     * the current row bold, and measuring Home alone gave the Pouch row the
+     * selected weight permanently. The badge ahead of Home's label is what
+     * once made the Pouch row come out in 11px type.
      */
     const NAV = `
         <header role="banner">
@@ -176,34 +126,33 @@
             </nav>
         </header>`;
 
+    const navEntry = () => document.getElementById('bb-x-nav-entry');
+
     suite('x.com — the Pouch row in the navigation', () => {
         test('the mark is the extension\'s own, over the glyph as a fallback', () => {
             stage(NAV);
             makeUi().injectNavEntry();
 
-            const entry = document.getElementById('bb-x-nav-entry');
+            const entry = navEntry();
             assert(entry, 'the row goes in');
-            // Both are in the markup: content.css stacks the picture over the
-            // glyph and twitter-ui.js drops the picture on error, so a src
-            // that cannot load uncovers a mark in currentColor rather than
-            // leaving a hole. An earlier version of this row ran the URL
-            // through Dom.safeUrlAttr, which passes http(s) and nothing else
-            // — so every chrome-extension:// src came out as "#".
+            // content.css stacks the picture over the glyph, and a src that
+            // cannot load is dropped to uncover it. Dom.safeUrlAttr once
+            // turned every chrome-extension:// src into "#".
             assert(entry.querySelector('.bb-pouch-glyph'), 'the shared glyph underneath');
             const art = entry.querySelector('.bb-x-nav-img');
-            // The mock has no chrome.runtime.getURL, so the <img> is removed
-            // rather than left pointing at nothing — which is the same path a
-            // reloaded extension takes.
             if (art) assertEqual(art.getAttribute('src') === '', false, 'never an empty src');
             teardown();
         });
 
-        test('it sits under Home', () => {
+        test('it sits under Home, once however often the injector runs', () => {
             stage(NAV);
-            makeUi().injectNavEntry();
+            const ui = makeUi();
+            ui.injectNavEntry();
+            ui.injectNavEntry();
 
             const home = document.querySelector('[data-testid="AppTabBar_Home_Link"]');
             assertEqual(home.nextElementSibling.id, 'bb-x-nav-entry');
+            assertEqual(document.querySelectorAll('#bb-x-nav-entry, #bb-x-test .bb-x-nav').length, 1);
             teardown();
         });
 
@@ -211,30 +160,17 @@
             stage(NAV);
             makeUi().injectNavEntry();
 
-            const entry = document.getElementById('bb-x-nav-entry');
-            // Written as custom properties rather than as font-size and
-            // font-weight, because the row has two states and one style
-            // attribute: content.css derives the selected look from the
-            // resting numbers, and an inline font-size would beat it forever.
-            const prop = (name) => entry.style.getPropertyValue(name);
-
-            // X scales both with its display-size setting, and content.css
-            // can only carry one reading of it.
+            // Custom properties, not font-size: content.css derives the
+            // selected look from these, and an inline size would beat it.
+            const prop = (name) => navEntry().style.getPropertyValue(name);
             assertEqual(prop('--bb-x-nav-size'), '23px', 'the label, not the 11px badge beside it');
             assertEqual(prop('--bb-x-nav-ico'), '30px');
-
-            // The resting weight comes from a row that is not current, and the
-            // bold one from the row that is. Reading only Home gave the Pouch
-            // row the selected weight all day.
-            assertEqual(prop('--bb-x-nav-weight'), '400', 'at rest it is one of the column');
-            assertEqual(prop('--bb-x-nav-weight-on'), '800', "and X's own bold when the panel is open");
+            assertEqual(prop('--bb-x-nav-weight'), '400', 'at rest, from a row that is not current');
+            assertEqual(prop('--bb-x-nav-weight-on'), '800', "X's own bold when the panel is open");
             teardown();
         });
 
         test('with only the row you are on to read, that is what is read', () => {
-            // A signed-out column, or one X has cut down: there is no
-            // unselected row to measure, and a row with no metrics at all is
-            // worse than one wearing the current row's.
             stage(`
                 <header role="banner">
                     <nav role="navigation">
@@ -246,48 +182,39 @@
                 </header>`);
             makeUi().injectNavEntry();
 
-            const entry = document.getElementById('bb-x-nav-entry');
-            assertEqual(entry.style.getPropertyValue('--bb-x-nav-weight'), '700');
-            // Not written at all, so content.css's own fallback applies rather
-            // than "bold, the same as at rest", which would be no state change.
-            assertEqual(entry.style.getPropertyValue('--bb-x-nav-weight-on'), '');
+            assertEqual(navEntry().style.getPropertyValue('--bb-x-nav-weight'), '700');
+            // Unwritten, so content.css's fallback applies rather than no change of state.
+            assertEqual(navEntry().style.getPropertyValue('--bb-x-nav-weight-on'), '');
             teardown();
         });
 
         test('a navigation with no Home row still gets a row', () => {
             stage('<header role="banner"><nav role="navigation"></nav></header>');
             makeUi().injectNavEntry();
-
-            // Nothing to measure is not a reason to place nothing: content.css
-            // carries the fallback metrics for exactly this.
-            assert(document.getElementById('bb-x-nav-entry'), 'placed anyway');
+            assert(navEntry(), 'content.css carries the fallback metrics');
             teardown();
         });
 
         test('a chat page has no row, and leaving it brings the row back', () => {
-            // X squeezes the column to a rail of icons for a chat, and the
-            // row's word spilled out over the conversation list.
+            // X squeezes the column to icons there, and the row's word spilled over the chats.
             stage(NAV);
             const ui = makeUi();
             ui.injectNavEntry('/home');
-            assert(document.getElementById('bb-x-nav-entry'), 'placed on the timeline');
-
+            assert(navEntry(), 'placed on the timeline');
             ui.injectNavEntry('/i/chat/123-456');
-            assertEqual(document.getElementById('bb-x-nav-entry'), null, 'taken out in the chat');
+            assertEqual(navEntry(), null, 'taken out in the chat');
             ui.injectNavEntry('/messages');
-            assertEqual(document.getElementById('bb-x-nav-entry'), null, 'and the older inbox');
-
+            assertEqual(navEntry(), null, 'and the older inbox');
             ui.injectNavEntry('/explore');
-            assert(document.getElementById('bb-x-nav-entry'), 'back once the chat is left');
+            assert(navEntry(), 'back once the chat is left');
             teardown();
         });
 
         test('only the chat routes count as chat', () => {
-            const { isChatPath } = window.BB.TwitterPage;
+            const { isChatPath } = TwitterPage();
             assert(isChatPath('/i/chat'));
             assert(isChatPath('/messages/123-456'));
-            // A handle that merely starts with the word is somebody's profile.
-            assertEqual(isChatPath('/messagesbot'), false);
+            assertEqual(isChatPath('/messagesbot'), false, 'a profile');
             assertEqual(isChatPath('/i/bookmarks'), false);
         });
     });
