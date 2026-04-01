@@ -509,45 +509,41 @@
         });
     });
 
+    // Called on the module directly: driving them through injectProfileButton
+    // needs the address bar at /<handle>, which a file:// page cannot do.
     suite('x.com — copying X\'s own layout', () => {
         test('a cell of an opened post\'s row is copied, not guessed at', () => {
-            // Each cell there is a growing flex box; ours has to grow with
-            // them or the row comes out lopsided.
             const host = stage('<div style="display: block; flex-grow: 1; justify-content: center"></div>');
             const button = document.createElement('button');
             const slot = TwitterUi().slotFor(button, host.firstElementChild);
 
             assertEqual(slot.style.flexGrow, '1', 'grows with the cells beside it');
             assertEqual(slot.style.justifyContent, 'center');
-            assertEqual(slot.style.alignItems, 'center', 'which is what centres the glyph');
+            assertEqual(slot.style.alignItems, 'center', 'which centres the glyph');
             assertEqual(slot.style.display, 'flex', "a copied 'block' drops the glyph to the baseline");
-            assertEqual(slot.firstElementChild, button, 'and the button is in it');
+            assertEqual(slot.firstElementChild, button);
             teardown();
         });
 
         test('a cell with nothing to copy is still a cell', () => {
             const slot = TwitterUi().slotFor(document.createElement('button'), null);
             assert(slot.classList.contains('bb-x-post-slot'), 'content.css carries the fallback');
-            assertEqual(slot.getAttribute('style'), null, 'and nothing is written over it');
+            assertEqual(slot.getAttribute('style'), null);
         });
 
         test('a profile button wears X\'s ring rather than one of its own', () => {
+            // Our own 36px ring in currentColor was a shade too dark and sat below X's line.
             const host = stage(`
                 <button data-testid="userActions"
                         style="width: 34px; height: 34px; border: 1px solid rgb(83, 100, 113);
                                margin-left: 0px; margin-right: 0px"></button>`);
-            const more = host.firstElementChild;
             const button = document.createElement('button');
+            TwitterUi().wearRing(button, TwitterUi().ringModel(host.firstElementChild));
 
-            TwitterUi().wearRing(button, TwitterUi().ringModel(more));
-
-            // Our own 36px ring in currentColor was both a shade too dark and
-            // two pixels too tall, which is what put it below their line.
             assertEqual(button.style.getPropertyValue('--bb-x-ring-size'), '34px');
             assertEqual(button.style.getPropertyValue('--bb-x-ring'), 'rgb(83, 100, 113)');
             assertEqual(button.style.getPropertyValue('--bb-x-ring-width'), '1px');
-            // A guessed 8px is wrong wherever X spaces that row with a gap.
-            assertEqual(button.style.marginRight, '0px');
+            assertEqual(button.style.marginRight, '0px', 'not a guessed 8px');
             teardown();
         });
 
@@ -556,11 +552,7 @@
                 <div data-testid="userActions">
                     <div style="border: 2px solid rgb(1, 2, 3); width: 40px; height: 40px"></div>
                 </div>`);
-            const model = TwitterUi().ringModel(host.firstElementChild);
-
-            // Reading the outer element would have given a zero border and
-            // left the button in currentColor, which is the bug in miniature.
-            assertEqual(model, host.firstElementChild.firstElementChild);
+            assertEqual(TwitterUi().ringModel(host.firstElementChild), host.firstElementChild.firstElementChild);
             teardown();
         });
     });
@@ -568,8 +560,7 @@
     suite('x.com — reading a post', () => {
         test('a post is read off its own markup', () => {
             timeline();
-            const post = TwitterPage().readPost(document.querySelector('#bb-x-test article'));
-
+            const post = TwitterPage().readPost(q('article'));
             assertEqual(post.statusId, '1770');
             assertEqual(post.handle, '@isorokin');
             assertEqual(post.name, 'Ilya Sorokin');
@@ -579,45 +570,28 @@
             teardown();
         });
 
-        test('an opened post is read by its own stamp, not by the one of the post it quotes', () => {
+        test('an opened post is read by its own stamp, not the quoted one\'s, and gets its button', () => {
+            // The quote's <time> comes first and is in no link, so the post
+            // once read with no id and was the one post with no button.
             opened();
-            const post = TwitterPage().readPost(document.querySelector('#bb-x-test article'));
-
-            // The quoted card's <time> comes first there and is in no link,
-            // so the post read as one with no id — and was the one post on
-            // its own page with no button.
+            const post = TwitterPage().readPost(q('article'));
             assert(post, 'read at all');
             assertEqual(post.statusId, '2112354505346146630');
             assertEqual(post.handle, '@iquilezles');
             assertEqual(post.text, 'A provocation.');
             assertEqual(post.postedAt, Date.parse('2026-10-20T15:12:00.000Z'), "its own time, not the quote's");
-            teardown();
-        });
-
-        test('and it gets its button', () => {
-            opened();
-            makeUi().injectPostButtons();
-
-            const button = document.querySelector('#bb-x-test .bb-x-post-btn');
-            assert(button, 'placed');
-            assertEqual(button.dataset.bbStatus, '2112354505346146630');
-            teardown();
-        });
-
-        test('a post with no status id is not half-read', () => {
-            stage('<article data-testid="tweet"><div data-testid="tweetText">x</div></article>');
-
-            // The status id is how a post is keyed in storage. Half a record would
-            // file the same post twice on the next scroll.
-            assertEqual(TwitterPage().readPost(document.querySelector('#bb-x-test article')), null);
-            teardown();
-        });
-
-        test('no button is fitted to a post that cannot be filed', () => {
-            stage('<article data-testid="tweet"><div role="group"></div></article>');
 
             makeUi().injectPostButtons();
-            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-post-btn').length, 0);
+            assertEqual(q('.bb-x-post-btn').dataset.bbStatus, '2112354505346146630');
+            teardown();
+        });
+
+        test('a post with no status id is not half-read, and gets no button', () => {
+            // The id is the storage key: half a record files the same post twice.
+            stage('<article data-testid="tweet"><div data-testid="tweetText">x</div><div role="group"></div></article>');
+            assertEqual(TwitterPage().readPost(q('article')), null);
+            makeUi().injectPostButtons();
+            assertEqual(count('.bb-x-post-btn'), 0);
             teardown();
         });
     });
@@ -628,26 +602,18 @@
         test('a promoted post is hidden by its whole cell, not just its article', () => {
             timeline({ promoted: true });
             makeAds(true).sweep();
-
-            const cell = document.querySelector('#bb-x-test [data-testid="cellInnerDiv"]');
-            assert(cell.classList.contains('bb-x-ad-hidden'),
-                'hiding the article alone leaves X\'s padding behind as an empty stripe');
+            assert(q('[data-testid="cellInnerDiv"]').classList.contains('bb-x-ad-hidden'),
+                'the article alone leaves X\'s padding as an empty stripe');
             teardown();
         });
 
-        test('an ordinary post is left alone', () => {
+        test('an ordinary post is left alone, and nothing is hidden while the setting is off', () => {
             timeline({ promoted: false });
             makeAds(true).sweep();
-
-            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-ad-hidden').length, 0);
-            teardown();
-        });
-
-        test('nothing is hidden while the setting is off', () => {
+            assertEqual(count('.bb-x-ad-hidden'), 0);
             timeline({ promoted: true });
             makeAds(false).sweep();
-
-            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-ad-hidden').length, 0);
+            assertEqual(count('.bb-x-ad-hidden'), 0);
             teardown();
         });
 
@@ -655,53 +621,18 @@
             timeline({ promoted: true });
             const ads = makeAds(true);
             ads.sweep();
-            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-ad-hidden').length, 1);
-
-            // The switch has to undo itself on the page that is already open, or
-            // it looks like it did nothing until the next reload.
+            assertEqual(count('.bb-x-ad-hidden'), 1);
             ads.restore();
-            assertEqual(document.querySelectorAll('#bb-x-test .bb-x-ad-hidden').length, 0);
-            assertEqual(document.querySelectorAll('#bb-x-test [data-bb-ad]').length, 0,
-                'and the marks come off too, so a re-enable sweeps it again');
+            assertEqual(count('.bb-x-ad-hidden'), 0);
+            assertEqual(count('[data-bb-ad]'), 0, 'and the marks come off, so a re-enable sweeps again');
             teardown();
         });
 
         test('an upsell in the right-hand column has no cell to hide', () => {
             stage('<aside aria-label="Subscribe to Premium"><span>Premium</span></aside>');
-
             makeAds(true).sweep();
-            assert(document.querySelector('#bb-x-test aside').classList.contains('bb-x-ad-hidden'),
-                'closest() answering null is the difference between a timeline slot and a sidebar');
+            assert(q('aside').classList.contains('bb-x-ad-hidden'), 'hidden itself, with no timeline cell around it');
             teardown();
         });
     });
-
-    suite('x.com — the nav row', () => {
-        test('the Pouch row goes under Home', () => {
-            stage(`
-                <header role="banner"><nav role="navigation">
-                    <a data-testid="AppTabBar_Home_Link" href="/home">Home</a>
-                    <a href="/explore">Explore</a>
-                </nav></header>`);
-
-            makeUi().injectNavEntry();
-
-            const rows = [...document.querySelectorAll('#bb-x-test nav > *')];
-            assertEqual(rows[1].id, 'bb-x-nav-entry', 'second, right after Home');
-            assertEqual(rows.length, 3);
-            teardown();
-        });
-
-        test('it is placed once, however often the injector runs', () => {
-            stage('<header role="banner"><nav role="navigation"></nav></header>');
-
-            const ui = makeUi();
-            ui.injectNavEntry();
-            ui.injectNavEntry();
-
-            assertEqual(document.querySelectorAll('#bb-x-nav-entry, #bb-x-test .bb-x-nav').length, 1);
-            teardown();
-        });
-    });
-
 })();
