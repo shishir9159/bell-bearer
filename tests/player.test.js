@@ -1,27 +1,19 @@
 /**
- * Specs for playback control, driven against a real <video> element and real
- * KeyboardEvents.
- *
- * This is the regression suite for "speed up and down is buggy sometimes". The
- * three causes each have a test:
- *
- *  - one keypress ran both our handler and the page's, so the rate moved two
- *    rungs (or landed off the ladder entirely);
- *  - the site reset playbackRate when it loaded a new source and nothing put it
- *    back;
- *  - a change made through the site's own speed menu was ignored, so the next
- *    step jumped from a rate the user could not see.
+ * Playback control against a real <video> and real KeyboardEvents — the
+ * regression suite for "speed up and down is buggy sometimes": one press ran
+ * our handler and the page's, the site reset the rate on a new source, and a
+ * change made in the site's own menu was ignored.
  */
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * A player wired to a real, attached <video>, plus the shortcut handling and a
- * page-level keydown listener standing in for YouTube's own.
+ * A player on a real, attached <video>, with the shortcuts installed and a
+ * page keydown listener standing in for YouTube's own.
  */
 function harness() {
     const host = document.createElement('div');
-    // Attached and non-zero-sized: the locator ignores videos that are neither.
+    // The locator ignores a video that is detached or zero-sized.
     host.style.cssText = 'position:fixed;left:-9999px;width:320px;height:180px;';
     const video = document.createElement('video');
     video.width = 320;
@@ -31,7 +23,6 @@ function harness() {
 
     const notes = [];
     let remember = true;
-
     const player = window.BB.Player.createPlayer({
         getVideoElement: () => video,
         notify: (message) => notes.push(message),
@@ -39,7 +30,6 @@ function harness() {
     });
     player.attach();
 
-    // Stands in for YouTube's own `<` / `>` handling.
     let pageHandlerRuns = 0;
     const pageHandler = () => { pageHandlerRuns++; };
     document.addEventListener('keydown', pageHandler);
@@ -71,62 +61,44 @@ function harness() {
     };
 }
 
+async function using(fn) {
+    const h = harness();
+    try {
+        await fn(h);
+    } finally {
+        h.destroy();
+    }
+}
+
 const FASTER = { key: '>', code: 'Period', shiftKey: true };
 const SLOWER = { key: '<', code: 'Comma', shiftKey: true };
 const RESET = { key: '+', code: 'Equal', shiftKey: true };
 
 suite('player: speed shortcuts', () => {
-    test('one press moves exactly one rung', async () => {
-        const h = harness();
-        try {
-            h.press(FASTER);
-            assertEqual(h.video.playbackRate, 1.25);
-            h.press(FASTER);
-            assertEqual(h.video.playbackRate, 1.5);
-        } finally { h.destroy(); }
-    });
+    test('one press moves exactly one rung, down retraces up, and + goes back to 1x', () => using((h) => {
+        h.press(FASTER);
+        assertEqual(h.video.playbackRate, 1.25);
+        h.press(FASTER);
+        assertEqual(h.video.playbackRate, 1.5);
+        h.press(SLOWER);
+        h.press(SLOWER);
+        assertEqual(h.video.playbackRate, 1);
+        for (let i = 0; i < 4; i++) h.press(FASTER);
+        h.press(RESET);
+        assertEqual(h.video.playbackRate, 1);
+    }));
 
-    test('REGRESSION: the page never sees a key we handled', async () => {
+    test('REGRESSION: the page never sees a key we handled, and still gets the rest', () => using((h) => {
         // preventDefault() does not stop another listener, so YouTube's own
-        // speed handling ran too and the rate moved twice per press.
-        const h = harness();
-        try {
-            h.press(FASTER);
-            h.press(SLOWER);
-            assertEqual(h.pageHandlerRuns, 0, 'the page handler must not run for a key we act on');
-        } finally { h.destroy(); }
-    });
+        // handling ran too and the rate moved twice per press.
+        h.press(FASTER);
+        h.press(SLOWER);
+        assertEqual(h.pageHandlerRuns, 0);
+        h.press({ key: 'k', code: 'KeyK' });
+        assertEqual(h.pageHandlerRuns, 1);
+    }));
 
-    test('a key we do not handle still reaches the page', async () => {
-        const h = harness();
-        try {
-            h.press({ key: 'k', code: 'KeyK' });
-            assertEqual(h.pageHandlerRuns, 1);
-        } finally { h.destroy(); }
-    });
-
-    test('up then down returns to where it started', async () => {
-        const h = harness();
-        try {
-            h.press(FASTER);
-            h.press(FASTER);
-            h.press(SLOWER);
-            h.press(SLOWER);
-            assertEqual(h.video.playbackRate, 1);
-        } finally { h.destroy(); }
-    });
-
-    test('+ goes straight back to 1x from anywhere', async () => {
-        const h = harness();
-        try {
-            for (let i = 0; i < 4; i++) h.press(FASTER);
-            h.press(RESET);
-            assertEqual(h.video.playbackRate, 1);
-        } finally { h.destroy(); }
-    });
-
-    test('typing in a field is never hijacked', async () => {
-        const h = harness();
+    test('typing in a field is never hijacked', () => using((h) => {
         const field = document.createElement('input');
         document.body.appendChild(field);
         try {
@@ -134,90 +106,62 @@ suite('player: speed shortcuts', () => {
             assertEqual(h.video.playbackRate, 1, 'a ">" typed into a field must stay a ">"');
         } finally {
             field.remove();
-            h.destroy();
         }
-    });
+    }));
 });
 
 suite('player: holding the rate against the page', () => {
-    test('re-applies the chosen rate when the page resets it on a new source', async () => {
-        const h = harness();
-        try {
-            h.player.setRate(2, { announce: false });
-
-            h.video.dispatchEvent(new Event('loadstart'));
-            await wait(20);
-            h.video.playbackRate = 1; // the page stomping us mid-load
-            await wait(20);
-
-            assertEqual(h.video.playbackRate, 2, 'the rate should have been put back');
-        } finally { h.destroy(); }
+    test('a reset by the page on a new source is put back, unless the setting is off', async () => {
+        for (const remember of [true, false]) {
+            await using(async (h) => {
+                h.player.setRate(2, { announce: false });
+                h.setRemember(remember);
+                h.video.dispatchEvent(new Event('loadstart'));
+                await wait(20);
+                h.video.playbackRate = 1;
+                await wait(20);
+                assertEqual(h.video.playbackRate, remember ? 2 : 1, `remember ${remember}`);
+            });
+        }
     });
 
-    test('does not fight the page when the setting is off', async () => {
-        const h = harness();
-        try {
-            h.player.setRate(2, { announce: false });
-            h.setRemember(false);
-
-            h.video.dispatchEvent(new Event('loadstart'));
-            await wait(20);
-            h.video.playbackRate = 1;
-            await wait(20);
-
-            assertEqual(h.video.playbackRate, 1);
-        } finally { h.destroy(); }
-    });
-
-    test('adopts a change made through the site own speed control', async () => {
-        // Outside the after-a-source-change window, a rate we did not set is
-        // the user driving the page. Fighting it made our speed menu unusable.
-        const h = harness();
-        try {
-            h.player.setRate(2, { announce: false });
-            h.video.playbackRate = 0.75;
-            await wait(20);
-
-            assertEqual(h.video.playbackRate, 0.75, 'must not be pulled back');
-            assertEqual(h.player.desiredRate, 0.75, 'must become the new intent');
-
-            h.press(FASTER);
-            assertEqual(h.video.playbackRate, 1, 'stepping continues from the adopted rate');
-        } finally { h.destroy(); }
-    });
+    test('adopts a change made through the site own speed control', () => using(async (h) => {
+        // Away from a source change, a rate we did not set is the user's.
+        // Fighting it made the site's speed menu unusable.
+        h.player.setRate(2, { announce: false });
+        h.video.playbackRate = 0.75;
+        await wait(20);
+        assertEqual(h.video.playbackRate, 0.75, 'pulled back');
+        assertEqual(h.player.desiredRate, 0.75, 'not the new intent');
+        h.press(FASTER);
+        assertEqual(h.video.playbackRate, 1, 'stepping continues from the adopted rate');
+    }));
 });
 
 suite('player: telling its own writes apart', () => {
-    test('REGRESSION: a boost is not adopted as the chosen rate', async () => {
-        // ratechange is queued. The flag that used to mark our own writes
-        // was cleared before the event ran, so the boost's 3x read as the
-        // user choosing 3x, and a new video then started at it.
-        const h = harness();
-        try {
-            h.player.setRate(1.5, { announce: false });
-            h.player.boostSpeed(10);
-            await wait(50);
-            assertEqual(h.player.desiredRate, 1.5);
-        } finally { h.destroy(); }
-    });
+    test('REGRESSION: a boost is not adopted as the chosen rate', () => using(async (h) => {
+        // ratechange is queued, and the flag marking our own writes was
+        // cleared before it ran, so a new video started at the boost's 3x.
+        h.player.setRate(1.5, { announce: false });
+        h.player.boostSpeed(10);
+        await wait(50);
+        assertEqual(h.player.desiredRate, 1.5);
+    }));
 
-    test('while a watch party holds the rate, its writes are not adopted and the keys go to it', async () => {
-        const h = harness();
+    test('while a watch party holds the rate, its writes are not adopted and the keys go to it', () => using(async (h) => {
         const steps = [];
-        try {
-            h.player.setRate(1, { announce: false });
-            h.player.holdRate(true, { step: (direction) => { steps.push(direction); return 1.25; } });
-            assert(h.player.isRateHeld());
-            h.video.playbackRate = 0.93; // a sync nudge
-            await wait(50);
-            assertEqual(h.player.desiredRate, 1, 'a nudge is not a choice');
-            h.press(FASTER);
-            assertDeepEqual(steps, [1]);
-            assertEqual(h.video.playbackRate, 0.93, 'the party writes the rate, not the player');
-            h.player.holdRate(false);
-            assert(!h.player.isRateHeld());
-        } finally { h.destroy(); }
-    });
+        h.player.setRate(1, { announce: false });
+        h.player.holdRate(true, { step: (direction) => { steps.push(direction); return 1.25; } });
+        assert(h.player.isRateHeld());
+        h.video.playbackRate = 0.93; // a sync nudge
+        await wait(50);
+        assertEqual(h.player.desiredRate, 1, 'a nudge is not a choice');
+        h.press(FASTER);
+        assertDeepEqual(steps, [1]);
+        assertEqual(h.video.playbackRate, 0.93, 'the party writes the rate, not the player');
+        h.player.holdRate(false);
+        assert(!h.player.isRateHeld());
+    }));
 });
 
 suite('player: temporary boost', () => {
