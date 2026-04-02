@@ -92,23 +92,30 @@ function assertFalling(values, msg) {
 const Speed = require('../src/shared/speed.js');
 
 section('speed ladder');
-check('steps to the next rung strictly above', () => {
-    eq(Speed.nextStep(1), 1.25);
-    eq(Speed.nextStep(2), 2.25);
+check('stepping walks the ladder in order, and down retraces up', () => {
+    const walk = (rate, step) => Array.from({ length: 5 }, () => (rate = step(rate)));
+    eq(walk(1, Speed.nextStep), [1.25, 1.5, 1.75, 2, 2.25]);
+    eq(walk(2.25, Speed.prevStep), [2, 1.75, 1.5, 1.25, 1]);
+    for (const start of Speed.STEPS.slice(1, -1)) eq(Speed.prevStep(Speed.nextStep(start)), start, `from ${start}`);
 });
-check('an off-ladder rate does not skip a rung', () => {
+check('an off-ladder rate steps to the next rung either way, never past it', () => {
     // The old "nearest index + 1" turned 2.4 into 3 and skipped 2.5 entirely.
-    eq(Speed.nextStep(2.4), 2.5);
-    eq(Speed.prevStep(2.4), 2.25);
+    eq([2.4, 1.1, 0.3].map((rate) => Speed.nextStep(rate)), [2.5, 1.25, 0.5]);
+    eq([2.4, 2.6, 1.4, 4.9].map((rate) => Speed.prevStep(rate)), [2.25, 2.5, 1.25, 4]);
 });
-check('stepping stops at the ends rather than wrapping', () => {
-    eq(Speed.nextStep(5), 5);
-    eq(Speed.prevStep(0.25), 0.25);
+check('float noise is not a different rate', () => {
+    // A rate a hair off a rung fell through the exact-match search.
+    eq(Speed.nextStep(1.7500000000000002), 2);
+    assert(Speed.sameRate(1.7500000000000002, 1.75));
+    eq([Speed.format(1.7500000000000002), Speed.format(2)], ['1.75x', '2x']);
 });
-check('direction 0 is a reset to 1x', () => eq(Speed.step(2.5, 0), 1));
-check('clamps out-of-range rates', () => {
-    eq(Speed.clamp(99), Speed.MAX_RATE);
-    eq(Speed.clamp(0), Speed.MIN_RATE);
+check('stepping stops at the ends rather than wrapping, and direction 0 is 1x', () => {
+    eq([Speed.nextStep(5), Speed.prevStep(0.25)], [5, 0.25]);
+    eq([Speed.step(1, 1), Speed.step(1.25, -1), Speed.step(2.5, 0)], [1.25, 1, 1]);
+});
+check('clamps to what a media element will play, and a non-number to 1x', () => {
+    eq([99, 0, -4].map((rate) => Speed.clamp(rate)), [Speed.MAX_RATE, Speed.MIN_RATE, Speed.MIN_RATE]);
+    eq(['fast', undefined, NaN].map((rate) => Speed.clamp(rate)), [1, 1, 1]);
 });
 
 // ----------------------------------------------------------------- dom
@@ -514,6 +521,37 @@ check('the typography settings scale each layout’s type, and the measure narro
     eq(ReaderLayout.geometry('dock', 1280, 760, { scale: 0.75 }).type.size, 12);
 });
 
+section('transcripts');
+{
+    const { TranscriptError, TimeIndex, FetchedTranscriptSnippet } = require('../src/shared/transcript.js');
+
+    check('no captions, an unplayable video or no matching language is expected; anything else is loud', () => {
+        const e = new TranscriptError(TranscriptError.NO_CAPTIONS, 'No captions available for this video', true);
+        eq([e.code, e.expected, e.name, e instanceof Error], ['NO_CAPTIONS', true, 'TranscriptError', true]);
+        eq(new TranscriptError(TranscriptError.NOT_PLAYABLE, 'x', true).expected, true);
+        eq(new TranscriptError(TranscriptError.NO_LANGUAGE, 'x', true).expected, true);
+        eq(new TranscriptError(TranscriptError.IP_BLOCKED, 'blocked').expected, false);
+        eq(new TranscriptError(TranscriptError.FETCH_FAILED, 'http 500').expected, false);
+        eq(new TranscriptError('SOMETHING_NEW', 'x').expected, false, 'unexpected by default');
+        const codes = ['NO_CAPTIONS', 'NOT_PLAYABLE', 'NO_LANGUAGE', 'IP_BLOCKED', 'FETCH_FAILED'].map((name) => TranscriptError[name]);
+        eq(new Set(codes).size, codes.length);
+        assert(codes.every((code) => typeof code === 'string' && code), 'a code is empty');
+    });
+    check('the time index finds the snippet at a time, or the one before, sorting what it is given', () => {
+        const idx = new TimeIndex([
+            new FetchedTranscriptSnippet('third', 10, 5),
+            new FetchedTranscriptSnippet('first', 0, 5),
+            new FetchedTranscriptSnippet('second', 5, 5),
+            new FetchedTranscriptSnippet('fourth', 20, 5),
+        ]);
+        eq([0, 7, 12.5].map((t) => idx.getSnippetAtTime(t).text), ['first', 'second', 'third']);
+        eq([idx.getSnippetAtTime(17), idx.getSnippetAtTime(-1)].map(Boolean), [false, false], 'in the gap, before the start');
+        eq([idx.getSnippetAtOrBefore(17).text, idx.getSnippetAtOrBefore(100).text], ['third', 'fourth']);
+        assert(idx.getSnippetsInRange(4, 12).some((s) => s.text === 'second'), 'the range missed what overlaps it');
+        const empty = new TimeIndex([]);
+        eq([empty.getSnippetAtTime(0), empty.getSnippetAtOrBefore(0)].map(Boolean), [false, false]);
+    });
+}
 checkAsync('a transcript asked for by language is its own fetch, and tracks are listed once', async () => {
     const asked = [];
     let listed = 0;
@@ -608,6 +646,7 @@ keyFromPage.then(() => checkAsync('a translated transcript is labelled with what
         globalThis.fetch = saved;
     }
 }));
+section('copying out as markdown');
 check('checkpoints copy out as a timestamped markdown list', () => {
     globalThis.BB.YouTube = globalThis.BB.YouTube || require('../src/shared/youtube.js');
     const Markdown = require('../src/content/markdown.js');
