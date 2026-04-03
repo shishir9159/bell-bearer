@@ -125,12 +125,14 @@ const Dom = require('../src/shared/dom.js');
 require('../src/shared/icons.js');
 
 section('escaping and URL safety');
-check('escapes markup in text', () => eq(Dom.escapeHtml('<b>&"x"'), '&lt;b&gt;&amp;&quot;x&quot;'));
-check('javascript: URLs are neutralised', () => {
+check('escapes markup in text, quotes included', () => {
+    eq(Dom.escapeHtml('<b>&"x"'), '&lt;b&gt;&amp;&quot;x&quot;');
+    eq(Dom.escapeHtml("'c'"), '&#39;c&#39;');
+});
+check('javascript: URLs are neutralised, and http(s) ones pass through', () => {
+    // Channel URLs are typed by hand in the dashboard: a one-click self-XSS otherwise.
     eq(Dom.safeUrl('javascript:alert(1)'), '#');
     eq(Dom.safeUrl('data:text/html,<script>'), '#');
-});
-check('http(s) URLs pass through', () => {
     eq(Dom.safeUrl('https://youtube.com/watch?v=x'), 'https://youtube.com/watch?v=x');
 });
 
@@ -150,8 +152,10 @@ check('a v= inside a redirect target is not the video id', () => {
     const url = 'https://www.youtube.com/redirect?q=https%3A%2F%2Fex.com%2F%3Fv%3Dnope';
     eq(YouTube.extractVideoId(url), null);
 });
-check('non-watch pages have no id', () => {
+check('non-watch pages and look-alike hosts have no id', () => {
     eq(YouTube.extractVideoId('https://www.youtube.com/feed/subscriptions'), null);
+    eq(YouTube.extractVideoId('https://notyoutube.com/watch?v=abc'), null);
+    eq(YouTube.extractVideoId('https://example.com/watch?v=abc'), null);
 });
 
 const PageInfo = require('../src/content/page-info.js');
@@ -182,6 +186,15 @@ check('a watch page is not a channel page', () => {
 const Bookmarks = require('../src/shared/bookmarks.js');
 
 section('checkpoints');
+check('a first checkpoint makes the video entry, sorted by start, and the list given is left alone', () => {
+    const video = { id: 'v', title: 'V', url: 'u' };
+    const first = Bookmarks.addBookmarks([], video, [{ time: 90 }, { start: 12, end: 30 }, { time: 45 }]);
+    eq([first.added, first.videos.length, first.videos[0].id], [3, 1, 'v']);
+    eq(first.videos[0].bookmarks.map((b) => Bookmarks.bookmarkTime(b)), [12, 45, 90]);
+    const snapshot = JSON.stringify(first.videos);
+    Bookmarks.addBookmarks(first.videos, video, [{ time: 20 }]);
+    eq(JSON.stringify(first.videos), snapshot);
+});
 check('adding dedupes against every existing time, not just the last', () => {
     const videos = [{ id: 'v', title: 'V', url: 'u', bookmarks: [
         { time: 10 }, { time: 30 }, { time: 20 } ] }];
@@ -231,6 +244,22 @@ check('removing by id takes the right one when three share a second', () => {
         { id: 'a', time: 7 }, { id: 'b', time: 7 }, { id: 'c', time: 7 } ] }];
     eq(Bookmarks.removeBookmarkById(videos, 'v', 'b')[0].bookmarks.map((b) => b.id), ['a', 'c']);
     eq(Bookmarks.removeBookmarkById(videos, 'v', 'zz'), videos, 'an unknown id changes nothing');
+    eq(Bookmarks.removeBookmarkById(videos, 'nope', 'b')[0].bookmarks.length, 3, 'nor an unknown video');
+});
+check('an import must look like an export; a merge counts videos and checkpoints apart, and skips a bad entry', () => {
+    eq([null, { videos: [] }, { version: '1.0', exportDate: 'x' }, { version: '1.0', exportDate: 'x', videos: [] }]
+        .map((file) => !!Bookmarks.validateImport(file)), [false, false, false, true]);
+    const video = { id: 'v', title: 'V', url: 'u' };
+    const merged = Bookmarks.mergeImported(Bookmarks.addBookmarks([], video, [{ time: 10 }]).videos, [
+        { id: 'v', title: 'V', bookmarks: [{ time: 10 }, { time: 20 }] },
+        { id: 'w', title: 'W', bookmarks: [{ time: 5 }] },
+        null,
+        { title: 'no id', bookmarks: [] },
+    ]);
+    eq([merged.addedVideos, merged.updatedVideos, merged.addedBookmarks], [1, 1, 2]);
+    const both = Bookmarks.addBookmarks([], video, [{ time: 10 }, { time: 20 }]).videos;
+    const again = Bookmarks.mergeImported(both, [{ id: 'v', title: 'V', bookmarks: [{ time: 10 }, { time: 20 }] }]);
+    eq([again.addedBookmarks, again.type], [0, 'warning'], 'the same file twice');
 });
 check('a record from before ids can still be edited and removed', () => {
     const old = { time: 12, start: 12, end: 15, timestamp: 1700000000000, note: 'n' };
@@ -289,6 +318,9 @@ check('timestamp links parse out of pasted text, one per line', () => {
         'https://www.youtube.com/watch?v=abcdefghijk&t=2m30s');
     eq(found.length, 1, 'both links are the same video, so one entry');
     eq(found[0].bookmarks.map((b) => b.time), [90, 150]);
+    const twoWays = Bookmarks.parseTimestampLinks('https://youtu.be/abc?t=1m\nhttps://www.youtube.com/watch?v=abc&t=60');
+    eq(twoWays[0].bookmarks.length, 1, 'one instant written two ways');
+    eq(Bookmarks.parseTimestampLinks('not a link\nhttps://example.com/watch?v=abc\n'), []);
 });
 
 // ------------------------------------------------------ reader transcript
