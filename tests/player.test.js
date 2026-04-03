@@ -165,49 +165,35 @@ suite('player: telling its own writes apart', () => {
 });
 
 suite('player: temporary boost', () => {
-    test('runs at 3x then restores the previous rate', async () => {
-        const h = harness();
-        try {
-            h.player.setRate(1.5, { announce: false });
-            h.player.boostSpeed(0.1);
-            assertEqual(h.video.playbackRate, 3);
+    test('runs at 3x then restores the previous rate', () => using(async (h) => {
+        h.player.setRate(1.5, { announce: false });
+        h.player.boostSpeed(0.1);
+        assertEqual(h.video.playbackRate, 3);
+        await wait(250);
+        assertEqual(h.video.playbackRate, 1.5);
+    }));
 
-            await wait(250);
-            assertEqual(h.video.playbackRate, 1.5);
-        } finally { h.destroy(); }
-    });
+    test('a manual change during a boost cancels it', () => using(async (h) => {
+        h.player.setRate(1.5, { announce: false });
+        h.player.boostSpeed(0.1);
+        h.press(FASTER);
+        const chosen = h.video.playbackRate;
+        await wait(250);
+        assertEqual(h.video.playbackRate, chosen, 'the restore undid a manual change');
+    }));
 
-    test('a manual change during a boost cancels it', async () => {
-        // Otherwise the restore fires later and silently undoes the choice the
-        // user just made.
-        const h = harness();
-        try {
-            h.player.setRate(1.5, { announce: false });
-            h.player.boostSpeed(0.1);
-            h.press(FASTER);
-            const chosen = h.video.playbackRate;
-
-            await wait(250);
-            assertEqual(h.video.playbackRate, chosen, 'the restore must not undo a manual change');
-        } finally { h.destroy(); }
-    });
-
-    test('re-triggering extends the boost without losing the original rate', async () => {
-        const h = harness();
-        try {
-            h.player.setRate(1.25, { announce: false });
-            h.player.boostSpeed(0.1);
-            h.player.boostSpeed(0.2);   // the original rate must still be 1.25
-            await wait(400);
-            assertEqual(h.video.playbackRate, 1.25);
-        } finally { h.destroy(); }
-    });
+    test('re-triggering extends the boost without losing the original rate', () => using(async (h) => {
+        h.player.setRate(1.25, { announce: false });
+        h.player.boostSpeed(0.1);
+        h.player.boostSpeed(0.2);
+        await wait(400);
+        assertEqual(h.video.playbackRate, 1.25);
+    }));
 });
 
 /**
- * Reddit's player as Reddit draws it: a shreddit-player whose open shadow
- * root holds the <video>, and no <video> in the page's own DOM. Larger than
- * the harness's, so that it outranks any other video left on the page.
+ * Reddit's player: a shreddit-player whose open shadow root holds the
+ * <video>. Larger than the harness's, so it outranks any video left over.
  */
 function redditPlayer(top = 0) {
     const host = document.createElement('shreddit-player');
@@ -220,12 +206,25 @@ function redditPlayer(top = 0) {
     return { host, video };
 }
 
+async function onReddit(fn) {
+    const { host, video } = redditPlayer();
+    const player = window.BB.Player.createPlayer({
+        getVideoElement: window.BB.Site.createPlayerLocator('reddit'), notify: () => {},
+    });
+    player.attach();
+    try {
+        await fn(player, video);
+    } finally {
+        player.detach();
+        host.remove();
+    }
+}
+
 suite('player: Reddit, whose video is inside a shadow root', () => {
     test('REGRESSION: the locator finds it', () => {
         const { host, video } = redditPlayer();
         try {
-            assertEqual(document.querySelector('shreddit-player video'), null,
-                'precondition: the selector Reddit used to have matches nothing');
+            assertEqual(document.querySelector('shreddit-player video'), null, 'precondition');
             assertEqual(window.BB.Site.createPlayerLocator('reddit')(), video);
         } finally { host.remove(); }
     });
@@ -245,73 +244,33 @@ suite('player: Reddit, whose video is inside a shadow root', () => {
         }
     });
 
-    test('REGRESSION: a reset while loading is put back, because the root is listened in', async () => {
-        // Media events are not composed, so a capture listener on document
-        // never heard this video's ratechange and the rate was not kept.
-        const { host, video } = redditPlayer();
-        const player = window.BB.Player.createPlayer({
-            getVideoElement: window.BB.Site.createPlayerLocator('reddit'), notify: () => {},
-        });
-        player.attach();
-        try {
-            player.setRate(2, { announce: false });
-            video.dispatchEvent(new Event('loadstart'));
-            await wait(20);
-            video.playbackRate = 1;
-            await wait(20);
-            assertEqual(video.playbackRate, 2);
-        } finally {
-            player.detach();
-            host.remove();
-        }
-    });
+    test('REGRESSION: a reset while loading is put back, because the root is listened in', () => onReddit(async (player, video) => {
+        // Media events are not composed: a capture listener on document never heard this ratechange.
+        player.setRate(2, { announce: false });
+        video.dispatchEvent(new Event('loadstart'));
+        await wait(20);
+        video.playbackRate = 1;
+        await wait(20);
+        assertEqual(video.playbackRate, 2);
+    }));
 
-    test('a change made in Reddit\'s own speed menu is adopted', async () => {
-        const { host, video } = redditPlayer();
-        const player = window.BB.Player.createPlayer({
-            getVideoElement: window.BB.Site.createPlayerLocator('reddit'), notify: () => {},
-        });
-        player.attach();
-        try {
-            player.setRate(2, { announce: false });
-            video.playbackRate = 0.75;
-            await wait(20);
-            assertEqual(player.desiredRate, 0.75);
-        } finally {
-            player.detach();
-            host.remove();
-        }
-    });
+    test('a change made in Reddit\'s own speed menu is adopted', () => onReddit(async (player, video) => {
+        player.setRate(2, { announce: false });
+        video.playbackRate = 0.75;
+        await wait(20);
+        assertEqual(player.desiredRate, 0.75);
+    }));
 });
 
 suite('player: skipping', () => {
-    test('skips forward and back by the requested amount', async () => {
-        const h = harness();
-        try {
-            h.player.skip(5);
-            assertEqual(h.video.currentTime, 5);
-            h.player.skip(-3);
-            assertEqual(h.video.currentTime, 2);
-        } finally { h.destroy(); }
-    });
-
-    test('never seeks before the start', async () => {
-        const h = harness();
-        try {
-            h.player.skip(-9);
-            assertEqual(h.video.currentTime, 0);
-        } finally { h.destroy(); }
-    });
-
-    test('an unknown duration does not poison currentTime', async () => {
-        // duration is NaN until metadata loads, and Math.min(x, NaN) is NaN —
-        // which the old code wrote straight into currentTime.
-        const h = harness();
-        try {
-            assert(Number.isNaN(h.video.duration), 'precondition: duration is not known yet');
-            h.player.skip(7);
-            assert(!Number.isNaN(h.video.currentTime), 'currentTime must stay a number');
-            assertEqual(h.video.currentTime, 7);
-        } finally { h.destroy(); }
-    });
+    test('skips by the amount asked, never before the start, before the duration is known', () => using((h) => {
+        // duration is NaN until metadata loads, and Math.min(x, NaN) once went into currentTime.
+        assert(Number.isNaN(h.video.duration), 'precondition');
+        h.player.skip(5);
+        assertEqual(h.video.currentTime, 5);
+        h.player.skip(-3);
+        assertEqual(h.video.currentTime, 2);
+        h.player.skip(-9);
+        assertEqual(h.video.currentTime, 0);
+    }));
 });
