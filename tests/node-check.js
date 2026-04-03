@@ -865,15 +865,17 @@ const now = Date.parse('2026-08-30T12:00:00Z');
 const ago = (ms) => Time.relativeTime(now - ms, now);
 
 section('relative time');
-check('under a minute is "just now"', () => eq(ago(59 * 1000), 'just now'));
-check('rounds down (13 days is 1 week)', () => eq(ago(13 * 864e5), '1 week ago'));
-check('singular', () => eq(ago(864e5), '1 day ago'));
-check('plural', () => eq(ago(3 * 864e5), '3 days ago'));
-check('a future date is not a negative age', () => eq(Time.relativeTime(now + 5e6, now), 'just now'));
-check('a missing date gets no label', () => {
-    eq(Time.relativeTime(0, now), '', 'zero');
-    eq(Time.relativeTime(undefined, now), '', 'undefined');
-    eq(Time.relativeTime(null, now), '', 'null');
+check('rounds down, so a card never ages a video past what it is', () => {
+    eq([59 * 1000, 6 * 864e5, 13 * 864e5].map(ago), ['just now', '6 days ago', '1 week ago']);
+});
+check('singular and plural', () => {
+    eq([6e4, 2 * 6e4, 36e5, 864e5, 3 * 864e5, 31536e6].map(ago),
+        ['1 minute ago', '2 minutes ago', '1 hour ago', '1 day ago', '3 days ago', '1 year ago']);
+});
+check('a future date is not a negative age, and a missing one gets no label', () => {
+    // Clock skew against YouTube's feed is ordinary; a feed entry with no date is stored as 0.
+    eq(Time.relativeTime(now + 5e6, now), 'just now');
+    eq([0, undefined, null].map((at) => Time.relativeTime(at, now)), ['', '', '']);
 });
 check('formatTime still works', () => {
     eq(Time.formatTime(65), '1:05');
@@ -4824,7 +4826,7 @@ const storedDays = () => Object.keys(store)
         reset({ on: false });
         await Activity.tick(tabAt('https://github.com/a', 'A'), T0);
         await Activity.tick(tabAt('https://github.com/a', 'A'), T0 + secs(60));
-        eq(storedDays(), []);
+        eq([storedDays(), store[Activity.DAYS_KEY]], [[], undefined]);
     });
 
     await checkAsync('the first tick records nothing', async () => {
@@ -4890,6 +4892,22 @@ const storedDays = () => Object.keys(store)
         eq(dayRecord().total, 30, 'the gap is credited, not thrown away with the worker');
     });
 
+    await checkAsync('where there is session storage the marker is kept there, not written to disk each tick', async () => {
+        const session = {};
+        global.chrome.storage.session = {
+            get: (keys, cb) => cb(Object.fromEntries(keys.filter((k) => k in session).map((k) => [k, session[k]]))),
+            set: (values, cb) => { Object.assign(session, values); cb(); },
+        };
+        try {
+            reset();
+            await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+            eq(session[Activity.LAST_KEY].host, 'a.test');
+            eq(store[Activity.LAST_KEY], undefined);
+        } finally {
+            delete global.chrome.storage.session;
+        }
+    });
+
     await checkAsync('the longest page accumulates across ticks', async () => {
         reset();
         await Activity.tick(tabAt('https://a.test/x', 'Short page'), T0);
@@ -4897,8 +4915,7 @@ const storedDays = () => Object.keys(store)
         await Activity.tick(tabAt('https://b.test/y', 'Long page'), T0 + secs(40));
         await Activity.tick(tabAt('https://c.test/z', 'Another'), T0 + secs(70));
         const day = dayRecord();
-        eq(day.top.title, 'Long page');
-        eq(day.top.seconds, 60);
+        eq([day.top.title, day.top.host, day.top.seconds], ['Long page', 'b.test', 60]);
         eq(day.total, 70);
     });
 
@@ -5158,12 +5175,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
 
     section('activity — formatting');
-    check('human() reads naturally', () => {
-        eq(Activity.human(0), '0m');
-        eq(Activity.human(45), '45s');
-        eq(Activity.human(90), '2m');
-        eq(Activity.human(3600), '1h');
-        eq(Activity.human(3720), '1h 2m');
+    check('human() reads the way a person would say it', () => {
+        eq([0, 45, 90, 3600, 3720, 7 * 3600 + 1800].map((s) => Activity.human(s)), ['0m', '45s', '2m', '1h', '1h 2m', '7h 30m']);
     });
 
     section('feed — whose channel is this page?');
