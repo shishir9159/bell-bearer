@@ -5680,6 +5680,34 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(claimed({}, press('NumpadAdd', { key: '+' })), ['speed-reset']);
     });
 
+    check('each default combination is claimed by exactly one binding', () => {
+        for (const event of [
+            press('Digit3', { alt: true }), press('Digit3', { shift: true, key: '#' }), press('Digit3', { ctrl: true, shift: true, key: '#' }),
+            press('Period', { shift: true, key: '>' }), press('Comma', { shift: true, key: '<' }), press('Equal', { shift: true, key: '+' }),
+            press('KeyB', { ctrl: true, key: 'b' }), press('KeyS', { ctrl: true, shift: true, key: 'S' }),
+        ]) {
+            eq(claimed({}, event).length, 1, `${event.code} claimed by ${claimed({}, event)}`);
+        }
+    });
+
+    check('digits: Alt skips forward, Shift back, Ctrl+Shift boosts; the numpad counts and 0 does not', () => {
+        eq(claimed({}, press('Digit5', { shift: true, key: '%' })), ['skip-backward']);
+        eq(claimed({}, press('Digit4', { ctrl: true, shift: true, key: '$' })), ['speed-boost']);
+        eq(claimed({}, press('Numpad7', { alt: true })), ['skip-forward']);
+        eq(claimed({}, press('Digit0', { alt: true })), []);
+        eq([{ code: 'Digit1' }, { code: 'Numpad9' }, { code: 'Digit0' }, { code: 'KeyA' }, {}].map((event) => Shortcuts.digitOf(event)),
+            [1, 9, null, null, null]);
+    });
+
+    check('speed keys match by physical key as well as character; Command and auto-repeat are never ours', () => {
+        // On layouts where Shift+. is not ">", the code still identifies it.
+        eq(claimed({}, press('Period', { shift: true, key: ':' })), ['speed-up']);
+        eq(claimed({}, press('Comma', { shift: true, key: '<' })), ['speed-down']);
+        eq(claimed({}, press('Period', { shift: true, meta: true, key: '>' })), []);
+        eq(claimed({}, press('KeyB', { meta: true, key: 'b' })), []);
+        eq(claimed({}, press('KeyB', { ctrl: true, key: 'b', repeat: true })), [], 'a held key restarted a recording');
+    });
+
     check('no two default shortcuts share keys', () => {
         const seen = new Map();
         for (const binding of Keybindings.BINDINGS) {
