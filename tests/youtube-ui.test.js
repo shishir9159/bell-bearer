@@ -91,136 +91,58 @@ suite('youtube drawer entry', () => {
     });
 });
 
-/**
- * Which header the playlist "Follow" button goes into.
- *
- * YouTube leaves a fully built but zero-sized `ytd-playlist-panel-renderer`
- * on every /playlist page, and renders more than one flexible-actions row.
- * Matching only `document.querySelector` per selector meant that whenever a
- * dead copy came first in the document, the selector was abandoned and the
- * live header after it was never found — so the button showed up on whichever
- * playlists happened to order the DOM favourably, and on no others.
- */
+// YouTube leaves a zero-sized playlist panel on every /playlist page, and the
+// first copy of a selector in the document was once the only one tried — so
+// the Follow button showed up only where the DOM happened to order well.
 suite('youtube playlist header', () => {
-    let host = null;
-
-    function stage(html) {
-        host = document.createElement('div');
-        host.innerHTML = html;
-        document.body.appendChild(host);
-        return host;
-    }
-
-    function teardown() {
-        if (host) host.remove();
-        host = null;
-    }
+    const firstMatch = (html, selectors) => staged(html, () => YouTubeUi().firstMatch(selectors));
 
     test('a hidden first match does not veto a visible later one', () => {
-        // The shape of the bug: same selector, dead copy first.
-        stage(`
+        const found = firstMatch(`
             <yt-flexible-actions-view-model id="dead" style="display:none"></yt-flexible-actions-view-model>
-            <yt-flexible-actions-view-model id="live" style="display:block;width:200px;height:40px"></yt-flexible-actions-view-model>
-        `);
-        try {
-            const found = YouTubeUi().firstMatch(['yt-flexible-actions-view-model']);
-            assertEqual(found && found.id, 'live');
-        } finally { teardown(); }
+            <yt-flexible-actions-view-model id="live" style="display:block;width:200px;height:40px"></yt-flexible-actions-view-model>`,
+        ['yt-flexible-actions-view-model']);
+        assertEqual(found && found.id, 'live');
     });
 
-    test('a zero-sized node is not a header', () => {
-        stage('<div class="header" style="width:0;height:0"></div>');
-        try {
-            assertEqual(YouTubeUi().firstMatch(['.header']), null);
-        } finally { teardown(); }
-    });
-
-    test('visibility:hidden keeps its box but is still not on screen', () => {
-        stage('<div class="header" style="width:200px;height:40px;visibility:hidden"></div>');
-        try {
-            assertEqual(YouTubeUi().firstMatch(['.header']), null);
-        } finally { teardown(); }
+    test('a zero-sized node, or one with visibility:hidden, is not a header', () => {
+        assertEqual(firstMatch('<div class="header" style="width:0;height:0"></div>', ['.header']), null);
+        assertEqual(firstMatch('<div class="header" style="width:200px;height:40px;visibility:hidden"></div>', ['.header']), null);
     });
 
     test('selectors are tried in order, and an absent one is skipped', () => {
-        stage('<div class="second" style="width:120px;height:20px"></div>');
-        try {
-            const found = YouTubeUi().firstMatch(['.first', '.second']);
-            assertEqual(found && found.className, 'second');
-        } finally { teardown(); }
+        const found = firstMatch('<div class="second" style="width:120px;height:20px"></div>', ['.first', '.second']);
+        assertEqual(found && found.className, 'second');
     });
 });
 
-/**
- * The pouch button beside Subscribe, across an SPA move.
- *
- * YouTube keeps the watch page in the DOM, hidden, when you go from a video to
- * its channel. "There is already a button" used to retire the task with the
- * button stranded in that hidden page, so the channel page had none.
- */
+// YouTube keeps the watch page in the DOM, hidden, on the way to a channel,
+// and "there is already a button" once retired the task with it stranded there.
 suite('youtube pouch button', () => {
-    let host = null;
+    const SUB = '<ytd-subscribe-button-renderer style="display:block;width:90px;height:36px"></ytd-subscribe-button-renderer>';
 
-    function stage(html) {
-        host = document.createElement('div');
-        host.innerHTML = html;
-        document.body.appendChild(host);
-    }
-
-    function teardown() {
-        if (host) host.remove();
-        host = null;
-    }
-
-    function makeShownUi() {
-        return YouTubeUi().createYouTubeUi({
-            watcher: { add() {}, remove() {}, has: () => false, schedule() {}, stop() {} },
-            notify() {},
-            getPouchButtonStyle: () => 'default',
-        });
-    }
-
-    const SUB = '<ytd-subscribe-button-renderer style="display:block;width:90px;height:36px">' +
-        '</ytd-subscribe-button-renderer>';
-
-    test('a button stranded in a hidden page moves to the Subscribe on screen', () => {
-        stage(`<div id="watch" style="display:none"><div>${SUB}</div></div>` +
-            `<div id="channel"><div>${SUB}</div></div>`);
-        try {
-            const ui = makeShownUi();
+    test('a button stranded in a hidden page moves to the Subscribe on screen', () => staged(
+        `<div id="watch"><div>${SUB}</div></div><div id="channel" style="display:none"><div>${SUB}</div></div>`, (host) => {
+            const ui = makeUi('default');
             const { BUTTON_ID } = YouTubeUi();
-
-            // Placed on the watch page while it was the one on screen.
-            host.querySelector('#watch').style.display = '';
-            host.querySelector('#channel').style.display = 'none';
             assertEqual(ui.injectPouchButton('/watch'), true);
             assert(host.querySelector('#watch #' + BUTTON_ID), 'placed on the watch page');
 
-            // Off to the channel, which YouTube shows beside the hidden video.
             host.querySelector('#watch').style.display = 'none';
             host.querySelector('#channel').style.display = '';
             assertEqual(ui.injectPouchButton('/@someone'), true);
             assert(host.querySelector('#channel #' + BUTTON_ID), 'moved to the channel page');
             assertEqual(document.querySelectorAll('#' + BUTTON_ID).length, 1, 'moved, not duplicated');
-        } finally { teardown(); }
-    });
+        }));
 
-    test('a page with no Subscribe lets the task go at once', () => {
-        stage(SUB);
-        try {
-            assertEqual(makeShownUi().injectPouchButton('/'), true);
-            assertEqual(document.getElementById(YouTubeUi().BUTTON_ID), null,
-                'nothing placed on the home page');
-        } finally { teardown(); }
-    });
+    test('a page with no Subscribe lets the task go at once', () => staged(SUB, () => {
+        assertEqual(makeUi('default').injectPouchButton('/'), true);
+        assertEqual(document.getElementById(YouTubeUi().BUTTON_ID), null, 'placed on the home page');
+    }));
 
     test('only home, the feeds, search and playlists go without Subscribe', () => {
         const { hasSubscribe } = YouTubeUi();
-        for (const path of ['/', '/feed/subscriptions', '/results', '/playlist']) {
-            assertEqual(hasSubscribe(path), false, path);
-        }
-        for (const path of ['/watch', '/@someone', '/channel/UC123', '/shorts/abc', '/playlists-fan']) {
-            assertEqual(hasSubscribe(path), true, path);
-        }
+        for (const path of ['/', '/feed/subscriptions', '/results', '/playlist']) assertEqual(hasSubscribe(path), false, path);
+        for (const path of ['/watch', '/@someone', '/channel/UC123', '/shorts/abc', '/playlists-fan']) assertEqual(hasSubscribe(path), true, path);
     });
 });
