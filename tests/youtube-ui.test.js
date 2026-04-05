@@ -1,154 +1,90 @@
 /**
- * Where Bell Bearer's row lands in YouTube's left drawer.
- *
- * This is the one injection whose *position* is the feature: the entry used to
- * be prepended to `#sections`, which put a bare div above YouTube's whole nav
- * rather than in it. It now belongs third in the first section, after Home and
- * Shorts, and that is easy to lose again the next time this file is touched.
- *
- * The tests call `injectGuideEntry` straight off the factory rather than going
- * through `install()`. The watcher only runs its tasks on an animation frame,
- * and a background tab may not get one for seconds at a time.
+ * Where Bell Bearer's own controls land on YouTube. The injectors are called
+ * directly rather than through install(), whose watcher only runs on an
+ * animation frame that a hidden tab may not get.
  */
 
 const YouTubeUi = () => window.BB.YouTubeUi;
+const NO_WATCHER = { add() {}, remove() {}, has: () => false, schedule() {}, stop() {} };
 
-/** A stand-in drawer: `count` items in the first section, one in a second. */
-function drawer(count) {
+/** A fresh factory: each one carries its own retry counter. */
+const makeUi = (pouchStyle = 'hidden') => YouTubeUi().createYouTubeUi({
+    watcher: NO_WATCHER, notify() {}, getPouchButtonStyle: () => pouchStyle,
+});
+
+/** Markup on the page for the length of `run`. */
+function staged(html, run) {
     const host = document.createElement('div');
-    host.id = 'bb-test-guide';
+    host.id = 'bb-test-youtube';
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    try {
+        return run(host);
+    } finally {
+        host.remove();
+    }
+}
 
-    const first = ['Home', 'Shorts', 'Subscriptions', 'You']
-        .slice(0, count)
-        .map((name) => `<ytd-guide-entry-renderer>${name}</ytd-guide-entry-renderer>`)
-        .join('');
-
-    host.innerHTML = `
+// The entry was once prepended to #sections, above YouTube's whole nav
+// rather than in it. It belongs third in the first section.
+suite('youtube drawer entry', () => {
+    /** `count` items in the first section, one in a second. */
+    const drawer = (count) => `
         <ytd-guide-renderer>
             <div id="sections">
-                <ytd-guide-section-renderer><div id="items">${first}</div></ytd-guide-section-renderer>
+                <ytd-guide-section-renderer><div id="items">${['Home', 'Shorts', 'Subscriptions', 'You'].slice(0, count)
+                    .map((name) => `<ytd-guide-entry-renderer>${name}</ytd-guide-entry-renderer>`).join('')}</div></ytd-guide-section-renderer>
                 <ytd-guide-section-renderer><div id="items">
                     <ytd-guide-entry-renderer>History</ytd-guide-entry-renderer>
                 </div></ytd-guide-section-renderer>
             </div>
         </ytd-guide-renderer>`;
+    const firstSection = (host) => host.querySelector('#sections ytd-guide-section-renderer #items').children;
+    const labels = (host) => [...firstSection(host)].map((el) => el.id || el.textContent.trim());
+    const entries = () => document.querySelectorAll('#bb-guide-entry').length;
 
-    document.body.appendChild(host);
-    return host;
-}
+    test('lands third, as an item of the first section, once however often it runs', () => staged(drawer(3), (host) => {
+        const ui = makeUi();
+        ui.injectGuideEntry();
+        assertDeepEqual(labels(host), ['Home', 'Shorts', 'bb-guide-entry', 'Subscriptions']);
+        assertEqual(ui.injectGuideEntry(), true);
+        assertEqual(entries(), 1);
+    }));
 
-function teardown() {
-    const host = document.getElementById('bb-test-guide');
-    if (host) host.remove();
-}
+    test('reads "Pouch", under the extension\'s own icon, in YouTube\'s own styles', () => staged(drawer(3), () => {
+        makeUi().injectGuideEntry();
+        const entry = document.getElementById('bb-guide-entry');
+        // Every row in that drawer is named after where it goes.
+        assertEqual(entry.textContent.trim(), 'Pouch');
+        const icon = entry.querySelector('.bb-guide-ico img');
+        assert(icon && /icons\/icon\d*\.png$/.test(icon.getAttribute('src') || ''),
+            'the Bell Bearer icon, from icons/ — which is why that folder is web-accessible');
+        assert(entry.querySelector('.guide-icon.style-scope.ytd-guide-entry-renderer'), 'the icon column Home and Shorts use');
+        assert(entry.querySelector('.title.style-scope.ytd-guide-entry-renderer'), 'and their label');
+    }));
 
-/** A fresh factory: each one carries its own retry counter. */
-function makeUi() {
-    return YouTubeUi().createYouTubeUi({
-        watcher: { add() {}, remove() {}, has: () => false, schedule() {}, stop() {} },
-        notify() {},
-        getPouchButtonStyle: () => 'hidden',
-    });
-}
+    test('appears at once on a half-built drawer, and slides back to third', () => staged(drawer(1), (host) => {
+        // YouTube streams the drawer. Waiting for the third slot made the row arrive visibly late.
+        const ui = makeUi();
+        assertEqual(ui.injectGuideEntry(), false, 'placed, but still watching');
+        assertDeepEqual(labels(host), ['Home', 'bb-guide-entry']);
 
-/** The first section's items, with our entry named rather than shown as HTML. */
-function firstSection() {
-    return [...document.querySelectorAll('#bb-test-guide #sections ytd-guide-section-renderer')][0]
-        .querySelector('#items').children;
-}
+        firstSection(host)[0].insertAdjacentHTML('afterend',
+            '<ytd-guide-entry-renderer>Shorts</ytd-guide-entry-renderer>' +
+            '<ytd-guide-entry-renderer>Subscriptions</ytd-guide-entry-renderer>');
+        assertEqual(ui.injectGuideEntry(), true, 'the drawer is full, so the task is done');
+        assertDeepEqual(labels(host), ['Home', 'Shorts', 'bb-guide-entry', 'Subscriptions']);
+        assertEqual(entries(), 1, 'moved, not duplicated');
+    }));
 
-const labels = () => [...firstSection()].map((el) => el.id || el.textContent.trim());
-
-suite('youtube drawer entry', () => {
-
-    test('lands third, after Home and Shorts', () => {
-        drawer(3);
-        try {
-            makeUi().injectGuideEntry();
-            assertDeepEqual(labels(),
-                ['Home', 'Shorts', 'bb-guide-entry', 'Subscriptions']);
-        } finally { teardown(); }
-    });
-
-    test('goes in the first section, not above the whole drawer', () => {
-        drawer(3);
-        try {
-            makeUi().injectGuideEntry();
-            const entry = document.getElementById('bb-guide-entry');
-            assert(entry.parentElement.id === 'items',
-                'the entry is an item in the list, not a sibling of the sections');
-        } finally { teardown(); }
-    });
-
-    test('reads "Pouch", under the extension\'s own icon', () => {
-        drawer(3);
-        try {
-            makeUi().injectGuideEntry();
-            const entry = document.getElementById('bb-guide-entry');
-            // Every other row in that drawer is named after where it goes,
-            // not after what clicking it does, so this one is too.
-            assertEqual(entry.textContent.trim(), 'Pouch');
-
-            const icon = entry.querySelector('.bb-guide-ico img');
-            assert(icon, 'the row wears the Bell Bearer icon, not a generic glyph');
-            assert(/icons\/icon\d*\.png$/.test(icon.getAttribute('src') || ''),
-                'and it comes from icons/, which is why that folder is web-accessible');
-
-            // The row borrows YouTube's scope classes, so the rules that size
-            // its icon column and set the weight of its labels reach ours too.
-            assert(entry.querySelector('.guide-icon.style-scope.ytd-guide-entry-renderer'),
-                'the icon column is styled by the rule Home and Shorts use');
-            assert(entry.querySelector('.title.style-scope.ytd-guide-entry-renderer'),
-                'and so is the label');
-        } finally { teardown(); }
-    });
-
-    test('appears at once on a half-built drawer, and slides back to third', () => {
-        // YouTube streams the drawer; on the first pass only Home may exist.
-        // Waiting for the third slot to exist before drawing anything is what
-        // made the row arrive visibly late, so it goes in wherever it fits and
-        // is moved as the rest turn up.
-        drawer(1);
-        try {
-            const ui = makeUi();
-            assertEqual(ui.injectGuideEntry(), false, 'placed, but still watching');
-            assertDeepEqual(labels(), ['Home', 'bb-guide-entry'],
-                'it is on screen from the first pass');
-
-            // The rest arrive, around it.
-            firstSection()[0].insertAdjacentHTML('afterend',
-                '<ytd-guide-entry-renderer>Shorts</ytd-guide-entry-renderer>' +
-                '<ytd-guide-entry-renderer>Subscriptions</ytd-guide-entry-renderer>');
-            assertEqual(ui.injectGuideEntry(), true, 'the drawer is full, so the task is done');
-            assertDeepEqual(labels(), ['Home', 'Shorts', 'bb-guide-entry', 'Subscriptions']);
-            assertEqual(document.querySelectorAll('#bb-guide-entry').length, 1,
-                'moved, not duplicated');
-        } finally { teardown(); }
-    });
-
-    test('stops watching a drawer that never reaches three', () => {
-        // Signed out, or with Shorts turned off. The row is up from the first
-        // pass either way; this is only about when the task lets go.
-        drawer(2);
-        try {
-            const ui = makeUi();
-            let result = false;
-            for (let i = 0; i < 20 && result === false; i += 1) result = ui.injectGuideEntry();
-
-            assertEqual(result, true, 'it must stop watching eventually');
-            assertDeepEqual(labels(), ['Home', 'Shorts', 'bb-guide-entry']);
-        } finally { teardown(); }
-    });
-
-    test('a second pass does not add a duplicate', () => {
-        drawer(3);
-        try {
-            const ui = makeUi();
-            ui.injectGuideEntry();
-            assertEqual(ui.injectGuideEntry(), true);
-            assertEqual(document.querySelectorAll('#bb-guide-entry').length, 1);
-        } finally { teardown(); }
-    });
+    test('stops watching a drawer that never reaches three', () => staged(drawer(2), (host) => {
+        // Signed out, or with Shorts turned off.
+        const ui = makeUi();
+        let result = false;
+        for (let i = 0; i < 20 && result === false; i += 1) result = ui.injectGuideEntry();
+        assertEqual(result, true, 'it never stopped watching');
+        assertDeepEqual(labels(host), ['Home', 'Shorts', 'bb-guide-entry']);
+    }));
 
     test('no drawer on the page yet is a retry, not a crash', () => {
         assertEqual(makeUi().injectGuideEntry(), false);

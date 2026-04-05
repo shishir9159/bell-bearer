@@ -6,8 +6,8 @@
  * watcher only runs on an animation frame that a hidden tab may not get.
  */
 
-// Wrapped: a bare `const makeUi` beside youtube-ui.test.js's `function makeUi`
-// is a SyntaxError that drops this whole file without failing a test.
+// Wrapped: a second top-level `makeUi` beside youtube-ui.test.js's is a
+// SyntaxError that drops this whole file without failing a test.
 (function () {
     'use strict';
 
