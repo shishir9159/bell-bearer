@@ -1,64 +1,65 @@
 /**
- * Specs for the keyboard bindings.
- *
- * The interesting cases are the ones that used to misfire: modifier
- * combinations matching two bindings at once, and shortcuts firing while the
- * user was typing — which matters a lot more now that the content script runs
- * on every site rather than only YouTube.
+ * The shortcut dispatcher on the real window: the typing guard, Shorts
+ * seeking, double taps, and pasting a copied link. Which binding claims a
+ * key is pure logic, in node-check.js.
  */
 
 const K = window.BB.Shortcuts;
 
-suite('shortcuts: typing guard', () => {
-    function eventOn(node) {
-        return { target: node, composedPath: () => path(node) };
-    }
-    function path(node) {
-        const out = [];
-        for (let el = node; el; el = el.parentElement) out.push(el);
-        out.push(document.body);
-        return out;
-    }
+/** A keydown on `target`, returned so a spec can read defaultPrevented. */
+function keydown(code, init = {}, target = document.body) {
+    const event = new KeyboardEvent('keydown', { code, key: code, bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(event);
+    return event;
+}
 
-    function withElement(html, run) {
+/** A textarea on the page for the length of `run`. */
+async function withTextarea(run) {
+    const box = document.createElement('textarea');
+    document.body.appendChild(box);
+    try {
+        return await run(box);
+    } finally {
+        box.remove();
+    }
+}
+
+suite('shortcuts: typing guard', () => {
+    const eventOn = (node) => ({
+        target: node,
+        composedPath: () => {
+            const out = [];
+            for (let el = node; el; el = el.parentElement) out.push(el);
+            return [...out, document.body];
+        },
+    });
+    const typingIn = (html, pick = (el) => el) => {
         const host = document.createElement('div');
         host.style.display = 'none';
         host.innerHTML = html;
         document.body.appendChild(host);
         try {
-            run(host.firstElementChild);
+            return K.isTypingTarget(eventOn(pick(host.firstElementChild)));
         } finally {
             host.remove();
         }
-    }
+    };
 
-    test('typing in a text field is never hijacked', () => {
-        withElement('<input type="text">', (el) => assert(K.isTypingTarget(eventOn(el))));
-        withElement('<textarea></textarea>', (el) => assert(K.isTypingTarget(eventOn(el))));
+    test('a text field, an editable, an ARIA textbox, or anything inside one is typing', () => {
+        assert(typingIn('<input type="text">'));
+        assert(typingIn('<textarea></textarea>'));
+        assert(typingIn('<div contenteditable="true"></div>'));
+        // YouTube's comment and search boxes.
+        assert(typingIn('<div role="textbox"></div>'));
+        assert(typingIn('<div contenteditable="true"><span><b>x</b></span></div>', (el) => el.querySelector('b')));
     });
 
-    test('a contenteditable counts as typing', () => {
-        withElement('<div contenteditable="true"></div>', (el) => assert(K.isTypingTarget(eventOn(el))));
-    });
-
-    test('an ARIA textbox counts as typing', () => {
-        // YouTube's comment and search boxes are divs with role="textbox".
-        withElement('<div role="textbox"></div>', (el) => assert(K.isTypingTarget(eventOn(el))));
-    });
-
-    test('a nested element inside a text field still counts', () => {
-        withElement('<div contenteditable="true"><span><b>x</b></span></div>', (el) => {
-            assert(K.isTypingTarget(eventOn(el.querySelector('b'))));
-        });
-    });
-
-    test('ordinary page content does not count', () => {
-        withElement('<div><p>hello</p></div>', (el) => assert(!K.isTypingTarget(eventOn(el))));
+    test('ordinary page content is not', () => {
+        assert(!typingIn('<div><p>hello</p></div>'));
     });
 });
 
 suite('shortcuts: skipping in shorts', () => {
-    /** The real dispatcher, on the real window, with the page's answers faked. */
     function withDispatcher({ shortsSeek = true, onShorts = true } = {}, run) {
         const skips = [];
         const uninstall = K.install({
@@ -75,16 +76,10 @@ suite('shortcuts: skipping in shorts', () => {
         }
     }
 
-    const press = (code, target = document.body) => {
-        const event = new KeyboardEvent('keydown', { code, key: code, bubbles: true, cancelable: true });
-        target.dispatchEvent(event);
-        return event;
-    };
-
     test('the arrows skip back and forward on a Shorts page', () => {
         withDispatcher({}, (skips) => {
-            const forward = press('ArrowRight');
-            press('ArrowLeft');
+            const forward = keydown('ArrowRight');
+            keydown('ArrowLeft');
             assertDeepEqual(skips, [1, -1]);
             assert(forward.defaultPrevented, 'the page also acted on the key');
         });
@@ -92,25 +87,21 @@ suite('shortcuts: skipping in shorts', () => {
 
     test('everywhere else, and with the setting off, the arrows are the page’s', () => {
         withDispatcher({ onShorts: false }, (skips) => {
-            assert(!press('ArrowRight').defaultPrevented, 'an arrow was taken off a page that is not Shorts');
+            assert(!keydown('ArrowRight').defaultPrevented, 'taken off a page that is not Shorts');
             assertDeepEqual(skips, []);
         });
         withDispatcher({ shortsSeek: false }, (skips) => {
-            assert(!press('ArrowLeft').defaultPrevented);
+            assert(!keydown('ArrowLeft').defaultPrevented);
             assertDeepEqual(skips, []);
         });
     });
 
-    test('an arrow typed in a comment box moves the caret, not the short', () => {
-        const box = document.createElement('textarea');
-        document.body.appendChild(box);
-        try {
-            withDispatcher({}, (skips) => {
-                press('ArrowLeft', box);
-                assertDeepEqual(skips, []);
-            });
-        } finally { box.remove(); }
-    });
+    test('an arrow typed in a comment box moves the caret, not the short', () => withTextarea((box) => {
+        withDispatcher({}, (skips) => {
+            keydown('ArrowLeft', {}, box);
+            assertDeepEqual(skips, []);
+        });
+    }));
 
     test('the short skipped is the active one, not a preloaded neighbour', () => {
         const host = document.createElement('div');
@@ -125,7 +116,7 @@ suite('shortcuts: skipping in shorts', () => {
 });
 
 suite('shortcuts: double tap', () => {
-    /** The real dispatcher, on the real window, with a clock the spec moves by hand. */
+    /** The dispatcher with a clock the spec moves by hand. */
     function withDispatcher(run) {
         const copies = [];
         const clock = { at: 1000 };
@@ -142,23 +133,15 @@ suite('shortcuts: double tap', () => {
         }
     }
 
-    const press = (code, init = {}, target = document.body) => {
-        const event = new KeyboardEvent('keydown', {
-            code, key: code.replace(/^Key/, '').toLowerCase(), bubbles: true, cancelable: true, ...init,
-        });
-        target.dispatchEvent(event);
-        return event;
-    };
+    const press = (code, init = {}, target) => keydown(code, { key: code.replace(/^Key/, '').toLowerCase(), ...init }, target);
 
     test('y twice copies, and only the second press is taken from the page', () => {
         withDispatcher((copies, clock) => {
-            const first = press('KeyY');
+            assert(!press('KeyY').defaultPrevented, 'a single y was taken off the page');
             assertDeepEqual(copies, []);
-            assert(!first.defaultPrevented, 'a single y was taken off the page');
             clock.at += 200;
-            const second = press('KeyY');
+            assert(press('KeyY').defaultPrevented, 'the page also acted on the second press');
             assertEqual(copies.length, 1);
-            assert(second.defaultPrevented, 'the page also acted on the second press');
         });
     });
 
@@ -183,29 +166,13 @@ suite('shortcuts: double tap', () => {
         });
     });
 
-    test('another key between the two ends the wait', () => {
+    test('another key between the two ends the wait, but a modifier does not', () => {
         withDispatcher((copies) => {
             press('KeyY');
             press('KeyA');
             assert(!press('KeyY').defaultPrevented);
             assertDeepEqual(copies, []);
         });
-    });
-
-    test('a held key is one press, however long it repeats', () => {
-        withDispatcher((copies, clock) => {
-            press('KeyY');
-            for (let i = 0; i < 5; i++) { clock.at += 30; press('KeyY', { repeat: true }); }
-            assertDeepEqual(copies, []);
-            // Let go and pressed again at once: the hold was not half of a
-            // double tap, so this is a first press.
-            clock.at += 30;
-            assert(!press('KeyY').defaultPrevented);
-            assertDeepEqual(copies, []);
-        });
-    });
-
-    test('a modifier going down in between is not another key', () => {
         withDispatcher((copies) => {
             press('KeyY');
             press('ShiftLeft', { key: 'Shift', shiftKey: true });
@@ -214,21 +181,29 @@ suite('shortcuts: double tap', () => {
         });
     });
 
-    test('y y typed into a field is two letters, and never half of a tap on the page', () => {
-        const box = document.createElement('textarea');
-        document.body.appendChild(box);
-        try {
-            withDispatcher((copies) => {
-                press('KeyY', {}, box);
-                press('KeyY', {}, box);
-                assertDeepEqual(copies, []);
-                press('KeyY');
-                press('KeyY', {}, box);
-                press('KeyY');
-                assertDeepEqual(copies, [], 'a y in the field counted towards one on the page');
-            });
-        } finally { box.remove(); }
+    test('a held key is one press, however long it repeats', () => {
+        withDispatcher((copies, clock) => {
+            press('KeyY');
+            for (let i = 0; i < 5; i++) { clock.at += 30; press('KeyY', { repeat: true }); }
+            assertDeepEqual(copies, []);
+            // Let go and pressed again at once: the hold was not half a double tap.
+            clock.at += 30;
+            assert(!press('KeyY').defaultPrevented);
+            assertDeepEqual(copies, []);
+        });
     });
+
+    test('y y typed into a field is two letters, and never half of a tap on the page', () => withTextarea((box) => {
+        withDispatcher((copies) => {
+            press('KeyY', {}, box);
+            press('KeyY', {}, box);
+            assertDeepEqual(copies, []);
+            press('KeyY');
+            press('KeyY', {}, box);
+            press('KeyY');
+            assertDeepEqual(copies, [], 'a y in the field counted towards one on the page');
+        });
+    }));
 });
 
 suite('shortcuts: y y on a video', () => {
@@ -238,35 +213,32 @@ suite('shortcuts: y y on a video', () => {
         getChannelInfo: () => ({ channelName: 'Somebody' }),
     };
     const watch = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+    const markdownOn = (site, extra) => window.BB.Markdown.createMarkdown({ site, pageInfo, ...extra });
 
     test('the link opens at the second it is given, and at the start given none', () => {
-        const markdown = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo });
+        const markdown = markdownOn('youtube');
         assertEqual(markdown.pageLink(83).markdown, `[A \\[live\\] set by Somebody](${watch}&t=83s)`);
         assertEqual(markdown.pageLink().markdown, `[A \\[live\\] set by Somebody](${watch})`);
     });
 
     test('the channel is named after "by" until settings ask for the title alone, and the switch is followed at once', () => {
         const settings = { youtubeLinkChannel: true };
-        const markdown = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo, getSettings: () => settings });
+        const markdown = markdownOn('youtube', { getSettings: () => settings });
         assertEqual(markdown.pageLink().text, `A [live] set by Somebody ${watch}`);
         settings.youtubeLinkChannel = false;
         assertDeepEqual(markdown.pageLink(), { markdown: `[A \\[live\\] set](${watch})`, text: `A [live] set ${watch}` });
     });
 
     test('a page that is not a video copies as itself, whatever the second', () => {
-        const home = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo: { ...pageInfo, getVideoId: () => null } });
-        const elsewhere = window.BB.Markdown.createMarkdown({ site: 'other', pageInfo });
-        for (const markdown of [home, elsewhere]) {
+        for (const markdown of [markdownOn('youtube', { pageInfo: { ...pageInfo, getVideoId: () => null } }), markdownOn('other')]) {
             assertDeepEqual(markdown.pageLink(83), markdown.pageLink());
             assert(markdown.pageLink(83).markdown.endsWith(`(${location.href})`), 'not this page');
         }
     });
 
     test('as plain text it is the same link, the title and then the address', () => {
-        const video = window.BB.Markdown.createMarkdown({ site: 'youtube', pageInfo });
-        assertEqual(video.pageLink(83).text, `A [live] set by Somebody ${watch}&t=83s`);
-        const elsewhere = window.BB.Markdown.createMarkdown({ site: 'other', pageInfo });
-        assertEqual(elsewhere.pageLink().text, `${document.title} ${location.href}`);
+        assertEqual(markdownOn('youtube').pageLink(83).text, `A [live] set by Somebody ${watch}&t=83s`);
+        assertEqual(markdownOn('other').pageLink().text, `${document.title} ${location.href}`);
     });
 
     test('an advert’s clock is never taken for the video’s', () => {
@@ -285,11 +257,9 @@ suite('shortcuts: pasting a copied link', () => {
     const link = { markdown: '[A \\[live\\] set](https://example.com/a)', text: 'A [live] set https://example.com/a' };
 
     /**
-     * The real listeners on the real window, a clock the spec moves by hand,
-     * and a field with the caret in it. The clipboard is the spec's to
-     * imagine: a copy "lands" there or not as `lands` says, and each paste
-     * names what it carries. `copy` is where the link was copied: 'here',
-     * 'before' — in another tab, before this one was opened — or nowhere.
+     * The real listeners, a hand-moved clock, and a focused field. A copy
+     * reaches the clipboard as `clipboard.lands` says. `copy` is where the
+     * link was copied: 'here', 'before' (another tab, before this one), or nowhere.
      */
     async function withField(run, { tag = 'textarea', copy = 'here' } = {}) {
         const Dom = window.BB.Dom;
@@ -321,8 +291,6 @@ suite('shortcuts: pasting a copied link', () => {
 
     const press = (init) => window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
     const plainPaste = () => press({ code: 'KeyV', key: 'V', ctrlKey: true, shiftKey: true });
-
-    /** A paste of `text` aimed at `target`, as the browser sends one. */
     const paste = (target, text) => {
         const data = new DataTransfer();
         data.setData('text/plain', text);
@@ -338,8 +306,7 @@ suite('shortcuts: pasting a copied link', () => {
             document.addEventListener('paste', onPaste);
             try {
                 plainPaste();
-                const event = paste(field, link.markdown);
-                assert(event.defaultPrevented, 'the Markdown was left to paste as well');
+                assert(paste(field, link.markdown).defaultPrevented, 'the Markdown was left to paste as well');
                 assertEqual(field.value, link.text);
                 assertDeepEqual(reached, [link.text], 'the page was shown the Markdown too');
             } finally { document.removeEventListener('paste', onPaste); }
@@ -393,9 +360,8 @@ suite('shortcuts: pasting a copied link', () => {
     });
 
     test('REGRESSION: a cancelled paste sent again for the same press is cancelled too, not pasted beside the text', async () => {
-        // Chrome, handed the paste as an edit command with the key, takes
-        // the cancelled command for a key nobody handled and pastes again
-        // through its own binding. The Markdown landed after the text.
+        // Chrome takes the cancelled paste command for a key nobody handled
+        // and pastes again through its own binding.
         await withField(({ field }) => {
             plainPaste();
             paste(field, link.markdown);
