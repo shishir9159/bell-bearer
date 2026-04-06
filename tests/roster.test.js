@@ -1,24 +1,19 @@
 /**
- * The one part of the roster work that needs a real page: which Follow button
- * a job is allowed to click.
- *
- * Everything else — the file format, the pace, the cap, the lease, the plan —
- * is pure and lives in tests/node-check.js. This is here because it guards the
- * worst thing in the feature that could go wrong, and the only one that would
- * go wrong quietly.
- *
- * A profile page on x.com carries more than one Follow button. The account the
- * page is about has one in its header; the "You might like" module in the
- * sidebar has one per suggestion, and the timeline sometimes has more.
- * `[data-testid$="-follow"]` matches every one of them, so taking the first in
- * document order follows whoever X happened to be suggesting — silently,
- * plausibly, and on somebody else's account. The fixture below is built so that
- * the wrong button comes first, which is what makes the test worth having.
+ * The roster on a real page. The file format, pace, cap and plan are pure
+ * and in node-check.js; what is here is which page and which button a job
+ * may act on. A profile on x.com carries several Follow buttons, and
+ * `[data-testid$="-follow"]` matches the sidebar's suggestions first — so the
+ * fixture puts the wrong one first.
  */
 (function () {
     'use strict';
 
     const RosterContent = () => window.BB.RosterContent;
+    const Roster = () => window.BB.Roster;
+    const BAR = () => window.BB.RosterBar.ID;
+    const MARK = () => window.BB.RosterBar.MARK;
+    const bar = () => document.getElementById(BAR());
+    const act = (id) => bar() && bar().querySelector(`[data-bb-roster-act="${id}"]`);
 
     function stage(html) {
         teardown();
@@ -32,6 +27,25 @@
     function teardown() {
         const host = document.getElementById('bb-roster-test');
         if (host) host.remove();
+    }
+
+    const clean = () => Roster().clearJob();
+    /** A spec body that leaves no fixture and no job behind, however it ends. */
+    const cleanly = (run) => async () => {
+        try {
+            await run();
+        } finally {
+            teardown();
+            await clean();
+        }
+    };
+
+    async function until(test, ms = 4000) {
+        for (const end = Date.now() + ms; Date.now() < end;) {
+            if (test()) return true;
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return false;
     }
 
     /** A sidebar suggestion ahead of the profile's own header, as X orders it. */
@@ -50,28 +64,16 @@
         test('the scope is the profile header row, not the page', () => {
             stage(PROFILE);
             const scope = RosterContent().actionScope('twitter');
-
-            assert(scope, 'there is a header to scope to');
-            assertEqual(scope.id, 'headerRow');
-            assertEqual(scope.querySelector('[data-testid$="-follow"]').id, 'theirs',
-                'the account the page is about');
-            teardown();
-        });
-
-        test('the first Follow on the page is the wrong one', () => {
-            // Not a test of our code — a test that the fixture still shows the
-            // hazard the scope exists for. If X ever orders these the other
-            // way this assertion fails and says so, rather than the test above
-            // passing for the wrong reason.
-            stage(PROFILE);
+            assertEqual(scope && scope.id, 'headerRow');
+            assertEqual(scope.querySelector('[data-testid$="-follow"]').id, 'theirs');
+            // The fixture still shows the hazard: if X ever reorders these, this says so.
             assertEqual(document.querySelector('[data-testid$="-follow"]').id, 'suggestion');
             teardown();
         });
 
         test('no header row means no scope, rather than the whole page', () => {
             stage('<div><button data-testid="99-follow" id="suggestion"></button></div>');
-            assertEqual(RosterContent().actionScope('twitter'), null,
-                'a job stops on a null, and stopping is the right answer here');
+            assertEqual(RosterContent().actionScope('twitter'), null, 'a job stops on a null');
             teardown();
         });
 
@@ -82,7 +84,7 @@
             </span></div></div>`);
             const scope = RosterContent().actionScope('reddit');
             const table = RosterContent().SELECTORS.reddit;
-            assertEqual(scope.className, 'titlebox', 'the sidebar\'s own box');
+            assertEqual(scope.className, 'titlebox');
             assert(scope.querySelector('.fancy-toggle-button a.option.remove:not(.hidden)'),
                 'precondition: the old spelling matched a subreddit nobody had joined');
             assertEqual(scope.querySelector(table.followed[0]), null);
@@ -92,46 +94,45 @@
     });
 
     suite('the roster — the bar on the site\'s page', () => {
-        const bar = () => window.BB.RosterBar.createBar({ appearance: async () => ({}), dress: () => {} });
+        const newBar = () => window.BB.RosterBar.createBar({ appearance: async () => ({}), dress: () => {} });
 
         test('says what it is doing, and hands its buttons back', async () => {
-            const one = bar();
+            const one = newBar();
             const pressed = [];
             try {
                 await one.show({ head: 'Follow @alice?', line: 'Press Follow', acts: [{ id: 'skip', label: 'Skip' }], onAct: (id) => pressed.push(id) });
-                const element = document.getElementById(window.BB.RosterBar.ID);
-                assertEqual(element.querySelector('.bb-roster-bar-head').textContent, 'Follow @alice?');
-                const skip = element.querySelector('[data-bb-roster-act="skip"]');
+                assertEqual(bar().querySelector('.bb-roster-bar-head').textContent, 'Follow @alice?');
+                const skip = act('skip');
                 skip.click();
                 assertDeepEqual(pressed, ['skip']);
 
                 await one.show({ head: 'Follow @bob?', acts: [{ id: 'skip', label: 'Skip' }] });
                 assert(skip.isConnected, 'the same buttons are not drawn again under the pointer');
-                assertEqual(element.querySelector('.bb-roster-bar-line').textContent, '');
+                assertEqual(bar().querySelector('.bb-roster-bar-line').textContent, '');
             } finally { one.hide(); }
-            assertEqual(document.getElementById(window.BB.RosterBar.ID), null);
+            assertEqual(bar(), null);
         });
 
         test('two shows at once draw one bar, and a hide before it is built wins', async () => {
-            const one = bar();
+            const one = newBar();
             await Promise.all([one.show({ head: 'a' }), one.show({ head: 'b' })]);
-            assertEqual(document.querySelectorAll(`#${window.BB.RosterBar.ID}`).length, 1);
+            assertEqual(document.querySelectorAll(`#${BAR()}`).length, 1);
             one.hide();
             const shown = one.show({ head: 'c' });
             one.hide();
             await shown;
-            assertEqual(document.getElementById(window.BB.RosterBar.ID), null);
+            assertEqual(bar(), null);
         });
 
         test('rings the site\'s button and takes the ring off again', () => {
-            const one = bar();
+            const one = newBar();
             const button = document.createElement('button');
             document.body.append(button);
             try {
                 one.mark(button);
-                assert(button.hasAttribute(window.BB.RosterBar.MARK));
+                assert(button.hasAttribute(MARK()));
                 one.unmark();
-                assert(!button.hasAttribute(window.BB.RosterBar.MARK));
+                assert(!button.hasAttribute(MARK()));
             } finally { button.remove(); }
         });
     });
@@ -142,7 +143,6 @@
      * forever on a page the site redirected — and took over any tab of the
      * site opened while it ran.
      */
-    const Roster = () => window.BB.Roster;
     /** The tab the specs' jobs are in, and the one their pages say they are in. */
     const TAB = 7;
     const jobFor = (options) => Roster().newJob({ tabId: TAB, ...options });
@@ -160,8 +160,6 @@
         await RosterContent().createRoster({ site, notify: () => {}, page, tabId: async () => tab }).install();
         return { page, job: await Roster().loadJob() };
     }
-
-    const clean = () => Roster().clearJob();
 
     suite('the roster — which page may take a job up', () => {
         test('REGRESSION: a tab sent to the list and signed out stops, rather than going round', async () => {
@@ -300,8 +298,6 @@
      * Following from a list. The job used to press Follow itself; now it
      * rings the button and waits, and the press is the user's.
      */
-    const MARK = () => window.BB.RosterBar.MARK;
-
     async function until(test, ms = 4000) {
         for (const end = Date.now() + ms; Date.now() < end;) {
             if (test()) return true;
