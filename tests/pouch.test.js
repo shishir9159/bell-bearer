@@ -1,28 +1,13 @@
 /**
- * The state the two injected buttons show.
- *
- * A channel already in the pouch, and a playlist already followed, must both
- * stop offering to do the thing again — YouTube's own Subscribe button goes
- * flat and grey once you are subscribed, and these sit right beside it. That
- * is the whole behaviour under test here; the ordering, pinning, feed and
- * subscription-parsing logic is pure and lives in tests/node-check.js, which
- * runs in a second.
- *
- * The injections are called straight off the factory rather than through the
- * watcher, for the reason youtube-ui.test.js gives: the watcher only runs its
- * tasks on an animation frame, and a background tab may not get one for
- * seconds at a time.
+ * The state the injected pouch and playlist buttons show: once a channel is
+ * filed or a playlist followed they stop offering to do it again, the way
+ * Subscribe goes grey. The logic behind them is in node-check.js.
  */
 
-/*
- * Every spec file is a classic script sharing one global scope, so the helpers
- * below carry names of their own rather than the obvious `makeUi`/`teardown`.
- * A clash there is silent and does its damage in the other file: the later
- * definition wins, and youtube-ui.test.js starts tearing down a page it never
- * built while its own drawer leaks into the next test.
- */
+// Names of their own, not `makeUi`/`teardown`: every spec shares one global
+// scope, and a clash silently swaps youtube-ui.test.js's helpers for these.
 
-/** The first path command of the tick that takes the list's plus — what "filed" looks like. */
+/** The first path command of the tick that replaces the plus once filed. */
 const TICK_PATH = /M237\.66,180\.66/;
 
 function pouchUi(style, playlistDownload = null) {
@@ -35,12 +20,9 @@ function pouchUi(style, playlistDownload = null) {
 }
 
 /**
- * A stand-in watch page: a channel link, a subscribe renderer, a queue panel.
- *
- * The renderer is given a box on purpose. It is an unknown element here, so it
- * would otherwise be zero-sized — and the injector now steps over a Subscribe
- * that is not on screen, because a channel page keeps a second, hidden one in
- * its sticky header and the button was landing in that.
+ * A watch page with a channel link, Subscribe and a queue panel. Subscribe
+ * is given a box: the injector steps over one that is not on screen, as a
+ * channel page keeps a hidden second one in its sticky header.
  */
 function watchPage(channelHref) {
     const host = document.createElement('div');
@@ -64,79 +46,56 @@ function clearWatchPage() {
         .forEach((el) => { if (el) el.remove(); });
 }
 
-const filedChannel = {
-    id: '@filed',
-    name: 'A Channel',
-    url: 'https://www.youtube.com/@filed',
-    topicId: 't1',
-};
+async function onWatchPage(channelHref, localStore, run) {
+    MockChrome.reset({ localStore });
+    watchPage(channelHref);
+    try {
+        return await run();
+    } finally {
+        clearWatchPage();
+    }
+}
 
+const filedChannel = { id: '@filed', name: 'A Channel', url: 'https://www.youtube.com/@filed', topicId: 't1' };
 const pouchButton = () => document.getElementById('bb-add-to-subscriptions-btn');
-
-/** A watch URL inside a real playlist, for the injection-s href seam. */
+const followButton = () => document.getElementById('bb-follow-playlist-btn');
+const downloadButton = () => document.getElementById('bb-download-playlist-btn');
 const WITH_PLAYLIST = 'https://www.youtube.com/watch?v=abc&list=PLcourse';
 
 suite('the pouch button says whether the channel is already filed', () => {
+    const filed = { subscriptionChannels: [filedChannel] };
 
-    test('a filed channel gets the tick and YouTube-s "done" grey', async () => {
-        MockChrome.reset({ localStore: { subscriptionChannels: [filedChannel] } });
-        watchPage('/@filed');
+    test('a filed channel gets the tick and YouTube-s "done" grey', () => onWatchPage('/@filed', filed, async () => {
+        assertEqual(pouchUi().injectPouchButton(), true);
+        await MockChrome.settle();
+        const button = pouchButton();
+        assert(button.classList.contains('bb-in-pouch'), 'not greyed the way Subscribed is');
+        assertEqual(button.getAttribute('aria-pressed'), 'true');
+        assert(TICK_PATH.test(button.innerHTML), 'a plus, not a tick');
+    }));
 
-        try {
-            assertEqual(pouchUi().injectPouchButton(), true);
-            await MockChrome.settle();
+    test('a channel not in the pouch keeps the plus', () => onWatchPage('/@stranger', { subscriptionChannels: [] }, async () => {
+        pouchUi().injectPouchButton();
+        await MockChrome.settle();
+        const button = pouchButton();
+        assert(!button.classList.contains('bb-in-pouch'));
+        assertEqual(button.getAttribute('aria-pressed'), 'false');
+        assert(!TICK_PATH.test(button.innerHTML));
+    }));
 
-            const button = pouchButton();
-            assert(button.classList.contains('bb-in-pouch'),
-                'the filed state is what greys it out, the way Subscribed is grey');
-            assertEqual(button.getAttribute('aria-pressed'), 'true');
-            assert(TICK_PATH.test(button.innerHTML), 'and the glyph is a tick, not a plus');
-        } finally { clearWatchPage(); }
-    });
+    test('a channel filed by handle is recognised however the URL is spelled', () => onWatchPage('/@filed?si=xyz', filed, async () => {
+        // The pouch key decides, or a tracking parameter would file it twice.
+        pouchUi().injectPouchButton();
+        await MockChrome.settle();
+        assert(pouchButton().classList.contains('bb-in-pouch'));
+    }));
 
-    test('a channel not in the pouch keeps the plus', async () => {
-        MockChrome.reset({ localStore: { subscriptionChannels: [] } });
-        watchPage('/@stranger');
-
-        try {
-            pouchUi().injectPouchButton();
-            await MockChrome.settle();
-
-            const button = pouchButton();
-            assert(!button.classList.contains('bb-in-pouch'));
-            assertEqual(button.getAttribute('aria-pressed'), 'false');
-            assert(!TICK_PATH.test(button.innerHTML));
-        } finally { clearWatchPage(); }
-    });
-
-    test('a channel filed by handle is recognised however the URL is spelled', async () => {
-        MockChrome.reset({ localStore: { subscriptionChannels: [filedChannel] } });
-        // Same channel, different spelling: the pouch key decides, not the
-        // string, or a tracking parameter would file it a second time.
-        watchPage('/@filed?si=xyz');
-
-        try {
-            pouchUi().injectPouchButton();
-            await MockChrome.settle();
-            assert(pouchButton().classList.contains('bb-in-pouch'));
-        } finally { clearWatchPage(); }
-    });
-
-    test('the accent style does not out-shout the filed state', async () => {
-        // "Already filed" is the more important thing to say of the two.
-        MockChrome.reset({ localStore: { subscriptionChannels: [filedChannel] } });
-        watchPage('/@filed');
-
-        try {
-            pouchUi('accent').injectPouchButton();
-            await MockChrome.settle();
-
-            const button = pouchButton();
-            assert(button.classList.contains('bb-accent'), 'the setting is still honoured');
-            assert(button.classList.contains('bb-in-pouch'),
-                'and content.css gives .bb-in-pouch the last word on the fill');
-        } finally { clearWatchPage(); }
-    });
+    test('the accent style does not out-shout the filed state', () => onWatchPage('/@filed', filed, async () => {
+        pouchUi('accent').injectPouchButton();
+        await MockChrome.settle();
+        assert(pouchButton().classList.contains('bb-accent'), 'the setting is still honoured');
+        assert(pouchButton().classList.contains('bb-in-pouch'), 'content.css gives .bb-in-pouch the last word');
+    }));
 });
 
 suite('the follow-playlist button', () => {
