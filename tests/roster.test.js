@@ -137,12 +137,6 @@
         });
     });
 
-    /**
-     * Which page may act on a job: one in the job's own tab. A job used to be
-     * taken up by every page of its site for as long as it ran, which looped
-     * forever on a page the site redirected — and took over any tab of the
-     * site opened while it ran.
-     */
     /** The tab the specs' jobs are in, and the one their pages say they are in. */
     const TAB = 7;
     const jobFor = (options) => Roster().newJob({ tabId: TAB, ...options });
@@ -161,84 +155,60 @@
         return { page, job: await Roster().loadJob() };
     }
 
+    // A job once ran on every page of its site: it looped on a page the site
+    // redirected, and took over any tab of the site opened meanwhile.
     suite('the roster — which page may take a job up', () => {
-        test('REGRESSION: a tab sent to the list and signed out stops, rather than going round', async () => {
-            try {
-                const job = Roster().heading(jobFor({ site: 'reddit', action: 'read' }), '/subreddits/mine/subscriber/');
-                const { page, job: after } = await enter('reddit', '/login/', job);
-                assertEqual(page.sent.length, 0, 'sent back to the list, it is only sent to /login again');
-                assertEqual(after.status, 'paused');
-                assert(/sign in/i.test(after.note), after.note);
-            } finally { await clean(); }
-        });
+        test('REGRESSION: a tab sent to the list and signed out stops, rather than going round', cleanly(async () => {
+            const job = Roster().heading(jobFor({ site: 'reddit', action: 'read' }), '/subreddits/mine/subscriber/');
+            const { page, job: after } = await enter('reddit', '/login/', job);
+            assertEqual(page.sent.length, 0, 'sent back to the list, it is only sent to /login again');
+            assertEqual(after.status, 'paused');
+            assert(/sign in/i.test(after.note), after.note);
+        }));
 
-        test('REGRESSION: another tab of the site leaves the job alone, on the job\'s own page too', async () => {
-            // Every page of the site once took a job up, and an x.com tab
-            // opened that evening was sent off to somebody's profile.
+        test('REGRESSION: another tab of the site leaves the job alone, on the job\'s own page too', cleanly(async () => {
             stage('<div id="siteTable"><div class="thing subreddit"><a class="title" href="/r/rust/">rust</a></div></div>');
-            try {
-                const { page, job: after } = await enter('reddit', '/subreddits/mine/subscriber/', jobFor({ site: 'reddit', action: 'read' }), TAB + 1);
-                assertEqual(page.sent.length, 0);
-                assertDeepEqual([after.status, after.found.length], ['running', 0], 'not read, not stopped');
-            } finally {
-                teardown();
-                await clean();
-            }
-        });
+            const { page, job: after } = await enter('reddit', '/subreddits/mine/subscriber/', jobFor({ site: 'reddit', action: 'read' }), TAB + 1);
+            assertEqual(page.sent.length, 0);
+            assertDeepEqual([after.status, after.found.length], ['running', 0], 'not read, not stopped');
+        }));
 
-        test('its own tab, taken somewhere else by the user, waits', async () => {
-            try {
-                const { page, job: after } = await enter('reddit', '/r/rust/', jobFor({ site: 'reddit', action: 'read' }));
-                assertEqual(page.sent.length, 0, 'an ordinary visit is not dragged back');
-                assertEqual(after.status, 'running');
-            } finally { await clean(); }
-        });
+        test('its own tab, taken somewhere else by the user, waits', cleanly(async () => {
+            const { page, job: after } = await enter('reddit', '/r/rust/', jobFor({ site: 'reddit', action: 'read' }));
+            assertEqual(page.sent.length, 0, 'an ordinary visit is not dragged back');
+            assertEqual(after.status, 'running');
+        }));
 
-        test('a profile that is not the name the job is on is left alone', async () => {
-            try {
-                const job = jobFor({ site: 'twitter', action: 'apply', names: ['alice'] });
-                const { page, job: after } = await enter('twitter', '/bob', job);
-                assertEqual(page.sent.length, 0);
-                assertEqual(after.status, 'running');
-                assertEqual(after.at, 0);
-            } finally { await clean(); }
-        });
+        test('a profile that is not the name the job is on is left alone', cleanly(async () => {
+            const { page, job: after } = await enter('twitter', '/bob', jobFor({ site: 'twitter', action: 'apply', names: ['alice'] }));
+            assertEqual(page.sent.length, 0);
+            assertDeepEqual([after.status, after.at], ['running', 0]);
+        }));
 
-        test('a page of old Reddit\'s list is read into the roster', async () => {
+        test('a page of old Reddit\'s list is read into the roster', cleanly(async () => {
             stage(`<div id="siteTable">
                 <div class="thing subreddit"><a class="title" href="https://old.reddit.com/r/rust/">rust</a></div>
                 <div class="thing subreddit"><a class="title" href="https://old.reddit.com/r/cpp/">cpp</a></div>
                 <div class="thing subreddit"><a class="title" href="https://old.reddit.com/user/someone/">a profile</a></div>
             </div>`);
-            try {
-                // Sent from reddit.com to old.reddit.com: another origin, where
-                // a mark kept in the tab's sessionStorage did not follow.
-                const job = Roster().heading(jobFor({ site: 'reddit', action: 'read' }), '/subreddits/mine/subscriber/');
-                const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', job);
-                assertEqual(after.status, 'done');
-                assertEqual(after.headingTo, '', 'and it has arrived');
-                assertDeepEqual((await Roster().loadRosters()).reddit.names, ['rust', 'cpp']);
-                assertEqual(document.getElementById(window.BB.RosterBar.ID), null, 'and the bar is gone');
-            } finally {
-                teardown();
-                await clean();
-            }
-        });
+            // Sent to old.reddit.com: another origin, where a mark in sessionStorage did not follow.
+            const job = Roster().heading(jobFor({ site: 'reddit', action: 'read' }), '/subreddits/mine/subscriber/');
+            const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', job);
+            assertEqual(after.status, 'done');
+            assertEqual(after.headingTo, '', 'and it has arrived');
+            assertDeepEqual((await Roster().loadRosters()).reddit.names, ['rust', 'cpp']);
+            assertEqual(bar(), null, 'and the bar is gone');
+        }));
 
-        test('an empty list is not saved over the last read', async () => {
+        test('an empty list is not saved over the last read', cleanly(async () => {
             stage('<div id="siteTable"></div>');
-            try {
-                await Roster().saveRoster('reddit', ['kept']);
-                const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', jobFor({ site: 'reddit', action: 'read' }));
-                assertEqual(after.status, 'paused');
-                assertDeepEqual((await Roster().loadRosters()).reddit.names, ['kept']);
-            } finally {
-                teardown();
-                await clean();
-            }
-        });
+            await Roster().saveRoster('reddit', ['kept']);
+            const { job: after } = await enter('reddit', '/subreddits/mine/subscriber/', jobFor({ site: 'reddit', action: 'read' }));
+            assertEqual(after.status, 'paused');
+            assertDeepEqual((await Roster().loadRosters()).reddit.names, ['kept']);
+        }));
 
-        test('REGRESSION: the following list is read from rows you follow, and nothing is scrolled', async () => {
+        test('REGRESSION: the following list is read from rows you follow, and nothing is scrolled', cleanly(async () => {
             const row = (name, testid) => `<div data-testid="UserCell"><a href="/${name}">${name}</a>
                 <button data-testid="1-${testid}"></button></div>`;
             stage(`<a data-testid="AppTabBar_Profile_Link" href="/me"></a>
@@ -252,16 +222,8 @@
                 const reading = RosterContent().createRoster({
                     site: 'twitter', notify: () => {}, page: pageAt('/me/following'), tabId: async () => TAB,
                 }).install();
-                const done = await (async () => {
-                    for (let i = 0; i < 40; i++) {
-                        const button = document.querySelector('#bb-roster-bar [data-bb-roster-act="done"]');
-                        if (button && /2 so far/.test(document.getElementById('bb-roster-bar').textContent)) return button;
-                        await new Promise((resolve) => setTimeout(resolve, 100));
-                    }
-                    return null;
-                })();
-                assert(done, 'the bar counts the two rows you follow');
-                done.click();
+                assert(await until(() => act('done') && /2 so far/.test(bar().textContent)), 'the bar counts the two rows you follow');
+                act('done').click();
                 await reading;
                 assertDeepEqual((await Roster().loadRosters()).twitter.names, ['alice', 'bob'],
                     'not the suggestion under the list, nor the sidebar');
@@ -269,42 +231,24 @@
                 assertEqual(scrolled, 0, 'scrolling x.com from a script is scripting the site');
             } finally {
                 window.scrollTo = scrollTo;
-                teardown();
-                await clean();
             }
-        });
+        }));
 
-        test('a tab sent to a name and landing elsewhere stops the job', async () => {
-            try {
-                const job = Roster().heading(jobFor({ site: 'twitter', action: 'apply', names: ['alice'] }), '/alice');
-                const { page, job: after } = await enter('twitter', '/i/flow/login', job);
-                assertEqual(page.sent.length, 0);
-                assertEqual(after.status, 'paused');
-                assert(after.note.includes('@alice'), after.note);
-            } finally { await clean(); }
-        });
+        test('a tab sent to a name and landing elsewhere stops the job', cleanly(async () => {
+            const job = Roster().heading(jobFor({ site: 'twitter', action: 'apply', names: ['alice'] }), '/alice');
+            const { page, job: after } = await enter('twitter', '/i/flow/login', job);
+            assertEqual(page.sent.length, 0);
+            assertEqual(after.status, 'paused');
+            assert(after.note.includes('@alice'), after.note);
+        }));
 
-        test('sent there long ago, the tab being elsewhere is the user\'s doing', async () => {
-            try {
-                const then = Date.now() - Roster().SENT_MS - 1000;
-                const job = Roster().heading(jobFor({ site: 'twitter', action: 'apply', names: ['alice'] }), '/alice', then);
-                const { job: after } = await enter('twitter', '/home', job);
-                assertEqual(after.status, 'running', 'not a stop: nothing went wrong');
-            } finally { await clean(); }
-        });
+        test('sent there long ago, the tab being elsewhere is the user\'s doing', cleanly(async () => {
+            const then = Date.now() - Roster().SENT_MS - 1000;
+            const job = Roster().heading(jobFor({ site: 'twitter', action: 'apply', names: ['alice'] }), '/alice', then);
+            const { job: after } = await enter('twitter', '/home', job);
+            assertEqual(after.status, 'running', 'not a stop: nothing went wrong');
+        }));
     });
-
-    /**
-     * Following from a list. The job used to press Follow itself; now it
-     * rings the button and waits, and the press is the user's.
-     */
-    async function until(test, ms = 4000) {
-        for (const end = Date.now() + ms; Date.now() < end;) {
-            if (test()) return true;
-            await new Promise((resolve) => setTimeout(resolve, 50));
-        }
-        return false;
-    }
 
     /** A job on @alice, then @bob, running on @alice's page. */
     async function onAlice(gap = 50) {
@@ -314,84 +258,64 @@
         return { page, running };
     }
 
+    // The job once pressed Follow itself; now it rings the button and waits.
     suite('the roster — following is your press, not the job\'s', () => {
-        test('REGRESSION: nothing is pressed for you; your press moves the job on', async () => {
+        test('REGRESSION: nothing is pressed for you; your press moves the job on', cleanly(async () => {
             stage(PROFILE);
             const theirs = document.getElementById('theirs');
             let presses = 0;
             // X's own handler, as far as this needs it: the button turns.
             theirs.addEventListener('click', () => { presses++; theirs.dataset.testid = '42-unfollow'; });
-            try {
-                const { page, running } = await onAlice();
-                assert(await until(() => theirs.hasAttribute(MARK())), 'the header\'s Follow is rung');
-                await new Promise((resolve) => setTimeout(resolve, 800));
-                assertEqual(presses, 0, 'and nothing pressed it');
-                assertEqual((await Roster().loadJob()).at, 0, 'so the job waits');
-                assert(!document.getElementById('suggestion').hasAttribute(MARK()), 'the suggestion is not rung');
+            const { page, running } = await onAlice();
+            assert(await until(() => theirs.hasAttribute(MARK())), 'the header\'s Follow is rung');
+            await new Promise((resolve) => setTimeout(resolve, 800));
+            assertEqual(presses, 0, 'and nothing pressed it');
+            assertEqual((await Roster().loadJob()).at, 0, 'so the job waits');
+            assert(!document.getElementById('suggestion').hasAttribute(MARK()), 'the suggestion is not rung');
 
-                theirs.click();
-                await running;
-                const after = await Roster().loadJob();
-                assertDeepEqual([after.at, after.done, after.today], [1, 1, 1]);
-                assertDeepEqual(page.sent, ['https://x.com/bob']);
-            } finally {
-                teardown();
-                await clean();
-            }
-        });
+            theirs.click();
+            await running;
+            const after = await Roster().loadJob();
+            assertDeepEqual([after.at, after.done, after.today], [1, 1, 1]);
+            assertDeepEqual(page.sent, ['https://x.com/bob']);
+        }));
 
-        test('Stop during the gap after a follow ends the job before the next page', async () => {
+        test('Stop during the gap after a follow ends the job before the next page', cleanly(async () => {
             stage(PROFILE);
             const theirs = document.getElementById('theirs');
             theirs.addEventListener('click', () => { theirs.dataset.testid = '42-unfollow'; });
-            try {
-                const { page, running } = await onAlice(5000);
-                assert(await until(() => theirs.hasAttribute(MARK())));
-                theirs.click();
-                const head = () => document.querySelector(`#${window.BB.RosterBar.ID} .bb-roster-bar-head`);
-                assert(await until(() => head() && head().textContent === 'Followed @alice'), 'the gap is counted down');
-                assert(/@bob opens in \ds/.test(document.getElementById(window.BB.RosterBar.ID).textContent));
-                document.querySelector(`#${window.BB.RosterBar.ID} [data-bb-roster-act="stop"]`).click();
-                await running;
-                assertEqual(await Roster().loadJob(), null);
-                assertDeepEqual(page.sent, [], '@bob is never opened');
-            } finally {
-                teardown();
-                await clean();
-            }
-        });
+            const { page, running } = await onAlice(5000);
+            assert(await until(() => theirs.hasAttribute(MARK())));
+            theirs.click();
+            const head = () => document.querySelector(`#${BAR()} .bb-roster-bar-head`);
+            assert(await until(() => head() && head().textContent === 'Followed @alice'), 'the gap is counted down');
+            assert(/@bob opens in \ds/.test(bar().textContent));
+            act('stop').click();
+            await running;
+            assertEqual(await Roster().loadJob(), null);
+            assertDeepEqual(page.sent, [], '@bob is never opened');
+        }));
 
-        test('an account already followed costs nothing against the day', async () => {
+        test('an account already followed costs nothing against the day', cleanly(async () => {
             stage(PROFILE.replace('42-follow', '42-unfollow'));
-            try {
-                const { page, running } = await onAlice();
-                await running;
-                const after = await Roster().loadJob();
-                assertDeepEqual([after.at, after.skipped, after.today], [1, 1, 0]);
-                assertDeepEqual(page.sent, ['https://x.com/bob']);
-            } finally {
-                teardown();
-                await clean();
-            }
-        });
+            const { page, running } = await onAlice();
+            await running;
+            const after = await Roster().loadJob();
+            assertDeepEqual([after.at, after.skipped, after.today], [1, 1, 0]);
+            assertDeepEqual(page.sent, ['https://x.com/bob']);
+        }));
 
-        test('with no Follow button, Skip is yours to press', async () => {
+        test('with no Follow button, Skip is yours to press', cleanly(async () => {
             stage('<div data-testid="primaryColumn"><div><button data-testid="userActions"></button></div></div>');
-            try {
-                const { page, running } = await onAlice();
-                const skip = () => document.querySelector(`#${window.BB.RosterBar.ID} [data-bb-roster-act="skip"]`);
-                assert(await until(skip), 'the bar offers Skip');
-                assertEqual((await Roster().loadJob()).status, 'running', 'a missing button is asked about, not a stop');
-                skip().click();
-                await running;
-                const after = await Roster().loadJob();
-                assertDeepEqual([after.at, after.passed, after.today], [1, 1, 0]);
-                assertDeepEqual(page.sent, ['https://x.com/bob']);
-            } finally {
-                teardown();
-                await clean();
-            }
-        });
+            const { page, running } = await onAlice();
+            assert(await until(() => act('skip')), 'the bar offers Skip');
+            assertEqual((await Roster().loadJob()).status, 'running', 'a missing button is asked about, not a stop');
+            act('skip').click();
+            await running;
+            const after = await Roster().loadJob();
+            assertDeepEqual([after.at, after.passed, after.today], [1, 1, 0]);
+            assertDeepEqual(page.sent, ['https://x.com/bob']);
+        }));
     });
 
     /**
