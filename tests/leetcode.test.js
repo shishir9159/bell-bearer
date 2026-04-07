@@ -1,18 +1,10 @@
 /**
- * The LeetCode surfaces, for the parts only a real DOM can answer: a verdict
- * arriving from the page world, the grade card it opens, the pouch panel's
- * rail, mock mode hiding and un-hiding LeetCode's own furniture, and that
- * every skin actually reaches what we inject.
+ * The LeetCode surfaces that need a DOM: a verdict arriving from the page
+ * world, the grade card, the pouch panel, mock mode, the skins, the popup and
+ * the template library. The scheduling and the store are in node-check.js.
  *
- * The scheduling, the store and the template ordering are pure and live in
- * tests/node-check.js, which runs in a second. What is here is everything
- * that needs elements.
- *
- * Like the X specs, these call the injectors straight off the factory rather
- * than through install(): the watcher only runs its tasks on an animation
- * frame, and a backgrounded tab may not get one for seconds.
- *
- * Wrapped, because this file shares the global scope with the other specs.
+ * The injectors are called directly rather than through install(), whose
+ * watcher only runs on an animation frame that a hidden tab may not get.
  */
 (function () {
     'use strict';
@@ -20,32 +12,24 @@
     const LeetUi = () => window.BB.LeetUi;
     const LeetRead = () => window.BB.LeetRead;
     const Leet = () => window.BB.Leet;
-    const Fsrs = () => window.BB.Fsrs;
     const LeetTemplates = () => window.BB.LeetTemplates;
 
     const NO_WATCHER = { add() {}, remove() {}, has: () => false, schedule() {}, stop() {} };
-
     const HOST_ID = 'bb-leet-test';
+    const byId = (id) => document.getElementById(id);
 
     /** Let the mocked chrome.* callbacks, which defer through a timer, land. */
     const settle = () => new Promise((done) => setTimeout(done, 0));
 
     /**
-     * Wait until `predicate` holds.
-     *
-     * Not a fixed number of settles. Recording a verdict is a read, a
-     * serialised read-modify-write and a render, and the mock defers every
-     * chrome.* callback through a macrotask — so "how many turns is that" is
-     * an implementation detail that changed the moment the store grew a write
-     * chain. Counting turns made these tests pass for the wrong reason and
-     * then fail in a different order; waiting for the thing itself does not.
+     * Wait until `predicate` holds. Counting settles instead broke the moment
+     * the store grew a write chain. Awaited, so an async predicate is not
+     * merely a truthy promise.
      */
     async function waitFor(predicate, what, ms = 3000) {
         const started = Date.now();
         for (;;) {
             let held = false;
-            // Awaited, so an async predicate is not merely "a promise, which
-            // is truthy" — which is exactly how this was wrong the first time.
             try { held = !!(await predicate()); } catch (_) { held = false; }
             if (held) return;
             if (Date.now() - started > ms) throw new Error(`timed out waiting for ${what}`);
@@ -58,6 +42,11 @@
         return Leet().problemsOf(await Leet().load())[slug] || null;
     }
 
+    /** What leet-page.js would have dispatched after a submission came back. */
+    function sendVerdict(detail) {
+        document.dispatchEvent(new CustomEvent('bb:leet:verdict', { detail: JSON.stringify(detail) }));
+    }
+
     /** Send a verdict and wait until it is on record. */
     async function recordVerdict(detail, expectedAttempts) {
         sendVerdict(detail);
@@ -65,29 +54,32 @@
             const problem = await stored(detail.slug);
             return problem && problem.attempts.length >= expectedAttempts;
         }, `attempt ${expectedAttempts} on ${detail.slug}`);
-        // The predicate above is async, so waitFor resolves on the turn the
-        // read came back; the grade card is opened on the turn after it.
+        // The grade card opens on the turn after the read came back.
         await settle();
     }
 
+    /** Stand in for the page world, answering every read with `code`; returns its removal. */
+    function pageWorld(code) {
+        const onRead = (event) => {
+            if (JSON.parse(event.detail).type !== 'read') return;
+            document.dispatchEvent(new CustomEvent('bb:leet:code', { detail: JSON.stringify(code) }));
+        };
+        document.addEventListener('bb:leet', onRead);
+        return () => document.removeEventListener('bb:leet', onRead);
+    }
+
     function teardown() {
-        const host = document.getElementById(HOST_ID);
+        const host = byId(HOST_ID);
         if (host) host.remove();
         ['bb-leet-overlay', 'bb-leet-grade', 'bb-leet-suggest', 'bb-leet-chip', 'bb-leet-nav', 'bb-leet-pill']
-            .forEach((id) => {
-                const element = document.getElementById(id);
-                if (element) element.remove();
-            });
+            .forEach((id) => { if (byId(id)) byId(id).remove(); });
         document.documentElement.classList.remove('bb-leet-mock');
-        document.querySelectorAll('[data-bb-leet-hidden]').forEach((element) => {
-            element.removeAttribute('data-bb-leet-hidden');
-        });
+        document.querySelectorAll('[data-bb-leet-hidden]').forEach((element) => element.removeAttribute('data-bb-leet-hidden'));
     }
 
     /**
-     * A stand-in problem page, built out of the hooks leet-read.js keys off —
-     * LeetCode's own `data-track-load` and its semantic hrefs, rather than the
-     * generated class names that change with every deploy.
+     * A problem page built from the hooks leet-read.js keys off — LeetCode's
+     * `data-track-load` and its hrefs, not its generated class names.
      */
     function problemPage() {
         teardown();
@@ -107,9 +99,8 @@
             <div data-track-load="similar_question">Similar questions</div>
             <div data-track-load="hints">Hints</div>
             <div id="solutions_tab">Solutions</div>
-            <!-- LeetCode's stopwatch as it is actually built: a div wearing
-                 role="button", named only by an aria-label that changes with
-                 its state. Copied from the live page. -->
+            <!-- The stopwatch as the live page builds it: a div with
+                 role="button", named only by an aria-label that follows its state. -->
             <div class="flex h-8 flex-none items-center p-1">
                 <div role="button" aria-label="Start" data-state="closed">00:00:00</div>
             </div>`;
@@ -118,15 +109,13 @@
     }
 
     /**
-     * A UI wired to a fake page. `path` is what LeetRead reads the slug from —
-     * the spec page is served from file:// or :5601, so location itself can
-     * never be a LeetCode URL and slugOf is stubbed instead.
+     * A UI over a fake page. The spec page is never at a LeetCode URL, so
+     * slugOf is stubbed to read `path` instead of location.
      */
     function makeUi({ path = '/problems/two-sum/', settings = {} } = {}) {
         const values = Object.assign({}, window.BB.Settings.DEFAULTS, settings);
         const realSlugOf = LeetRead().slugOf;
         LeetRead().slugOf = (given) => realSlugOf(given === undefined ? path : given);
-
         const notes = [];
         const ui = LeetUi().createLeetUi({
             watcher: NO_WATCHER,
@@ -137,12 +126,8 @@
             ui,
             notes,
             values,
-            /**
-             * Put the document back. uninstall() is the half that matters:
-             * install() puts four listeners on `document`, and without taking
-             * them off again the third test in this file would be answered by
-             * the first test's UI as well as its own.
-             */
+            // uninstall() matters: install() puts four listeners on document,
+            // which would otherwise answer every later test as well.
             restore: () => {
                 ui.uninstall();
                 LeetRead().slugOf = realSlugOf;
@@ -150,93 +135,82 @@
         };
     }
 
-    /** What leet-page.js would have dispatched after a submission came back. */
-    function sendVerdict(detail) {
-        document.dispatchEvent(new CustomEvent('bb:leet:verdict', { detail: JSON.stringify(detail) }));
+    /** A fresh store, a problem page and a UI over it for `run`, put back however it ends. */
+    async function onProblem({ store, settings, install = false } = {}, run) {
+        MockChrome.reset({ localStore: store });
+        problemPage();
+        const made = makeUi({ settings });
+        if (install) made.ui.install();
+        try {
+            return await run(made);
+        } finally {
+            made.restore();
+            teardown();
+        }
     }
 
-    // ------------------------------------------------------ reading a page
+    const clock = () => document.querySelector('[role="button"][aria-label="Start"]');
 
     suite('leetcode — reading the page', () => {
-        test('reads the problem out of LeetCode-shaped markup', () => {
+        test('reads the problem out of LeetCode-shaped markup, and drops a difficulty it does not know', () => {
             problemPage();
             const read = LeetRead();
             assertEqual(read.readTitle(), 'Two Sum', 'the leading number is not part of the name');
             assertEqual(read.readDifficulty(), 'Medium');
             assertDeepEqual(read.readTags(), ['Array', 'Hash Table']);
-            teardown();
-        });
-
-        test('a difficulty that is not one of the three is dropped', () => {
-            problemPage();
             document.querySelector('.text-difficulty-medium').textContent = 'Spicy';
-            assertEqual(LeetRead().readDifficulty(), '',
-                'an unrecognised word must not be filed as a difficulty');
+            assertEqual(read.readDifficulty(), '');
             teardown();
         });
 
         test('reads the stopwatch, and says nothing when it cannot', () => {
             problemPage();
             const read = LeetRead();
-            const clock = document.querySelector('[role="button"][aria-label="Start"]');
+            const watch = clock();
             assertEqual(read.timerSeconds(), 0, '00:00:00 is a reading, not a failure');
-            clock.textContent = '12:30';
+            watch.textContent = '12:30';
             assertEqual(read.timerSeconds(), 750);
-            clock.textContent = '1:02:05';
-            assertEqual(read.timerSeconds(), 3725, 'an hour in');
-            clock.remove();
+            watch.textContent = '1:02:05';
+            assertEqual(read.timerSeconds(), 3725);
+            watch.remove();
             assertEqual(read.timerSeconds(), null, 'no widget is null, not zero');
             teardown();
         });
 
         test('a control that does not read as a clock is not the stopwatch', () => {
-            // The last-resort selector is "anything clickable", so the clock
-            // test is the only thing standing between us and clicking some
-            // unrelated button on the page.
+            // The last-resort selector is "anything clickable".
             problemPage();
-            document.querySelector('[role="button"][aria-label="Start"]').remove();
+            clock().remove();
             const stray = document.createElement('div');
             stray.setAttribute('role', 'button');
             stray.setAttribute('aria-label', 'Start');
             stray.textContent = 'Start coding';
-            document.getElementById(HOST_ID).appendChild(stray);
-
-            assertEqual(LeetRead().timerControl(), null, 'it believed a button that says "Start coding"');
+            byId(HOST_ID).appendChild(stray);
+            assertEqual(LeetRead().timerControl(), null);
             assertEqual(LeetRead().timerButton(), null);
             teardown();
         });
 
-        test('a running stopwatch is never pressed', () => {
-            // The same element is start and pause, told apart only by its
-            // label. Pressing it while it runs would stop the clock of anyone
-            // who had already started it — every time they opened a problem.
+        test('a running stopwatch is read but never pressed', () => {
+            // One element is start and pause: pressing it would stop a clock already running.
             problemPage();
-            const clock = document.querySelector('[role="button"][aria-label="Start"]');
-            clock.setAttribute('aria-label', 'Pause');
-            clock.textContent = '04:12';
-
+            const watch = clock();
+            watch.setAttribute('aria-label', 'Pause');
+            watch.textContent = '04:12';
             assert(LeetRead().timerControl(), 'it can still be read');
-            assertEqual(LeetRead().timerSeconds(), 252, 'and read correctly');
+            assertEqual(LeetRead().timerSeconds(), 252);
             assertEqual(LeetRead().timerButton(), null, 'but it must not be pressable');
             teardown();
         });
 
-        test('a stopped clock reading zero is pressable whatever it is called', () => {
+        test('a stopwatch with no name on it is still found, and pressable while it reads zero', () => {
+            // LeetCode renames these; the generic fallback plus the clock test carry it through.
             problemPage();
-            const clock = document.querySelector('[role="button"][aria-label="Start"]');
-            clock.removeAttribute('aria-label');
+            const watch = clock();
+            watch.removeAttribute('aria-label');
             assert(LeetRead().timerButton(), 'a zeroed clock is the one case worth starting');
-            teardown();
-        });
-
-        test('the stopwatch is found even when every named spelling is gone', () => {
-            // LeetCode renames these; the generic fallback plus the clock test
-            // is what keeps the timer working through that.
-            problemPage();
-            const clock = document.querySelector('[role="button"][aria-label="Start"]');
-            clock.removeAttribute('aria-label');
-            clock.removeAttribute('data-state');
-            clock.textContent = '07:45';
+            watch.removeAttribute('data-state');
+            watch.textContent = '07:45';
             assertEqual(LeetRead().timerSeconds(), 465);
             teardown();
         });
@@ -245,51 +219,26 @@
             problemPage();
             const targets = LeetRead().hideTargets();
             assert(targets.length >= 5, `expected the pill, tags, similar, hints and solutions; got ${targets.length}`);
-            assert(targets.some((el) => el.className === 'text-difficulty-medium'), 'the difficulty is still on show');
-            assert(targets.some((el) => el.id === 'solutions_tab'), 'the solutions tab is still on show');
+            assert(targets.some((el) => el.className === 'text-difficulty-medium'), 'the difficulty');
+            assert(targets.some((el) => el.id === 'solutions_tab'), 'the solutions tab');
             teardown();
         });
     });
 
-    // ----------------------------------------------------------- the nav row
-
     suite('leetcode — the nav row', () => {
-        test('the Pouch row goes into LeetCode’s own bar', () => {
-            problemPage();
-            const { ui, restore } = makeUi();
+        test('the Pouch row goes into LeetCode’s own bar once, and back when the bar is rebuilt', () => onProblem({}, ({ ui }) => {
             ui.injectNavEntry();
-
-            const row = document.getElementById('bb-leet-nav');
-            assert(row, 'no Pouch row was placed');
-            assertEqual(row.closest('nav').id, 'leetcode-navbar', 'it did not land in the nav');
+            ui.injectNavEntry();
+            const row = byId('bb-leet-nav');
+            assertEqual(row && row.closest('nav').id, 'leetcode-navbar');
             assert(row.textContent.includes('Pouch'), 'the row is unlabelled');
-            restore();
-            teardown();
-        });
-
-        test('placing it twice does not make two', () => {
-            problemPage();
-            const { ui, restore } = makeUi();
-            ui.injectNavEntry();
-            ui.injectNavEntry();
             assertEqual(document.querySelectorAll('#bb-leet-nav').length, 1);
-            restore();
-            teardown();
-        });
 
-        test('a nav LeetCode rebuilt gets the row back', () => {
-            // injectNavEntry never retires, because LeetCode rebuilds that bar
-            // on its own schedule. Losing the row for the rest of the session
-            // is the failure this guards.
-            problemPage();
-            const { ui, restore } = makeUi();
+            // It never retires, because LeetCode rebuilds that bar on its own schedule.
+            row.remove();
             ui.injectNavEntry();
-            document.getElementById('bb-leet-nav').remove();
-            ui.injectNavEntry();
-            assert(document.getElementById('bb-leet-nav'), 'the row did not come back');
-            restore();
-            teardown();
-        });
+            assert(byId('bb-leet-nav'), 'the row did not come back');
+        }));
     });
 
     // ---------------------------------------------------------- the verdict
