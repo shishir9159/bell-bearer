@@ -552,33 +552,26 @@
         });
     });
 
-    // ------------------------------------------- managing templates on the dashboard
-
     suite('leetcode — managing templates', () => {
-        const View = () => window.BB.LeetTemplatesView;
-
-        function panelHost() {
+        /** The dashboard's template panel over `templates`, loaded. */
+        async function panel(templates) {
+            MockChrome.reset({ localStore: { bbLeetTemplates: templates } });
             teardown();
             const host = document.createElement('div');
             host.id = HOST_ID;
             host.setAttribute('data-leet-templates', '');
             document.body.appendChild(host);
+            await window.BB.LeetTemplatesView.mountPanel(host).reload();
             return host;
         }
+        const template = (id, name, over) => ({ id, name, lang: '', body: '', createdAt: 1, usedAt: 0, uses: 0, ...over });
 
         test('lists every template with its language and size', async () => {
-            MockChrome.reset({ localStore: { bbLeetTemplates: [
-                { id: 'lt_a', name: 'bisect', lang: 'python3', body: 'lo = 0\nhi = n', createdAt: 1, usedAt: 0, uses: 3 },
-                { id: 'lt_b', name: 'header', lang: '', body: '', createdAt: 2, usedAt: 0, uses: 0 },
-            ] } });
-
-            const host = panelHost();
-            const panel = View().mountPanel(host);
-            await panel.reload();
-
-            const titles = Array.from(host.querySelectorAll('.leet-tpl-title')).map((el) => el.textContent);
-            assertDeepEqual(titles, ['bisect', 'header'], 'array order is display order');
-
+            const host = await panel([
+                template('lt_a', 'bisect', { lang: 'python3', body: 'lo = 0\nhi = n', uses: 3 }),
+                template('lt_b', 'header', { createdAt: 2 }),
+            ]);
+            assertDeepEqual(Array.from(host.querySelectorAll('.leet-tpl-title')).map((el) => el.textContent), ['bisect', 'header']);
             const subs = Array.from(host.querySelectorAll('.leet-tpl-sub')).map((el) => el.textContent);
             assert(subs[0].includes('Python3') && subs[0].includes('2 lines'), `got: ${subs[0]}`);
             assert(subs[0].includes('used 3'), 'it does not say how often it is reached for');
@@ -587,234 +580,148 @@
         });
 
         test('an empty library says where templates come from', async () => {
-            MockChrome.reset({ localStore: { bbLeetTemplates: [] } });
-            const host = panelHost();
-            await View().mountPanel(host).reload();
-
+            const host = await panel([]);
             assert(/No templates yet/.test(host.textContent));
             assert(/Ctrl/.test(host.textContent), 'it does not mention the shortcut that makes one');
             teardown();
         });
 
-        test('a new template is written to the store', async () => {
-            MockChrome.reset({ localStore: { bbLeetTemplates: [] } });
-            const host = panelHost();
-            const panel = View().mountPanel(host);
-            await panel.reload();
-
+        test('a new template is written to the store, indentation and all', async () => {
+            const host = await panel([]);
             host.querySelector('[data-leet-tpl-new]').click();
             host.querySelector('.leet-tpl-name-input').value = 'union find';
             host.querySelector('.leet-tpl-lang-input').value = 'cpp';
             host.querySelector('.leet-tpl-body-input').value = 'int find(int x) {\n    return p[x];\n}';
             host.querySelector('[data-leet-tpl-save]').click();
-
             await waitFor(async () => (await LeetTemplates().load()).length === 1, 'the template to be saved');
             const [saved] = await LeetTemplates().load();
-            assertEqual(saved.name, 'union find');
-            assertEqual(saved.lang, 'cpp');
+            assertDeepEqual([saved.name, saved.lang], ['union find', 'cpp']);
             assert(saved.body.includes('    return p[x];'), 'the indentation was trimmed away');
             teardown();
         });
 
         test('editing one keeps everything it was not asked to change', async () => {
-            MockChrome.reset({ localStore: { bbLeetTemplates: [
-                { id: 'lt_a', name: 'bisect', lang: 'python3', body: 'old', createdAt: 1, usedAt: 55, uses: 7 },
-            ] } });
-            const host = panelHost();
-            const panel = View().mountPanel(host);
-            await panel.reload();
-
+            const host = await panel([template('lt_a', 'bisect', { lang: 'python3', body: 'old', usedAt: 55, uses: 7 })]);
             host.querySelector('[data-leet-tpl-edit]').click();
             host.querySelector('.leet-tpl-body-input').value = 'new body';
             host.querySelector('[data-leet-tpl-save]').click();
-
             await waitFor(async () => (await LeetTemplates().load())[0].body === 'new body', 'the edit to land');
             const [saved] = await LeetTemplates().load();
-            assertEqual(saved.name, 'bisect', 'the name was lost');
-            assertEqual(saved.uses, 7, 'the usage count was reset');
+            assertDeepEqual([saved.name, saved.uses], ['bisect', 7]);
             teardown();
         });
 
         test('a template with no name is refused rather than saved blank', async () => {
-            MockChrome.reset({ localStore: { bbLeetTemplates: [] } });
-            const host = panelHost();
-            await View().mountPanel(host).reload();
-
+            const host = await panel([]);
             host.querySelector('[data-leet-tpl-new]').click();
             host.querySelector('.leet-tpl-body-input').value = 'something';
             host.querySelector('[data-leet-tpl-save]').click();
             await settle();
             await settle();
-
             assertEqual((await LeetTemplates().load()).length, 0, 'a nameless template got in');
             teardown();
         });
 
         test('reordering is a splice and nothing else', async () => {
-            MockChrome.reset({ localStore: { bbLeetTemplates: [
-                { id: 'lt_a', name: 'first', lang: '', body: '', createdAt: 1, usedAt: 0, uses: 0 },
-                { id: 'lt_b', name: 'second', lang: '', body: '', createdAt: 2, usedAt: 0, uses: 0 },
-            ] } });
-            const host = panelHost();
-            const panel = View().mountPanel(host);
-            await panel.reload();
-
+            const host = await panel([template('lt_a', 'first'), template('lt_b', 'second', { createdAt: 2 })]);
             const items = host.querySelectorAll('[data-leet-tpl-id]');
             items[1].dispatchEvent(new DragEvent('dragstart', { bubbles: true }));
             items[0].dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true }));
-
             await waitFor(async () => (await LeetTemplates().load())[0].name === 'second', 'the reorder');
-            const order = (await LeetTemplates().load()).map((t) => t.name);
-            assertDeepEqual(order, ['second', 'first']);
+            assertDeepEqual((await LeetTemplates().load()).map((t) => t.name), ['second', 'first']);
             teardown();
         });
     });
-
-    // ------------------------------------------------------------- Shift+P
 
     suite('leetcode — Shift+P', () => {
         /**
-         * Wire the keyboard the way src/content/main.js does, including the
-         * two gates that decide whether the key is ours: the `pouchShortcut`
-         * setting, and there being a pouch on this site to open.
+         * The keyboard wired the way src/content/main.js does it, with both of
+         * its gates: the `pouchShortcut` setting, and a pouch on this site.
          */
         function withKeyboard(settings, run) {
-            const made = makeUi({ settings });
-            const uninstall = window.BB.Shortcuts.install({
-                hasVideo: () => false,
-                skip() {}, faster() {}, slower() {}, resetSpeed() {}, boostSpeed() {},
-                startRecording() {}, stopRecording() {}, toggleSegment() {},
-                openSkim() {}, openHints() {},
-                openPouch: () => made.ui.openPouch(),
-                canOpenPouch: () => !!made.ui,
-                featureOn: (key) => made.values[key] === true,
-            }, {
-                canRecord: () => false,
-                getShortcut: (id) => window.BB.Keybindings.resolve(made.values.shortcuts, id),
-                paused: () => false,
-            });
-
-            const press = () => window.dispatchEvent(new KeyboardEvent('keydown', {
-                key: 'P', code: 'KeyP', shiftKey: true, bubbles: true, cancelable: true,
-            }));
-
-            return Promise.resolve(run({ press, made })).finally(() => {
-                uninstall();
-                made.restore();
+            return onProblem({ settings }, async (made) => {
+                const uninstall = window.BB.Shortcuts.install({
+                    hasVideo: () => false,
+                    skip() {}, faster() {}, slower() {}, resetSpeed() {}, boostSpeed() {},
+                    startRecording() {}, stopRecording() {}, toggleSegment() {},
+                    openSkim() {}, openHints() {},
+                    openPouch: () => made.ui.openPouch(),
+                    canOpenPouch: () => !!made.ui,
+                    featureOn: (key) => made.values[key] === true,
+                }, {
+                    canRecord: () => false,
+                    getShortcut: (id) => window.BB.Keybindings.resolve(made.values.shortcuts, id),
+                    paused: () => false,
+                });
+                const press = () => window.dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'P', code: 'KeyP', shiftKey: true, bubbles: true, cancelable: true,
+                }));
+                try {
+                    await run(press);
+                } finally {
+                    uninstall();
+                }
             });
         }
 
-        test('opens the pouch when the shortcut is switched on', async () => {
-            MockChrome.reset();
-            problemPage();
-            await withKeyboard({ pouchShortcut: true }, async ({ press }) => {
-                press();
-                await waitFor(() => document.getElementById('bb-leet-overlay'),
-                    'the pouch to open on Shift+P');
-                assert(document.getElementById('bb-leet-overlay'), 'Shift+P opened nothing');
-            });
-            teardown();
-        });
+        test('opens the pouch when the shortcut is switched on, and a second press closes it', () => withKeyboard({ pouchShortcut: true }, async (press) => {
+            press();
+            await waitFor(() => byId('bb-leet-overlay'), 'the pouch to open on Shift+P');
+            press();
+            await settle();
+            assert(!byId('bb-leet-overlay'), 'the second press did not close it');
+        }));
 
-        test('does nothing at all until it is switched on', async () => {
-            // Off by default, like Skim and the link hints: a bare-Shift letter
-            // is a large claim to make on somebody's keyboard unasked. The key
-            // has to go back to the page untouched, not be swallowed.
-            MockChrome.reset();
-            problemPage();
-            await withKeyboard({ pouchShortcut: false }, async ({ press }) => {
-                let defaultPrevented = false;
-                const watch = (event) => { defaultPrevented = event.defaultPrevented; };
-                window.addEventListener('keydown', watch);
-                press();
-                window.removeEventListener('keydown', watch);
-
-                await settle();
-                assert(!document.getElementById('bb-leet-overlay'), 'it opened with the setting off');
-                assert(!defaultPrevented, 'the key was swallowed instead of left to the page');
-            });
-            teardown();
-        });
-
-        test('a second press closes it again', async () => {
-            MockChrome.reset();
-            problemPage();
-            await withKeyboard({ pouchShortcut: true }, async ({ press }) => {
-                press();
-                await waitFor(() => document.getElementById('bb-leet-overlay'), 'the pouch to open');
-                press();
-                await settle();
-                assert(!document.getElementById('bb-leet-overlay'), 'the second press did not close it');
-            });
-            teardown();
-        });
+        test('does nothing at all until it is switched on', () => withKeyboard({ pouchShortcut: false }, async (press) => {
+            // A bare-Shift letter is a large claim on a keyboard: the key goes back to the page untouched.
+            let defaultPrevented = false;
+            const watch = (event) => { defaultPrevented = event.defaultPrevented; };
+            window.addEventListener('keydown', watch);
+            press();
+            window.removeEventListener('keydown', watch);
+            await settle();
+            assert(!byId('bb-leet-overlay'), 'it opened with the setting off');
+            assert(!defaultPrevented, 'the key was swallowed instead of left to the page');
+        }));
     });
-
-    // ------------------------------------------------------- the page bridge
 
     suite('leetcode — the page-world bridge', () => {
         test('the language is read back synchronously', () => {
-            // DOM dispatch runs the other world's listener inline, which is
-            // what lets currentLang() be a plain function call rather than a
-            // promise the panel would have to render around.
-            const onRead = (event) => {
-                if (JSON.parse(event.detail).type !== 'read') return;
-                document.dispatchEvent(new CustomEvent('bb:leet:code', {
-                    detail: JSON.stringify({ lang: 'cpp', selection: 'int x;', value: 'int x;' }),
-                }));
-            };
-            document.addEventListener('bb:leet', onRead);
-
+            // DOM dispatch runs the other world's listener inline, so currentLang() needs no promise.
+            const quiet = pageWorld({ lang: 'cpp', selection: 'int x;', value: 'int x;' });
             const { ui, restore } = makeUi();
-            const answer = ui.askPage();
-            assertEqual(answer.lang, 'cpp');
-            assertEqual(answer.selection, 'int x;');
-
-            document.removeEventListener('bb:leet', onRead);
-            restore();
+            try {
+                const answer = ui.askPage();
+                assertDeepEqual([answer.lang, answer.selection], ['cpp', 'int x;']);
+            } finally {
+                quiet();
+                restore();
+            }
         });
 
         test('with no page world there, it answers blanks rather than hanging', () => {
             const { ui, restore } = makeUi();
-            const answer = ui.askPage();
-            assertDeepEqual(answer, { lang: '', selection: '', value: '' });
-            restore();
+            try {
+                assertDeepEqual(ui.askPage(), { lang: '', selection: '', value: '' });
+            } finally { restore(); }
         });
 
         test('the suggester offers to save what is selected', async () => {
-            MockChrome.reset({ localStore: { bbLeetTemplates: [] } });
-            const onRead = (event) => {
-                if (JSON.parse(event.detail).type !== 'read') return;
-                document.dispatchEvent(new CustomEvent('bb:leet:code', {
-                    detail: JSON.stringify({ lang: 'python', selection: 'lo, hi = 0, n', value: '' }),
-                }));
-            };
-            document.addEventListener('bb:leet', onRead);
-
-            problemPage();
-            const { ui, restore } = makeUi();
-            ui.openSuggest();
-            await waitFor(() => document.querySelector('#bb-leet-suggest .is-save'),
-                'the save-the-selection row');
-
-            const saveRow = document.querySelector('#bb-leet-suggest .is-save');
-            assert(saveRow, 'nothing offered to save the selection');
-
-            // The filter box doubles as the name field.
-            document.querySelector('.bb-leet-suggest-q').value = 'bisect';
-            saveRow.click();
-            await waitFor(async () => (await LeetTemplates().load()).length === 1,
-                'the template to be saved');
-
-            const saved = await LeetTemplates().load();
-            assertEqual(saved.length, 1, 'the selection was not saved');
-            assertEqual(saved[0].name, 'bisect');
-            assertEqual(saved[0].lang, 'python3', 'monaco’s "python" files as LeetCode’s python3');
-            assertEqual(saved[0].body, 'lo, hi = 0, n');
-
-            document.removeEventListener('bb:leet', onRead);
-            restore();
-            teardown();
+            const quiet = pageWorld({ lang: 'python', selection: 'lo, hi = 0, n', value: '' });
+            try {
+                await onProblem({ store: { bbLeetTemplates: [] } }, async ({ ui }) => {
+                    ui.openSuggest();
+                    await waitFor(() => document.querySelector('#bb-leet-suggest .is-save'), 'the save-the-selection row');
+                    // The filter box doubles as the name field.
+                    document.querySelector('.bb-leet-suggest-q').value = 'bisect';
+                    document.querySelector('#bb-leet-suggest .is-save').click();
+                    await waitFor(async () => (await LeetTemplates().load()).length === 1, 'the template to be saved');
+                    const [saved] = await LeetTemplates().load();
+                    assertEqual(saved.name, 'bisect');
+                    assertEqual(saved.lang, 'python3', 'monaco’s "python" files as LeetCode’s python3');
+                    assertEqual(saved.body, 'lo, hi = 0, n');
+                });
+            } finally { quiet(); }
         });
     });
 })();
