@@ -241,130 +241,68 @@
         }));
     });
 
-    // ---------------------------------------------------------- the verdict
-
     suite('leetcode — a submission coming back', () => {
-        test('a wrong answer is recorded and says nothing', async () => {
-            MockChrome.reset();
-            problemPage();
-            const { ui, notes, restore } = makeUi();
-            ui.install();
-
+        test('a wrong answer is recorded and says nothing', () => onProblem({ install: true }, async ({ notes }) => {
             await recordVerdict({ slug: 'two-sum', status: 'Wrong Answer', runtime: '', lang: 'python3' }, 1);
-
             const problem = await stored('two-sum');
-            assert(problem, 'the attempt was not recorded at all');
             assertEqual(problem.attempts.length, 1);
             assertEqual(problem.attempts[0].status, 'Wrong Answer');
             assertEqual(problem.solvedAt, 0, 'a wrong answer is not a solve');
-            assertEqual(notes.length, 0, 'the page already told them; a toast is noise');
-            assert(!document.getElementById('bb-leet-grade'), 'nothing to grade yet');
+            assertEqual(notes.length, 0, 'the page already told them');
+            assert(!byId('bb-leet-grade'), 'nothing to grade yet');
+        }));
 
-            restore();
-            teardown();
-        });
-
-        test('an accept opens the grade card with the suggestion marked', async () => {
-            MockChrome.reset();
-            problemPage();
-            const { ui, restore } = makeUi();
-            ui.install();
-
-            // Two wrong answers, then a right one: two failures on a Medium is
-            // Hard by Fsrs.suggestGrade, whatever the clock says. One at a
-            // time, because each verdict reads the record before it writes —
-            // overlapping them would have both read the same "before".
+        test('an accept opens the grade card with the suggestion marked', () => onProblem({ install: true }, async () => {
+            // Two failures on a Medium is Hard, whatever the clock says. One at
+            // a time: each verdict reads the record before it writes.
             await recordVerdict({ slug: 'two-sum', status: 'Wrong Answer' }, 1);
             await recordVerdict({ slug: 'two-sum', status: 'Runtime Error' }, 2);
             await recordVerdict({ slug: 'two-sum', status: 'Accepted', runtime: '52 ms' }, 3);
-            await waitFor(() => document.getElementById('bb-leet-grade'), 'the grade card');
+            await waitFor(() => byId('bb-leet-grade'), 'the grade card');
 
-            const card = document.getElementById('bb-leet-grade');
-            assert(card, 'no grade card appeared');
-
-            const buttons = Array.from(card.querySelectorAll('[data-bb-grade]'));
-            assertEqual(buttons.length, 4, 'all four grades are offered');
+            const buttons = Array.from(byId('bb-leet-grade').querySelectorAll('[data-bb-grade]'));
+            assertEqual(buttons.length, 4);
             const marked = buttons.filter((b) => b.classList.contains('is-suggested'));
             assertEqual(marked.length, 1, 'exactly one is pre-selected');
-            assertEqual(marked[0].dataset.bbGrade, '2', 'two failures on a Medium is Hard');
+            assertEqual(marked[0].dataset.bbGrade, '2');
             assertEqual(marked[0].getAttribute('aria-pressed'), 'true');
+            for (const button of buttons) assert(button.textContent.trim().length > 4, 'a grade with no consequence written on it');
+        }));
 
-            // And each one says what it would cost.
-            for (const button of buttons) {
-                assert(button.textContent.trim().length > 4,
-                    'a grade button with no consequence written on it is four words with no meaning');
-            }
-
-            restore();
-            teardown();
-        });
-
-        test('picking a grade writes the schedule', async () => {
-            MockChrome.reset();
-            problemPage();
-            const { ui, restore } = makeUi();
-            ui.install();
-
+        test('picking a grade writes the schedule', () => onProblem({ install: true }, async () => {
             await recordVerdict({ slug: 'two-sum', status: 'Accepted', runtime: '52 ms' }, 1);
-            await waitFor(() => document.getElementById('bb-leet-grade'), 'the grade card');
-
+            await waitFor(() => byId('bb-leet-grade'), 'the grade card');
             document.querySelector('#bb-leet-grade [data-bb-grade="3"]').click();
             await waitFor(async () => (await stored('two-sum')).fsrs, 'the schedule to be written');
 
             const problem = await stored('two-sum');
-            assert(problem.fsrs, 'nothing was scheduled');
             assertEqual(problem.fsrs.grade, 3);
             assert(problem.fsrs.due > Date.now(), 'it is due in the past');
-            assert(!document.getElementById('bb-leet-grade'), 'the card stayed up after answering');
+            assert(!byId('bb-leet-grade'), 'the card stayed up after answering');
+        }));
 
-            restore();
-            teardown();
-        });
-
-        test('dismissing leaves the problem ungraded rather than taking the suggestion', async () => {
-            // A schedule written on the user's behalf is a wrong date they
-            // never agreed to and would have to go and find to fix.
-            MockChrome.reset();
-            problemPage();
-            const { ui, restore } = makeUi();
-            ui.install();
-
+        test('dismissing leaves the problem ungraded rather than taking the suggestion', () => onProblem({ install: true }, async () => {
+            // A schedule written for them is a date they never agreed to.
             await recordVerdict({ slug: 'two-sum', status: 'Accepted' }, 1);
-            await waitFor(() => document.getElementById('bb-leet-grade'), 'the grade card');
-
+            await waitFor(() => byId('bb-leet-grade'), 'the grade card');
             document.querySelector('#bb-leet-grade [data-bb-leet-close]').click();
             await settle();
 
             const problem = await stored('two-sum');
             assertEqual(problem.fsrs, null, 'dismissing scheduled it anyway');
             assert(problem.solvedAt > 0, 'but the solve itself is still on record');
+        }));
 
-            restore();
-            teardown();
-        });
-
-        test('the grade card stays away when the setting is off', async () => {
-            MockChrome.reset();
-            problemPage();
-            const { ui, notes, restore } = makeUi({ settings: { leetGradePrompt: false } });
-            ui.install();
-
-            // Wait for the toast, which is the positive signal that the whole
-            // chain has run — then the absence of a card means something.
+        test('the grade card stays away when the setting is off', () => onProblem({ install: true, settings: { leetGradePrompt: false } }, async ({ notes }) => {
+            // The toast says the whole chain has run, so the card's absence means something.
             await recordVerdict({ slug: 'two-sum', status: 'Accepted' }, 1);
             await waitFor(() => notes.some((n) => /Accepted/.test(n.message)), 'the accepted toast');
-
-            assert(!document.getElementById('bb-leet-grade'), 'the card appeared with the prompt off');
-
-            restore();
-            teardown();
-        });
+            assert(!byId('bb-leet-grade'), 'the card appeared with the prompt off');
+        }));
     });
 
-    // ------------------------------------------------------------ the panel
-
     suite('leetcode — the pouch panel', () => {
-        /** A log with one problem in each of the three states. */
+        /** One problem in each of the three states. */
         function seededStore() {
             const now = Date.now();
             return {
@@ -391,69 +329,34 @@
                 bbLeetDays: {},
             };
         }
-
-        test('the rail counts each list', async () => {
-            MockChrome.reset({ localStore: seededStore() });
-            problemPage();
-            const { ui, restore } = makeUi();
-
+        const openPanel = async (ui) => {
             ui.openPouch();
-            await waitFor(() => document.querySelector("#bb-leet-overlay .bb-leet-rail-row"),
-                "the panel to hydrate");
+            await waitFor(() => document.querySelector('#bb-leet-overlay .bb-leet-rail-row'), 'the panel to hydrate');
+        };
 
-            const rows = Array.from(document.querySelectorAll('#bb-leet-overlay .bb-leet-rail-row'));
+        test('the rail counts each list, and it opens on Due with the note and when it is wanted', () => onProblem({ store: seededStore() }, async ({ ui }) => {
+            await openPanel(ui);
             const counts = {};
-            rows.forEach((row) => { counts[row.dataset.bbView] = row.querySelector('.bb-leet-rail-n').textContent; });
+            document.querySelectorAll('#bb-leet-overlay .bb-leet-rail-row').forEach((row) => {
+                counts[row.dataset.bbView] = row.querySelector('.bb-leet-rail-n').textContent;
+            });
+            assertDeepEqual([counts.due, counts.toSolve, counts.solved], ['1', '1', '1']);
 
-            assertEqual(counts.due, '1', 'one problem has come round');
-            assertEqual(counts.toSolve, '1', 'one was opened and never accepted');
-            assertEqual(counts.solved, '1', 'one is solved and not yet due');
+            const pane = document.querySelector('#bb-leet-overlay .bb-leet-pane').textContent;
+            assert(pane.includes('Due One'), 'the due problem is not listed');
+            assert(pane.includes('sliding window'), 'its note is not shown');
+            assert(/overdue|due today/.test(pane), `no due date on the row: ${pane}`);
+        }));
 
-            restore();
-            teardown();
-        });
-
-        test('it opens on Due, and shows the note and when it is wanted', async () => {
-            MockChrome.reset({ localStore: seededStore() });
-            problemPage();
-            const { ui, restore } = makeUi();
-
-            ui.openPouch();
-            await waitFor(() => document.querySelector("#bb-leet-overlay .bb-leet-rail-row"),
-                "the panel to hydrate");
-
-            const pane = document.querySelector('#bb-leet-overlay .bb-leet-pane');
-            assert(pane.textContent.includes('Due One'), 'the due problem is not listed');
-            assert(pane.textContent.includes('sliding window'), 'its note is not shown');
-            assert(/overdue|due today/.test(pane.textContent), `no due date on the row: ${pane.textContent}`);
-
-            restore();
-            teardown();
-        });
-
-        test('editing a note here writes it to the store', async () => {
-            MockChrome.reset({ localStore: seededStore() });
-            problemPage();
-            const { ui, restore } = makeUi();
-
-            ui.openPouch();
-            await waitFor(() => document.querySelector("#bb-leet-overlay .bb-leet-rail-row"),
-                "the panel to hydrate");
-
+        test('editing a note here writes it to the store', () => onProblem({ store: seededStore() }, async ({ ui }) => {
+            await openPanel(ui);
             document.querySelector('#bb-leet-overlay [data-bb-note="due-one"]').click();
             const input = document.querySelector('#bb-leet-overlay .bb-leet-note-input');
             assert(input, 'clicking the note did not open a field');
             input.value = 'two pointers, sorted input only';
             document.querySelector('#bb-leet-overlay [data-bb-note-save]').click();
-            await waitFor(async () => (await stored('due-one')).note === 'two pointers, sorted input only',
-                'the note to be written');
-
-            const problem = await stored('due-one');
-            assertEqual(problem.note, 'two pointers, sorted input only');
-
-            restore();
-            teardown();
-        });
+            await waitFor(async () => (await stored('due-one')).note === 'two pointers, sorted input only', 'the note to be written');
+        }));
 
         test('the templates rail offers this language first', async () => {
             const store = seededStore();
@@ -462,129 +365,62 @@
                 { id: 'lt_b', name: 'bisect', lang: 'python3', body: 'lo, hi = 0, n', createdAt: 2, usedAt: 0, uses: 0 },
                 { id: 'lt_c', name: 'header', lang: '', body: '# notes', createdAt: 3, usedAt: 0, uses: 0 },
             ];
-            MockChrome.reset({ localStore: store });
-            problemPage();
-            const { ui, restore } = makeUi();
-
-            // Stand in for the page world, which is not loaded in the suite.
-            const onRead = (event) => {
-                if (JSON.parse(event.detail).type !== 'read') return;
-                document.dispatchEvent(new CustomEvent('bb:leet:code', {
-                    detail: JSON.stringify({ lang: 'python', selection: '', value: '' }),
-                }));
-            };
-            document.addEventListener('bb:leet', onRead);
-
-            ui.openPouch();
-            await waitFor(() => document.querySelector("#bb-leet-overlay .bb-leet-rail-row"),
-                "the panel to hydrate");
-
-            document.querySelector('#bb-leet-overlay [data-bb-view="__templates__"]').click();
-            const names = Array.from(document.querySelectorAll('#bb-leet-overlay .bb-leet-tpl-name'))
-                .map((el) => el.textContent);
-            // Monaco says "python"; LeetCode calls it python3, and a C++
-            // template must not be offered into a Python buffer.
-            assertDeepEqual(names, ['bisect', 'header']);
-
-            document.removeEventListener('bb:leet', onRead);
-            restore();
-            teardown();
+            const quiet = pageWorld({ lang: 'python', selection: '', value: '' });
+            try {
+                await onProblem({ store }, async ({ ui }) => {
+                    await openPanel(ui);
+                    document.querySelector('#bb-leet-overlay [data-bb-view="__templates__"]').click();
+                    const names = Array.from(document.querySelectorAll('#bb-leet-overlay .bb-leet-tpl-name')).map((el) => el.textContent);
+                    // Monaco says "python", LeetCode python3; a C++ template is not offered to it.
+                    assertDeepEqual(names, ['bisect', 'header']);
+                });
+            } finally { quiet(); }
         });
     });
 
-    // ------------------------------------------------------- mock interview
-
     suite('leetcode — mock interview mode', () => {
-        test('it hides the difficulty and the tags, and puts them back on exit', () => {
-            problemPage();
-            const { ui, restore } = makeUi();
+        test('it hides the difficulty and the tags, and hands the page back exactly as it was', () => onProblem({}, ({ ui }) => {
             const pill = document.querySelector('.text-difficulty-medium');
             const tag = document.querySelector('a[href="/tag/array/"]');
+            const before = byId(HOST_ID).innerHTML;
 
             ui.startMock('two-sum');
             assert(document.documentElement.classList.contains('bb-leet-mock'), '<html> was not marked');
             assert(pill.hasAttribute('data-bb-leet-hidden'), 'the difficulty is still on show');
             assert(tag.hasAttribute('data-bb-leet-hidden'), 'the tags are still on show');
-            assert(document.getElementById('bb-leet-chip'), 'no countdown was drawn');
+            assert(byId('bb-leet-chip'), 'no countdown was drawn');
 
             ui.stopMock();
             assert(!document.documentElement.classList.contains('bb-leet-mock'), 'the class was left behind');
-            assert(!pill.hasAttribute('data-bb-leet-hidden'), 'the difficulty was not given back');
-            assert(!tag.hasAttribute('data-bb-leet-hidden'), 'the tags were not given back');
-            assert(!document.getElementById('bb-leet-chip'), 'the countdown was left behind');
+            assert(!byId('bb-leet-chip'), 'the countdown was left behind');
+            // Nothing is added to LeetCode's nodes beyond the mark, so the markup comes back byte for byte.
+            assertEqual(byId(HOST_ID).innerHTML, before);
+        }));
 
-            restore();
-            teardown();
-        });
-
-        test('leaving puts the page back exactly as it was', () => {
-            // Nothing is removed and nothing is added to LeetCode's own nodes
-            // beyond the mark, so the markup has to come back byte-identical.
-            problemPage();
-            const { ui, restore } = makeUi();
-            const before = document.getElementById(HOST_ID).innerHTML;
-
+        test('the countdown runs on the setting’s own minutes', () => onProblem({ settings: { leetMockMinutes: 45 } }, ({ ui }) => {
             ui.startMock('two-sum');
-            ui.stopMock();
-
-            assertEqual(document.getElementById(HOST_ID).innerHTML, before,
-                'the page was not handed back the way it was found');
-            restore();
-            teardown();
-        });
-
-        test('the countdown runs on the setting’s own minutes', () => {
-            problemPage();
-            const { ui, restore } = makeUi({ settings: { leetMockMinutes: 45 } });
-            ui.startMock('two-sum');
-
             const shown = document.querySelector('#bb-leet-chip .bb-leet-chip-time').textContent;
             assert(/^4[45]:\d\d$/.test(shown), `expected about 45 minutes, got ${shown}`);
-
             ui.stopMock();
-            restore();
-            teardown();
-        });
+        }));
 
-        test('the grade card is suppressed while the clock is running', async () => {
-            MockChrome.reset();
-            problemPage();
-            const { ui, restore } = makeUi();
-            ui.install();
+        test('the grade card is suppressed while the clock is running', () => onProblem({ install: true }, async ({ ui }) => {
+            // The attempt is still recorded, and waiting for it makes the card's absence mean something.
             ui.startMock('two-sum');
-
-            // The attempt is still recorded — the interview is not a rehearsal
-            // — and waiting for it is what makes the absence below mean
-            // something rather than being a race we happened to win.
             await recordVerdict({ slug: 'two-sum', status: 'Accepted' }, 1);
-
-            assert(!document.getElementById('bb-leet-grade'),
-                'grading belongs after the clock stops, not over the top of it');
-            const problem = await stored('two-sum');
-            assertEqual(problem.attempts.length, 1);
-
+            assert(!byId('bb-leet-grade'), 'grading belongs after the clock stops');
+            assertEqual((await stored('two-sum')).attempts.length, 1);
             ui.stopMock();
-            restore();
-            teardown();
-        });
+        }));
 
-        test('the note pill goes away with it and comes back after', async () => {
-            MockChrome.reset();
-            problemPage();
-            const { ui, restore } = makeUi({ settings: { leetNoteButton: true } });
-
+        test('the note pill goes away with it and comes back after', () => onProblem({ settings: { leetNoteButton: true } }, async ({ ui }) => {
             ui.injectNotePill();
-            await waitFor(() => document.getElementById('bb-leet-pill'), 'the pill to be placed');
-
+            await waitFor(() => byId('bb-leet-pill'), 'the pill to be placed');
             ui.startMock('two-sum');
-            assert(!document.getElementById('bb-leet-pill'), 'your own note is help too');
-
+            assert(!byId('bb-leet-pill'), 'your own note is help too');
             ui.stopMock();
-            await waitFor(() => document.getElementById('bb-leet-pill'), 'the pill to come back');
-
-            restore();
-            teardown();
-        });
+            await waitFor(() => byId('bb-leet-pill'), 'the pill to come back');
+        }));
     });
 
     // -------------------------------------------------------------- dressing
