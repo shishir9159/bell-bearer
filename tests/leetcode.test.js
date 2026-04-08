@@ -423,218 +423,130 @@
         }));
     });
 
-    // -------------------------------------------------------------- dressing
-
     suite('leetcode — dressing the surfaces', () => {
-        const SKINS = ['default', 'riso', 'medieval', 'deco'];
-
-        for (const skin of SKINS) {
-            test(`the panel is dressed for the ${skin} skin`, async () => {
-                MockChrome.reset({ localStore: { skin } });
-                problemPage();
-                const { ui, restore } = makeUi();
-
+        for (const skin of ['default', 'riso', 'medieval', 'deco']) {
+            test(`the panel is dressed for the ${skin} skin`, () => onProblem({ store: { skin } }, async ({ ui }) => {
                 ui.openPouch();
-                await waitFor(() => {
-                    const drawn = document.getElementById("bb-leet-overlay");
-                    return drawn && drawn.dataset.bbSkin;
-                }, "the panel to be dressed");
-
-                const overlay = document.getElementById('bb-leet-overlay');
-                assert(overlay, 'no panel opened');
-                assert(overlay.classList.contains('bb-themed'),
-                    'undressed, so none of the --bb-* tokens resolve and it draws as a white slab');
+                await waitFor(() => byId('bb-leet-overlay') && byId('bb-leet-overlay').dataset.bbSkin, 'the panel to be dressed');
+                const overlay = byId('bb-leet-overlay');
+                assert(overlay.classList.contains('bb-themed'), 'undressed, so no --bb-* token resolves');
                 assertEqual(overlay.dataset.bbSkin, skin);
-                assert(overlay.dataset.bbTheme === 'light' || overlay.dataset.bbTheme === 'dark',
-                    `the light/dark half was not set: ${overlay.dataset.bbTheme}`);
-
-                restore();
-                teardown();
-            });
+                assert(['light', 'dark'].includes(overlay.dataset.bbTheme), `the light/dark half: ${overlay.dataset.bbTheme}`);
+            }));
         }
 
-        test('the grade card is dressed too', async () => {
-            MockChrome.reset({ localStore: { skin: 'riso' } });
-            problemPage();
-            const { ui, restore } = makeUi();
-            ui.install();
-
+        test('the grade card is dressed too', () => onProblem({ store: { skin: 'riso' }, install: true }, async () => {
             await recordVerdict({ slug: 'two-sum', status: 'Accepted' }, 1);
-            await waitFor(() => {
-                const drawn = document.getElementById('bb-leet-grade');
-                // The dressing is read from storage behind the card, so the
-                // card existing is not yet the card being dressed.
-                return drawn && drawn.dataset.bbSkin;
-            }, 'the grade card to be dressed');
-
-            const card = document.getElementById('bb-leet-grade');
-            assert(card.classList.contains('bb-themed'), 'the card would draw unthemed');
-            assertEqual(card.dataset.bbSkin, 'riso');
-
-            restore();
-            teardown();
-        });
+            // Dressing is read from storage behind the card, so the card existing is not yet the card dressed.
+            await waitFor(() => byId('bb-leet-grade') && byId('bb-leet-grade').dataset.bbSkin, 'the grade card to be dressed');
+            assert(byId('bb-leet-grade').classList.contains('bb-themed'));
+            assertEqual(byId('bb-leet-grade').dataset.bbSkin, 'riso');
+        }));
     });
-
-    // -------------------------------------------------------- the popup
 
     suite('leetcode — the popup queue', () => {
         const LeetPopup = () => window.BB.LeetPopup;
 
-        function popupHost() {
+        /** The popup over `store`, in a fresh host, rendered. */
+        async function popup(store, { slug = '', title = '' } = {}) {
+            MockChrome.reset({ localStore: store });
             teardown();
             const host = document.createElement('div');
             host.id = HOST_ID;
             document.body.appendChild(host);
-            return host;
-        }
-
-        function makePopup({ slug = '', title = '' } = {}) {
             const opened = [];
             const view = LeetPopup().createView({
-                body: popupHost(),
+                body: host,
                 currentSlug: () => slug,
                 currentTitle: () => title,
                 onOpen: (url) => opened.push(url),
                 onDashboard: () => opened.push('dashboard'),
             });
-            return { view, opened, host: document.getElementById(HOST_ID) };
+            await view.render();
+            return { view, opened, host };
         }
 
         const problem = (slug, over) => Object.assign({
             slug, title: slug, difficulty: 'Medium', tags: [], url: '',
             note: '', seenAt: Date.now(), solvedAt: 0, attempts: [], fsrs: null,
         }, over);
+        /** Solved, and not due for a month. */
+        const done = () => {
+            const now = Date.now();
+            return problem('done', { solvedAt: now, fsrs: { stability: 30, difficulty: 5, due: now + 30 * 864e5, reviewedAt: now, reps: 2, lapses: 0 } });
+        };
 
         test('lists what to do next, due before unsolved', async () => {
             const now = Date.now();
-            MockChrome.reset({ localStore: { bbLeetProblems: {
+            const { host } = await popup({ bbLeetProblems: {
                 fresh: problem('fresh'),
                 overdue: problem('overdue', {
                     solvedAt: now - 9 * 864e5,
                     fsrs: { stability: 3, difficulty: 5, due: now - 864e5, reviewedAt: now - 4 * 864e5, reps: 1, lapses: 0 },
                 }),
-            } } });
-
-            const { view, host } = makePopup();
-            await view.render();
-
+            } });
             const names = Array.from(host.querySelectorAll('.leet-pop-name')).map((el) => el.textContent);
-            assertDeepEqual(names, ['overdue', 'fresh'],
-                'a half-forgotten problem is worth more than a fresh one');
+            assertDeepEqual(names, ['overdue', 'fresh'], 'a half-forgotten problem is worth more than a fresh one');
             assert(host.textContent.includes('overdue'), 'it does not say how late it is');
         });
 
         test('says so plainly when there is nothing waiting', async () => {
-            const now = Date.now();
-            MockChrome.reset({ localStore: { bbLeetProblems: {
-                done: problem('done', {
-                    solvedAt: now,
-                    fsrs: { stability: 30, difficulty: 5, due: now + 30 * 864e5, reviewedAt: now, reps: 2, lapses: 0 },
-                }),
-            } } });
-
-            const { view, host } = makePopup();
-            await view.render();
-
+            const { host } = await popup({ bbLeetProblems: { done: done() } });
             assert(host.textContent.includes('Everything is complete'), `got: ${host.textContent}`);
             assert(host.textContent.includes('1 problem tracked'), 'it does not say what it knows about');
             assert(!host.querySelector('.leet-pop-row'), 'it listed something anyway');
         });
 
         test('an empty log says where problems come from', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { view, host } = makePopup();
-            await view.render();
+            const { host } = await popup({});
             assert(host.textContent.includes('Everything is complete'));
-            assert(/Open a problem on LeetCode/.test(host.textContent),
-                'a first-run popup that says only "complete" is a dead end');
+            assert(/Open a problem on LeetCode/.test(host.textContent), 'a first-run popup that says only "complete" is a dead end');
         });
 
         test('offers to add the problem in the tab when it is not on the list', async () => {
-            const now = Date.now();
-            MockChrome.reset({ localStore: { bbLeetProblems: {
-                done: problem('done', {
-                    solvedAt: now,
-                    fsrs: { stability: 30, difficulty: 5, due: now + 30 * 864e5, reviewedAt: now, reps: 2, lapses: 0 },
-                }),
-            } } });
-
-            const { view, host } = makePopup({ slug: 'done', title: 'Done' });
-            await view.render();
-
+            const { view, host } = await popup({ bbLeetProblems: { done: done() } }, { slug: 'done', title: 'Done' });
             const add = host.querySelector('[data-leet-add]');
-            assert(add, 'no way to put the problem in front of you onto the list');
-            assertEqual(add.dataset.leetAdd, 'done');
-
+            assertEqual(add && add.dataset.leetAdd, 'done');
             add.click();
-            await waitFor(async () => {
-                const state = await Leet().load();
-                return Leet().inQueue(state, 'done', Date.now());
-            }, 'the problem to join the queue');
-
+            await waitFor(async () => Leet().inQueue(await Leet().load(), 'done', Date.now()), 'the problem to join the queue');
             await view.render();
             assert(host.querySelector('.leet-pop-row'), 'it did not appear in the list afterwards');
             assert(!host.querySelector('[data-leet-add]'), 'it is still offering to add it');
         });
 
         test('a problem never seen before can be added straight from the popup', async () => {
-            // The case that matters most: the content script did not load, so
-            // nothing filed it — and the popup is where you would go to find
-            // out why nothing is happening.
-            MockChrome.reset({ localStore: {} });
-            const { view, host } = makePopup({ slug: 'two-sum', title: 'Two Sum' });
-            await view.render();
-
+            // The content script did not load, and the popup is where you go to find out why.
+            const { host } = await popup({}, { slug: 'two-sum', title: 'Two Sum' });
             const add = host.querySelector('[data-leet-add]');
-            assert(add, 'nothing offered');
-            assert(add.textContent.includes('Two Sum'), 'the button does not name what it would add');
-
+            assert(add && add.textContent.includes('Two Sum'), 'nothing offered, or not named');
             add.click();
-            await waitFor(async () => (await stored('two-sum')), 'the problem to be recorded');
-
+            await waitFor(() => stored('two-sum'), 'the problem to be recorded');
             const saved = await stored('two-sum');
             assertEqual(saved.title, 'Two Sum');
             assertEqual(saved.solvedAt, 0, 'adding it is not solving it');
         });
 
-        test('a problem already on the list is not offered again', async () => {
-            MockChrome.reset({ localStore: { bbLeetProblems: { fresh: problem('fresh') } } });
-            const { view, host } = makePopup({ slug: 'fresh', title: 'Fresh' });
-            await view.render();
-
-            assert(!host.querySelector('[data-leet-add]'), 'it offered to add something already there');
-            assert(host.textContent.includes('already on the list'));
-        });
-
-        test('off a problem page there is nothing to add', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { view, host } = makePopup({ slug: '' });
-            await view.render();
-            assert(!host.querySelector('[data-leet-add]'), 'it offered to add a page that is not a problem');
+        test('nothing is offered for a problem already on the list, or off a problem page', async () => {
+            const listed = await popup({ bbLeetProblems: { fresh: problem('fresh') } }, { slug: 'fresh', title: 'Fresh' });
+            assert(!listed.host.querySelector('[data-leet-add]'), 'it offered to add something already there');
+            assert(listed.host.textContent.includes('already on the list'));
+            const elsewhere = await popup({});
+            assert(!elsewhere.host.querySelector('[data-leet-add]'), 'it offered to add a page that is not a problem');
         });
 
         test('a long queue is capped, with a way through to the rest', async () => {
             const problems = {};
             for (let i = 0; i < LeetPopup().LIMIT + 4; i++) problems[`p${i}`] = problem(`p${i}`);
-            MockChrome.reset({ localStore: { bbLeetProblems: problems } });
-
-            const { view, host, opened } = makePopup();
-            await view.render();
-
+            const { host, opened } = await popup({ bbLeetProblems: problems });
             assertEqual(host.querySelectorAll('.leet-pop-row').length, LeetPopup().LIMIT);
             const more = host.querySelector('[data-leet-dashboard]');
-            assert(more, 'no way through to the rest');
-            assert(more.textContent.includes('4 more'), `got: ${more.textContent}`);
+            assert(more && more.textContent.includes('4 more'), more && more.textContent);
             more.click();
             assertDeepEqual(opened, ['dashboard']);
         });
 
         test('a row opens that problem', async () => {
-            MockChrome.reset({ localStore: { bbLeetProblems: { fresh: problem('fresh') } } });
-            const { view, host, opened } = makePopup();
-            await view.render();
-
+            const { host, opened } = await popup({ bbLeetProblems: { fresh: problem('fresh') } });
             host.querySelector('.leet-pop-row').click();
             assertDeepEqual(opened, ['https://leetcode.com/problems/fresh/']);
         });
