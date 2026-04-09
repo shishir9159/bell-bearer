@@ -1,26 +1,12 @@
 /**
- * The TypeRacer surfaces, for the parts only a real DOM can answer: reading a
- * race panel built the way the site builds one, a stream of genuine
- * `beforeinput` events arriving through a capture listener on `document`, the
- * caret going up over the quote and coming back off again, and every skin
- * actually reaching what we inject.
+ * The TypeRacer surfaces that need a DOM: reading a race panel, real
+ * `beforeinput` events through the capture listener on `document`, the caret
+ * over the quote, and the skins. The arithmetic is in node-check.js.
  *
- * The arithmetic — folding the keystrokes, the n-gram tables, the correction
- * windows, the drill — is pure and lives in tests/node-check.js, which runs in
- * a second. What is here is everything that needs elements.
- *
- * Two things are stubbed and neither is the thing under test. `location` on
- * this page is the spec runner's, never typeracer.com, so isRacePage is
- * answered directly. And `performance.now` is driven by hand: a typing test
- * measured against a clock some spec slept through would be a test of how
- * fast this machine is.
- *
- * Sound is not stubbed at all, on purpose. Nothing in a test run is a user
- * gesture, so the audio context never starts, and Sfx.play has to be silent
- * rather than throw — which is the same shape as a page the user never
- * clicked on, and worth asserting rather than mocking away.
- *
- * Wrapped, because this file shares the global scope with the other specs.
+ * `isRacePage` is answered directly (this page is never typeracer.com) and
+ * `performance.now` is driven by hand. Sound is not stubbed: nothing here is a
+ * user gesture, so Sfx.play must be silent rather than throw, as on a page
+ * nobody has clicked.
  */
 (function () {
     'use strict';
@@ -31,8 +17,9 @@
     const Sfx = () => window.BB.Sfx;
 
     const NO_WATCHER = { add() {}, remove() {}, has: () => false, schedule() {}, stop() {} };
-
     const HOST_ID = 'bb-typer-test';
+    const caret = () => document.querySelector(`.${TyperUi().CARET_CLASS}`);
+    const caretOn = () => document.documentElement.classList.contains(TyperUi().CARET_ON);
 
     /** Long enough to be a quote, and with a comma in it to fold. */
     const QUOTE = 'The quick brown fox jumps over the lazy dog, again and again.';
@@ -53,18 +40,13 @@
         if (host) host.remove();
         document.querySelectorAll(`.${TyperUi().CARET_CLASS}`).forEach((node) => node.remove());
         document.documentElement.classList.remove(TyperUi().CARET_ON);
-        document.querySelectorAll(`[${TyperUi().ANCHOR_ATTR}]`).forEach((node) => {
-            node.removeAttribute(TyperUi().ANCHOR_ATTR);
-        });
+        document.querySelectorAll(`[${TyperUi().ANCHOR_ATTR}]`).forEach((node) => node.removeAttribute(TyperUi().ANCHOR_ATTR));
     }
 
     /**
-     * A stand-in race, built out of the hooks typeracer-read.js keys off —
-     * the site's own `inputPanel` furniture rather than the generated GWT
-     * class names that move with every deploy.
-     *
-     * `typed` is how much of the quote the site has marked as already typed,
-     * which is the only thing telling the caret where you are.
+     * A race built from the site's own `inputPanel` furniture, not its GWT
+     * class names. `typed` is how much of the quote is marked typed, which
+     * is all that tells the caret where you are.
      */
     function racePage({ typed = 0, results = null } = {}) {
         teardown();
@@ -88,7 +70,7 @@
         return host;
     }
 
-    /** Mark another `count` characters as typed, the way the site would. */
+    /** Mark `count` characters as typed, the way the site would. */
     function markTyped(count) {
         const panel = document.querySelector('.inputPanelText');
         panel.children[0].textContent = QUOTE.slice(0, count);
@@ -97,63 +79,44 @@
 
     /** Put a results table on the page, which is what ends a race. */
     function showResults(text) {
-        const host = document.getElementById(HOST_ID);
         const table = document.createElement('table');
         table.className = 'raceResults';
-        table.innerHTML = `<tr><td>${text}</td></tr>
-            <tr><td><a href="/text?id=3810721">see this text</a></td></tr>`;
-        host.appendChild(table);
+        table.innerHTML = `<tr><td>${text}</td></tr><tr><td><a href="/text?id=3810721">see this text</a></td></tr>`;
+        document.getElementById(HOST_ID).appendChild(table);
     }
 
     /**
-     * A UI wired to that page, with the clock in our own hands.
-     *
-     * install() rather than reaching past it: the capture listener on
-     * `document` is the thing being exercised, and calling the handler
-     * directly would test a function nobody registers.
+     * A UI over that page, installed and synced, with the clock in hand.
+     * Through install(), because the capture listener is what is under test.
      */
-    function makeUi({ settings = {}, racePage: isRace = true } = {}) {
+    function makeUi({ settings = {} } = {}) {
         const values = Object.assign({}, window.BB.Settings.DEFAULTS, settings);
         const realIsRacePage = TyperRead().isRacePage;
         const realNow = performance.now;
         let clock = 1000;
         performance.now = () => clock;
-        TyperRead().isRacePage = () => isRace;
+        TyperRead().isRacePage = () => true;
 
-        const notes = [];
-        const ui = TyperUi().createTyperUi({
-            watcher: NO_WATCHER,
-            notify: (message, type) => notes.push({ message, type }),
-            getSettings: () => values,
-        });
+        const ui = TyperUi().createTyperUi({ watcher: NO_WATCHER, notify() {}, getSettings: () => values });
         ui.install();
-
+        ui.sync();
         const input = document.querySelector('input.txtInput');
 
         /** One real InputEvent per character; a `<` is one backspace. */
         const type = (text, { step = 200 } = {}) => {
             for (const ch of text) {
                 clock += step;
-                const event = ch === '<'
+                input.dispatchEvent(ch === '<'
                     ? new InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true })
-                    : new InputEvent('beforeinput', { inputType: 'insertText', data: ch, bubbles: true, cancelable: true });
-                input.dispatchEvent(event);
+                    : new InputEvent('beforeinput', { inputType: 'insertText', data: ch, bubbles: true, cancelable: true }));
             }
         };
 
         return {
             ui,
-            notes,
             values,
             type,
-            input,
-            tick: (ms) => { clock += ms; },
-            /**
-             * Put the document back. uninstall() is the half that matters:
-             * install() puts three listeners on `document`, and without
-             * taking them off the third spec in this file would be answered
-             * by the first spec's UI as well as its own.
-             */
+            // uninstall() matters: the three listeners on document would otherwise answer every later spec.
             restore: () => {
                 ui.uninstall();
                 TyperRead().isRacePage = realIsRacePage;
@@ -162,12 +125,25 @@
         };
     }
 
-    // ----------------------------------------------------- reading a page
+    /** A fresh store, a race page and a UI over it for `run`, put back however it ends. */
+    async function onRace({ typed = 0, settings, store } = {}, run) {
+        MockChrome.reset({ localStore: store });
+        racePage({ typed });
+        const page = makeUi({ settings });
+        try {
+            return await run(page);
+        } finally {
+            page.restore();
+            teardown();
+        }
+    }
 
     suite('typeracer — reading the page', () => {
-        test('reads the quote out of TypeRacer-shaped markup', () => {
+        test('reads the quote out of TypeRacer-shaped markup, and no quote out of a short string', () => {
             racePage();
             assertEqual(TyperRead().quoteText(), QUOTE);
+            document.querySelector('.inputPanelText').textContent = 'Waiting…';
+            assertEqual(TyperRead().quoteText(), null);
             teardown();
         });
 
@@ -175,18 +151,9 @@
             racePage();
             const input = document.querySelector('input.txtInput');
             assert(TyperRead().inputBox() === input, 'the live box was passed over');
-
-            // Between races the site leaves the box in the page and disables
-            // it; a listener on that would report a race that never started.
+            // Between races the site disables the box; listening there reports a race that never started.
             input.readOnly = true;
             assertEqual(TyperRead().inputBox(), null);
-            teardown();
-        });
-
-        test('a panel with no quote in it reports nothing', () => {
-            racePage();
-            document.querySelector('.inputPanelText').textContent = 'Waiting…';
-            assertEqual(TyperRead().quoteText(), null, 'a short string was believed to be a quote');
             teardown();
         });
 
@@ -198,96 +165,52 @@
         });
     });
 
-    // ------------------------------------------------------- typing a race
-
     suite('typeracer — typing a race', () => {
-        test('a real beforeinput on the page lands in the stream', () => {
-            racePage();
-            const page = makeUi();
-            page.ui.sync();
-            page.type('The quick');
-
-            const race = page.ui.currentRace();
+        test('a real beforeinput on the page lands in the stream', () => onRace({}, ({ ui, type }) => {
+            type('The quick');
+            const race = ui.currentRace();
             assert(race, 'no race was started by the quote appearing');
             assertEqual(race.depth, 9);
             assertEqual(race.events.map((one) => one.ch).join(''), 'The quick');
             assert(race.events.every((one) => one.ok), 'a correct run reported a mistake');
+        }));
 
-            page.restore();
-            teardown();
-        });
-
-        test('a backspace arrives as its own event and steps the position back', () => {
-            racePage();
-            const page = makeUi();
-            page.ui.sync();
-            page.type('Tx<h');
-
-            const race = page.ui.currentRace();
+        test('a backspace arrives as its own event and steps the position back', () => onRace({}, ({ ui, type }) => {
+            type('Tx<h');
+            const race = ui.currentRace();
             assertEqual(race.depth, 2);
             assertEqual(race.events.filter((one) => one.del).length, 1);
             assertEqual(race.events[3].expected, 'h', 'the retype was compared against the wrong position');
+        }));
 
-            page.restore();
-            teardown();
-        });
-
-        test('a race is recorded when the results panel turns up', async () => {
-            MockChrome.reset({ localStore: {} });
-            racePage();
-            const page = makeUi();
-            page.ui.sync();
-            page.type(QUOTE.slice(0, 30));
+        test('a race is recorded when the results panel turns up', () => onRace({}, async ({ ui, type }) => {
+            type(QUOTE.slice(0, 30));
             showResults('Speed: 84 WPM Accuracy: 97.4%');
-            page.ui.sync();
-
+            ui.sync();
             await waitFor(async () => (await Typer().load()).races.length === 1, 'the race to be written');
             const [race] = (await Typer().load()).races;
-            assertEqual(race.wpm, 84, 'the number the user just saw on screen');
-            assertEqual(race.accuracy, 97.4);
-            assertEqual(race.chars, 30);
-            assertEqual(race.quoteId, '3810721');
-            assertEqual(page.ui.currentRace(), null, 'the stream was not let go of');
+            assertDeepEqual([race.wpm, race.accuracy, race.chars, race.quoteId], [84, 97.4, 30, '3810721']);
+            assertEqual(ui.currentRace(), null, 'the stream was not let go of');
+        }));
 
-            page.restore();
-            teardown();
-        });
-
-        test('nothing is recorded while tracking is off', async () => {
-            MockChrome.reset({ localStore: {} });
-            racePage();
-            const page = makeUi({ settings: { typerTrack: false } });
-            page.ui.sync();
-            page.type(QUOTE.slice(0, 30));
+        test('nothing is recorded while tracking is off', () => onRace({ settings: { typerTrack: false } }, async ({ ui, type }) => {
+            type(QUOTE.slice(0, 30));
             showResults('Speed: 84 WPM Accuracy: 97.4%');
-            page.ui.sync();
-
+            ui.sync();
             assertEqual((await Typer().load()).races.length, 0);
-            page.restore();
-            teardown();
-        });
+        }));
 
-        test('the tables are built from the keystrokes, not from the scoreboard', async () => {
-            MockChrome.reset({ localStore: {} });
-            racePage();
-            const page = makeUi();
-            page.ui.sync();
-            // "The quick" at a steady 200ms: every pair inside it is one
-            // reading, and none of them is anything TypeRacer publishes.
-            page.type('The quick brown fox');
+        test('the tables are built from the keystrokes, not from the scoreboard', () => onRace({}, async ({ ui, type }) => {
+            // At a steady 200ms every pair is one reading, and none is anything TypeRacer publishes.
+            type('The quick brown fox');
             showResults('Speed: 84 WPM Accuracy: 100%');
-            page.ui.sync();
-
-            await waitFor(async () => Object.keys((await Typer().load()).grams.bi).length > 0,
-                'the n-gram table to be written');
+            ui.sync();
+            await waitFor(async () => Object.keys((await Typer().load()).grams.bi).length > 0, 'the n-gram table to be written');
             const { grams } = await Typer().load();
             assertEqual(grams.bi.th.n, 1, 'the pair "Th" was not folded down to "th"');
             assertEqual(grams.bi.th.ms, 200);
             assert(grams.tri.the, 'no trigram was credited at all');
-
-            page.restore();
-            teardown();
-        });
+        }));
     });
 
     // ---------------------------------------------------------- the caret
