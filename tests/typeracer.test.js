@@ -213,168 +213,93 @@
         }));
     });
 
-    // ---------------------------------------------------------- the caret
-
     suite('typeracer — the typing caret', () => {
-        test('the default draws nothing and leaves the page alone', () => {
-            racePage({ typed: 10 });
-            const page = makeUi();
-            page.ui.sync();
-            page.ui.drawCaret();
+        test('the default draws nothing and leaves the page alone', () => onRace({ typed: 10 }, ({ ui }) => {
+            ui.drawCaret();
+            assertEqual(ui.caretMode(), 'site');
+            assertEqual(caret(), null);
+            assert(!caretOn(), 'the page was marked for a caret that was never drawn');
+        }));
 
-            assertEqual(page.ui.caretMode(), 'site');
-            assertEqual(document.querySelector(`.${TyperUi().CARET_CLASS}`), null);
-            assert(!document.documentElement.classList.contains(TyperUi().CARET_ON),
-                'the page was marked for a caret that was never drawn');
-
-            page.restore();
-            teardown();
-        });
-
-        test('a shape goes up over the quote and stands the site’s own down', () => {
-            racePage({ typed: 10 });
-            const page = makeUi({ settings: { typerCaret: 'bar' } });
-            page.ui.sync();
-            page.ui.drawCaret();
-
-            const caret = document.querySelector(`.${TyperUi().CARET_CLASS}`);
-            assert(caret, 'nothing was drawn');
-            assertEqual(caret.dataset.bbCaret, 'bar');
-            assert(/translate\(/.test(caret.style.transform), `not placed: "${caret.style.transform}"`);
-            assert(parseFloat(caret.style.height) > 0, 'the caret has no height');
-            assert(document.documentElement.classList.contains(TyperUi().CARET_ON),
-                'TypeRacer’s own marking is still up beside ours');
+        test('a shape goes up over the quote and stands the site’s own down', () => onRace({ typed: 10, settings: { typerCaret: 'bar' } }, ({ ui }) => {
+            ui.drawCaret();
+            assertEqual(caret() && caret().dataset.bbCaret, 'bar');
+            assert(/translate\(/.test(caret().style.transform), `not placed: "${caret().style.transform}"`);
+            assert(parseFloat(caret().style.height) > 0, 'the caret has no height');
+            assert(caretOn(), 'TypeRacer’s own marking is still up beside ours');
             assert(document.querySelector('.txtUnhighlight').hasAttribute(TyperUi().ANCHOR_ATTR),
                 'the element holding the next character was not marked');
+        }));
 
-            page.restore();
-            teardown();
-        });
-
-        test('the caret moves with the quote rather than staying put', () => {
-            racePage({ typed: 4 });
-            const page = makeUi({ settings: { typerCaret: 'block' } });
-            page.ui.sync();
-            page.ui.drawCaret();
-            const first = document.querySelector(`.${TyperUi().CARET_CLASS}`).style.transform;
-
+        test('the caret moves with the quote rather than staying put', () => onRace({ typed: 4, settings: { typerCaret: 'block' } }, ({ ui }) => {
+            ui.drawCaret();
+            const first = caret().style.transform;
             markTyped(30);
-            page.ui.drawCaret();
-            const second = document.querySelector(`.${TyperUi().CARET_CLASS}`).style.transform;
-            assert(first !== second, `the caret stayed at ${first} across thirty characters`);
+            ui.drawCaret();
+            assert(first !== caret().style.transform, `the caret stayed at ${first} across thirty characters`);
+        }));
 
-            page.restore();
-            teardown();
-        });
-
-        test('turning it off gives the page back exactly as it was', () => {
-            racePage({ typed: 10 });
-            const page = makeUi({ settings: { typerCaret: 'outline' } });
-            page.ui.sync();
-            page.ui.drawCaret();
-            assert(document.querySelector(`.${TyperUi().CARET_CLASS}`), 'nothing was drawn to begin with');
-
-            page.values.typerCaret = 'site';
-            page.ui.refreshSurfaces();
-
-            assertEqual(document.querySelector(`.${TyperUi().CARET_CLASS}`), null, 'the caret was left up');
-            assert(!document.documentElement.classList.contains(TyperUi().CARET_ON), 'the class was left on');
+        test('turning it off gives the page back exactly as it was', () => onRace({ typed: 10, settings: { typerCaret: 'outline' } }, ({ ui, values }) => {
+            ui.drawCaret();
+            assert(caret(), 'nothing was drawn to begin with');
+            values.typerCaret = 'site';
+            ui.refreshSurfaces();
+            assertEqual(caret(), null, 'the caret was left up');
+            assert(!caretOn(), 'the class was left on');
             assertEqual(document.querySelector(`[${TyperUi().ANCHOR_ATTR}]`), null, 'the mark was left on the quote');
-            // Nothing was removed from the page, so the quote is untouched.
             assertEqual(document.querySelector('.inputPanelText').textContent.replace(/\s+/g, ' ').trim(), QUOTE);
+        }));
 
-            page.restore();
-            teardown();
-        });
-
-        test('a quote that cannot be read draws no caret rather than a wrong one', () => {
-            racePage({ typed: 10 });
-            const page = makeUi({ settings: { typerCaret: 'bar' } });
-            page.ui.sync();
-            page.ui.drawCaret();
-            assert(document.querySelector(`.${TyperUi().CARET_CLASS}`), 'nothing was drawn to begin with');
-
+        test('a quote that cannot be read draws no caret rather than a wrong one', () => onRace({ typed: 10, settings: { typerCaret: 'bar' } }, ({ ui }) => {
+            ui.drawCaret();
+            assert(caret(), 'nothing was drawn to begin with');
             // The site renamed its panel out from under us.
             document.querySelector('.inputPanelText').className = 'somethingElse';
-            page.ui.drawCaret();
-            assert(!page.ui.caretGaveUp(), 'one miss is the gap between races');
-            page.ui.drawCaret();
-            assert(page.ui.caretGaveUp(), 'it kept guessing');
-            assertEqual(document.querySelector(`.${TyperUi().CARET_CLASS}`), null);
-            assert(!document.documentElement.classList.contains(TyperUi().CARET_ON), 'the page was not given back');
-
-            page.restore();
-            teardown();
-        });
+            ui.drawCaret();
+            assert(!ui.caretGaveUp(), 'one miss is the gap between races');
+            ui.drawCaret();
+            assert(ui.caretGaveUp(), 'it kept guessing');
+            assertEqual(caret(), null);
+            assert(!caretOn(), 'the page was not given back');
+        }));
 
         test('uninstalling takes the caret and the class with it', () => {
+            MockChrome.reset();
             racePage({ typed: 10 });
             const page = makeUi({ settings: { typerCaret: 'underline' } });
-            page.ui.sync();
             page.ui.drawCaret();
-            assert(document.querySelector(`.${TyperUi().CARET_CLASS}`), 'nothing was drawn');
-
+            assert(caret(), 'nothing was drawn');
             page.restore();
-            assertEqual(document.querySelector(`.${TyperUi().CARET_CLASS}`), null);
-            assert(!document.documentElement.classList.contains(TyperUi().CARET_ON));
+            assertEqual(caret(), null);
+            assert(!caretOn());
             teardown();
         });
     });
-
-    // ----------------------------------------------------------- the skins
 
     suite('typeracer — every skin reaches the caret', () => {
         for (const skin of ['default', 'riso', 'medieval', 'deco']) {
-            test(`the caret is dressed for ${skin}`, async () => {
-                MockChrome.reset({ localStore: { skin } });
-                racePage({ typed: 10 });
-                const page = makeUi({ settings: { typerCaret: 'block' } });
-                page.ui.sync();
-                page.ui.drawCaret();
-
-                await waitFor(() => {
-                    const drawn = document.querySelector(`.${TyperUi().CARET_CLASS}`);
-                    return drawn && drawn.dataset.bbSkin;
-                }, 'the caret to be dressed');
-
-                const caret = document.querySelector(`.${TyperUi().CARET_CLASS}`);
-                assert(caret.classList.contains('bb-themed'),
-                    'undressed, so none of the --bb-* tokens resolve and it draws as nothing at all');
-                assertEqual(caret.dataset.bbSkin, skin);
-                assert(caret.dataset.bbTheme === 'light' || caret.dataset.bbTheme === 'dark',
-                    `the light/dark half was not set: ${caret.dataset.bbTheme}`);
-
-                page.restore();
-                teardown();
-            });
+            test(`the caret is dressed for ${skin}`, () => onRace({ typed: 10, store: { skin }, settings: { typerCaret: 'block' } }, async ({ ui }) => {
+                ui.drawCaret();
+                await waitFor(() => caret() && caret().dataset.bbSkin, 'the caret to be dressed');
+                assert(caret().classList.contains('bb-themed'), 'undressed, so no --bb-* token resolves and it draws as nothing');
+                assertEqual(caret().dataset.bbSkin, skin);
+                assert(['light', 'dark'].includes(caret().dataset.bbTheme), `the light/dark half: ${caret().dataset.bbTheme}`);
+            }));
         }
     });
 
-    // ----------------------------------------------------------- the sound
-
     suite('typeracer — the sound stays out of the way', () => {
         test('a page that never got a gesture is silent rather than broken', () => {
-            // Nothing in a test run is a user gesture, so the context never
-            // starts — the same shape as a page the user has not clicked on.
-            // play() has to return, not throw: it sits inside a keydown
-            // handler on a typing test.
+            // play() sits inside a keydown handler on a typing test: it has to return, not throw.
             Sfx().unlock();
             for (const id of Sfx().VOICE_IDS) Sfx().play(id, { volume: 100 });
             Sfx().play('click', { volume: 150, detune: -36 });
             Sfx().play('nonesuch');
-            assert(true, 'reaching here is the assertion');
         });
 
-        test('typing with sound on costs the page nothing it can notice', () => {
-            racePage();
-            const page = makeUi({ settings: { typerSound: true, typerSoundVolume: 80 } });
-            page.ui.sync();
-            // The real handler, the real Sfx, and no context behind it.
-            page.type('The quick brown fox');
-            assertEqual(page.ui.currentRace().depth, 19, 'the sound path swallowed a keystroke');
-
-            page.restore();
-            teardown();
-        });
+        test('typing with sound on costs the page nothing it can notice', () => onRace({ settings: { typerSound: true, typerSoundVolume: 80 } }, ({ ui, type }) => {
+            type('The quick brown fox');
+            assertEqual(ui.currentRace().depth, 19, 'the sound path swallowed a keystroke');
+        }));
     });
 })();
