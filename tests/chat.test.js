@@ -1,135 +1,79 @@
 /**
- * The chat panel, for the parts only a real DOM can answer: opening and
- * docking, the outline reaching a turn the page has not mounted, the tree
- * switching branch by clicking the page's own arrows, comparing, exporting,
- * pins, and every surface in every skin. The page they run against is
- * tests/chat-stage.js.
- *
- * Like the LeetCode specs, these call the injectors straight off the factory
- * rather than through the watcher, which only runs on an animation frame.
- *
- * Wrapped, because this file shares the global scope with the other specs.
+ * The chat panel on the tests/chat-stage.js page: opening, the outline
+ * reaching turns the page has not mounted, switching branch through the
+ * page's own arrows, comparing, exporting, pins, and the skins.
  */
 (function () {
     'use strict';
 
-    const { BB, TURN_PX, settle, waitFor, conversation, stagePage, teardown, makeUi } = window.ChatStage;
+    const { BB, TURN_PX, settle, waitFor, conversation, stagePage, makeUi, onChat } = window.ChatStage;
 
-    // ------------------------------------------------------------- panel
+    /** True once the turn `id` sits within `px` of the top of the thread. */
+    const atTop = (page, id, px, within = (top) => top >= 0 && top < px) => {
+        const turn = page.host.querySelector(`[data-turn-id="${id}"]`);
+        return turn && within(turn.getBoundingClientRect().top - page.scroller.getBoundingClientRect().top);
+    };
+    const hotkey = (code) => new KeyboardEvent('keydown', {
+        code, key: code.slice(3).toLowerCase(), ctrlKey: true, altKey: true, bubbles: true, cancelable: true,
+    });
 
     suite('chat — the panel', () => {
-        test('the toggle goes into the chat header, and opens and shuts the panel', async () => {
-            window.MockChrome.reset();
-            const conv = conversation();
-            stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                ui.injectToggle();
-                const toggle = document.getElementById('bb-chat-toggle');
-                assert(toggle && toggle.parentElement.id === 'conversation-header-actions', 'the toggle is not in the header');
-                toggle.click();
-                const panel = document.getElementById('bb-chat-panel');
-                assert(panel, 'the panel did not open');
-                await waitFor(() => panel.querySelector('.bb-chat-title').textContent === 'A long chat', 'the title');
-                assertEqual(toggle.getAttribute('aria-pressed'), 'true');
-                toggle.click();
-                assert(!document.getElementById('bb-chat-panel'), 'a second press did not close it');
-                await settle(20);
-                assertEqual(window.MockChrome.state.localStore.bbChatPanel.open, false, 'shut was not remembered');
-            } finally { restore(); }
-        });
+        test('the toggle goes into the chat header, and opens and shuts the panel', () => onChat({}, async ({ ui }) => {
+            ui.injectToggle();
+            const toggle = document.getElementById('bb-chat-toggle');
+            assert(toggle && toggle.parentElement.id === 'conversation-header-actions', 'the toggle is not in the header');
+            toggle.click();
+            const panel = document.getElementById('bb-chat-panel');
+            assert(panel, 'the panel did not open');
+            await waitFor(() => panel.querySelector('.bb-chat-title').textContent === 'A long chat', 'the title');
+            assertEqual(toggle.getAttribute('aria-pressed'), 'true');
+            toggle.click();
+            assert(!document.getElementById('bb-chat-panel'), 'a second press did not close it');
+            await settle(20);
+            assertEqual(window.MockChrome.state.localStore.bbChatPanel.open, false, 'shut was not remembered');
+        }));
 
-        test('the outline lists every prompt and the headings under each answer', async () => {
-            window.MockChrome.reset();
-            const conv = conversation();
-            stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                ui.openPouch();
-                await waitFor(() => document.querySelectorAll('.bb-chat-entry').length, 'the outline');
-                const texts = Array.from(document.querySelectorAll('.bb-chat-entry'), (row) => row.textContent.trim());
-                assertEqual(texts[0], 'Prompt number 1');
-                assert(texts.includes('Part 3A') && texts.includes('Part 3B'), 'the headings are missing');
-                assertEqual(texts.filter((t) => /^Prompt/.test(t)).length, 12);
-            } finally { restore(); }
-        });
+        test('the outline lists every prompt and the headings under each answer', () => onChat({}, async ({ ui }) => {
+            ui.openPouch();
+            await waitFor(() => document.querySelectorAll('.bb-chat-entry').length, 'the outline');
+            const texts = Array.from(document.querySelectorAll('.bb-chat-entry'), (row) => row.textContent.trim());
+            assertEqual(texts[0], 'Prompt number 1');
+            assert(texts.includes('Part 3A') && texts.includes('Part 3B'), 'the headings are missing');
+            assertEqual(texts.filter((t) => /^Prompt/.test(t)).length, 12);
+        }));
 
-        test('an outline row reaches a turn the page has not mounted', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(20);
-            const page = stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                ui.openPouch();
-                await waitFor(() => document.querySelectorAll('.bb-chat-entry').length, 'the outline');
-                assert(!page.host.querySelector('[data-turn-id="u17"]'), 'prompt 17 should start unmounted');
-                const row = Array.from(document.querySelectorAll('.bb-chat-entry'))
-                    .find((entry) => entry.textContent.trim() === 'Prompt number 17');
-                row.click();
-                await waitFor(() => {
-                    const turn = page.host.querySelector('[data-turn-id="u17"]');
-                    if (!turn) return false;
-                    const top = turn.getBoundingClientRect().top - page.scroller.getBoundingClientRect().top;
-                    return top >= 0 && top < 120;
-                }, 'prompt 17 at the top of the thread', 4000);
-            } finally { restore(); }
-        });
+        test('an outline row reaches a turn the page has not mounted', () => onChat({ pairs: 20 }, async ({ ui, page }) => {
+            ui.openPouch();
+            await waitFor(() => document.querySelectorAll('.bb-chat-entry').length, 'the outline');
+            assert(!page.host.querySelector('[data-turn-id="u17"]'), 'prompt 17 should start unmounted');
+            Array.from(document.querySelectorAll('.bb-chat-entry')).find((entry) => entry.textContent.trim() === 'Prompt number 17').click();
+            await waitFor(() => atTop(page, 'u17', 120), 'prompt 17 at the top of the thread', 4000);
+        }));
 
-        test('a heading row lands on the heading, not the top of its answer', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(12);
-            const page = stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                await waitFor(() => ui.conversation(), 'the conversation');
-                const landed = await ui.goTo('a9', 'Part 9B');
-                assert(landed, 'reach said it could not');
-                const heading = Array.from(page.host.querySelectorAll('h2')).find((h) => h.textContent === 'Part 9B');
-                await waitFor(() => {
-                    const top = heading.getBoundingClientRect().top - page.scroller.getBoundingClientRect().top;
-                    return top >= 0 && top < 80;
-                }, 'the heading at the top', 3000);
-            } finally { restore(); }
-        });
+        test('a heading row lands on the heading, not the top of its answer', () => onChat({}, async ({ ui, page }) => {
+            await waitFor(() => ui.conversation(), 'the conversation');
+            assert(await ui.goTo('a9', 'Part 9B'), 'reach said it could not');
+            const heading = Array.from(page.host.querySelectorAll('h2')).find((h) => h.textContent === 'Part 9B');
+            await waitFor(() => {
+                const top = heading.getBoundingClientRect().top - page.scroller.getBoundingClientRect().top;
+                return top >= 0 && top < 80;
+            }, 'the heading at the top', 3000);
+        }));
 
-        test('a pin opened from the dashboard lands on its turn, and the address forgets it', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(12);
-            const page = stagePage(conv);
-            history.replaceState(history.state, '', `${location.pathname}${location.search}#bb-node=u9`);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                assertEqual(location.hash, '', 'the address kept the pin');
-                await waitFor(() => {
-                    const turn = page.host.querySelector('[data-turn-id="u9"]');
-                    return turn && Math.abs(turn.getBoundingClientRect().top - page.scroller.getBoundingClientRect().top) < 80;
-                }, 'prompt 9 at the top', 4000);
-            } finally { restore(); }
-        });
+        test('a pin opened from the dashboard lands on its turn, and the address forgets it', () => onChat({
+            prepare: () => history.replaceState(history.state, '', `${location.pathname}${location.search}#bb-node=u9`),
+        }, async ({ page }) => {
+            assertEqual(location.hash, '', 'the address kept the pin');
+            await waitFor(() => atTop(page, 'u9', 80, (top) => Math.abs(top) < 80), 'prompt 9 at the top', 4000);
+        }));
 
-        test('next and previous prompt step from where the reader is', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(12);
-            const page = stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                await waitFor(() => ui.conversation(), 'the conversation');
-                page.scroller.scrollTop = 4 * TURN_PX; // u3 at the top
-                page.mount();
-                const key = (code) => new KeyboardEvent('keydown', { code, key: code.slice(3).toLowerCase(), ctrlKey: true, altKey: true, bubbles: true, cancelable: true });
-                document.body.dispatchEvent(key('KeyJ'));
-                await waitFor(() => {
-                    const turn = page.host.querySelector('[data-turn-id="u4"]');
-                    return turn && Math.abs(turn.getBoundingClientRect().top - page.scroller.getBoundingClientRect().top) < 40;
-                }, 'prompt 4 after Ctrl+Alt+J', 3000);
-            } finally { restore(); }
-        });
+        test('next and previous prompt step from where the reader is', () => onChat({}, async ({ ui, page }) => {
+            await waitFor(() => ui.conversation(), 'the conversation');
+            page.scroller.scrollTop = 4 * TURN_PX; // u3 at the top
+            page.mount();
+            document.body.dispatchEvent(hotkey('KeyJ'));
+            await waitFor(() => atTop(page, 'u4', 40, (top) => Math.abs(top) < 40), 'prompt 4 after Ctrl+Alt+J', 3000);
+        }));
     });
 
     // ---------------------------------------------------------- branches

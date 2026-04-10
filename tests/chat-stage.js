@@ -1,16 +1,9 @@
 /**
- * A chatgpt.com-shaped page for the chat specs, and the helpers every one of
- * them uses — shared by tests/chat.test.js and tests/chat-queue.test.js.
- *
- * The page is built to chatgpt.com's markup as it was read off the live site:
- * <section data-turn> turns carrying data-message-id, a thread that scrolls
- * inside [data-scroll-root], a ProseMirror composer that turns a paste into
- * paragraphs, a send button that is only there while the box has text. It is
- * virtualised on purpose — only the turns near the viewport are in the
- * document, the way claude.ai's are and ChatGPT's are starting to be — and a
- * turn under a fork carries the site's `< k/n >`, whose arrows really do swap
- * the branch shown. The conversation itself comes from a stub fetch, so
- * nothing here talks to a network.
+ * A chatgpt.com-shaped page for the chat specs, and the helpers they share.
+ * Built to the live site's markup: <section data-turn> turns, a thread that
+ * scrolls in [data-scroll-root], a ProseMirror composer, a send button only
+ * while there is text. Virtualised on purpose, with forks whose `< k/n >`
+ * arrows really swap the branch. The conversation comes from a stub fetch.
  */
 (function () {
     'use strict';
@@ -22,13 +15,7 @@
 
     const settle = (ms = 0) => new Promise((done) => setTimeout(done, ms));
 
-    /**
-     * Wait until `predicate` holds. The limit stretches in a hidden tab, as
-     * the harness's own does: the mock defers every chrome.* callback through
-     * a timer, and a hidden tab runs those a second apart at best, so a queue
-     * that sends three prompts through a dozen storage writes legitimately
-     * needs minutes there and seconds on screen.
-     */
+    // The limit stretches in a hidden tab, where the mock's timers run a second apart.
     async function waitFor(predicate, what, ms = 3000) {
         ms *= document.hidden ? 20 : 1;
         const started = Date.now();
@@ -72,11 +59,8 @@
     }
 
     /**
-     * A chatgpt.com-shaped page for `conv`, mounting only the turns within a
-     * screen of the viewport, as a virtualised thread does. A turn under a
-     * fork carries the site's `< k/n >`, and its arrows really do swap the
-     * branch the page shows — to the newest leaf under the sibling, which is
-     * what the sites do.
+     * A page for `conv` that mounts only the turns within a screen of the
+     * viewport. A fork's arrows swap to the newest leaf under the sibling, as the sites do.
      */
     function stagePage(conv) {
         teardown();
@@ -178,10 +162,7 @@
             // the click — so the old element is still there for a moment.
             setTimeout(mount, 30);
         });
-        // A scroll event is dispatched as part of rendering, and a hidden tab
-        // does not render — so a virtualiser that only listened for it would
-        // never mount anything while the suite runs behind another window.
-        // The page is also polled, which a real one would not need.
+        // Polled as well: a hidden tab does not render, so never sends the scroll event.
         let seen = -1;
         const poll = setInterval(() => {
             if (!host.isConnected) { clearInterval(poll); return; }
@@ -217,5 +198,26 @@
         return { ui, adapter, notes, values, restore: () => { ui.uninstall(); teardown(); } };
     }
 
-    window.ChatStage = { BB, NO_WATCHER, HOST_ID, TURN_PX, settle, waitFor, conversation, stagePage, teardown, makeUi };
+    /**
+     * A fresh store, a staged conversation of `pairs` and the chat UI over it
+     * for `run`, put back however it ends. `prepare(page)` dresses the page
+     * before the UI is made; `stage` and `make` are claude.ai's in its specs.
+     */
+    async function onChat({ pairs = 12, site, current, store, settings, prepare, install = true, stage = stagePage, make = makeUi } = {}, run) {
+        window.MockChrome.reset({ localStore: store });
+        const conv = conversation(pairs);
+        if (site) conv.site = site;
+        if (current) conv.current = current;
+        const page = stage(conv);
+        if (prepare) prepare(page);
+        const made = make(conv, { settings });
+        try {
+            if (install) made.ui.install();
+            return await run({ ...made, page, conv });
+        } finally {
+            made.restore();
+        }
+    }
+
+    window.ChatStage = { BB, NO_WATCHER, HOST_ID, TURN_PX, settle, waitFor, conversation, stagePage, teardown, makeUi, onChat };
 })();
