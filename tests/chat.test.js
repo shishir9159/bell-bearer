@@ -6,7 +6,7 @@
 (function () {
     'use strict';
 
-    const { BB, TURN_PX, settle, waitFor, conversation, stagePage, makeUi, onChat } = window.ChatStage;
+    const { BB, TURN_PX, settle, waitFor, conversation, onChat } = window.ChatStage;
 
     /** True once the turn `id` sits within `px` of the top of the thread. */
     const atTop = (page, id, px, within = (top) => top >= 0 && top < px) => {
@@ -76,54 +76,30 @@
         }));
     });
 
-    // ---------------------------------------------------------- branches
-
     suite('chat — branches', () => {
         const nodeIn = (id) => document.querySelector(`#bb-chat-panel [data-bb-chat-node="${id}"]`);
 
-        test('the tree marks the path shown and labels every fork with the page’s own numbers', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(12);
-            stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                ui.openPouch({ tab: 'tree' });
-                await waitFor(() => nodeIn('u1'), 'the tree');
-                assert(nodeIn('u1').classList.contains('is-path') && !nodeIn('a2x').classList.contains('is-path'));
-                const labels = Array.from(document.querySelectorAll('.bb-tree-sib'), (t) => t.textContent).sort();
-                assertDeepEqual(labels, ['1/2', '1/2', '2/2', '2/2']);
-            } finally { restore(); }
-        });
+        test('the tree marks the path shown and labels every fork with the page’s own numbers', () => onChat({}, async ({ ui }) => {
+            ui.openPouch({ tab: 'tree' });
+            await waitFor(() => nodeIn('u1'), 'the tree');
+            assert(nodeIn('u1').classList.contains('is-path') && !nodeIn('a2x').classList.contains('is-path'));
+            assertDeepEqual(Array.from(document.querySelectorAll('.bb-tree-sib'), (t) => t.textContent).sort(), ['1/2', '1/2', '2/2', '2/2']);
+        }));
 
-        test('a turn two forks away is reached by clicking the page’s arrows at each', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(12);
-            conv.current = 'a2x';
-            const page = stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                ui.openPouch({ tab: 'tree' });
-                await waitFor(() => nodeIn('a4x'), 'the tree');
-                nodeIn('a4x').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-                await waitFor(() => page.path.includes('a4x'), 'the page showing the edited prompt’s answer', 8000);
-                assertEqual(page.page.clicks, 2, 'one click at each fork');
-                await waitFor(() => ui.conversation().current === 'a4x', 'the panel following');
-                // An overlaid panel steps aside to show the page; docked, it
-                // stays. Either way, opened again it marks the new path.
-                ui.panel.open({ tab: 'tree' });
-                assert(nodeIn('a4x').classList.contains('is-path'), 'the tree still marks the old path');
-            } finally { restore(); }
-        });
+        test('a turn two forks away is reached by clicking the page’s arrows at each', () => onChat({ current: 'a2x' }, async ({ ui, page }) => {
+            ui.openPouch({ tab: 'tree' });
+            await waitFor(() => nodeIn('a4x'), 'the tree');
+            nodeIn('a4x').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await waitFor(() => page.path.includes('a4x'), 'the page showing the edited prompt’s answer', 8000);
+            assertEqual(page.page.clicks, 2, 'one click at each fork');
+            await waitFor(() => ui.conversation().current === 'a4x', 'the panel following');
+            // Overlaid, the panel steps aside to show the page; opened again it marks the new path.
+            ui.panel.open({ tab: 'tree' });
+            assert(nodeIn('a4x').classList.contains('is-path'), 'the tree still marks the old path');
+        }));
 
-        test('shift-clicking two turns compares them, side by side or in one column', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(12);
-            stagePage(conv);
-            const { ui, restore } = makeUi(conv);
+        test('shift-clicking two turns compares them, side by side or in one column', () => onChat({}, async ({ ui }) => {
             try {
-                ui.install();
                 ui.openPouch({ tab: 'tree' });
                 await waitFor(() => nodeIn('a2x'), 'the tree');
                 nodeIn('a2').dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
@@ -142,64 +118,47 @@
             } finally {
                 const left = document.getElementById('bb-chat-compare');
                 if (left) left.remove();
-                restore();
             }
-        });
+        }));
 
-        test('the panel follows the page when the site’s own arrows are used', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(12);
-            const page = stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                await waitFor(() => ui.conversation(), 'the conversation');
-                page.host.querySelector('[data-turn-id="a2"] [data-test-step="1"]').click();
-                await waitFor(() => page.host.querySelector('[data-turn-id="a2x"]'), 'the page switching');
-                ui.syncNow();
-                assertEqual(ui.conversation().current, 'a2x');
-            } finally { restore(); }
-        });
+        test('the panel follows the page when the site’s own arrows are used', () => onChat({}, async ({ ui, page }) => {
+            await waitFor(() => ui.conversation(), 'the conversation');
+            page.host.querySelector('[data-turn-id="a2"] [data-test-step="1"]').click();
+            await waitFor(() => page.host.querySelector('[data-turn-id="a2x"]'), 'the page switching');
+            ui.syncNow();
+            assertEqual(ui.conversation().current, 'a2x');
+        }));
     });
 
-    // ------------------------------------------------------------ export
+    /** Dom.download recording into `saved` for the length of `run`. */
+    async function capturingDownloads(run) {
+        const real = BB().Dom.download;
+        const saved = [];
+        BB().Dom.download = (name, data, type) => saved.push({ name, data, type });
+        try {
+            return await run(saved);
+        } finally {
+            BB().Dom.download = real;
+        }
+    }
 
     suite('chat — export', () => {
-        test('Export offers Markdown and JSON, and each is a download of the chat in memory', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(6);
-            stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            const real = BB().Dom.download;
-            const saved = [];
-            BB().Dom.download = (name, data, type) => saved.push({ name, data, type });
-            try {
-                ui.install();
-                ui.openPouch();
-                await waitFor(() => document.querySelector('[data-bb-chat-menu]'), 'the Export button');
-                document.querySelector('[data-bb-chat-menu]').click();
-                document.querySelector('[data-bb-chat-export="md"]').click();
-                assert(!document.querySelector('.bb-chat-menu'), 'the menu stayed open');
-                document.querySelector('[data-bb-chat-menu]').click();
-                document.querySelector('[data-bb-chat-export="json"]').click();
-                await waitFor(() => saved.length === 2, 'two downloads');
-                assert(/ A long chat\.md$/.test(saved[0].name), saved[0].name);
-                assert(saved[0].data.includes('## You\n\nPrompt number 6'), 'the Markdown is not the chat');
-                assertEqual(saved[1].type, 'application/json');
-                assert(JSON.parse(saved[1].data).nodes.a2x, 'the JSON left out a branch');
-            } finally {
-                BB().Dom.download = real;
-                restore();
-            }
-        });
-    });
+        test('Export offers Markdown and JSON, and each is a download of the chat in memory', () => onChat({ pairs: 6 }, ({ ui }) => capturingDownloads(async (saved) => {
+            ui.openPouch();
+            await waitFor(() => document.querySelector('[data-bb-chat-menu]'), 'the Export button');
+            document.querySelector('[data-bb-chat-menu]').click();
+            document.querySelector('[data-bb-chat-export="md"]').click();
+            assert(!document.querySelector('.bb-chat-menu'), 'the menu stayed open');
+            document.querySelector('[data-bb-chat-menu]').click();
+            document.querySelector('[data-bb-chat-export="json"]').click();
+            await waitFor(() => saved.length === 2, 'two downloads');
+            assert(/ A long chat\.md$/.test(saved[0].name), saved[0].name);
+            assert(saved[0].data.includes('## You\n\nPrompt number 6'), 'the Markdown is not the chat');
+            assertEqual(saved[1].type, 'application/json');
+            assert(JSON.parse(saved[1].data).nodes.a2x, 'the JSON left out a branch');
+        })));
 
-    suite('chat — bulk export', () => {
-        test('picked chats are fetched in turn, a 429 is waited out, and the zip is saved', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(4);
-            stagePage(conv);
-            const { ui, adapter, restore } = makeUi(conv);
+        test('picked chats are fetched in turn, a 429 is waited out, and the zip is saved', () => onChat({ pairs: 4, install: false }, ({ adapter }) => capturingDownloads(async (saved) => {
             const listed = Array.from({ length: 5 }, (_, i) => ({ id: `k${i}`, title: `Chat ${i}`, updatedAt: Date.UTC(2025, 10, 1 + i) }));
             let throttled = false;
             const fetched = [];
@@ -209,116 +168,86 @@
                 fetched.push(id);
                 return { ...conversation(2), id, title: `Chat ${id.slice(1)}` };
             };
-            const saved = [];
-            const realDownload = BB().Dom.download;
-            BB().Dom.download = (name, data, type) => saved.push({ name, data, type });
             const library = BB().ChatLibrary.createLibrary({
                 adapter, notify() {}, getSettings: () => BB().Settings.DEFAULTS,
                 appearance: async () => ({ theme: 'light', skin: 'default' }), dress() {}, sleep: () => settle(0),
             });
-            try {
-                const dialog = library.open();
-                await waitFor(() => dialog.element.querySelectorAll('[data-bb-lib-id]').length === 5, 'the list');
-                const box = (id) => dialog.element.querySelector(`[data-bb-lib-id="${id}"]`);
-                box('k1').click();
-                box('k3').dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
-                assertEqual(dialog.state.picked.size, 3, 'shift-click did not pick the range');
-                dialog.element.querySelector('[data-bb-lib-export]').click();
-                await waitFor(() => saved.length, 'the zip', 4000);
-                assertDeepEqual(fetched, ['k1', 'k2', 'k3'], 'not one at a time, in order, with k2 retried');
-                assert(/^chatgpt-export-\d{4}-\d\d-\d\d\.zip$/.test(saved[0].name), saved[0].name);
-                assertEqual(saved[0].type, 'application/zip');
-                assert(saved[0].data instanceof Uint8Array && saved[0].data.length > 200, 'the archive is empty');
-                dialog.close();
-            } finally {
-                BB().Dom.download = realDownload;
-                restore();
-            }
-        });
+            const dialog = library.open();
+            await waitFor(() => dialog.element.querySelectorAll('[data-bb-lib-id]').length === 5, 'the list');
+            const box = (id) => dialog.element.querySelector(`[data-bb-lib-id="${id}"]`);
+            box('k1').click();
+            box('k3').dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+            assertEqual(dialog.state.picked.size, 3, 'shift-click did not pick the range');
+            dialog.element.querySelector('[data-bb-lib-export]').click();
+            await waitFor(() => saved.length, 'the zip', 4000);
+            assertDeepEqual(fetched, ['k1', 'k2', 'k3'], 'not one at a time, in order, with k2 retried');
+            assert(/^chatgpt-export-\d{4}-\d\d-\d\d\.zip$/.test(saved[0].name), saved[0].name);
+            assertEqual(saved[0].type, 'application/zip');
+            assert(saved[0].data instanceof Uint8Array && saved[0].data.length > 200, 'the archive is empty');
+            dialog.close();
+        })));
     });
-
-    // -------------------------------------------------------------- pins
 
     suite('chat — pins', () => {
-        const hotkey = (code) => new KeyboardEvent('keydown', {
-            code, key: code.slice(3).toLowerCase(), ctrlKey: true, altKey: true, bubbles: true, cancelable: true,
-        });
+        test('Ctrl+Alt+P pins the message being read, marks it and lists it', () => onChat({}, async ({ ui, page }) => {
+            await waitFor(() => ui.conversation(), 'the conversation');
+            page.scroller.scrollTop = 5 * TURN_PX; // a3 at the top
+            page.mount();
+            document.body.dispatchEvent(hotkey('KeyP'));
+            await waitFor(() => window.MockChrome.state.localStore.bbChatPins, 'the pin to be written');
+            const chat = window.MockChrome.state.localStore.bbChatPins['chatgpt:c1'];
+            assertDeepEqual(chat.pins.map((pin) => pin.node), ['a3']);
+            assertEqual(chat.title, 'A long chat');
+            // The stage re-renders after the scroll, wiping a mark that landed
+            // first; on a real page the watcher puts it back, as markNow does here.
+            await waitFor(() => {
+                ui.markNow();
+                return page.host.querySelector('[data-turn-id="a3"][data-bb-chat-pinned]');
+            }, 'the mark on the page');
 
-        test('Ctrl+Alt+P pins the message being read, marks it and lists it', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(12);
-            const page = stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                await waitFor(() => ui.conversation(), 'the conversation');
-                page.scroller.scrollTop = 5 * TURN_PX; // a3 at the top
-                page.mount();
-                document.body.dispatchEvent(hotkey('KeyP'));
-                await waitFor(() => window.MockChrome.state.localStore.bbChatPins, 'the pin to be written');
-                const chat = window.MockChrome.state.localStore.bbChatPins['chatgpt:c1'];
-                assertDeepEqual(chat.pins.map((pin) => pin.node), ['a3']);
-                assertEqual(chat.title, 'A long chat');
-                // The stage re-renders the thread after the scroll above, wiping
-                // the mark if it landed first. On a real page the watcher puts
-                // it back; this spec has none, so it stands in for it.
-                await waitFor(() => {
-                    ui.markNow();
-                    return page.host.querySelector('[data-turn-id="a3"][data-bb-chat-pinned]');
-                }, 'the mark on the page');
+            ui.openPouch({ tab: 'pins' });
+            await waitFor(() => document.querySelector('.bb-chat-pin'), 'the pins tab');
+            assert(document.querySelector('.bb-chat-pin-label').textContent.includes('Part 3A'), 'the excerpt is not the answer');
+            ui.panel.open({ tab: 'outline' });
+            assertEqual(document.querySelector('.bb-chat-entry.is-pinned').dataset.bbChatReach, 'a3', 'the outline does not wear the pin');
+        }));
 
-                ui.openPouch({ tab: 'pins' });
-                await waitFor(() => document.querySelector('.bb-chat-pin'), 'the pins tab');
-                assert(document.querySelector('.bb-chat-pin-label').textContent.includes('Part 3A'), 'the excerpt is not the answer');
-                const outline = () => { ui.panel.open({ tab: 'outline' }); return document.querySelector('.bb-chat-entry.is-pinned'); };
-                assertEqual(outline().dataset.bbChatReach, 'a3', 'the outline does not wear the pin');
-            } finally { restore(); }
-        });
-
-        test('a pin is named in place and unpinned from its row', async () => {
-            window.MockChrome.reset({ localStore: { bbChatPins: {
-                'chatgpt:c1': { title: 'A long chat', url: '', updatedAt: 1, pins: [{ node: 'a4', label: '', excerpt: 'Answer number 4.', at: 1 }] },
-            } } });
-            const conv = conversation(12);
-            stagePage(conv);
-            const { ui, restore } = makeUi(conv);
-            try {
-                ui.install();
-                ui.openPouch({ tab: 'pins' });
-                await waitFor(() => document.querySelector('[data-bb-chat-relabel]'), 'the pin row');
-                document.querySelector('[data-bb-chat-relabel]').click();
-                const input = document.querySelector('[data-bb-chat-label]');
-                assert(input && document.activeElement === input, 'the name field did not take the focus');
-                input.value = 'the fix';
-                input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-                await waitFor(() => document.querySelector('.bb-chat-pin-label') &&
-                    document.querySelector('.bb-chat-pin-label').textContent === 'the fix', 'the new name');
-                document.querySelector('[data-bb-chat-unpin]').click();
-                await waitFor(() => document.querySelector('.bb-chat-empty'), 'the empty pins tab');
-                assertDeepEqual(window.MockChrome.state.localStore.bbChatPins, {});
-            } finally { restore(); }
-        });
+        test('a pin is named in place and unpinned from its row', () => onChat({ store: { bbChatPins: {
+            'chatgpt:c1': { title: 'A long chat', url: '', updatedAt: 1, pins: [{ node: 'a4', label: '', excerpt: 'Answer number 4.', at: 1 }] },
+        } } }, async ({ ui }) => {
+            ui.openPouch({ tab: 'pins' });
+            await waitFor(() => document.querySelector('[data-bb-chat-relabel]'), 'the pin row');
+            document.querySelector('[data-bb-chat-relabel]').click();
+            const input = document.querySelector('[data-bb-chat-label]');
+            assert(input && document.activeElement === input, 'the name field did not take the focus');
+            input.value = 'the fix';
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            await waitFor(() => document.querySelector('.bb-chat-pin-label') &&
+                document.querySelector('.bb-chat-pin-label').textContent === 'the fix', 'the new name');
+            document.querySelector('[data-bb-chat-unpin]').click();
+            await waitFor(() => document.querySelector('.bb-chat-empty'), 'the empty pins tab');
+            assertDeepEqual(window.MockChrome.state.localStore.bbChatPins, {});
+        }));
     });
-
-    // ------------------------------------------------------------- skins
 
     suite('chat — skins', () => {
         test('every surface drawn on a chat site is dressed in the skin that is on', async () => {
             for (const skin of ['default', 'riso', 'medieval', 'deco']) {
-                window.MockChrome.reset({ localStore: {
-                    skin,
-                    bbPromptQueue: { items: [{ id: 'k1', site: 'chatgpt', conv: 'c1', chain: 'pc_1', text: 'Later', model: '',
-                        notBefore: Date.now() + 3600000, status: 'waiting', note: '', createdAt: 1, sentAt: 0 }] },
-                } });
-                const conv = conversation(4);
-                const page = stagePage(conv);
-                const alert = document.createElement('div');
-                alert.setAttribute('role', 'alert');
-                alert.textContent = 'You have hit the Free plan limit for GPT-5. Responses will use another model until your limit resets after 11:58 PM.';
-                page.host.appendChild(alert);
-                const { ui, restore } = makeUi(conv, { settings: { chatgptComposerTools: true } });
-                try {
-                    ui.install();
+                await onChat({
+                    pairs: 4,
+                    settings: { chatgptComposerTools: true },
+                    store: {
+                        skin,
+                        bbPromptQueue: { items: [{ id: 'k1', site: 'chatgpt', conv: 'c1', chain: 'pc_1', text: 'Later', model: '',
+                            notBefore: Date.now() + 3600000, status: 'waiting', note: '', createdAt: 1, sentAt: 0 }] },
+                    },
+                    prepare: (page) => {
+                        const alert = document.createElement('div');
+                        alert.setAttribute('role', 'alert');
+                        alert.textContent = 'You have hit the Free plan limit for GPT-5. Responses will use another model until your limit resets after 11:58 PM.';
+                        page.host.appendChild(alert);
+                    },
+                }, async ({ ui }) => {
                     ui.openPouch();
                     ui.limitNow();
                     ui.onHotkey(new KeyboardEvent('keydown', { code: 'KeyI', key: 'i', ctrlKey: true, altKey: true, cancelable: true }));
@@ -329,7 +258,7 @@
                             return element && element.classList.contains('bb-themed') && element.dataset.bbSkin === skin;
                         }, `${id} in ${skin}`);
                     }
-                } finally { restore(); }
+                });
             }
         });
     });
