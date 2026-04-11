@@ -7,7 +7,7 @@
 (function () {
     'use strict';
 
-    const { BB, settle, waitFor, conversation, stagePage, teardown, makeUi, onChat } = window.ChatStage;
+    const { BB, settle, waitFor, conversation, stagePage, teardown, onChat } = window.ChatStage;
 
     suite('chat — typing into the composer', () => {
         /** A box on the page for the length of `run`. */
@@ -127,54 +127,48 @@
         }));
     });
 
-    // ------------------------------------------------------------- queue
-
     suite('chat — the prompt queue', () => {
         const item = (id, text, extra = {}) => ({
             id, site: 'chatgpt', conv: 'c1', chain: 'pc_1', text, model: '', notBefore: 0,
             status: 'waiting', note: '', createdAt: 1, sentAt: 0, ...extra,
         });
+        const queued = (...items) => ({ bbPromptQueue: { items } });
         const queue = () => window.MockChrome.state.localStore.bbPromptQueue;
         const fast = { chatgptQueueGapSeconds: 1 };
+        const notice = (text) => (page) => {
+            const alert = document.createElement('div');
+            alert.setAttribute('role', 'alert');
+            alert.textContent = text;
+            page.host.appendChild(alert);
+        };
+        const HOURLY = 'You’ve reached our limit of messages per hour. Please try again in 30 minutes.';
 
-        test('queued prompts are typed in and sent in turn, each after the last answer', async () => {
-            window.MockChrome.reset({ localStore: { bbPromptQueue: { items: [item('q1', 'First'), item('q2', 'Second\nwith two lines'), item('q3', 'Third')] } } });
-            const conv = conversation(4);
-            const page = stagePage(conv);
-            const { ui, restore } = makeUi(conv, { settings: fast });
-            try {
-                ui.install();
-                await waitFor(() => page.page.sent.length === 3, 'three prompts sent', 12000);
-                assertDeepEqual(page.page.sent, ['First', 'Second\nwith two lines', 'Third']);
-                await waitFor(() => queue().items.every((one) => one.status === 'sent'), 'all marked sent', 4000);
-                assertDeepEqual(queue().leases, {}, 'the lease outlived the queue');
-            } finally { restore(); }
-        });
+        test('queued prompts are typed in and sent in turn, each after the last answer', () => onChat({
+            pairs: 4, settings: fast, store: queued(item('q1', 'First'), item('q2', 'Second\nwith two lines'), item('q3', 'Third')),
+        }, async ({ page }) => {
+            await waitFor(() => page.page.sent.length === 3, 'three prompts sent', 12000);
+            assertDeepEqual(page.page.sent, ['First', 'Second\nwith two lines', 'Third']);
+            await waitFor(() => queue().items.every((one) => one.status === 'sent'), 'all marked sent', 4000);
+            assertDeepEqual(queue().leases, {}, 'the lease outlived the queue');
+        }));
 
-        test('someone typing in the box is never typed over', async () => {
-            window.MockChrome.reset({ localStore: { bbPromptQueue: { items: [item('t1', 'Queued one')] } } });
-            const conv = conversation(4);
-            const page = stagePage(conv);
+        test('someone typing in the box is never typed over', () => onChat({
+            pairs: 4, settings: fast, store: queued(item('t1', 'Queued one')),
+            prepare: (page) => { page.host.querySelector('#prompt-textarea').innerHTML = '<p>half a thought</p>'; },
+        }, async ({ ui, page }) => {
             const box = page.host.querySelector('#prompt-textarea');
-            box.innerHTML = '<p>half a thought</p>';
-            const { ui, restore } = makeUi(conv, { settings: fast });
-            try {
-                ui.install();
-                await settle(400);
-                assertDeepEqual(page.page.sent, [], 'it sent over the reader');
-                assertEqual(box.textContent, 'half a thought');
-                box.innerHTML = '<p><br></p>';
-                ui.wakeQueue();
-                await waitFor(() => page.page.sent.length === 1, 'the queued prompt, once the box was empty', 5000);
-            } finally { restore(); }
-        });
+            await settle(400);
+            assertDeepEqual(page.page.sent, [], 'it sent over the reader');
+            assertEqual(box.textContent, 'half a thought');
+            box.innerHTML = '<p><br></p>';
+            ui.wakeQueue();
+            await waitFor(() => page.page.sent.length === 1, 'the queued prompt, once the box was empty', 5000);
+        }));
 
         test('pressing the site’s stop pauses the queue instead of carrying on', async () => {
-            window.MockChrome.reset({ localStore: { bbPromptQueue: { items: [item('s1', 'Long one'), item('s2', 'Follow-up')] } } });
-            const conv = conversation(4);
-            const page = stagePage(conv);
-            // Streams until it is stopped, so the stop is always pressed
-            // mid-answer however slowly a hidden tab runs the spec.
+            window.MockChrome.reset({ localStore: queued(item('s1', 'Long one'), item('s2', 'Follow-up')) });
+            const page = stagePage(conversation(4));
+            // Streams until stopped, so the stop lands mid-answer however slowly the tab runs.
             page.page.answerMs = 10 * 60 * 1000;
             const runner = BB().ChatRunner.createRunner({
                 adapter: Object.assign({}, BB().ChatgptRead.adapter, { convIdOf: () => 'c1', isNewChat: () => false }),
@@ -193,16 +187,11 @@
 
         test('the strip above the composer lists what is queued and changes it', async () => {
             const later = Date.now() + 3 * 3600 * 1000;
-            window.MockChrome.reset({ localStore: { bbPromptQueue: { items: [
+            await onChat({ pairs: 4, settings: fast, store: queued(
                 item('v1', 'Scheduled one', { notBefore: later }),
                 item('v2', 'Held one', { status: 'held', note: 'Its time passed while the browser was shut — send it anyway?' }),
                 item('v3', 'Third'),
-            ] } } });
-            const conv = conversation(4);
-            const page = stagePage(conv);
-            const { ui, restore } = makeUi(conv, { settings: fast });
-            try {
-                ui.install();
+            ) }, async ({ ui, page }) => {
                 await waitFor(() => document.getElementById('bb-chat-queue'), 'the strip');
                 const strip = document.getElementById('bb-chat-queue');
                 assertEqual(strip.nextElementSibling, page.host.querySelector('form'), 'the strip is not just above the composer');
@@ -216,30 +205,25 @@
                 ui.openPouch({ tab: 'queue' });
                 assertEqual(document.querySelectorAll('#bb-chat-panel .bb-chat-q-row').length, 2, 'the Queue tab is not the same list');
                 ui.panel.close();
-                // Rescheduling from the strip: the clock opens the editor, an hour from now sets it.
+                // The clock opens the time editor, and "an hour" sets an hour from now.
                 document.querySelector('#bb-chat-queue [data-bb-q="when"][data-bb-q-id="v1"]').click();
                 await waitFor(() => document.querySelector('#bb-chat-queue [data-bb-q="hour"]'), 'the time editor');
                 const before = Date.now();
                 document.querySelector('#bb-chat-queue [data-bb-q="hour"]').click();
                 await waitFor(() => queue().items[0].notBefore < later, 'the new time');
                 assert(Math.abs(queue().items[0].notBefore - (before + 3600000)) < 60000, 'not an hour from now');
-            } finally { restore(); }
+            });
             assert(!document.getElementById('bb-chat-queue'), 'the strip outlived its page');
         });
 
         test('a limit notice offers to hold the queue, and one that blocks holds it by itself', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(4);
-            const page = stagePage(conv);
-            const notice = document.createElement('div');
-            notice.setAttribute('role', 'alert');
-            notice.textContent = 'You\u2019ve hit the Free plan limit for GPT-5. Responses will use another model until your limit resets after 11:58 PM.';
-            page.host.appendChild(notice);
-            // A prompt about limits, being typed, is not a notice.
-            page.host.querySelector('#prompt-textarea').innerHTML = '<p>Explain the rate limit that resets after 3 PM</p>';
-            const { ui, restore } = makeUi(conv, { settings: fast });
-            try {
-                ui.install();
+            let alert = null;
+            await onChat({ pairs: 4, settings: fast, prepare: (page) => {
+                notice('You’ve hit the Free plan limit for GPT-5. Responses will use another model until your limit resets after 11:58 PM.')(page);
+                alert = page.host.querySelector('[role="alert"]');
+                // A prompt about limits, being typed, is not a notice.
+                page.host.querySelector('#prompt-textarea').innerHTML = '<p>Explain the rate limit that resets after 3 PM</p>';
+            } }, async ({ ui }) => {
                 ui.limitNow();
                 const chip = document.getElementById('bb-chat-limit');
                 assert(chip && /GPT-5 is back after 11:58/.test(chip.textContent), chip && chip.textContent);
@@ -249,77 +233,57 @@
                 if (reset.getTime() <= Date.now()) reset.setDate(reset.getDate() + 1);
                 assertEqual(queue().holds.chatgpt.until, reset.getTime() + 60000, 'not a minute past the reset');
 
-                notice.textContent = 'You\u2019ve reached our limit of messages per hour. Please try again in 30 minutes.';
+                alert.textContent = HOURLY;
                 ui.limitNow();
                 assert(/queue waits/.test(document.getElementById('bb-chat-limit').textContent), 'a blocking notice was only offered');
                 await waitFor(() => queue().holds.chatgpt.until < reset.getTime(), 'the queue held for the half hour');
-            } finally { restore(); }
+            });
             assert(!document.getElementById('bb-chat-limit'), 'the chip outlived its page');
         });
 
-        test('a blocking notice whose time moves with the clock is held once, not on every look', async () => {
-            // "In 30 minutes" is thirty minutes from whenever it is read, and
-            // the queue was rewritten on every pass of the watcher.
-            window.MockChrome.reset();
-            const conv = conversation(4);
-            const page = stagePage(conv);
-            const notice = document.createElement('div');
-            notice.setAttribute('role', 'alert');
-            notice.textContent = 'You’ve reached our limit of messages per hour. Please try again in 30 minutes.';
-            page.host.appendChild(notice);
-            const { ui, restore } = makeUi(conv, { settings: fast });
-            try {
-                ui.install();
+        test('a blocking notice whose time moves with the clock is held once, not on every look', () => onChat({
+            pairs: 4, settings: fast, prepare: notice(HOURLY),
+        }, async ({ ui }) => {
+            // "In 30 minutes" is read afresh each time, and the queue was rewritten on every pass.
+            ui.limitNow();
+            await waitFor(() => queue() && queue().holds.chatgpt, 'the hold');
+            const first = queue().holds.chatgpt.until;
+            for (let i = 0; i < 4; i++) {
+                await settle(20);
                 ui.limitNow();
-                await waitFor(() => queue() && queue().holds.chatgpt, 'the hold');
-                const first = queue().holds.chatgpt.until;
-                for (let i = 0; i < 4; i++) {
-                    await settle(20);
-                    ui.limitNow();
-                }
-                await settle(100);
-                assertEqual(queue().holds.chatgpt.until, first, 'the hold was written again');
-            } finally { restore(); }
-        });
+            }
+            await settle(100);
+            assertEqual(queue().holds.chatgpt.until, first, 'the hold was written again');
+        }));
 
-        test('the composer buttons are drawn only while asked for, and do what the hotkeys do', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(4);
-            const page = stagePage(conv);
-            const { ui, values, restore } = makeUi(conv, { settings: Object.assign({ chatgptComposerTools: true }, fast) });
-            try {
-                ui.install();
-                ui.refreshSurfaces();
-                const tools = document.getElementById('bb-chat-tools');
-                assert(tools && tools.parentElement === page.host.querySelector('form'), 'not beside the composer’s own buttons');
-                page.host.querySelector('form').insertAdjacentHTML('beforeend', '<button type="button" data-testid="stop-button">Stop</button>');
-                page.host.querySelector('#prompt-textarea').innerHTML = '<p>From the button</p>';
-                tools.querySelector('[data-bb-tool="queue"]').click();
-                await waitFor(() => queue() && queue().items.length === 1, 'the queued item');
-                values.chatgptComposerTools = false;
-                ui.refreshSurfaces();
-                assert(!document.getElementById('bb-chat-tools'), 'turning it off left the buttons on the open page');
-            } finally { restore(); }
-        });
-
-        test('Ctrl+Alt+Q queues what is in the box and clears it', async () => {
-            window.MockChrome.reset();
-            const conv = conversation(4);
-            const page = stagePage(conv);
-            page.page.answerMs = 60000;
+        test('the composer buttons are drawn only while asked for, and do what the hotkeys do', () => onChat({
+            pairs: 4, settings: Object.assign({ chatgptComposerTools: true }, fast),
+        }, async ({ ui, values, page }) => {
+            ui.refreshSurfaces();
+            const tools = document.getElementById('bb-chat-tools');
+            assert(tools && tools.parentElement === page.host.querySelector('form'), 'not beside the composer’s own buttons');
             page.host.querySelector('form').insertAdjacentHTML('beforeend', '<button type="button" data-testid="stop-button">Stop</button>');
+            page.host.querySelector('#prompt-textarea').innerHTML = '<p>From the button</p>';
+            tools.querySelector('[data-bb-tool="queue"]').click();
+            await waitFor(() => queue() && queue().items.length === 1, 'the queued item');
+            values.chatgptComposerTools = false;
+            ui.refreshSurfaces();
+            assert(!document.getElementById('bb-chat-tools'), 'turning it off left the buttons on the open page');
+        }));
+
+        test('Ctrl+Alt+Q queues what is in the box and clears it', () => onChat({
+            pairs: 4, settings: fast, prepare: (page) => {
+                page.page.answerMs = 60000;
+                page.host.querySelector('form').insertAdjacentHTML('beforeend', '<button type="button" data-testid="stop-button">Stop</button>');
+                page.host.querySelector('#prompt-textarea').innerHTML = '<p>Then do the next part.</p>';
+            },
+        }, async ({ page }) => {
             const box = page.host.querySelector('#prompt-textarea');
-            box.innerHTML = '<p>Then do the next part.</p>';
-            const { ui, restore } = makeUi(conv, { settings: fast });
-            try {
-                ui.install();
-                box.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyQ', key: 'q', ctrlKey: true, altKey: true, bubbles: true, cancelable: true }));
-                await waitFor(() => queue() && queue().items.length === 1, 'the queued item');
-                assertEqual(queue().items[0].text, 'Then do the next part.');
-                assertEqual(queue().items[0].conv, 'c1');
-                await waitFor(() => BB().Composer.isEmpty(box), 'the box to be cleared once the prompt was safely queued');
-                assertDeepEqual(page.page.sent, [], 'it went while an answer was still streaming');
-            } finally { restore(); }
-        });
+            box.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyQ', key: 'q', ctrlKey: true, altKey: true, bubbles: true, cancelable: true }));
+            await waitFor(() => queue() && queue().items.length === 1, 'the queued item');
+            assertDeepEqual([queue().items[0].text, queue().items[0].conv], ['Then do the next part.', 'c1']);
+            await waitFor(() => BB().Composer.isEmpty(box), 'the box to be cleared once the prompt was safely queued');
+            assertDeepEqual(page.page.sent, [], 'it went while an answer was still streaming');
+        }));
     });
 })();
