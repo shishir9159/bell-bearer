@@ -1,18 +1,10 @@
 /**
- * Each isolated-world entry boots on its own: the manifest's, and each one
- * the worker registers for a site (src/background/site-scripts.js).
- *
- * A page gets exactly one entry: the core list, that site's own files, then
- * main.js. So main.js runs with the core and one site's modules and nothing
- * else, and a site block that reached for another site's module — or a core
- * module that leaned on a site's — throws at load on that site alone, where
- * none of the other specs would ever see it: they load everything at once.
- * A site switched off gets the core list alone while its host still names
- * it, the case most likely to reach for a module that is not there.
- *
- * This loads each entry's files, and only those, into a frame of their own,
- * tells Site which site it is on, and lets main.js boot there. Over file://
- * the manifest cannot be fetched, and these say so rather than fail.
+ * Each isolated-world entry boots on its own, in a frame with only its files:
+ * the manifest's, and each one the worker registers for a site. A site block
+ * that reaches for another site's module throws on that site alone, which the
+ * other specs, loading everything at once, never see. A site switched off
+ * gets the core list alone. Over file:// the manifest cannot be read, and
+ * these pass without checking.
  */
 (function () {
     'use strict';
