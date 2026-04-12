@@ -204,151 +204,121 @@ suite('party media: waiting on the authority', () => {
 });
 
 suite('party media: keeping up with the room', () => {
-    test('a remote seek lands without echoing back as a seek', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ pos: 20 });
-            // Past the seek debounce, or an echo would not have been sent yet.
-            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
-            assert(Math.abs(h.video.currentTime - 20) < 0.5, `landed at ${h.video.currentTime}`);
-            assertDeepEqual(h.intents(), []);
-        } finally { h.destroy(); }
-    });
+    test('a remote seek lands without echoing back as a seek', () => onParty({}, async (h) => {
+        h.room({ pos: 20 });
+        await partyWait(SEEK_SETTLE()); // or an echo would not have been sent yet
+        assert(Math.abs(h.video.currentTime - 20) < 0.5, `landed at ${h.video.currentTime}`);
+        assertDeepEqual(h.intents(), []);
+    }));
 
-    test('a little behind is caught up by a rate nudge, which is not an intent', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ paused: false, pos: 0, at: Date.now() - 700 });
-            await partyWait(300);
-            assert(h.video.playbackRate > 1, `still at ${h.video.playbackRate}`);
-            assert(h.media.stats().nudges >= 1);
-            assertEqual(h.media.stats().seeks, 0, 'under a second and a half behind is never a seek');
-            assertDeepEqual(h.intents(), []);
-        } finally { h.destroy(); }
-    });
+    test('a little behind is caught up by a rate nudge, which is not an intent', () => onParty({}, async (h) => {
+        h.room(BEHIND());
+        await partyWait(300);
+        assert(h.video.playbackRate > 1, `still at ${h.video.playbackRate}`);
+        assert(h.media.stats().nudges >= 1);
+        assertEqual(h.media.stats().seeks, 0, 'under a second and a half behind is never a seek');
+        assertDeepEqual(h.intents(), []);
+    }));
 
     test('a nudge is never remembered as the chosen speed', async () => {
         const watching = { video: null };
         const player = window.BB.Player.createPlayer({ getVideoElement: () => watching.video, notify: () => {} });
-        const h = await partyHarness({ player });
-        watching.video = h.video;
-        player.attach();
-        try {
-            player.desiredRate = 1;
-            h.room({ paused: false, pos: 0, at: Date.now() - 700 });
-            await partyWait(300);
-            assert(h.video.playbackRate > 1, 'nudged');
-            assertEqual(player.desiredRate, 1);
-        } finally {
-            player.detach();
-            h.destroy();
-        }
+        await onParty({ player }, async (h) => {
+            watching.video = h.video;
+            player.attach();
+            try {
+                player.desiredRate = 1;
+                h.room(BEHIND());
+                await partyWait(300);
+                assert(h.video.playbackRate > 1, 'nudged');
+                assertEqual(player.desiredRate, 1);
+            } finally { player.detach(); }
+        });
     });
 
     test('the speed keys step the room rate, from the room rate', async () => {
         const held = { step: null };
         const player = { holdRate: (on, options) => { held.step = on ? options.step : null; } };
-        const h = await partyHarness({ player });
-        try {
-            h.room({ paused: false, pos: 0, at: Date.now() - 700 }); // mid-nudge
+        await onParty({ player }, async (h) => {
+            h.room(BEHIND()); // mid-nudge
             await partyWait(300);
             assertEqual(held.step(1), 1.25, 'one rung above the room, not above the nudge');
             assertEqual(held.step(1), 1.5, 'and a second press before the first went out is the next rung');
-            await partyWait(window.BB.PartyMedia.RATE_DEBOUNCE_MS + 100);
+            await partyWait(RATE_SETTLE());
             assertDeepEqual(h.intents().map((one) => [one.op, one.rate]), [['rate', 1.5]]);
             h.media.detach();
             assertEqual(held.step, null, 'leaving hands the keys back');
-        } finally { h.destroy(); }
+        });
     });
 
-    test('leaving mid-nudge hands back the room rate', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ paused: false, pos: 0, at: Date.now() - 700 });
-            await partyWait(300);
-            h.media.detach();
-            assertEqual(h.video.playbackRate, 1);
-        } finally { h.destroy(); }
-    });
+    test('leaving mid-nudge hands back the room rate', () => onParty({}, async (h) => {
+        h.room(BEHIND());
+        await partyWait(300);
+        h.media.detach();
+        assertEqual(h.video.playbackRate, 1);
+    }));
 });
 
 suite('party media: which video', () => {
-    test('the room moving to another video is followed, by a url built here', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ media: { site: 'youtube', id: 'aaaaaaaaaaa' } });
-            assertDeepEqual(h.gone, ['https://www.youtube.com/watch?v=aaaaaaaaaaa']);
-            assertEqual(h.media.status(), 'elsewhere');
-        } finally { h.destroy(); }
-    });
+    test('the room moving to another video is followed, by a url built here', () => onParty({}, (h) => {
+        h.room({ media: { site: 'youtube', id: 'aaaaaaaaaaa' } });
+        assertDeepEqual(h.gone, ['https://www.youtube.com/watch?v=aaaaaaaaaaa']);
+        assertEqual(h.media.status(), 'elsewhere');
+    }));
 
-    test('while on another video, nothing it does is sent to the room', async () => {
-        const h = await partyHarness({ followMedia: () => false });
-        try {
-            h.moveTo({ site: 'youtube', id: 'bbbbbbbbbbb' });
-            h.video.currentTime = 12;
-            h.video.playbackRate = 2;
-            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
-            assertDeepEqual(h.intents(), []);
-        } finally { h.destroy(); }
-    });
+    test('while on another video, nothing it does is sent to the room', () => onParty({ followMedia: () => false }, async (h) => {
+        h.moveTo({ site: 'youtube', id: 'bbbbbbbbbbb' });
+        h.video.currentTime = 12;
+        h.video.playbackRate = 2;
+        await partyWait(SEEK_SETTLE());
+        assertDeepEqual(h.intents(), []);
+    }));
 
-    test('loading another video here moves the room to it, and the load itself is not an intent', async () => {
-        const h = await partyHarness();
-        try {
-            const next = { site: 'youtube', id: 'ccccccccccc' };
-            h.moveTo(next);
-            h.video.src = h.url; // a new source, as a watch-page navigation gives the player
-            h.video.playbackRate = 1.75; // the page putting its remembered rate back mid-load
-            await new Promise((resolve) => h.video.addEventListener('loadeddata', resolve, { once: true }));
-            await partyWait(100);
-            assertDeepEqual(h.intents().map((one) => [one.op, one.media]), [['media', next]]);
-        } finally { h.destroy(); }
-    });
+    test('loading another video here moves the room to it, and the load itself is not an intent', () => onParty({}, async (h) => {
+        const next = { site: 'youtube', id: 'ccccccccccc' };
+        h.moveTo(next);
+        h.video.src = h.url; // a new source, as a watch-page navigation gives the player
+        h.video.playbackRate = 1.75; // the page putting its remembered rate back mid-load
+        await new Promise((resolve) => h.video.addEventListener('loadeddata', resolve, { once: true }));
+        await partyWait(100);
+        assertDeepEqual(h.intents().map((one) => [one.op, one.media]), [['media', next]]);
+    }));
 });
 
 suite('party media: what the chip is told', () => {
     test('what the room says besides the vector reaches the chip, and the clock\'s own talk does not', async () => {
         const heard = [];
-        const h = await partyHarness({ onRoom: (msg) => heard.push(msg.t) });
-        try {
+        await onParty({ onRoom: (msg) => heard.push(msg.t) }, (h) => {
             h.media.receive({ t: 'members', list: [] });
             h.media.receive({ t: 'request', from: 'm2', op: 'pause' });
             h.media.receive({ t: 'link', up: false });
             h.media.receive({ t: 'pong', c: 1, s: 1, s2: 1 });
             assertDeepEqual(heard, ['welcome', 'members', 'request', 'link']);
-        } finally { h.destroy(); }
+        });
     });
 
-    test('a member playing along says how far off it is, and no more than every few seconds', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ paused: false, pos: 0 });
-            assert(await partyUntil(() => h.sent.some((msg) => msg.t === 'drift'), 3000), 'a drift report');
-            const reports = h.sent.filter((msg) => msg.t === 'drift');
-            assertEqual(reports.length, 1);
-            assert(Number.isInteger(reports[0].ms) && typeof h.media.drift() === 'number', JSON.stringify(reports));
-        } finally { h.destroy(); }
-    });
+    test('a member playing along says how far off it is, and no more than every few seconds', () => onParty({}, async (h) => {
+        h.room({ paused: false, pos: 0 });
+        assert(await partyUntil(() => h.sent.some((msg) => msg.t === 'drift'), 3000), 'a drift report');
+        const reports = h.sent.filter((msg) => msg.t === 'drift');
+        assertEqual(reports.length, 1);
+        assert(Number.isInteger(reports[0].ms) && typeof h.media.drift() === 'number', JSON.stringify(reports));
+    }));
 
-    test('left on another video, the way back is the room\'s video, built here', async () => {
-        const h = await partyHarness({ followMedia: () => false });
-        try {
-            h.moveTo({ site: 'youtube', id: 'bbbbbbbbbbb' });
-            h.room({ paused: true });
-            assertEqual(h.media.status(), 'elsewhere');
-            assertDeepEqual(h.gone, [], 'not followed');
-            h.media.goToRoomMedia();
-            assertDeepEqual(h.gone, ['https://www.youtube.com/watch?v=dQw4w9WgXcQ']);
-        } finally { h.destroy(); }
-    });
+    test('left on another video, the way back is the room\'s video, built here', () => onParty({ followMedia: () => false }, (h) => {
+        h.moveTo({ site: 'youtube', id: 'bbbbbbbbbbb' });
+        h.room({ paused: true });
+        assertEqual(h.media.status(), 'elsewhere');
+        assertDeepEqual(h.gone, [], 'not followed');
+        h.media.goToRoomMedia();
+        assertDeepEqual(h.gone, ['https://www.youtube.com/watch?v=dQw4w9WgXcQ']);
+    }));
 });
 
 /**
  * Netflix's player API as the page world has it, with a billboard session
- * ahead of the one being watched. Its seek moves the video the way Netflix's
- * does; any other currentTime write is counted, because on Netflix it is
- * error M7375.
+ * ahead of the one being watched. Any currentTime write but its seek's is
+ * counted: on Netflix it is error M7375.
  */
 function fakeNetflix(video) {
     const calls = [];
@@ -387,42 +357,34 @@ function fakeNetflix(video) {
 
 suite('party media: netflix', () => {
     const NETFLIX = { site: 'netflix', id: '81234567' };
-
-    test('a seek goes through the player api, to the session being watched, never currentTime', async () => {
-        const h = await partyHarness({ party: NETFLIX });
+    /** A Netflix party with its player API for `run`. */
+    const onNetflixParty = (run) => onParty({ party: NETFLIX }, async (h) => {
         const netflix = fakeNetflix(h.video);
         try {
-            h.room({ pos: 20 });
-            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
-            assertDeepEqual(netflix.calls, [['seek', 20000]]);
-            assertEqual(netflix.direct(), 0);
-            assertDeepEqual(h.intents(), [], 'the seek we made is not an intent');
-        } finally {
-            netflix.remove();
-            h.destroy();
-        }
+            await run(h, netflix);
+        } finally { netflix.remove(); }
     });
 
-    test('play and pause go through the api as well', async () => {
-        const h = await partyHarness({ party: NETFLIX });
-        const netflix = fakeNetflix(h.video);
-        try {
-            h.room({ paused: false });
-            assert(await partyUntil(() => !h.video.paused));
-            h.room({ paused: true, pos: h.video.currentTime });
-            assert(await partyUntil(() => h.video.paused));
-            assertDeepEqual(netflix.calls.map((one) => one[0]).filter((op) => op !== 'seek'), ['play', 'pause']);
-            assertDeepEqual(h.intents(), []);
-        } finally {
-            netflix.remove();
-            h.destroy();
-        }
-    });
+    test('a seek goes through the player api, to the session being watched, never currentTime', () => onNetflixParty(async (h, netflix) => {
+        h.room({ pos: 20 });
+        await partyWait(SEEK_SETTLE());
+        assertDeepEqual(netflix.calls, [['seek', 20000]]);
+        assertEqual(netflix.direct(), 0);
+        assertDeepEqual(h.intents(), [], 'the seek we made is not an intent');
+    }));
+
+    test('play and pause go through the api as well', () => onNetflixParty(async (h, netflix) => {
+        h.room({ paused: false });
+        assert(await partyUntil(() => !h.video.paused));
+        h.room({ paused: true, pos: h.video.currentTime });
+        assert(await partyUntil(() => h.video.paused));
+        assertDeepEqual(netflix.calls.map((one) => one[0]).filter((op) => op !== 'seek'), ['play', 'pause']);
+        assertDeepEqual(h.intents(), []);
+    }));
 
     test('with no player api, no seek is made and the party says so; play still works', async () => {
         const statuses = [];
-        const h = await partyHarness({ party: NETFLIX, onStatus: (status) => statuses.push(status) });
-        try {
+        await onParty({ party: NETFLIX, onStatus: (status) => statuses.push(status) }, async (h) => {
             h.room({ pos: 20 });
             await partyWait(100);
             assert(h.video.currentTime < 1, 'never a currentTime write');
@@ -430,24 +392,17 @@ suite('party media: netflix', () => {
             assert(!h.media.canSeek());
             h.room({ paused: false, pos: 0, at: Date.now() });
             assert(await partyUntil(() => !h.video.paused), 'play falls back to the <video>');
-        } finally { h.destroy(); }
+        });
     });
 
-    test('a nudge netflix puts back sends this member to seek-only, and is not an intent', async () => {
-        const h = await partyHarness({ party: NETFLIX });
-        const netflix = fakeNetflix(h.video);
-        try {
-            h.room({ paused: false, pos: 0, at: Date.now() - 700 });
-            assert(await partyUntil(() => h.video.playbackRate > 1), 'nudged');
-            h.video.playbackRate = 1; // Netflix putting its own rate back
-            await partyWait(100);
-            assertEqual(h.media.stats().profile, 'seekOnly');
-            assertDeepEqual(h.intents(), []);
-        } finally {
-            netflix.remove();
-            h.destroy();
-        }
-    });
+    test('a nudge netflix puts back sends this member to seek-only, and is not an intent', () => onNetflixParty(async (h) => {
+        h.room(BEHIND());
+        assert(await partyUntil(() => h.video.playbackRate > 1), 'nudged');
+        h.video.playbackRate = 1; // Netflix putting its own rate back
+        await partyWait(100);
+        assertEqual(h.media.stats().profile, 'seekOnly');
+        assertDeepEqual(h.intents(), []);
+    }));
 });
 
 suite('party media: readiness', () => {
