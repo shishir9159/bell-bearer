@@ -1,7 +1,7 @@
 /**
- * Specs for the party's media adapter, against a real <video> playing real
- * (silent) media — the echo problem is about the order a browser queues media
- * events in, which nothing but a browser reproduces.
+ * The party's media adapter against a real <video> playing silent media: the
+ * echo problem is about the order a browser queues media events in, which
+ * nothing but a browser reproduces.
  */
 
 const partyWait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -54,9 +54,8 @@ async function partyHarness(over = {}) {
         ...over,
     });
     media.attach();
-    // The session's answer to the attach ping: room time is ours. Drift is
-    // not corrected until the clock has a sample.
-    // `unsynced` leaves it unanswered, for the spec about exactly that.
+    // The session's answer to the attach ping: drift is not corrected until
+    // the clock has a sample. `unsynced` leaves it unanswered.
     const ping = sent.find((msg) => msg.t === 'ping');
     if (!over.unsynced) media.receive({ t: 'pong', c: ping.c, s: ping.c, s2: ping.c });
 
@@ -88,142 +87,121 @@ async function partyHarness(over = {}) {
     };
 }
 
+/** A harness for `run`, taken down however it ends. */
+async function onParty(over, run) {
+    const h = await partyHarness(over);
+    try {
+        return await run(h);
+    } finally {
+        h.destroy();
+    }
+}
+
+const SEEK_SETTLE = () => window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150;
+const RATE_SETTLE = () => window.BB.PartyMedia.RATE_DEBOUNCE_MS + 100;
+/** Playing, the room's clock 700 ms ahead: a little behind, so nudged. */
+const BEHIND = () => ({ paused: false, pos: 0, at: Date.now() - 700 });
+
 suite('party media: telling our writes from the user', () => {
-    test('a remote play and pause are played, and send nothing back', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ paused: false });
-            assert(await partyUntil(() => !h.video.paused), 'the room said play');
-            h.room({ paused: true, pos: h.video.currentTime });
-            assert(await partyUntil(() => h.video.paused), 'the room said pause');
-            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
-            assertDeepEqual(h.intents(), [], 'our own writes are not intents');
-        } finally { h.destroy(); }
-    });
+    test('a remote play and pause are played, and send nothing back', () => onParty({}, async (h) => {
+        h.room({ paused: false });
+        assert(await partyUntil(() => !h.video.paused), 'the room said play');
+        h.room({ paused: true, pos: h.video.currentTime });
+        assert(await partyUntil(() => h.video.paused), 'the room said pause');
+        await partyWait(SEEK_SETTLE());
+        assertDeepEqual(h.intents(), [], 'our own writes are not intents');
+    }));
 
-    test('a user pause is one intent, built on the vector it was made against', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ paused: false });
-            await partyWait(200);
-            h.video.pause();
-            await partyWait(100);
-            const intents = h.intents();
-            assertEqual(intents.length, 1);
-            assertEqual(intents[0].op, 'pause');
-            assertEqual(intents[0].base, h.seq);
-        } finally { h.destroy(); }
-    });
+    test('a user pause is one intent, built on the vector it was made against', () => onParty({}, async (h) => {
+        h.room({ paused: false });
+        await partyWait(200);
+        h.video.pause();
+        await partyWait(100);
+        assertDeepEqual(h.intents().map((one) => [one.op, one.base]), [['pause', h.seq]]);
+    }));
 
+    test('scrubbing sends one seek, from where it stopped', () => onParty({}, async (h) => {
+        for (const at of [5, 9, 14]) {
+            h.video.currentTime = at;
+            await partyWait(40);
+        }
+        await partyWait(SEEK_SETTLE());
+        const seeks = h.intents().filter((one) => one.op === 'seek');
+        assertEqual(seeks.length, 1);
+        assert(Math.abs(seeks[0].pos - 14) < 0.5);
+    }));
 
-    test('scrubbing sends one seek, from where it stopped', async () => {
-        const h = await partyHarness();
-        try {
-            for (const at of [5, 9, 14]) {
-                h.video.currentTime = at;
-                await partyWait(40);
-            }
-            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
-            const seeks = h.intents().filter((one) => one.op === 'seek');
-            assertEqual(seeks.length, 1);
-            assert(Math.abs(seeks[0].pos - 14) < 0.5);
-        } finally { h.destroy(); }
-    });
+    test('REGRESSION: a seek of the user’s is not pulled back by the drift before it lands', () => onParty({}, async (h) => {
+        // A timeupdate fires between seeking and seeked; the debounce once
+        // started at seeked, so the drift pulled a paused player back mid-scrub.
+        await partyWait(window.BB.PartyMedia.DRIFT_EVAL_MS + 100); // the drift decides at most once a second
+        h.video.currentTime = 30;
+        await partyWait(SEEK_SETTLE());
+        assert(Math.abs(h.video.currentTime - 30) < 0.5, `pulled back to ${h.video.currentTime}`);
+        assertDeepEqual(h.intents().map((one) => [one.op, Math.round(one.pos)]), [['seek', 30]]);
+    }));
 
-    test('REGRESSION: a seek of the user’s is not pulled back by the drift before it lands', async () => {
-        // The browser fires a timeupdate between seeking and seeked. The
-        // debounce used to start at seeked, so that timeupdate let the drift
-        // correct a paused player back to the room's position mid-scrub.
-        const h = await partyHarness();
-        try {
-            await partyWait(window.BB.PartyMedia.DRIFT_EVAL_MS + 100); // the drift decides at most once a second
-            h.video.currentTime = 30;
-            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 150);
-            assert(Math.abs(h.video.currentTime - 30) < 0.5, `pulled back to ${h.video.currentTime}`);
-            assertDeepEqual(h.intents().map((one) => [one.op, Math.round(one.pos)]), [['seek', 30]]);
-        } finally { h.destroy(); }
-    });
+    test('REGRESSION: nothing is corrected against a clock with no sample yet', () => onParty({ unsynced: true }, async (h) => {
+        // Room time was once read off our own clock until the first pong, so a
+        // player in step with a room 2 s behind was seeked 2 s on.
+        let seeks = 0;
+        h.video.addEventListener('seeking', () => { seeks++; });
+        h.room({ paused: false, pos: 0, at: Date.now() - 2000 });
+        await partyWait(window.BB.PartyMedia.DRIFT_EVAL_MS + 200);
+        assertEqual(seeks, 0, 'not seeked before the clock is known');
+        const c = window.BB.PartyClock.localNow();
+        h.media.receive({ t: 'pong', c, s: c - 2000, s2: c - 2000 });
+        await partyWait(window.BB.PartyMedia.DRIFT_EVAL_MS + 200);
+        assertEqual(seeks, 0, 'in step once it is');
+        assert(!h.video.paused, 'and playing all along');
+    }));
 
-    test('REGRESSION: nothing is corrected against a clock with no sample yet', async () => {
-        // The welcome lands before the session answers the first ping, and
-        // room time used to be read off our own clock until it did. With the
-        // room's clock 2 s behind ours, a player in step was seeked 2 s on.
-        const h = await partyHarness({ unsynced: true });
-        try {
-            let seeks = 0;
-            h.video.addEventListener('seeking', () => { seeks++; });
-            h.room({ paused: false, pos: 0, at: Date.now() - 2000 });
-            await partyWait(window.BB.PartyMedia.DRIFT_EVAL_MS + 200);
-            assertEqual(seeks, 0, 'not seeked before the clock is known');
-            const c = window.BB.PartyClock.localNow();
-            h.media.receive({ t: 'pong', c, s: c - 2000, s2: c - 2000 });
-            await partyWait(window.BB.PartyMedia.DRIFT_EVAL_MS + 200);
-            assertEqual(seeks, 0, 'in step once it is');
-            assert(!h.video.paused, 'and playing all along');
-        } finally { h.destroy(); }
-    });
+    test('REGRESSION: a welcome from another room measures the clock again', () => onParty({}, async (h) => {
+        // The samples were the old room's, and the next ping was a minute away.
+        const state = () => ({ seq: h.seq, media: PARTY_VIDEO, paused: true, pos: 0, rate: 1, at: Date.now(), by: 'm2', hold: null });
+        const pings = () => h.sent.filter((msg) => msg.t === 'ping').length;
+        h.media.receive({ t: 'welcome', you: 'm1', room: { id: 'p1', state: state() } });
+        const before = pings();
+        h.media.receive({ t: 'welcome', you: 'm1', room: { id: 'p1', state: state() } });
+        assertEqual(pings(), before, 'a resume into the same room keeps it');
+        h.media.receive({ t: 'welcome', you: 'm9', room: { id: 'p2', state: state() } });
+        assert(pings() > before, 'asked again at once');
+    }));
 
-    test('REGRESSION: a welcome from another room measures the clock again', async () => {
-        // The session starts its clock again for a new room, and the samples
-        // here were made from the old one; the next ping was a minute away.
-        const h = await partyHarness();
-        try {
-            const state = () => ({ seq: h.seq, media: PARTY_VIDEO, paused: true, pos: 0, rate: 1, at: Date.now(), by: 'm2', hold: null });
-            const pings = () => h.sent.filter((msg) => msg.t === 'ping').length;
-            h.media.receive({ t: 'welcome', you: 'm1', room: { id: 'p1', state: state() } });
-            const before = pings();
-            h.media.receive({ t: 'welcome', you: 'm1', room: { id: 'p1', state: state() } });
-            assertEqual(pings(), before, 'a resume into the same room keeps it');
-            h.media.receive({ t: 'welcome', you: 'm9', room: { id: 'p2', state: state() } });
-            assert(pings() > before, 'asked again at once');
-        } finally { h.destroy(); }
-    });
-
-    test('a user rate change is an intent', async () => {
-        const h = await partyHarness();
-        try {
-            h.video.playbackRate = 1.5;
-            await partyWait(window.BB.PartyMedia.RATE_DEBOUNCE_MS + 100);
-            assertDeepEqual(h.intents().map((one) => [one.op, one.rate]), [['rate', 1.5]]);
-        } finally { h.destroy(); }
-    });
+    test('a user rate change is an intent', () => onParty({}, async (h) => {
+        h.video.playbackRate = 1.5;
+        await partyWait(RATE_SETTLE());
+        assertDeepEqual(h.intents().map((one) => [one.op, one.rate]), [['rate', 1.5]]);
+    }));
 });
 
 suite('party media: waiting on the authority', () => {
-    test('a stale vector does not undo a pause the room has not answered yet', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ paused: false });
-            await partyWait(200);
-            h.video.pause();
-            await partyWait(100);
-            h.room({ paused: false }); // a heartbeat from before our pause reached anyone
-            await partyWait(200);
-            assert(h.video.paused, 'must stay paused until our intent is answered');
-            h.ackLast({ paused: true, pos: h.video.currentTime });
-            await partyWait(200);
-            assert(h.video.paused);
-            assertEqual(h.intents().length, 1, 'and nothing was sent in the meantime');
-        } finally { h.destroy(); }
-    });
+    test('a stale vector does not undo a pause the room has not answered yet', () => onParty({}, async (h) => {
+        h.room({ paused: false });
+        await partyWait(200);
+        h.video.pause();
+        await partyWait(100);
+        h.room({ paused: false }); // a heartbeat from before our pause reached anyone
+        await partyWait(200);
+        assert(h.video.paused, 'must stay paused until our intent is answered');
+        h.ackLast({ paused: true, pos: h.video.currentTime });
+        await partyWait(200);
+        assert(h.video.paused);
+        assertEqual(h.intents().length, 1, 'and nothing was sent in the meantime');
+    }));
 
-    test('a rejected intent snaps back to the room, even to the vector we already had', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ paused: false });
-            await partyWait(200);
-            h.video.pause();
-            await partyWait(100);
-            const intent = h.intents()[0];
-            h.media.receive({ t: 'reject', id: intent.id, why: 'policy' });
-            h.media.receive({ t: 'state', seq: h.seq, media: PARTY_VIDEO, paused: false, pos: 0, rate: 1, at: Date.now(), by: 'm2', hold: null });
-            await partyWait(200);
-            assert(!h.video.paused, 'the host has control: back to playing');
-            assertEqual(h.media.status(), 'synced');
-        } finally { h.destroy(); }
-    });
+    test('a rejected intent snaps back to the room, even to the vector we already had', () => onParty({}, async (h) => {
+        h.room({ paused: false });
+        await partyWait(200);
+        h.video.pause();
+        await partyWait(100);
+        h.media.receive({ t: 'reject', id: h.intents()[0].id, why: 'policy' });
+        h.media.receive({ t: 'state', seq: h.seq, media: PARTY_VIDEO, paused: false, pos: 0, rate: 1, at: Date.now(), by: 'm2', hold: null });
+        await partyWait(200);
+        assert(!h.video.paused, 'the host has control: back to playing');
+        assertEqual(h.media.status(), 'synced');
+    }));
 });
-
 
 suite('party media: keeping up with the room', () => {
     test('a remote seek lands without echoing back as a seek', async () => {
