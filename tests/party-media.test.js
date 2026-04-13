@@ -407,116 +407,96 @@ suite('party media: netflix', () => {
 
 suite('party media: readiness', () => {
     const readies = (h) => h.sent.filter((msg) => msg.t === 'ready').map((msg) => (msg.ready ? 'ready' : msg.why));
+    const playing = async (h) => {
+        h.room({ paused: false });
+        assert(await partyUntil(() => !h.video.paused));
+    };
 
-    test('a stall is not ready, never a pause, and is cleared when the frames come back', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ paused: false });
-            assert(await partyUntil(() => !h.video.paused));
-            await partyWait(150); // paused flips at once; the real `playing` comes after
-            h.video.dispatchEvent(new Event('waiting'));
-            await partyWait(window.BB.PartyMedia.STALL_MS + 150);
-            assertDeepEqual(readies(h), ['buffering']);
-            h.video.dispatchEvent(new Event('playing'));
-            assertDeepEqual(readies(h), ['buffering', 'ready']);
-            assertDeepEqual(h.intents(), [], 'a stall is never a pause intent');
-        } finally { h.destroy(); }
-    });
+    test('a stall is not ready, never a pause, and is cleared when the frames come back', () => onParty({}, async (h) => {
+        await playing(h);
+        await partyWait(150); // paused flips at once; the real `playing` comes after
+        h.video.dispatchEvent(new Event('waiting'));
+        await partyWait(window.BB.PartyMedia.STALL_MS + 150);
+        assertDeepEqual(readies(h), ['buffering']);
+        h.video.dispatchEvent(new Event('playing'));
+        assertDeepEqual(readies(h), ['buffering', 'ready']);
+        assertDeepEqual(h.intents(), [], 'a stall is never a pause intent');
+    }));
 
-    test('a hiccup shorter than the threshold is not worth telling the room', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ paused: false });
-            assert(await partyUntil(() => !h.video.paused));
-            h.video.dispatchEvent(new Event('waiting'));
-            await partyWait(200);
-            h.video.dispatchEvent(new Event('playing'));
-            await partyWait(window.BB.PartyMedia.STALL_MS);
-            assertDeepEqual(readies(h), []);
-        } finally { h.destroy(); }
-    });
+    test('a hiccup shorter than the threshold is not worth telling the room', () => onParty({}, async (h) => {
+        await playing(h);
+        h.video.dispatchEvent(new Event('waiting'));
+        await partyWait(200);
+        h.video.dispatchEvent(new Event('playing'));
+        await partyWait(window.BB.PartyMedia.STALL_MS);
+        assertDeepEqual(readies(h), []);
+    }));
 
-    test('the room holding for someone pauses softly and says who for', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ paused: false });
-            assert(await partyUntil(() => !h.video.paused));
-            h.room({ paused: false, hold: { waiting: ['m3'], since: Date.now() } });
-            assert(await partyUntil(() => h.video.paused));
-            assertEqual(h.media.status(), 'waiting');
-            assertDeepEqual(h.intents(), [], 'the pause for a hold is ours, not an intent');
-        } finally { h.destroy(); }
-    });
+    test('the room holding for someone pauses softly and says who for', () => onParty({}, async (h) => {
+        await playing(h);
+        h.room({ paused: false, hold: { waiting: ['m3'], since: Date.now() } });
+        assert(await partyUntil(() => h.video.paused));
+        assertEqual(h.media.status(), 'waiting');
+        assertDeepEqual(h.intents(), [], 'the pause for a hold is ours, not an intent');
+    }));
 
     test('an ad is this member\'s alone: not ready, nothing sent, and caught up afterwards', async () => {
         const player = document.createElement('div');
         player.id = 'movie_player';
         document.body.appendChild(player);
-        const h = await partyHarness();
         try {
-            h.room({ paused: false });
-            assert(await partyUntil(() => !h.video.paused));
-            player.className = 'ad-showing';
-            h.video.dispatchEvent(new Event('timeupdate'));
-            assertDeepEqual(readies(h), ['ad'], 'an ad never holds the room, but the room is told');
-            h.video.pause(); // skipping about in the ad
-            h.video.playbackRate = 2;
-            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS);
-            assertDeepEqual(h.intents(), []);
-            player.className = '';
-            h.video.dispatchEvent(new Event('timeupdate'));
-            assertDeepEqual(readies(h), ['ad', 'ready']);
-            // The ad cost it some time, so it is nudged back up to the room —
-            // at the room's rate give or take a nudge, not the 2x set in the ad.
-            // A full nudge is 1.08, and 1.08 - 1 is a hair over 0.08 in floating
-            // point: a catch-up big enough to saturate failed this outright.
-            const nudge = window.BB.PartyDrift.PROFILES.nudge.maxNudge + 1e-9;
-            assert(await partyUntil(() => !h.video.paused && Math.abs(h.video.playbackRate - 1) <= nudge), 'back with the room');
-        } finally {
-            h.destroy();
-            player.remove();
-        }
+            await onParty({}, async (h) => {
+                await playing(h);
+                player.className = 'ad-showing';
+                h.video.dispatchEvent(new Event('timeupdate'));
+                assertDeepEqual(readies(h), ['ad'], 'an ad never holds the room, but the room is told');
+                h.video.pause(); // skipping about in the ad
+                h.video.playbackRate = 2;
+                await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS);
+                assertDeepEqual(h.intents(), []);
+                player.className = '';
+                h.video.dispatchEvent(new Event('timeupdate'));
+                assertDeepEqual(readies(h), ['ad', 'ready']);
+                // Nudged back up to the room at its rate, not the ad's 2x. A full
+                // nudge, 1.08, is a hair over 0.08 from 1 in floating point.
+                const nudge = window.BB.PartyDrift.PROFILES.nudge.maxNudge + 1e-9;
+                assert(await partyUntil(() => !h.video.paused && Math.abs(h.video.playbackRate - 1) <= nudge), 'back with the room');
+            });
+        } finally { player.remove(); }
     });
 });
 
 suite('party media: playback speed', () => {
     test('a speed the room would refuse is put back, not sent', async () => {
         const notes = [];
-        const h = await partyHarness({ notify: (message) => notes.push(message) });
-        try {
+        await onParty({ notify: (message) => notes.push(message) }, async (h) => {
             h.video.playbackRate = 8; // a site's custom speed, or another extension
-            await partyWait(window.BB.PartyMedia.RATE_DEBOUNCE_MS + 100);
+            await partyWait(RATE_SETTLE());
             assertDeepEqual(h.intents(), []);
             assertEqual(h.video.playbackRate, 1, 'back on the room rate');
             assert(/between 0.25/.test(notes.join()), `the user was not told: ${notes.join()}`);
-        } finally { h.destroy(); }
+        });
     });
 
-    test('a burst of speed changes is one intent, at where it stopped', async () => {
-        const h = await partyHarness();
-        try {
-            for (const rate of [1.25, 1.5, 1.75]) {
-                h.video.playbackRate = rate;
-                await partyWait(40);
-            }
-            await partyWait(window.BB.PartyMedia.RATE_DEBOUNCE_MS + 100);
-            assertDeepEqual(h.intents().map((one) => [one.op, one.rate]), [['rate', 1.75]]);
-            assertEqual(h.video.playbackRate, 1.75, 'nothing pulled it back while it waited');
-        } finally { h.destroy(); }
-    });
+    test('a burst of speed changes is one intent, at where it stopped', () => onParty({}, async (h) => {
+        for (const rate of [1.25, 1.5, 1.75]) {
+            h.video.playbackRate = rate;
+            await partyWait(40);
+        }
+        await partyWait(RATE_SETTLE());
+        assertDeepEqual(h.intents().map((one) => [one.op, one.rate]), [['rate', 1.75]]);
+        assertEqual(h.video.playbackRate, 1.75, 'nothing pulled it back while it waited');
+    }));
 
-    test('a vector with a rate the room could not have is not played', async () => {
-        const h = await partyHarness();
-        try {
-            h.room({ rate: 1.5 });
-            await partyWait(50);
-            h.room({ rate: 40 });
-            await partyWait(50);
-            assertEqual(h.video.playbackRate, 1.5, '40x from a broken server');
-            h.room({ rate: null });
-            await partyWait(50);
-            assertEqual(h.video.playbackRate, 1.5, 'no rate at all is not 0x');
-            assertEqual(h.media.room().rate, 1.5);
-        } finally { h.destroy(); }
-    });
+    test('a vector with a rate the room could not have is not played', () => onParty({}, async (h) => {
+        h.room({ rate: 1.5 });
+        await partyWait(50);
+        h.room({ rate: 40 });
+        await partyWait(50);
+        assertEqual(h.video.playbackRate, 1.5, '40x from a broken server');
+        h.room({ rate: null });
+        await partyWait(50);
+        assertEqual(h.video.playbackRate, 1.5, 'no rate at all is not 0x');
+        assertEqual(h.media.room().rate, 1.5);
+    }));
 });

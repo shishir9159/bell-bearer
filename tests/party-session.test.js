@@ -74,52 +74,47 @@ async function sessionHarness() {
     };
 }
 
+/** A session harness for `run`, once the tab is synced; left however it ends. */
+async function onSession(run) {
+    const h = await sessionHarness();
+    try {
+        assert(await partyUntil(() => h.media.status() === 'synced'), `status ${h.media.status()}`);
+        await run(h);
+    } finally {
+        await h.destroy();
+    }
+}
+
 suite('party session: the media path end to end, no network', () => {
-    test('the tab joins through the session and puts the room on its video', async () => {
-        const h = await sessionHarness();
-        try {
-            assert(await partyUntil(() => (h.room().media || {}).id === PARTY_VIDEO.id), 'the room took the tab\'s video');
-            assert(await partyUntil(() => h.media.status() === 'synced'), `status ${h.media.status()}`);
-            assertDeepEqual(h.session.status().members.map((m) => m.name), ['Ana', 'Ben']);
-        } finally { await h.destroy(); }
-    });
+    test('the tab joins through the session and puts the room on its video', () => onSession(async (h) => {
+        assert(await partyUntil(() => (h.room().media || {}).id === PARTY_VIDEO.id), 'the room took the tab\'s video');
+        assertDeepEqual(h.session.status().members.map((m) => m.name), ['Ana', 'Ben']);
+    }));
 
-    test('a user play goes round the room once and reaches the other member', async () => {
-        const h = await sessionHarness();
-        try {
-            await partyUntil(() => h.media.status() === 'synced');
-            h.video.play();
-            assert(await partyUntil(() => h.room().paused === false), 'the room is playing');
-            assert(h.heard.some((msg) => msg.t === 'state' && msg.paused === false), 'Ben was told');
-            await partyWait(600);
-            assertDeepEqual(h.intents().map((one) => one.op), ['media', 'play'], 'the room\'s answer is not played back as a new intent');
-            assert(!h.video.paused, 'and the video is still going');
-        } finally { await h.destroy(); }
-    });
+    test('a user play goes round the room once and reaches the other member', () => onSession(async (h) => {
+        h.video.play();
+        assert(await partyUntil(() => h.room().paused === false), 'the room is playing');
+        assert(h.heard.some((msg) => msg.t === 'state' && msg.paused === false), 'Ben was told');
+        await partyWait(600);
+        assertDeepEqual(h.intents().map((one) => one.op), ['media', 'play'], 'the room\'s answer is not played back as a new intent');
+        assert(!h.video.paused, 'and the video is still going');
+    }));
 
-    test('another member\'s pause and seek reach the video, and send nothing back', async () => {
-        const h = await sessionHarness();
-        try {
-            await partyUntil(() => h.media.status() === 'synced');
-            h.benDoes('play');
-            assert(await partyUntil(() => !h.video.paused), 'Ben pressed play');
-            h.benDoes('pause', { pos: 20 });
-            assert(await partyUntil(() => h.video.paused && Math.abs(h.video.currentTime - 20) < 0.5, 2500),
-                `paused ${h.video.paused} at ${h.video.currentTime}`);
-            await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 200);
-            assertDeepEqual(h.intents().map((one) => one.op), ['media']);
-        } finally { await h.destroy(); }
-    });
+    test('another member\'s pause and seek reach the video, and send nothing back', () => onSession(async (h) => {
+        h.benDoes('play');
+        assert(await partyUntil(() => !h.video.paused), 'Ben pressed play');
+        h.benDoes('pause', { pos: 20 });
+        assert(await partyUntil(() => h.video.paused && Math.abs(h.video.currentTime - 20) < 0.5, 2500),
+            `paused ${h.video.paused} at ${h.video.currentTime}`);
+        await partyWait(window.BB.PartyMedia.SEEK_DEBOUNCE_MS + 200);
+        assertDeepEqual(h.intents().map((one) => one.op), ['media']);
+    }));
 
-    test('leaving lets the tab go', async () => {
-        const h = await sessionHarness();
-        try {
-            await partyUntil(() => h.media.status() === 'synced');
-            await h.session.control({ op: 'leave' });
-            assert(await partyUntil(() => h.media.status() === 'left'), `status ${h.media.status()}`);
-            h.video.pause();
-            await partyWait(100);
-            assertDeepEqual(h.intents().map((one) => one.op), ['media'], 'a detached tab sends nothing');
-        } finally { await h.destroy(); }
-    });
+    test('leaving lets the tab go', () => onSession(async (h) => {
+        await h.session.control({ op: 'leave' });
+        assert(await partyUntil(() => h.media.status() === 'left'), `status ${h.media.status()}`);
+        h.video.pause();
+        await partyWait(100);
+        assertDeepEqual(h.intents().map((one) => one.op), ['media'], 'a detached tab sends nothing');
+    }));
 });
