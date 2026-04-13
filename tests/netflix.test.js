@@ -1,29 +1,10 @@
 /**
  * Several Netflix subtitles at once, against a stand-in for Netflix's player
  * around a real <video> playing silence, laid out by content-netflix.css.
+ * silentWav, partyWait and partyUntil are party-media.test.js's.
  */
 
-const nfWait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const nfFrames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-async function nfUntil(condition, ms = 1500) {
-    for (const end = Date.now() + ms; !condition() && Date.now() < end;) await nfWait(20);
-    return condition();
-}
-
-/** `seconds` of 8 kHz 8-bit silence, as a WAV blob. */
-function nfSilence(seconds) {
-    const samples = 8000 * seconds;
-    const bytes = new Uint8Array(44 + samples);
-    const view = new DataView(bytes.buffer);
-    const text = (at, s) => [...s].forEach((c, i) => { bytes[at + i] = c.charCodeAt(0); });
-    text(0, 'RIFF'); view.setUint32(4, 36 + samples, true); text(8, 'WAVEfmt ');
-    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
-    view.setUint32(24, 8000, true); view.setUint32(28, 8000, true); view.setUint16(32, 1, true); view.setUint16(34, 8, true);
-    text(36, 'data'); view.setUint32(40, samples, true);
-    bytes.fill(128, 44);
-    return new Blob([bytes], { type: 'audio/wav' });
-}
 
 const NF_FILES = {
     'https://nf.test/en': 'WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nDid you leave the lantern on?\n\n'
@@ -61,7 +42,7 @@ async function nfStage({ languages = 'en es', layout = 'stack', answer = NF_TRAC
         + '<div class="controls" style="position:absolute;left:0;right:0;bottom:0;height:12%"></div></div>';
     document.body.appendChild(host);
     const video = host.querySelector('video');
-    video.src = URL.createObjectURL(nfSilence(20));
+    video.src = URL.createObjectURL(silentWav(20));
     await new Promise((resolve) => video.addEventListener('loadeddata', resolve, { once: true }));
 
     const settings = { netflixSubs: true, netflixSubsLanguages: languages, netflixSubsLayout: layout };
@@ -99,7 +80,7 @@ async function nfStage({ languages = 'en es', layout = 'stack', answer = NF_TRAC
 async function onNetflix(options, run, { drawn = true } = {}) {
     const s = await nfStage(options);
     try {
-        if (drawn) await nfUntil(() => s.host.querySelector('.bb-nf-subs'));
+        if (drawn) await partyUntil(() => s.host.querySelector('.bb-nf-subs'));
         await run(s);
     } finally {
         s.destroy();
@@ -171,10 +152,10 @@ suite('netflix — several subtitles at once', () => {
     }));
 
     test('tracks the page hands over after it was first asked are picked up', () => onNetflix({ answer: null }, async (s) => {
-        await nfWait(100);
+        await partyWait(100);
         assert(!s.host.querySelector('.bb-nf-subs'), 'drew with no tracks');
         s.announce({ movieId: '81', tracks: NF_TRACKS });
-        await nfUntil(() => s.host.querySelector('.bb-nf-subs'));
+        await partyUntil(() => s.host.querySelector('.bb-nf-subs'));
         await s.at(1.5);
         assertDeepEqual(s.rows().map((row) => row[0]), ['en', 'es']);
     }, { drawn: false }));
