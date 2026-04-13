@@ -1,22 +1,16 @@
 /**
- * The YouTube reader, for what only a real DOM answers: a player element
- * really moving out of the page and back, the transcript set as paragraphs
- * of words, a stroke of the pen over those words turning into a checkpoint,
- * notes at the end of a highlight, five layouts, and every skin.
- *
- * The player is a stand-in with YouTube's id on it. What is under test is
- * where the element goes and whether it comes back to the right place — not
- * YouTube's own player, which a spec runner does not have.
- *
- * Wrapped, because this file shares the global scope with the other specs.
+ * The YouTube reader in a real DOM: the player element moving out of the
+ * page and back, the transcript as paragraphs of words, the pen turning a
+ * stroke into a checkpoint, notes, five layouts, and the skins. The player
+ * is a stand-in with YouTube's id: what is under test is where it goes.
  */
 (function () {
     'use strict';
 
     const Reader = () => window.BB.Reader;
     const Layout = () => window.BB.ReaderLayout;
-
     const HOST_ID = 'bb-reader-test';
+    const VIDEO_ID = 'vid00000001';
 
     /** A watcher that keeps its tasks, so a spec can run a pass by hand. */
     function makeWatcher() {
@@ -35,11 +29,9 @@
     }
 
     /**
-     * YouTube's shape, as far as the reader cares: the player between two
-     * siblings inside a container, so "put back against its sibling" and
-     * "put back at its index" can be told apart. The video sits in its own
-     * positioned container, absolutely placed and sized inline, as YouTube's
-     * stylesheet has it now.
+     * The player between two siblings in a container, so "back against its
+     * sibling" and "back at its index" differ; the video absolutely placed in
+     * its own container, as YouTube's stylesheet has it.
      */
     function stagePage({ chapters = '' } = {}) {
         teardown();
@@ -65,11 +57,7 @@
         document.documentElement.classList.remove('bb-reader-open');
     }
 
-    /**
-     * A transcript in the shape transcript.js hands over: a sentence a line,
-     * nine words each, long enough to scroll. Line i starts at 3i seconds
-     * and its words are 9i to 9i + 8.
-     */
+    /** A sentence a line, nine words each: line i starts at 3i seconds, its words are 9i to 9i + 8. */
     function makeTranscript(count = 60) {
         const snippets = [];
         for (let i = 0; i < count; i++) {
@@ -79,7 +67,7 @@
     }
 
     function makeReader({
-        transcript = makeTranscript(10), video = { id: 'vid00000001', title: 'A talk' }, settings = {}, transcripts: given = null,
+        transcript = makeTranscript(10), video = { id: VIDEO_ID, title: 'A talk' }, settings = {}, transcripts: given = null,
     } = {}) {
         const watcher = makeWatcher();
         let fetches = 0;
@@ -95,7 +83,6 @@
         return { reader, watcher, seeks, values, copied, fetches: () => fetches };
     }
 
-    const settle = () => new Promise((done) => setTimeout(done, 0));
     const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
     async function waitFor(predicate, what, ms = 3000) {
@@ -107,10 +94,9 @@
     }
 
     /**
-     * content.css, and the reader's own rules after it the way YouTube's
-     * entry loads them, for the specs that need the reader laid out — a
-     * pen needs words with somewhere to be. Loaded here rather than for the
-     * whole suite, where they would restyle every other spec's fixtures.
+     * content.css and the reader's own rules, as YouTube's entry loads them,
+     * for the specs that need the reader laid out. Loaded here rather than
+     * for the whole suite, where they would restyle every other fixture.
      */
     let styles = null;
     function loadStyles() {
@@ -139,6 +125,32 @@
         return Object.assign({ page }, made);
     }
 
+    /** A fresh store, then `prepare`, then an open reader for `run`; closed and cleared however it ends. */
+    async function onReader({ store = {}, prepare, ...options } = {}, run) {
+        MockChrome.reset({ localStore: store });
+        if (prepare) await prepare();
+        const made = await openReady(options);
+        try {
+            await run(made);
+        } finally {
+            if (made.reader.isOpen) made.reader.close();
+            teardown();
+        }
+    }
+
+    /** A page and a reader opened on it, unstyled, for the specs about where the player goes. */
+    function onPage(options, run) {
+        const page = stagePage();
+        const made = makeReader(options);
+        made.reader.open();
+        try {
+            run({ page, ...made });
+        } finally {
+            if (made.reader.isOpen) made.reader.close();
+            teardown();
+        }
+    }
+
     /** The page's <video> reporting a time, the way YouTube's would. */
     function playTo(page, seconds) {
         const video = page.player.querySelector('video');
@@ -157,6 +169,8 @@
         const videos = await window.BB.Bookmarks.load();
         return videos.length ? videos[0].bookmarks : [];
     };
+    const savedCount = (n, what) => waitFor(async () => (await saved()).length === n, what);
+    const filed = (bookmarks) => () => window.BB.Bookmarks.save([{ id: VIDEO_ID, title: 'A talk', url: 'u', bookmarks }]);
 
     const word = (reader, i) => reader.element.querySelector(`.rd-paras .rd-w[data-w="${i}"]`);
     const centre = (node) => {
@@ -185,128 +199,88 @@
         point(word(reader, i), 'pointerup', extra);
     }
 
+    const key = (type, init) => document.dispatchEvent(new KeyboardEvent(type, { bubbles: true, ...init }));
     const toastText = (reader) => reader.element.querySelector('.rd-toast-text').textContent;
+    const undo = (reader) => reader.element.querySelector('.rd-toast-undo').click();
     const marked = (reader) => Array.from(reader.element.querySelectorAll('.rd-paras .rd-w.m'), (n) => n.textContent);
 
     suite('reader — the player', () => {
-        test('opening adopts the real player rather than copying it', () => {
-            const page = stagePage();
-            const { reader } = makeReader();
-            assert(reader.open(), 'the reader did not open on a page with a player');
+        test('opening adopts the real player rather than copying it', () => onPage({}, ({ page, reader }) => {
+            assert(reader.isOpen, 'the reader did not open on a page with a player');
             assert(reader.element.contains(page.player), 'the player was not moved into the reader');
             assertEqual(document.querySelectorAll('#movie_player').length, 1, 'there are two players');
             assert(document.documentElement.classList.contains('bb-reader-open'));
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('the reader’s own styles stop at the player, whose controls are YouTube’s', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader, page } = await openReady();
-            // REGRESSION: border-box reached into the player, and every icon in
-            // YouTube's control bar drew at 24px in a 40px button.
+        test('the reader’s own styles stop at the player, whose controls are YouTube’s', () => onReader({}, ({ reader, page }) => {
+            // REGRESSION: border-box reached into the player and drew YouTube's icons at 24px in 40px buttons.
             const control = document.createElement('div');
             control.style.cssText = 'width: 40px; padding: 8px';
             page.player.appendChild(control);
             assertEqual(getComputedStyle(control).boxSizing, 'content-box', 'the reader restyled a control of YouTube’s');
             assertEqual(control.getBoundingClientRect().width, 56);
             assertEqual(getComputedStyle(reader.element.querySelector('.rd-panel')).boxSizing, 'border-box');
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('closing puts the player back against its sibling, not its index', () => {
-            const page = stagePage();
-            const { reader } = makeReader();
-            reader.open();
-            // YouTube inserting something ahead of the player while we hold
-            // it moves the index it used to have.
+        test('closing puts the player back against its sibling, not its index', () => onPage({}, ({ page, reader }) => {
+            // YouTube putting something ahead of the player moves the index it had.
             page.home.insertBefore(document.createElement('i'), page.home.firstChild);
             reader.close();
-
             assert(page.player.parentNode === page.home, 'the player did not go home');
             assert(page.player.nextSibling === page.after, 'the player went back in the wrong place');
             assertEqual(document.getElementById('bb-reader-slot'), null, 'the slot was left behind');
             assert(!document.documentElement.classList.contains('bb-reader-open'));
-            teardown();
-        });
+        }));
 
-        test('closing twice, or with the player gone, throws nothing', () => {
-            const page = stagePage();
-            const { reader } = makeReader();
-            reader.open();
+        test('closing twice, or with the player gone, throws nothing', () => onPage({}, ({ page, reader }) => {
             reader.close();
             reader.close();
-
             reader.open();
             page.player.remove();
             reader.close();
             assertEqual(reader.isOpen, false);
-            teardown();
-        });
+        }));
 
-        test('a player YouTube reparents is taken back', () => {
-            const page = stagePage();
-            const { reader, watcher } = makeReader();
-            reader.open();
+        test('a player YouTube reparents is taken back', () => onPage({}, ({ page, reader, watcher }) => {
             page.home.appendChild(page.player);
             watcher.pass();
             assert(reader.element.contains(page.player), 'the reparented player was left where YouTube put it');
-
             reader.close();
             watcher.pass();
             assert(!watcher.has('reader-player'), 'the task outlived the reader');
-            teardown();
-        });
+        }));
 
-        test('the player goes home for a fullscreen of YouTube’s own and comes back after', () => {
-            const page = stagePage();
-            const { reader } = makeReader();
-            reader.open();
-
+        test('the player goes home for a fullscreen of YouTube’s own and comes back after', () => onPage({}, ({ page, reader }) => {
             fullscreen(page.home);
             assert(page.player.parentNode === page.home, 'fullscreen showed a container with no player in it');
             fullscreen(null);
             assert(reader.element.contains(page.player), 'the player was not taken back afterwards');
-
             // A fullscreen of the player itself works where it stands.
             fullscreen(page.player);
             assert(reader.element.contains(page.player), 'the player was moved out of its own fullscreen');
             fullscreen(null);
-            reader.close();
-            teardown();
-        });
+        }));
     });
 
     suite('reader — the transcript', () => {
-        test('the transcript is set as paragraphs of words, each with its time in the gutter', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader } = await openReady({ transcript: makeTranscript(20) });
+        test('the transcript is set as paragraphs of words, each with its time in the gutter', () => onReader({ transcript: makeTranscript(20) }, ({ reader }) => {
             const paras = reader.element.querySelectorAll('.rd-paras .rd-p');
             assert(paras.length > 1 && paras.length < 20, `${paras.length} paragraphs for twenty lines`);
             assertEqual(reader.element.querySelectorAll('.rd-paras .rd-w').length, 20 * 9);
             assertEqual(paras[0].querySelector('.rd-stamp').textContent, '0:00');
             assert(paras[0].classList.contains('is-now'), 'the opening paragraph was not marked as playing');
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('a click on a word plays from it, and on a paragraph’s time from there', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader, seeks } = await openReady();
+        test('a click on a word plays from it, and on a paragraph’s time from there', () => onReader({}, async ({ reader, seeks }) => {
             tap(reader, 9 * 3);
             assertDeepEqual(seeks, [9], 'a word plays from when it is said');
             const stamps = reader.element.querySelectorAll('.rd-paras .rd-stamp');
             stamps[stamps.length - 1].click();
             assertEqual(seeks[1], Number(stamps[stamps.length - 1].dataset.t));
-            assertEqual(window.BB.Bookmarks && (await saved()).length, 0, 'a click saved a highlight');
-            reader.close();
-            teardown();
-        });
+            assertEqual((await saved()).length, 0, 'a click saved a highlight');
+        }));
 
-        test('the playing sentence and paragraph follow the video, and the column with it', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader, page } = await openReady({ transcript: makeTranscript() });
+        test('the playing sentence and paragraph follow the video, and the column with it', () => onReader({ transcript: makeTranscript() }, async ({ reader, page }) => {
             playTo(page, 40 * 3 + 1);
             const now = reader.element.querySelectorAll('.rd-paras .rd-s.is-now');
             assertEqual(now.length, 1, 'more than one sentence is playing');
@@ -316,13 +290,9 @@
             assert(at > 0 && paras.slice(0, at).every((p) => p.classList.contains('is-past')), 'what was said is not greyed');
             assert(!paras[at].classList.contains('is-past'), 'the playing paragraph greyed');
             await waitFor(() => reader.element.querySelector('.rd-scroll').scrollTop > 0, 'the column to follow');
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('scrolled away it stops following, and offers the way back', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader, page } = await openReady({ transcript: makeTranscript() });
+        test('scrolled away it stops following, and offers the way back', () => onReader({ transcript: makeTranscript() }, async ({ reader, page }) => {
             const column = reader.element.querySelector('.rd-scroll');
             playTo(page, 30 * 3);
             await waitFor(() => column.scrollTop > 0, 'the column to follow');
@@ -337,100 +307,75 @@
             assert(/Now · 2:30/.test(back.textContent), back.textContent);
             back.click();
             await waitFor(() => column.scrollTop > 0, 'the Now button to scroll back');
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('a video with no transcript says so plainly, and still lists its checkpoints', async () => {
-            MockChrome.reset({ localStore: {} });
-            await window.BB.Bookmarks.save([{ id: 'vid00000001', title: 'A talk', url: 'u', bookmarks: [
-                { id: 'a', time: 6, start: 6, end: 9, subtitle: 'made with Ctrl+B' }] }]);
-            const { reader } = await openReady({ transcript: null });
+        test('a video with no transcript says so plainly, and still lists its checkpoints', () => onReader({
+            transcript: null, prepare: filed([{ id: 'a', time: 6, start: 6, end: 9, subtitle: 'made with Ctrl+B' }]),
+        }, async ({ reader }) => {
             assert(/no transcript/i.test(reader.element.querySelector('.rd-paras').textContent), 'nothing said the transcript was missing');
             await waitFor(() => /Ctrl\+B/.test(reader.element.querySelector('.rd-list-pane').textContent), 'the checkpoint in the list');
-            reader.close();
-            teardown();
-        });
+        }));
     });
 
     suite('reader — the pen', () => {
-        test('a stroke saves exactly the words under it, and Undo takes it back', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader } = await openReady();
+        test('a stroke saves exactly the words under it, and Undo takes it back', () => onReader({}, async ({ reader }) => {
             stroke(reader, 20, 24);
             assertDeepEqual(marked(reader), ['of', 'the', 'talk,', 'said', 'at'], 'the ink is not where the pen went');
-            await waitFor(async () => (await saved()).length === 1, 'the highlight to be saved');
+            await savedCount(1, 'the highlight to be saved');
             const [one] = await saved();
             assertEqual(one.subtitle, 'of the talk, said at');
             assert(one.id && one.start > 6 && one.end < 9 && one.time === 6, JSON.stringify(one));
             assert(/^Highlighted 0:06–0:0\d$/.test(toastText(reader)), toastText(reader));
-
-            reader.element.querySelector('.rd-toast-undo').click();
-            await waitFor(async () => (await saved()).length === 0, 'the Undo');
+            undo(reader);
+            await savedCount(0, 'the Undo');
             assertDeepEqual(marked(reader), []);
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('two highlights beginning in the same second both survive', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader } = await openReady();
+        test('two highlights beginning in the same second both survive', () => onReader({}, async ({ reader }) => {
             stroke(reader, 18, 19);
             stroke(reader, 22, 23);
-            await waitFor(async () => (await saved()).length === 2, 'both highlights to be saved');
+            await savedCount(2, 'both highlights to be saved');
             const both = await saved();
             assertEqual(both[0].time, both[1].time, 'they do not share their second');
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('a stroke that touches highlights joins them, and their notes go with it', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader } = await openReady();
+        test('a stroke that touches highlights joins them, and their notes go with it', () => onReader({}, async ({ reader }) => {
             stroke(reader, 18, 19);
             stroke(reader, 23, 24);
-            await waitFor(async () => (await saved()).length === 2, 'two highlights');
+            await savedCount(2, 'two highlights');
             const keys = (await saved()).map((one) => one.id);
-            await window.BB.Bookmarks.update((videos) => window.BB.Bookmarks.editBookmark(videos, 'vid00000001', keys[0], { note: 'first' }));
-            await window.BB.Bookmarks.update((videos) => window.BB.Bookmarks.editBookmark(videos, 'vid00000001', keys[1], { note: 'second' }));
+            const note = (key, text) => window.BB.Bookmarks.update((videos) => window.BB.Bookmarks.editBookmark(videos, VIDEO_ID, key, { note: text }));
+            await note(keys[0], 'first');
+            await note(keys[1], 'second');
             await pause(50);
-            // 20 to 22 fills the gap: one passage now, drawn and stored as one.
-            stroke(reader, 20, 22);
-            await waitFor(async () => (await saved()).length === 1, 'the three to become one');
+            stroke(reader, 20, 22); // fills the gap: one passage now
+            await savedCount(1, 'the three to become one');
             const [one] = await saved();
             assertEqual(one.subtitle, 'Line 2 of the talk, said at');
             assertEqual(one.note, 'first second');
             assertEqual(one.id, keys[0], 'the one kept is the first it touched');
             assert(/^Extended to /.test(toastText(reader)), toastText(reader));
-            reader.element.querySelector('.rd-toast-undo').click();
-            await waitFor(async () => (await saved()).length === 2, 'the Undo to split them again');
-            reader.close();
-            teardown();
-        });
+            undo(reader);
+            await savedCount(2, 'the Undo to split them again');
+        }));
 
-        test('Alt with a click rubs a highlight out, and Undo puts it back', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader } = await openReady();
+        test('Alt with a click rubs a highlight out, and Undo puts it back', () => onReader({}, async ({ reader }) => {
             stroke(reader, 27, 30);
-            await waitFor(async () => (await saved()).length === 1, 'the highlight');
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Alt', bubbles: true }));
+            await savedCount(1, 'the highlight');
+            key('keydown', { key: 'Alt' });
             assert(reader.element.classList.contains('is-erasing'), 'Alt did not turn the pen into an eraser');
             tap(reader, 28, { altKey: true });
-            document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Alt', bubbles: true }));
+            key('keyup', { key: 'Alt' });
             assert(!reader.element.classList.contains('is-erasing'));
-            await waitFor(async () => (await saved()).length === 0, 'the highlight to go');
+            await savedCount(0, 'the highlight to go');
             assertEqual(toastText(reader), 'Highlight removed');
-            reader.element.querySelector('.rd-toast-undo').click();
-            await waitFor(async () => (await saved()).length === 1, 'the Undo');
-            reader.close();
-            teardown();
-        });
+            undo(reader);
+            await savedCount(1, 'the Undo');
+        }));
 
-        test('a picked highlight shows its toolbar and knobs, a knob trims it, and Shift reaches it further', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader, seeks } = await openReady();
+        test('a picked highlight shows its toolbar and knobs, a knob trims it, and Shift reaches it further', () => onReader({}, async ({ reader, seeks }) => {
             stroke(reader, 36, 40);
-            await waitFor(async () => (await saved()).length === 1, 'the highlight');
+            await savedCount(1, 'the highlight');
             tap(reader, 38);
             const toolbar = reader.element.querySelector('.rd-tb');
             assert(!toolbar.hidden, 'no toolbar over a picked highlight');
@@ -449,28 +394,23 @@
             tap(reader, 46, { shiftKey: true });
             await waitFor(async () => (await saved())[0].subtitle === 'of the talk, said at 12 seconds. Line 5', 'the reach with Shift');
             assertEqual((await saved()).length, 1);
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('Backspace removes the picked highlight; Escape lets go before it closes', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader } = await openReady();
+        test('Backspace removes the picked highlight; Escape lets go before it closes', () => onReader({}, async ({ reader }) => {
             stroke(reader, 45, 47);
             stroke(reader, 54, 56);
-            await waitFor(async () => (await saved()).length === 2, 'two highlights');
+            await savedCount(2, 'two highlights');
             tap(reader, 46);
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
-            await waitFor(async () => (await saved()).length === 1, 'Backspace to remove it');
+            key('keydown', { key: 'Backspace', cancelable: true });
+            await savedCount(1, 'Backspace to remove it');
 
             tap(reader, 55);
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            key('keydown', { key: 'Escape' });
             assert(reader.isOpen, 'Escape closed the reader with a highlight picked');
             assert(reader.element.querySelector('.rd-tb').hidden, 'Escape did not let go of it');
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            key('keydown', { key: 'Escape' });
             assertEqual(reader.isOpen, false);
-            teardown();
-        });
+        }));
     });
 
     suite('reader — notes', () => {
