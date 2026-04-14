@@ -242,7 +242,7 @@
         const notes = [];
         const reader = ArticleReader().createArticleReader({
             adapter: { read }, getSettings: () => ({ ...window.BB.Settings.DEFAULTS, ...(options.settings || {}) }),
-            copyText: async () => true, notify: (text) => notes.push(text), loadStyles: loadSheet,
+            copyText: options.copyText || (async () => true), notify: (text) => notes.push(text), loadStyles: loadSheet,
         });
         readers.push(reader);
         return { reader, notes };
@@ -257,7 +257,21 @@
         wait();
     });
 
+    /** A reader open and styled over `html` for `run`, every reader closed however it ends. */
+    async function onArticle(html, options, run) {
+        closeAll();
+        const made = makeReader(typeof html === 'function' ? html : articleOf(html), options);
+        made.reader.open();
+        await styled(made.reader);
+        try {
+            await run(made.reader, made);
+        } finally {
+            closeAll();
+        }
+    }
+
     const LONG = prose(4);
+    const keyIn = (target, key, init = {}) => target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, ...init }));
 
     suite('text reader — the reader over the page', () => {
         test('it opens over the page and closes leaving the page as it was, twice over', async () => {
@@ -265,62 +279,58 @@
             document.documentElement.style.overflow = 'clip';
             const before = document.body.innerHTML;
             const { reader } = makeReader(articleOf(LONG));
-            assertEqual(reader.open(), true);
-            await styled(reader);
-            assertEqual(document.documentElement.style.getPropertyValue('overflow'), 'hidden', 'the page scrolled under the reader');
-            assertEqual(document.getElementById(ArticleReader().ROOT_ID), reader.host);
-            assertEqual(reader.host.shadowRoot, null, 'the page can read the reader through an open shadow root');
-            reader.close();
-            reader.close();
-            assertEqual(document.body.innerHTML.trim(), before.trim());
-            assertEqual(document.documentElement.style.overflow, 'clip', 'the page\'s own overflow was not put back');
-            assertEqual(document.documentElement.classList.contains(ArticleReader().OPEN_CLASS), false);
-            document.documentElement.style.overflow = '';
-        });
-
-        test('the page\'s own styles do not reach the article', async () => {
-            closeAll();
-            const style = document.createElement('style');
-            style.textContent = 'p { margin: 77px !important; color: rgb(255, 0, 0) !important; } div { display: none; }';
-            document.head.appendChild(style);
             try {
-                const { reader } = makeReader(articleOf(LONG));
-                reader.open();
+                assertEqual(reader.open(), true);
                 await styled(reader);
-                const p = reader.element.querySelector('.tr-body p');
-                assert(getComputedStyle(p).marginLeft !== '77px', 'a page rule set the article\'s margins');
-                assert(getComputedStyle(p).color !== 'rgb(255, 0, 0)', 'a page rule set the article\'s ink');
-                assert(reader.element.getBoundingClientRect().height > 0, 'a page rule hid the reader');
+                assertEqual(document.documentElement.style.getPropertyValue('overflow'), 'hidden', 'the page scrolled under the reader');
+                assertEqual(document.getElementById(ArticleReader().ROOT_ID), reader.host);
+                assertEqual(reader.host.shadowRoot, null, 'the page can read the reader through an open shadow root');
+                reader.close();
+                reader.close();
+                assertEqual(document.body.innerHTML.trim(), before.trim());
+                assertEqual(document.documentElement.style.overflow, 'clip', 'the page\'s own overflow was not put back');
+                assertEqual(document.documentElement.classList.contains(ArticleReader().OPEN_CLASS), false);
             } finally {
-                style.remove();
+                document.documentElement.style.overflow = '';
                 closeAll();
             }
         });
 
-        test('the head says who, when and how long, and leaves out a summary that is only the lead again', () => {
-            closeAll();
-            const lead = 'Paragraph text that goes on for a while';
-            const { reader } = makeReader(articleOf(LONG, { description: lead }));
-            reader.open();
-            const head = reader.element.querySelector('.tr-head');
-            assertEqual(head.querySelector('.tr-title').textContent, 'A title');
-            const facts = head.querySelector('.tr-byline').textContent;
-            assert(/^Ada · .*2024 · \d+ min read$/.test(facts), facts);
-            assertEqual(head.querySelector('.tr-dek'), null);
-            closeAll();
+        test('the page\'s own styles do not reach the article', async () => {
+            const style = document.createElement('style');
+            style.textContent = 'p { margin: 77px !important; color: rgb(255, 0, 0) !important; } div { display: none; }';
+            document.head.appendChild(style);
+            try {
+                await onArticle(LONG, {}, (reader) => {
+                    const p = reader.element.querySelector('.tr-body p');
+                    assert(getComputedStyle(p).marginLeft !== '77px', 'a page rule set the article\'s margins');
+                    assert(getComputedStyle(p).color !== 'rgb(255, 0, 0)', 'a page rule set the article\'s ink');
+                    assert(reader.element.getBoundingClientRect().height > 0, 'a page rule hid the reader');
+                });
+            } finally { style.remove(); }
         });
+
+        test('the head says who, when and how long, and leaves out a summary that is only the lead again', () => onArticle(
+            articleOf(LONG, { description: 'Paragraph text that goes on for a while' }), {}, (reader) => {
+                const head = reader.element.querySelector('.tr-head');
+                assertEqual(head.querySelector('.tr-title').textContent, 'A title');
+                const facts = head.querySelector('.tr-byline').textContent;
+                assert(/^Ada · .*2024 · \d+ min read$/.test(facts), facts);
+                assertEqual(head.querySelector('.tr-dek'), null);
+            }));
 
         test('a page with little on it says so, and opens all the same when asked; opened by itself it stays shut', () => {
             closeAll();
             const { reader } = makeReader(articleOf('<p>Sign in to continue.</p>'));
-            assertEqual(reader.open({ auto: true }), false);
-            assertEqual(reader.isOpen, false);
-            reader.open();
-            const thin = reader.element.querySelector('.tr-thin');
-            assert(thin && /does not look like an article/.test(thin.textContent), 'no word of it');
-            thin.querySelector('.tr-anyway').click();
-            assertEqual(reader.element.querySelector('.tr-body').textContent.trim(), 'Sign in to continue.');
-            closeAll();
+            try {
+                assertEqual(reader.open({ auto: true }), false);
+                assertEqual(reader.isOpen, false);
+                reader.open();
+                const thin = reader.element.querySelector('.tr-thin');
+                assert(thin && /does not look like an article/.test(thin.textContent), 'no word of it');
+                thin.querySelector('.tr-anyway').click();
+                assertEqual(reader.element.querySelector('.tr-body').textContent.trim(), 'Sign in to continue.');
+            } finally { closeAll(); }
         });
 
         test('nothing to read is said once, and nothing opens', () => {
@@ -332,27 +342,23 @@
             assertEqual(notes.length, 1, 'opening by itself announced it');
         });
 
-        test('escape leaves a field first, then closes; the page hears no key pressed in the reader', () => {
-            closeAll();
+        test('escape leaves a field first, then closes; the page hears no key pressed in the reader', async () => {
             const heard = [];
             const listen = (event) => heard.push(event.key);
             document.addEventListener('keydown', listen);
             try {
-                const { reader } = makeReader(articleOf(LONG));
-                reader.open();
-                const field = document.createElement('input');
-                reader.element.querySelector('.tr-body').appendChild(field);
-                field.focus();
-                field.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true, composed: true }));
-                assertDeepEqual(heard, [], 'the page\'s j went off under the reader');
-                field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
-                assertEqual(reader.isOpen, true, 'escape in a field threw the article away');
-                reader.element.querySelector('.tr-scroll').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
-                assertEqual(reader.isOpen, false);
-            } finally {
-                document.removeEventListener('keydown', listen);
-                closeAll();
-            }
+                await onArticle(LONG, {}, (reader) => {
+                    const field = document.createElement('input');
+                    reader.element.querySelector('.tr-body').appendChild(field);
+                    field.focus();
+                    keyIn(field, 'j');
+                    assertDeepEqual(heard, [], 'the page\'s j went off under the reader');
+                    keyIn(field, 'Escape');
+                    assertEqual(reader.isOpen, true, 'escape in a field threw the article away');
+                    keyIn(reader.element.querySelector('.tr-scroll'), 'Escape');
+                    assertEqual(reader.isOpen, false);
+                });
+            } finally { document.removeEventListener('keydown', listen); }
         });
     });
 
@@ -366,71 +372,47 @@
     });
 
     suite('text reader — the contents and the bar', () => {
-        test('the sections are the article\'s own headings, folded end matter left out', async () => {
-            closeAll();
-            const { reader } = makeReader(articleOf(SECTIONS));
-            reader.open();
-            await styled(reader);
-            const items = [...reader.element.querySelectorAll('.tr-toc a')].map((a) => a.textContent);
-            assertDeepEqual(items, ['First part', 'A detail', 'Second part']);
+        test('the sections are the article\'s own headings, folded end matter left out', () => onArticle(SECTIONS, {}, (reader) => {
+            assertDeepEqual([...reader.element.querySelectorAll('.tr-toc a')].map((a) => a.textContent), ['First part', 'A detail', 'Second part']);
             const heading = reader.element.querySelector('.tr-body h3');
             assertEqual(reader.element.querySelector('.tr-toc li.is-h3 a').getAttribute('href'), `#${heading.id}`, 'a heading with no id cannot be jumped to');
-            closeAll();
-        });
+        }));
 
-        test('reading down marks the section being read, and ] and [ move between sections', async () => {
-            closeAll();
-            const { reader } = makeReader(articleOf(SECTIONS));
-            reader.open();
-            await styled(reader);
+        test('reading down marks the section being read, and ] and [ move between sections', () => onArticle(SECTIONS, {}, async (reader) => {
             const scroll = reader.element.querySelector('.tr-scroll');
-            const press = (key) => scroll.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
-            press(']');
-            await settled(scroll);
-            await frame();
             const on = () => (reader.element.querySelector('.tr-toc a.is-on') || {}).textContent;
-            assertEqual(on(), 'First part');
-            press(']');
-            await settled(scroll);
-            await frame();
-            assertEqual(on(), 'A detail');
-            press('[');
-            await settled(scroll);
-            await frame();
-            assertEqual(on(), 'First part');
+            for (const [key, section] of [[']', 'First part'], [']', 'A detail'], ['[', 'First part']]) {
+                keyIn(scroll, key, { cancelable: true });
+                await settled(scroll);
+                await frame();
+                assertEqual(on(), section, `after ${key}`);
+            }
             assert(reader.element.querySelector('.tr-progress span').style.transform.startsWith('scaleX(0.'), 'the hairline did not follow');
-            closeAll();
-        });
+        }));
 
         test('an article of one section has no contents, and a narrow window keeps them behind the bar', async () => {
-            closeAll();
-            const one = makeReader(articleOf(`${prose(4)}<h2>Only</h2>${prose(2)}`)).reader;
-            one.open();
-            await styled(one);
-            assertEqual(one.element.querySelector('.tr-toc').hidden, true);
-            assertEqual(one.element.querySelector('.tr-toc-btn').hidden, true);
-            closeAll();
-
-            const { reader } = makeReader(articleOf(SECTIONS));
-            reader.open();
-            await styled(reader);
-            reader.host.style.setProperty('width', '700px', 'important');
-            await frame();
-            await frame();
-            const button = reader.element.querySelector('.tr-toc-btn');
-            assertEqual(reader.element.classList.contains('is-wide'), false);
-            assertEqual(reader.element.querySelector('.tr-toc').hidden, true, 'the rail over a narrow column');
-            button.click();
-            assertEqual(reader.element.querySelector('.tr-toc').hidden, false);
-            reader.element.querySelector('.tr-body p').click();
-            assertEqual(reader.element.querySelector('.tr-toc').hidden, true, 'the sheet stayed over the article');
-            closeAll();
+            await onArticle(`${prose(4)}<h2>Only</h2>${prose(2)}`, {}, (reader) => {
+                assertEqual(reader.element.querySelector('.tr-toc').hidden, true);
+                assertEqual(reader.element.querySelector('.tr-toc-btn').hidden, true);
+            });
+            await onArticle(SECTIONS, {}, async (reader) => {
+                reader.host.style.setProperty('width', '700px', 'important');
+                await frame();
+                await frame();
+                assertEqual(reader.element.classList.contains('is-wide'), false);
+                assertEqual(reader.element.querySelector('.tr-toc').hidden, true, 'the rail over a narrow column');
+                reader.element.querySelector('.tr-toc-btn').click();
+                assertEqual(reader.element.querySelector('.tr-toc').hidden, false);
+                reader.element.querySelector('.tr-body p').click();
+                assertEqual(reader.element.querySelector('.tr-toc').hidden, true, 'the sheet stayed over the article');
+            });
         });
     });
 
     /** An article as the cleaner leaves one: footnotes and their marks under our prefix. */
     const NOTED = `<p>A claim.<sup><a href="#bbr-fn1">1</a></sup> See <a href="#bbr-later">the later part</a>.</p>${prose(3)}
         <h2 id="bbr-later">Later</h2>${prose(3)}<ol><li id="bbr-fn1"><a href="#bbr-ref1">^</a> The source, <em>page 4</em>.</li></ol>`;
+    const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
     suite('text reader — footnotes beside their marks', () => {
         test('a click on a mark opens its note beside it, without the way back; a second click or escape closes it', async () => {
