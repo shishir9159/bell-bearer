@@ -415,11 +415,7 @@
     const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
     suite('text reader — footnotes beside their marks', () => {
-        test('a click on a mark opens its note beside it, without the way back; a second click or escape closes it', async () => {
-            closeAll();
-            const { reader } = makeReader(articleOf(NOTED));
-            reader.open();
-            await styled(reader);
+        test('a click on a mark opens its note beside it, without the way back; a second click or escape closes it', () => onArticle(NOTED, {}, (reader) => {
             const mark = reader.element.querySelector('sup a');
             mark.click();
             const pop = reader.element.querySelector('.tr-pop');
@@ -429,32 +425,22 @@
             mark.click();
             assertEqual(reader.element.querySelector('.tr-pop'), null);
             mark.click();
-            reader.element.querySelector('.tr-scroll').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+            keyIn(reader.element.querySelector('.tr-scroll'), 'Escape');
             assertEqual(reader.element.querySelector('.tr-pop'), null, 'escape closed the reader instead of the note');
             assertEqual(reader.isOpen, true);
-            closeAll();
-        });
+        }));
 
-        test('a pointer resting on a mark opens the note, and leaving lets it go', async () => {
-            closeAll();
-            const { reader } = makeReader(articleOf(NOTED));
-            reader.open();
-            await styled(reader);
+        test('a pointer resting on a mark opens the note, and leaving lets it go', () => onArticle(NOTED, {}, async (reader) => {
             const mark = reader.element.querySelector('sup a');
             mark.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, composed: true, pointerType: 'mouse' }));
-            await new Promise((done) => setTimeout(done, 400));
+            await pause(400);
             assert(reader.element.querySelector('.tr-pop'), 'resting on the mark opened nothing');
             mark.dispatchEvent(new PointerEvent('pointerout', { bubbles: true, composed: true, pointerType: 'mouse' }));
-            await new Promise((done) => setTimeout(done, 350));
+            await pause(350);
             assertEqual(reader.element.querySelector('.tr-pop'), null);
-            closeAll();
-        });
+        }));
 
-        test('a link to a part of the article scrolls the column there, and opens no note', async () => {
-            closeAll();
-            const { reader } = makeReader(articleOf(NOTED));
-            reader.open();
-            await styled(reader);
+        test('a link to a part of the article scrolls the column there, and opens no note', () => onArticle(NOTED, {}, async (reader) => {
             const scroll = reader.element.querySelector('.tr-scroll');
             reader.element.querySelector('a[href="#bbr-later"]').click();
             await settled(scroll);
@@ -462,8 +448,7 @@
             assert(scroll.scrollTop > 100, 'the column did not move');
             const top = reader.element.querySelector('#bbr-later').getBoundingClientRect().top;
             assert(top > 0 && top < 120, `the heading landed at ${top}`);
-            closeAll();
-        });
+        }));
     });
 
     // ---------------------------------------------------------- highlights
@@ -479,7 +464,7 @@
         sel.removeAllRanges();
         sel.addRange(range);
         reader.element.querySelector('.tr-body').dispatchEvent(new PointerEvent('pointerup', { bubbles: true, composed: true, button: 0, altKey: alt }));
-        return new Promise((done) => setTimeout(done, 20));
+        return pause(20);
     }
 
     /** The text node holding `words`, and where in it they start. */
@@ -492,15 +477,17 @@
         throw new Error('no ' + words);
     }
 
+    /** Stroke over `words`, wherever they are in the reader. */
+    function strokeOver(reader, words) {
+        const { node, at } = find(reader, words);
+        return stroke(reader, node, at, at + words.length);
+    }
+
     const inked = (reader) => [...reader.element.querySelectorAll('mark.tr-mark')].map((m) => m.textContent).join('|');
     const paragraph = (reader, i) => reader.element.querySelectorAll('.tr-body p')[i].firstChild;
 
     suite('text reader — highlighting with the pen', () => {
-        test('letting go of a selection inks it, grown to whole words, and Undo takes it off', async () => {
-            closeAll();
-            const { reader } = makeReader(articleOf(PASSAGES));
-            reader.open();
-            await styled(reader);
+        test('letting go of a selection inks it, grown to whole words, and Undo takes it off', () => onArticle(PASSAGES, {}, async (reader) => {
             await stroke(reader, paragraph(reader, 0), 8, 22);
             assertEqual(inked(reader), 'cache has to forget', 'a stroke let go mid-word did not take the word');
             const toast = reader.element.querySelector('.tr-toast');
@@ -508,32 +495,19 @@
             toast.querySelector('.tr-toast-undo').click();
             assertEqual(inked(reader), '');
             assertEqual(reader.element.querySelector('.tr-body p').textContent, 'Every cache has to forget, sooner or later', 'the text was cut up and not put back');
-            closeAll();
-        });
+        }));
 
-        test('two strokes over one passage are one highlight; two paragraphs\' are two', async () => {
-            closeAll();
-            const { reader } = makeReader(articleOf(PASSAGES));
-            reader.open();
-            await styled(reader);
+        test('two strokes over one passage are one highlight; two paragraphs\' are two', () => onArticle(PASSAGES, {}, async (reader) => {
             await stroke(reader, paragraph(reader, 0), 6, 15);
-            const rest = find(reader, 'to forget');
-            await stroke(reader, rest.node, rest.at, rest.at + 9);
+            await strokeOver(reader, 'to forget');
             assertEqual(reader.highlights.records.length, 1);
             assertEqual(reader.highlights.records[0].exact, 'cache has to forget');
-            const later = find(reader, 'later');
-            await stroke(reader, later.node, later.at, later.at + 5);
-            const next = find(reader, 'The oldest');
-            await stroke(reader, next.node, next.at, next.at + 3);
+            await strokeOver(reader, 'later');
+            await strokeOver(reader, 'The');
             assertEqual(inked(reader), 'cache has to forget|later|The', 'a paragraph\'s end and the next one\'s start ran together');
-            closeAll();
-        });
+        }));
 
-        test('with the pen off a selection stays a selection; alt erases, and backspace takes the one picked', async () => {
-            closeAll();
-            const { reader } = makeReader(articleOf(PASSAGES));
-            reader.open();
-            await styled(reader);
+        test('with the pen off a selection stays a selection; alt erases, and backspace takes the one picked', () => onArticle(PASSAGES, {}, async (reader) => {
             reader.element.querySelector('.tr-pen').click();
             await stroke(reader, paragraph(reader, 0), 0, 5);
             assertEqual(inked(reader), '', 'the pen inked while it was off');
@@ -541,67 +515,51 @@
             await stroke(reader, paragraph(reader, 0), 0, 5);
             await stroke(reader, paragraph(reader, 1), 4, 10);
             assertEqual(reader.highlights.records.length, 2);
-            const every = find(reader, 'Every');
-            await stroke(reader, every.node, 1, 3, { alt: true });
+            await stroke(reader, find(reader, 'Every').node, 1, 3, { alt: true });
             assertEqual(inked(reader), 'oldest', 'alt did not erase what it crossed');
             reader.element.querySelector('mark.tr-mark').click();
-            reader.element.querySelector('.tr-scroll').dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, composed: true, cancelable: true }));
+            keyIn(reader.element.querySelector('.tr-scroll'), 'Backspace', { cancelable: true });
             assertEqual(inked(reader), '');
-            closeAll();
-        });
+        }));
 
         test('a note goes under its passage, and closing the reader keeps both for the page — nothing is stored', async () => {
-            closeAll();
             const stored = JSON.stringify(window.MockChrome.state.localStore);
-            const { reader } = makeReader(articleOf(PASSAGES));
-            reader.open();
-            await styled(reader);
-            await stroke(reader, paragraph(reader, 1), 4, 10);
-            reader.element.querySelector('mark.tr-mark').click();
-            reader.element.querySelector('.tr-tb-note').click();
-            const field = reader.element.querySelector('.tr-note textarea');
-            assert(field, 'no field for the note');
-            field.value = 'Usually.';
-            field.dispatchEvent(new Event('input', { bubbles: true }));
-            field.dispatchEvent(new Event('blur'));
-            assertEqual(reader.element.querySelector('.tr-note').textContent.trim(), 'Usually.');
-            assertEqual(reader.element.querySelector('.tr-note').previousElementSibling.textContent, 'The oldest entry goes first.');
-            reader.close();
-            reader.open();
-            await styled(reader);
-            assertEqual(inked(reader), 'oldest');
-            assertEqual(reader.highlights.records[0].note, 'Usually.');
-            assertEqual(JSON.stringify(window.MockChrome.state.localStore), stored, 'a highlight went into storage');
-            closeAll();
+            await onArticle(PASSAGES, {}, async (reader) => {
+                await stroke(reader, paragraph(reader, 1), 4, 10);
+                reader.element.querySelector('mark.tr-mark').click();
+                reader.element.querySelector('.tr-tb-note').click();
+                const field = reader.element.querySelector('.tr-note textarea');
+                assert(field, 'no field for the note');
+                field.value = 'Usually.';
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('blur'));
+                assertEqual(reader.element.querySelector('.tr-note').textContent.trim(), 'Usually.');
+                assertEqual(reader.element.querySelector('.tr-note').previousElementSibling.textContent, 'The oldest entry goes first.');
+                reader.close();
+                reader.open();
+                await styled(reader);
+                assertEqual(inked(reader), 'oldest');
+                assertEqual(reader.highlights.records[0].note, 'Usually.');
+                assertEqual(JSON.stringify(window.MockChrome.state.localStore), stored, 'a highlight went into storage');
+            });
         });
 
         test('copy gives every highlight as markdown: the title, the passage with a link to it, and its note', async () => {
-            closeAll();
             let copied = '';
-            const reader = ArticleReader().createArticleReader({
-                adapter: { read: articleOf(PASSAGES, { title: 'On [caches]', url: 'https://example.com/post#top' }) },
-                getSettings: () => window.BB.Settings.DEFAULTS, notify() {}, loadStyles: loadSheet,
+            await onArticle(articleOf(PASSAGES, { title: 'On [caches]', url: 'https://example.com/post#top' }), {
                 copyText: async (text) => { copied = text; return true; },
+            }, async (reader) => {
+                await stroke(reader, paragraph(reader, 1), 4, 10);
+                await reader.highlights.copyAll();
+                assertEqual(copied, '## [On \\[caches\\]](https://example.com/post)\n\n> oldest [↗](https://example.com/post#:~:text=oldest)');
             });
-            readers.push(reader);
-            reader.open();
-            await styled(reader);
-            await stroke(reader, paragraph(reader, 1), 4, 10);
-            await reader.highlights.copyAll();
-            assertEqual(copied, '## [On \\[caches\\]](https://example.com/post)\n\n> oldest [↗](https://example.com/post#:~:text=oldest)');
-            closeAll();
         });
 
-        test('with highlighting off in settings there is no pen, and a selection is left alone', async () => {
-            closeAll();
-            const { reader } = makeReader(articleOf(PASSAGES), { settings: { readerHighlight: false } });
-            reader.open();
-            await styled(reader);
+        test('with highlighting off in settings there is no pen, and a selection is left alone', () => onArticle(PASSAGES, { settings: { readerHighlight: false } }, async (reader) => {
             assertEqual(reader.element.querySelector('.tr-pen'), null);
             await stroke(reader, paragraph(reader, 0), 0, 5);
             assertEqual(inked(reader), '');
-            closeAll();
-        });
+        }));
     });
     // ----------------------------------------------------------- wikipedia
 
