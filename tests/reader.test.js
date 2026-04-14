@@ -414,14 +414,12 @@
     });
 
     suite('reader — notes', () => {
-        test('a note is written at the end of its highlight, and saved once the typing stops', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader } = await openReady({ transcript: makeTranscript(20) });
+        test('a note is written at the end of its highlight, and saved once the typing stops', () => onReader({ transcript: makeTranscript(20) }, async ({ reader }) => {
             // Across the paragraph break: the note belongs after the last of it.
             const paras = reader.element.querySelectorAll('.rd-paras .rd-p');
             const last = Number(paras[1].querySelector('.rd-w').dataset.w) + 2;
             stroke(reader, last - 6, last);
-            await waitFor(async () => (await saved()).length === 1, 'the highlight');
+            await savedCount(1, 'the highlight');
             tap(reader, last - 1);
             reader.element.querySelector('.rd-tb-note').click();
             const box = reader.element.querySelector('.rd-edit textarea');
@@ -434,15 +432,11 @@
             const note = reader.element.querySelector('.rd-note');
             assert(note && paras[1].contains(note), 'the note is not at the end of its highlight');
             assertEqual(note.textContent.trim(), 'Worth a second look.');
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('a note typed in the list is kept, and closing does not lose one', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader } = await openReady();
+        test('a note typed in the list is kept, and closing does not lose one', () => onReader({}, async ({ reader }) => {
             stroke(reader, 9, 12);
-            await waitFor(async () => (await saved()).length === 1, 'the highlight');
+            await savedCount(1, 'the highlight');
             reader.element.querySelector('.rd-tab[data-tab="highlights"]').click();
             const box = reader.element.querySelector('.rd-list-pane .rd-li textarea');
             box.focus();
@@ -450,29 +444,22 @@
             box.dispatchEvent(new Event('input', { bubbles: true }));
             reader.close();
             await waitFor(async () => (await saved())[0].note === 'typed and gone', 'the note to survive the close');
-            teardown();
-        });
+        }));
 
-        test('the label Ctrl+B writes is not shown as a note', async () => {
-            MockChrome.reset({ localStore: {} });
-            await window.BB.Bookmarks.save([{ id: 'vid00000001', title: 'A talk', url: 'u', bookmarks: [
-                { id: 'a', time: 6, start: 6, end: 9, note: 'Checkpoint 0:06 - 0:09' }] }]);
-            const { reader } = await openReady();
+        test('the label Ctrl+B writes is not shown as a note', () => onReader({
+            prepare: filed([{ id: 'a', time: 6, start: 6, end: 9, note: 'Checkpoint 0:06 - 0:09' }]),
+        }, async ({ reader }) => {
             await waitFor(() => marked(reader).length > 0, 'the checkpoint drawn');
             assertDeepEqual(marked(reader), 'Line 2 of the talk, said at 6 seconds.'.split(' '), 'Ctrl+B’s span is not what was said in it');
             assertEqual(reader.element.querySelector('.rd-note'), null);
-            reader.close();
-            teardown();
-        });
+        }));
     });
 
     suite('reader — the highlights list', () => {
-        test('every checkpoint is listed in time order, the ones past the transcript too, and copies as Markdown', async () => {
-            MockChrome.reset({ localStore: {} });
-            await window.BB.Bookmarks.save([{ id: 'vid00000001', title: 'A talk', url: 'u', bookmarks: [
-                { id: 'b', time: 900, start: 900, end: 905, subtitle: 'after the end' },
-                { id: 'a', time: 6, start: 6, end: 9, subtitle: 'Line 2', note: 'kept' }] }]);
-            const { reader, copied } = await openReady();
+        test('every checkpoint is listed in time order, the ones past the transcript too, and copies as Markdown', () => onReader({ prepare: filed([
+            { id: 'b', time: 900, start: 900, end: 905, subtitle: 'after the end' },
+            { id: 'a', time: 6, start: 6, end: 9, subtitle: 'Line 2', note: 'kept' },
+        ]) }, async ({ reader, copied }) => {
             reader.element.querySelector('.rd-tab[data-tab="highlights"]').click();
             await waitFor(() => reader.element.querySelectorAll('.rd-list-pane .rd-li').length === 2, 'both in the list');
             const items = Array.from(reader.element.querySelectorAll('.rd-list-pane .rd-li'), (item) => item.querySelector('.rd-li-text').textContent);
@@ -484,26 +471,17 @@
             assert(lines.includes('  - kept'), 'the note is not under its passage');
             assertEqual(lines.indexOf('  - kept'), lines.findIndex((line) => line.includes('Line 2')) + 1);
             await waitFor(() => /Copied/.test(reader.element.querySelector('.rd-list-pane .rd-copy').textContent), 'Copied');
-            reader.close();
-            teardown();
-        });
+        }));
     });
 
     suite('reader — layouts', () => {
         test('it opens in the layout the setting names, and an old one in the nearest', () => {
             for (const [asked, opened] of [['focus', 'focus'], ['split', 'dock'], ['theatre', 'glass'], ['sideways', 'dock']]) {
-                stagePage();
-                const { reader } = makeReader({ settings: { readerLayout: asked } });
-                reader.open();
-                assertEqual(reader.element.dataset.layout, opened, asked);
-                reader.close();
+                onPage({ settings: { readerLayout: asked } }, ({ reader }) => assertEqual(reader.element.dataset.layout, opened, asked));
             }
-            teardown();
         });
 
-        test('every layout gives the player room, and switching fetches nothing again', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader, page, fetches } = await openReady();
+        test('every layout gives the player room, and switching fetches nothing again', () => onReader({}, async ({ reader, page, fetches }) => {
             const first = reader.element.querySelector('.rd-paras .rd-p');
             for (const id of Layout().LAYOUT_IDS) {
                 reader.element.querySelector(`.rd-layout[data-layout="${id}"]`).click();
@@ -511,25 +489,18 @@
                 await pause(360);
                 const box = page.player.getBoundingClientRect();
                 assert(box.width > 200 && Math.abs(box.width / box.height - 16 / 9) < 0.03, `${id} left the player ${box.width}×${box.height}`);
-                // REGRESSION: the picture went black with the sound still
-                // playing. The video's container holds nothing but the
-                // absolutely placed video, so it had no height, and the
-                // video's height of 100% came to 0.
+                // REGRESSION: the picture went black with the sound playing — the
+                // video's container held only the absolute video, so had no height.
                 const picture = page.player.querySelector('video').getBoundingClientRect();
                 assert(Math.abs(picture.height - box.height) < 1 && Math.abs(picture.width - box.width) < 1,
                     `${id} gave the picture ${picture.width}×${picture.height} of a ${box.width}×${box.height} player`);
             }
             assertEqual(fetches(), 1, 'switching layout fetched the transcript again');
             assert(reader.element.querySelector('.rd-paras .rd-p') === first, 'switching redrew the transcript');
-            await waitFor(async () => (await window.BB.Settings.get(['readerLayout'])).readerLayout === 'focus',
-                'the last layout to be remembered');
-            reader.close();
-            teardown();
-        });
+            await waitFor(async () => (await window.BB.Settings.get(['readerLayout'])).readerLayout === 'focus', 'the last layout to be remembered');
+        }));
 
-        test('in the float card and the glass column a time stands over its paragraph, elsewhere beside it', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader } = await openReady({ transcript: makeTranscript(20) });
+        test('in the float card and the glass column a time stands over its paragraph, elsewhere beside it', () => onReader({ transcript: makeTranscript(20) }, async ({ reader }) => {
             for (const id of Layout().LAYOUT_IDS.filter((one) => one !== 'band')) {
                 reader.setLayout(id, { remember: false });
                 await pause(360);
@@ -540,17 +511,12 @@
                     assert(stamp.bottom <= text.top + 0.5, `${id}: the time is not over its paragraph`);
                     assert(Math.abs(stamp.left - text.left) < 1, `${id}: the time is ${stamp.left - text.left}px off the text’s edge`);
                 } else {
-                    assert(stamp.right <= text.left + 0.5 && Math.abs(stamp.top - text.top) < 2,
-                        `${id}: the time does not hang beside its paragraph`);
+                    assert(stamp.right <= text.left + 0.5 && Math.abs(stamp.top - text.top) < 2, `${id}: the time does not hang beside its paragraph`);
                 }
             }
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('the band holds three sentences, the playing one in the middle, and opens to the whole transcript', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader, page } = await openReady({ settings: { readerLayout: 'band' } });
+        test('the band holds three sentences, the playing one in the middle, and opens to the whole transcript', () => onReader({ settings: { readerLayout: 'band' } }, ({ reader, page }) => {
             playTo(page, 4 * 3 + 1);
             const rows = () => Array.from(reader.element.querySelectorAll('.rd-bandrows .rd-brow'));
             assertEqual(rows().length, 3);
@@ -561,13 +527,9 @@
             reader.element.querySelector('.rd-band-toggle').click();
             assert(!reader.element.querySelector('.rd-paras').hidden, 'the band did not open');
             assertEqual(rows().length, 0);
-            reader.close();
-            teardown();
-        });
+        }));
 
-        test('the float card and the pinned player move by their grips, and stop at the edge', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader } = await openReady({ settings: { readerLayout: 'float' } });
+        test('the float card and the pinned player move by their grips, and stop at the edge', () => onReader({ settings: { readerLayout: 'float' } }, async ({ reader }) => {
             const panel = reader.element.querySelector('.rd-panel');
             const grip = reader.element.querySelector('.rd-grip');
             const before = panel.getBoundingClientRect();
@@ -575,8 +537,7 @@
             const at = centre(grip);
             window.dispatchEvent(new PointerEvent('pointermove', { clientX: at.clientX - 120, clientY: at.clientY + 30 }));
             window.dispatchEvent(new PointerEvent('pointerup', { clientX: at.clientX - 120, clientY: at.clientY + 30 }));
-            const after = panel.getBoundingClientRect();
-            assertEqual(Math.round(before.left - after.left), 120, 'the card did not follow the grip');
+            assertEqual(Math.round(before.left - panel.getBoundingClientRect().left), 120, 'the card did not follow the grip');
             point(grip, 'pointerdown');
             window.dispatchEvent(new PointerEvent('pointerup', { clientX: -5000, clientY: -5000 }));
             assertEqual(Math.round(panel.getBoundingClientRect().left), 0, 'the card went off the screen');
@@ -590,60 +551,48 @@
             const v = centre(vgrip);
             window.dispatchEvent(new PointerEvent('pointerup', { clientX: v.clientX, clientY: v.clientY - 100 }));
             assertEqual(Math.round(top - video.getBoundingClientRect().top), 100, 'the pinned player did not move');
-            reader.close();
-            teardown();
-        });
+        }));
     });
 
     suite('reader — caption languages', () => {
         test('switching language redraws the transcript, and a highlight stays on its moment', async () => {
-            MockChrome.reset({ localStore: {} });
-            await window.BB.Bookmarks.save([{ id: 'vid00000001', title: 'A talk', url: 'u', bookmarks: [
-                { id: 'a', time: 6, start: 6, end: 9 }] }]);
             const english = makeTranscript(6);
             // The same talk in German, cut into different lines.
             const german = { languageCode: 'de', language: 'German', snippets: [0, 2, 4, 6.5, 8, 11, 14].map((start, i) =>
                 ({ text: `Zeile ${i}`, start, duration: 2 })) };
             const fetched = [];
-            const { reader } = await openReady({ transcripts: {
+            await onReader({ prepare: filed([{ id: 'a', time: 6, start: 6, end: 9 }]), transcripts: {
                 fetch: (id, { language } = {}) => {
                     fetched.push(language || '');
                     return Promise.resolve(language === 'de' ? german : english);
                 },
                 list: () => Promise.resolve([{ code: 'en', label: 'English' }, { code: 'de', label: 'German' }]),
-            } });
-            const picker = reader.element.querySelector('.rd-lang');
-            await waitFor(() => !picker.hidden, 'the picker for a video with two languages');
-            await waitFor(() => marked(reader).length > 0, 'the English highlight');
-
-            picker.querySelector('select').value = 'de';
-            picker.querySelector('select').dispatchEvent(new Event('change'));
-            await waitFor(() => /Zeile/.test(reader.element.querySelector('.rd-paras').textContent), 'the German words');
-            // Every German word said between 6s and 9s, and none other.
-            await waitFor(() => marked(reader).length > 0, 'the German highlight');
-            assertDeepEqual(marked(reader), ['Zeile', '3', 'Zeile'], 'the highlight moved off its time');
-            assertDeepEqual(fetched, ['', 'de']);
-            reader.close();
-            teardown();
+            } }, async ({ reader }) => {
+                const picker = reader.element.querySelector('.rd-lang');
+                await waitFor(() => !picker.hidden, 'the picker for a video with two languages');
+                await waitFor(() => marked(reader).length > 0, 'the English highlight');
+                picker.querySelector('select').value = 'de';
+                picker.querySelector('select').dispatchEvent(new Event('change'));
+                await waitFor(() => /Zeile/.test(reader.element.querySelector('.rd-paras').textContent), 'the German words');
+                // Every German word said between 6s and 9s, and none other.
+                await waitFor(() => marked(reader).length > 0, 'the German highlight');
+                assertDeepEqual(marked(reader), ['Zeile', '3', 'Zeile'], 'the highlight moved off its time');
+                assertDeepEqual(fetched, ['', 'de']);
+            });
         });
 
-        test('a video with one language offers no picker', async () => {
-            const { reader } = await openReady({ transcript: makeTranscript(3) });
+        test('a video with one language offers no picker', () => onReader({ transcript: makeTranscript(3) }, ({ reader }) => {
             assert(reader.element.querySelector('.rd-lang').hidden);
-            reader.close();
-            teardown();
-        });
+        }));
     });
 
     suite('reader — chapters', () => {
         const item = (v, t, clock, title) => `<ytd-macro-markers-list-item-renderer><a id="endpoint"
             href="/watch?v=${v}&t=${t}s"><h4 title="${title}">${title}</h4><div id="time">${clock}</div></a></ytd-macro-markers-list-item-renderer>`;
+        const chapters = item(VIDEO_ID, 0, '0:00', 'Opening') + item(VIDEO_ID, 12, '0:12', 'Middle') +
+            item('vid00000002', 20, '0:20', 'Another video') + item(VIDEO_ID, 21, '0:21', 'End');
 
-        test('YouTube’s chapters become chips under the docked player, and the one playing is lit', async () => {
-            MockChrome.reset({ localStore: {} });
-            const chapters = item('vid00000001', 0, '0:00', 'Opening') + item('vid00000001', 12, '0:12', 'Middle') +
-                item('vid00000002', 20, '0:20', 'Another video') + item('vid00000001', 21, '0:21', 'End');
-            const { reader, page, seeks } = await openReady({ page: { chapters } });
+        test('YouTube’s chapters become chips under the docked player, and the one playing is lit', () => onReader({ page: { chapters } }, ({ reader, page, seeks }) => {
             const chips = () => Array.from(reader.element.querySelectorAll('.rd-chip'));
             assertDeepEqual(chips().map((chip) => [chip.dataset.t, chip.lastChild.textContent.trim()]), [['0', 'Opening'], ['12', 'Middle'], ['21', 'End']],
                 'a leftover chapter from another video was taken');
@@ -652,9 +601,7 @@
             chips()[2].click();
             assertDeepEqual(seeks, [21]);
             assert(/A talk/.test(reader.element.querySelector('.rd-under').textContent), 'no title under the player');
-            reader.close();
-            teardown();
-        });
+        }));
 
         test('a description’s timestamps are chapters only the way YouTube counts them', () => {
             const parse = Reader().chaptersInText;
@@ -666,9 +613,7 @@
     });
 
     suite('reader — typography', () => {
-        test('the settings scale each layout’s own type, and an open reader follows a change', async () => {
-            MockChrome.reset({ localStore: {} });
-            const { reader, values } = await openReady({ settings: { readerFontSize: 20 } });
+        test('the settings scale each layout’s own type, and an open reader follows a change', () => onReader({ settings: { readerFontSize: 20 } }, ({ reader, values }) => {
             const text = () => getComputedStyle(reader.element.querySelector('.rd-paras .rd-text')).fontSize;
             assertEqual(text(), '20px', 'dock is 16px at the default 16');
             reader.setLayout('focus');
@@ -676,56 +621,49 @@
             values.readerFontSize = 16;
             reader.refresh();
             assertEqual(text(), '19px', 'an open reader did not follow the setting');
-            reader.close();
-            teardown();
-        });
+        }));
     });
 
     suite('reader — youtube’s header', () => {
         test('it covers the header by default, and starts under it when asked', async () => {
             await loadStyles();
-            const page = stagePage();
-            const masthead = document.createElement('div');
-            masthead.id = 'masthead-container';
-            masthead.style.height = '64px';
-            page.home.parentNode.appendChild(masthead);
-
-            const { reader, values } = makeReader();
-            reader.open();
-            assertEqual(reader.element.getBoundingClientRect().top, 0);
-            values.readerHideChrome = false;
-            reader.refresh();
-            assertEqual(reader.element.getBoundingClientRect().top, 64, 'the header was covered anyway');
-            assert(Number(getComputedStyle(reader.element).zIndex) < 2020, 'the header’s menus would open behind the reader');
-            reader.close();
-            teardown();
+            onPage({}, ({ page, reader, values }) => {
+                const masthead = document.createElement('div');
+                masthead.id = 'masthead-container';
+                masthead.style.height = '64px';
+                page.home.parentNode.appendChild(masthead);
+                reader.refresh();
+                assertEqual(reader.element.getBoundingClientRect().top, 0);
+                values.readerHideChrome = false;
+                reader.refresh();
+                assertEqual(reader.element.getBoundingClientRect().top, 64, 'the header was covered anyway');
+                assert(Number(getComputedStyle(reader.element).zIndex) < 2020, 'the header’s menus would open behind the reader');
+            });
         });
     });
 
     suite('reader — skins', () => {
         test('the reader is dressed in each skin, with the skin’s own shape', async () => {
             for (const skin of ['default', 'riso', 'medieval', 'deco']) {
-                MockChrome.reset({ localStore: { skin } });
-                const { reader } = await openReady();
-                await waitFor(() => reader.element.dataset.bbSkin === skin, `the ${skin} skin`);
-                assert(['light', 'dark'].includes(reader.element.dataset.bbTheme), 'no light or dark');
-                const radius = getComputedStyle(reader.element.querySelector('.rd-panel')).borderTopLeftRadius;
-                if (skin === 'riso' || skin === 'deco') assertEqual(radius, '0px', `${skin} kept round corners`);
-                else assert(radius !== '0px', `${skin} lost its corners`);
-                const mark = getComputedStyle(reader.element.querySelector('.rd-paras .rd-stamp'), '::before').content;
-                assertEqual(mark.includes('¶'), skin === 'medieval', `${skin}'s paragraph mark is ${mark}`);
-                const corners = getComputedStyle(reader.element.querySelector('.rd-corners')).display;
-                assertEqual(corners !== 'none', skin === 'deco', `${skin}'s corner ornament`);
-                if (skin === 'deco') {
-                    const drawn = Array.from(reader.element.querySelectorAll('.rd-corners svg:first-of-type path'), (path) => path.getAttribute('d'));
-                    assertDeepEqual(drawn, window.BB.Corners.SETS.fan.map((path) => path.d), 'deco’s corner is not the settings plate’s');
-                    const panel = reader.element.querySelector('.rd-panel').getBoundingClientRect();
-                    const scroll = reader.element.querySelector('.rd-scroll').getBoundingClientRect();
-                    assert(panel.bottom - scroll.bottom >= 10, 'the transcript runs under deco’s frame');
-                }
-                assert(reader.element.style.getPropertyValue('--rd-cursor-pen').includes('svg'), 'the pen is not the cursor');
-                reader.close();
-                teardown();
+                await onReader({ store: { skin } }, async ({ reader }) => {
+                    await waitFor(() => reader.element.dataset.bbSkin === skin, `the ${skin} skin`);
+                    assert(['light', 'dark'].includes(reader.element.dataset.bbTheme), 'no light or dark');
+                    const radius = getComputedStyle(reader.element.querySelector('.rd-panel')).borderTopLeftRadius;
+                    if (skin === 'riso' || skin === 'deco') assertEqual(radius, '0px', `${skin} kept round corners`);
+                    else assert(radius !== '0px', `${skin} lost its corners`);
+                    const mark = getComputedStyle(reader.element.querySelector('.rd-paras .rd-stamp'), '::before').content;
+                    assertEqual(mark.includes('¶'), skin === 'medieval', `${skin}'s paragraph mark is ${mark}`);
+                    const corners = getComputedStyle(reader.element.querySelector('.rd-corners')).display;
+                    assertEqual(corners !== 'none', skin === 'deco', `${skin}'s corner ornament`);
+                    if (skin === 'deco') {
+                        const drawn = Array.from(reader.element.querySelectorAll('.rd-corners svg:first-of-type path'), (path) => path.getAttribute('d'));
+                        assertDeepEqual(drawn, window.BB.Corners.SETS.fan.map((path) => path.d), 'deco’s corner is not the settings plate’s');
+                        const panel = reader.element.querySelector('.rd-panel').getBoundingClientRect();
+                        const scroll = reader.element.querySelector('.rd-scroll').getBoundingClientRect();
+                        assert(panel.bottom - scroll.bottom >= 10, 'the transcript runs under deco’s frame');
+                    }
+                    assert(reader.element.style.getPropertyValue('--rd-cursor-pen').includes('svg'), 'the pen is not the cursor');
+                });
             }
         });
 
@@ -734,42 +672,35 @@
             stagePage();
             const { reader } = makeReader();
             reader.open();
-            await waitFor(() => reader.element.dataset.bbSkin === 'default', 'the first skin');
-            await chrome.storage.local.set({ skin: 'medieval' });
-            reader.refresh();
-            await waitFor(() => reader.element.dataset.bbSkin === 'medieval', 'the new skin');
-            reader.close();
-            teardown();
+            try {
+                await waitFor(() => reader.element.dataset.bbSkin === 'default', 'the first skin');
+                await chrome.storage.local.set({ skin: 'medieval' });
+                reader.refresh();
+                await waitFor(() => reader.element.dataset.bbSkin === 'medieval', 'the new skin');
+            } finally {
+                reader.close();
+                teardown();
+            }
         });
     });
 
     suite('reader — opening and closing', () => {
-        test('Escape closes, but leaves a field first', () => {
-            stagePage();
-            const { reader } = makeReader();
-            reader.open();
+        test('Escape closes, but leaves a field first', () => onPage({}, ({ reader }) => {
             const field = document.createElement('textarea');
             reader.element.appendChild(field);
             field.focus();
-
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            key('keydown', { key: 'Escape' });
             assert(reader.isOpen, 'Escape in a note threw the reader away');
             assert(document.activeElement !== field, 'the field kept focus');
-
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            key('keydown', { key: 'Escape' });
             assertEqual(reader.isOpen, false);
-            teardown();
-        });
+        }));
 
-        test('only a different video closes it', () => {
-            stagePage();
-            const { reader } = makeReader();
-            reader.open();
-            reader.onNavigate('vid00000001');
+        test('only a different video closes it', () => onPage({}, ({ reader }) => {
+            reader.onNavigate(VIDEO_ID);
             assert(reader.isOpen, 'an advert handing back to the video closed the reader');
             reader.onNavigate('vid00000002');
             assertEqual(reader.isOpen, false);
-            teardown();
-        });
+        }));
     });
 })();
