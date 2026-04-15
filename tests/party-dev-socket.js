@@ -1,20 +1,12 @@
 /**
- * The WebSocket side of the party dev server, written out by hand because the
- * server has no dependencies: the RFC 6455 handshake, and frames the way a
- * party uses them — masked text from the client, unmasked text back, at most
- * 8 KB — plus close and ping. Nothing else of the RFC is needed, so nothing
- * else is here.
+ * The dev server's WebSocket, by hand to stay dependency-free: the RFC 6455
+ * handshake, masked text in, unmasked text out (8 KB at most), close and ping.
  *
- * The faults live here too, since they happen on the wire:
- *
- * - `lag` delays every message each way, so the round trip is twice it.
- * - `jitter` spreads that delay by up to ± this much. Order is kept, as TCP
- *   keeps it; only the timing wobbles, which is what drift and the release
- *   lead have to absorb.
- * - `loss` drops that percentage of messages each way, except the ones a
- *   join depends on. A socket cannot lose a message, but a server under load
- *   and a client that missed one while reconnecting look just like it, and
- *   the ping's `seq` is what is supposed to heal it.
+ * And the faults, which happen on the wire:
+ * - `lag` delays every message each way.
+ * - `jitter` spreads that delay by up to ± this much, keeping order as TCP does.
+ * - `loss` drops that percentage each way, except what a join needs — as a
+ *   loaded server or a reconnecting client would, for the ping's `seq` to heal.
  */
 'use strict';
 

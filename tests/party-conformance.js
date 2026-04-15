@@ -6,23 +6,16 @@
  *
  *     node tests/party-conformance.js ws://localhost:7070 [--slack ms] [--only text]
  *
- * It is how the Zig/Go server is checked against the extension's own
- * authority, so it knows nothing of either — no dependencies, only Node's
- * global WebSocket (Node 22 or later) and the protocol in the README.
+ * No dependencies: Node's global WebSocket (Node 22+) and the README's protocol.
  *
- * A vector's clock is injected; a server's is not. So the replay runs in real
- * time — a step `at` 15000 is sent fifteen seconds into its case — and reads
- * the case's start off the first welcome's `now`, the server's own clock. An
- * expected `at`, `s`, `s2` or `since` is a room time counted from there, and
- * matches within `--slack` ms; an expected `pos` within the same slack in
- * seconds of video. A `tick` step sends nothing: the server runs its own
- * timeouts about once a second, so a case with one allows a second more.
- * Every case gets its own room and runs alongside the others.
+ * A server's clock cannot be injected, so the replay runs in real time — a
+ * step `at` 15000 is sent fifteen seconds in — counted from the first
+ * welcome's `now`. Expected times (`at`, `s`, `s2`, `since`) and `pos` match
+ * within `--slack`. A `tick` sends nothing and allows the server's own
+ * once-a-second timeouts a second more. Each case has its own room.
  *
- * Run it against a server without fault injection. Lag alone shifts every
- * time by the same amount and passes; jitter can reorder two members' clicks
- * a hundred milliseconds apart, and loss drops what a case is waiting to see,
- * which is what those faults are for — exercising the extension, not this.
+ * Run it against a server without faults: jitter reorders clicks and loss
+ * drops what a case waits for. Lag alone passes.
  */
 'use strict';
 

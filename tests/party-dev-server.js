@@ -5,13 +5,9 @@
  *
  *     node tests/party-dev-server.js [--port 7070] [--lag ms] [--jitter ms] [--loss %]
  *
- * This is a test fixture, not the product. The server people will run is
- * written in Zig or Go against the README's "Watch party protocol", and
- * tests/party-conformance.js is what holds it to the same behaviour as this.
- * So nothing here is hardened: no TLS, no limits on rooms, no persistence.
- *
- * The faults are there to watch the extension heal, not to test the room;
- * what each one does is in party-dev-socket.js, where they happen.
+ * A fixture, not the product, so nothing is hardened: the real server is held
+ * to this one's behaviour by party-conformance.js. The faults, which are for
+ * watching the extension heal, are described in party-dev-socket.js.
  */
 'use strict';
 

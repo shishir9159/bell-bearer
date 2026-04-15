@@ -1,11 +1,7 @@
 /**
- * A mock of the subset of the `chrome.*` extension API that bell-bearer uses,
- * good enough to load the background and content sources unmodified and drive real
- * event sequences against them.
- *
- * Extension code registers its listeners once at load, so the mock is
- * installed before the scripts are loaded and then `reset()` between tests to
- * clear state without re-registering.
+ * The `chrome.*` APIs bell-bearer uses, enough to load the sources unmodified.
+ * Installed before them, as they register their listeners at load; `reset()`
+ * clears state between tests and leaves the listeners.
  */
 (function () {
     'use strict';
@@ -35,16 +31,9 @@
         moveErrorsRemaining: 0,
     };
 
-    /**
-     * Defer a mocked callback the way a real chrome.* call does.
-     *
-     * This has to stay a macrotask. A microtask (queueMicrotask) makes the
-     * suite dramatically faster in a throttled background tab, but it also
-     * hoists every mocked callback ahead of any setTimeout the code under test
-     * is waiting on — which silently reorders the back-off path in sowon, and
-     * turns a real regression test green
-     * whatever the code does. Fidelity beats speed here.
-     */
+    // A macrotask, as a real chrome.* callback is. A microtask is faster in a
+    // hidden tab but runs ahead of the code's own timers, which reorders
+    // sowon's back-off and turns its regression test green whatever the code does.
     const soon = (fn) => setTimeout(fn, 0);
     function pick(keys, store) {
         const out = {};
@@ -54,10 +43,8 @@
         });
         return out;
     }
-    // removeListener too: Settings.watch hands back an unsubscribe that
-    // calls it, and without it every UI a spec builds and tears down stays
-    // subscribed to storage for the rest of the run, answering changes made
-    // for the tests after it.
+    // removeListener too: without it every UI a spec tears down stays
+    // subscribed to storage, answering the changes later tests make.
     const evt = (arr) => ({
         addListener: (f) => arr.push(f),
         removeListener: (f) => {
@@ -276,17 +263,9 @@
         },
 
         /**
-         * Lets queued async callbacks (storage, tabs.get, retries) run.
-         *
-         * The default has to move with the tab's visibility. Every mocked
-         * callback is deferred through a setTimeout, and a browser throttles
-         * those hard in a background tab — so a wait that comfortably drains
-         * the queue in a visible tab drains almost none of it in a hidden one,
-         * and tests fail for the environment rather than for the code.
-         *
-         * An explicit argument is never scaled: where a test passes one it is
-         * usually timing something deliberately, such as staying inside the
-         * sowon throttle window.
+         * Lets queued callbacks run: longer in a hidden tab, which throttles
+         * the timers they wait on. An explicit `ms` is never scaled — a test
+         * that passes one is timing something.
          */
         settle: (ms) => new Promise((r) =>
             setTimeout(r, ms === undefined ? (document.hidden ? 4000 : 250) : ms)),

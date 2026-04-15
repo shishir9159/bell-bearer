@@ -1,25 +1,16 @@
 /**
- * Every list that loads the extension's classic scripts, and a check that
- * each file in a list comes after the files it takes off `BB` as it loads.
+ * Every list that loads the extension's classic scripts (AGENTS.md's table),
+ * and a check that each file comes after the ones it takes off `BB` as it
+ * loads. Getting one wrong fails in that surface only, at load.
  *
- * There is no bundler, so load order is kept by hand in a dozen places (see
- * CLAUDE.md's table), and getting one wrong fails in that surface only, at
- * load, as "undefined is not an object". node-check.js used to pin a handful
- * of pairs; this reads what each file actually needs instead.
- *
- * A file "needs" a name when it captures it at the top of its IIFE, in one of
- * the three shapes the repo uses:
+ * A file "needs" a name it captures at the top of its IIFE (four spaces in):
  *
  *     const { Settings, Dom } = root.BB;          (or window.BB, or BB)
  *     const Settings = ns.Settings || req('…');   (or BB.Settings || …)
  *     const Settings = root.BB && root.BB.Settings;   (bracketed, or globalThis)
  *
- * Only those at the IIFE's own indentation (four spaces) count. The same
- * shapes inside a function are read when the function runs, which is after
- * every list has finished loading — chess-stats reads BB.HeatMap that way, in
- * a popup that never loads the heat map because it never draws one.
- *
- * A file "provides" a name by assigning it: `root.BB.Settings = Settings`.
+ * The same shapes inside a function are read when it runs, after every list
+ * has loaded. A file "provides" a name by assigning it: `root.BB.X = X`.
  *
  *     node tests/load-order.js     # print what is out of order, if anything
  */

@@ -1,11 +1,7 @@
 /**
- * A ~40-line static file server, so the suite can be opened over HTTP when the
- * browser refuses `file://` sub-resource loads.
+ * A static server for the suite, for when the browser refuses `file://` loads.
  *
- *   node tests/serve.js        # then open http://localhost:5601/tests/
- *
- * Node only, no npm install — the suite itself has no dependencies and this
- * keeps it that way.
+ *     node tests/serve.js        # then open http://localhost:5601/tests/
  */
 const http = require('http');
 const fs = require('fs');
