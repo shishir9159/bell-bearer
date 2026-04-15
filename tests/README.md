@@ -26,7 +26,7 @@ Any page takes `?suite=<word>`. `x-only`, `chat-only`, `forge-only`,
 | `party-vectors.json` | Cases every party server must pass |
 | `party-dev-server.js` | A local party server: `--lag 200 --jitter 150 --loss 5` |
 | `party-conformance.js` | Replays the vectors: `node tests/party-conformance.js ws://localhost:7070` |
-| `live-transcript.html` | Real YouTube captions, so it needs the network and is in neither suite. Open it as `chrome-extension://<id>/tests/live-transcript.html` |
+| `live-transcript.html` | transcript.js against YouTube itself, so it is in neither suite. Open it as `chrome-extension://<id>/tests/live-transcript.html`, `?v=<id>` for another video |
 
 ## The mock
 
