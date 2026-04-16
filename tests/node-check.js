@@ -1,12 +1,5 @@
 /**
- * A Node smoke-check for the parts of the suite that are pure logic.
- *
- * The browser suite in tests/index.html stays the real thing — it drives real
- * KeyboardEvents against a real <video>, which Node cannot do. But a browser
- * throttles timers hard in a backgrounded tab, and the mock defers every
- * chrome.* callback through one, so a full run there can take minutes. This
- * runs the timestamp arithmetic and the activity store in a second, which is
- * what you want while actually changing that code.
+ * The pure-logic suite, in seconds; index.html is for what needs a DOM.
  *
  *     node tests/node-check.js
  *     node tests/node-check.js party    only the sections with "party" in their name
@@ -16,12 +9,9 @@
 let passed = 0;
 let failed = 0;
 
-/**
- * The area asked for, if any. Everything between the checks still runs, so
- * each section's set-up is there; only checks outside the area are skipped.
- * A check that leaned on an earlier section's leftovers would fail in an area
- * run and not in the whole one, which is why the whole one is the gate.
- */
+// Only checks outside the area are skipped; everything between them runs. A
+// check leaning on an earlier section's leftovers fails only in an area run,
+// which is why the whole run is the gate.
 const AREA = (process.argv[2] || '').toLowerCase();
 let inArea = !AREA;
 let skipped = 0;
@@ -69,12 +59,8 @@ function assert(condition, msg) {
     if (!condition) throw new Error(msg || 'expected truthy');
 }
 
-/**
- * A curve's shape rather than its values. The FSRS formulas are somebody
- * else's arithmetic and pinning them to constants would only record what this
- * machine computed today; what actually has to hold is that a more stable card
- * waits longer and a higher retention target waits less.
- */
+// A curve's shape, not its values: FSRS's constants are somebody else's, and
+// what has to hold is that a more stable card waits longer.
 function assertRising(values, msg) {
     for (let i = 1; i < values.length; i++) {
         assert(values[i] > values[i - 1], `${msg}: not rising at ${i} — ${values.join(', ')}`);
@@ -937,10 +923,8 @@ check('Again after a long gap lapses without falling through the floor', () => {
     eq(lapsed.lapses, 1);
 });
 check('a lapse never raises stability, however long the gap', () => {
-    // The lapse curve is not "S times a constant", and on a card that is still
-    // young it genuinely computes a *higher* stability than the card has —
-    // forgetting after 120 days something whose stability is 3 says little.
-    // The cap is what keeps that from reading as a reward for forgetting.
+    // On a young card the lapse curve computes a *higher* stability than it
+    // has; the cap keeps that from reading as a reward for forgetting.
     const young = Fsrs.review(null, 3, 0, { now: 0 });
     eq(Fsrs.review(young, 1, 120, { now: 0 }).stability, young.stability);
 });
@@ -1003,11 +987,8 @@ check('a clean run inside the budget but over half of it is Good', () => {
 
 const Leet = require('../src/shared/leetcode.js');
 
-// Two in the afternoon today rather than a fixed calendar date, for the same
-// reason the activity suite uses one: the store prunes anything older than
-// KEEP_DAYS on write, so a hard-coded date quietly stops being recorded once
-// the suite is run a year after it was written. Local, and set with setHours
-// so a tester west of UTC lights up the same square as one east of it.
+// Today at two, not a fixed date: the store prunes past KEEP_DAYS on write.
+// Set with setHours, so a tester either side of UTC lights the same square.
 const L0 = new Date().setHours(14, 0, 0, 0);
 const days = (n) => n * Leet.DAY_MS;
 
@@ -1295,13 +1276,8 @@ check('a reading that is not a clock is passed over, not read as zero', () => {
 const LeetUi = require('../src/content/leet-ui.js');
 
 /**
- * Drive the clock without a browser.
- *
- * Only what createLeetUi actually touches is stubbed — it reads the page's
- * visibility, registers listeners it is never sent, and asks LeetRead what
- * the stopwatch says. That last one is the seam: `reads` is the sequence of
- * readings LeetCode's widget is pretending to show, and null means "no widget
- * on this page", which is the branch the wall clock covers.
+ * Drive the clock without a browser. `reads` is the sequence LeetCode's
+ * stopwatch shows; null is "no widget", the branch the wall clock covers.
  */
 function withStubbedPage(path, run) {
     const saved = {
@@ -1542,10 +1518,8 @@ check('the calendar comes back as one count per day', () => {
     eq(parsed.activeDays, 2);
 });
 check('the day keys are UTC, the way LeetCode itself draws them', () => {
-    // Read back in local time, a midnight timestamp lands on the day before
-    // for anyone west of Greenwich and the day after for anyone far enough
-    // east. Matching LeetCode's own profile page is the answer a person can
-    // actually check against.
+    // Read back in local time, a midnight lands a day off either side of
+    // Greenwich; LeetCode's own profile page is what a person can check.
     eq(LeetApi.dayKeyUtc(utcMidnight('2026-01-01')), '2026-01-01');
     eq(LeetApi.dayKeyUtc(utcMidnight('2026-12-31')), '2026-12-31');
 });
@@ -1646,10 +1620,8 @@ check('the four grades are offered with what each would schedule', () => {
         const fresh = { slug: 'two-sum', difficulty: 'Medium', fsrs: null };
         const options = ui.previewIntervals(fresh, Date.now());
         eq(options.map((o) => o.label), ['Again', 'Hard', 'Good', 'Easy']);
-        // Harder answers bring it back sooner. Not *strictly* — on a first
-        // review Again and Hard both round down to tomorrow, which is the
-        // honest answer for both — but it must never invert, or the buttons
-        // are lying about their own consequences.
+        // Not strictly sooner (on a first review Again and Hard both round to
+        // tomorrow), but never inverted, or the buttons lie about themselves.
         const schedule = options.map((o) => o.days);
         for (let i = 1; i < schedule.length; i++) {
             assert(schedule[i] >= schedule[i - 1], `grade: inverted at ${i} — ${schedule.join(', ')}`);
@@ -1692,10 +1664,8 @@ const LeetStats = globalThis.BB.LeetStats;
 
 section('leetcode — the settings panel');
 check('every leetcode setting has a control carrying its key as an id', () => {
-    // This is the whole binding. src/page/settings-form.js matches a control
-    // to a setting by id and nothing else, so a setting with no element is a
-    // setting that can never be changed, and it fails silently — which is
-    // exactly the kind of thing a reader would not notice.
+    // settings-form.js binds a control to a setting by id alone, so a setting
+    // with no element can never be changed, and nothing says so.
     const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
     const Settings = globalThis.BB.Settings;
     const controls = new Set([...html.matchAll(/<(?:input|select|textarea)\b[^>]*\bid="([^"]+)"/g)].map((m) => m[1]));
@@ -1763,13 +1733,8 @@ check('the dashboard writes durations the way the panel does', () => {
 const Typer = require('../src/shared/typeracer.js');
 
 /**
- * A keystroke stream, written the way a race actually happens.
- *
- * `quote` is what was on screen; `typed` is what went in, where a `<` is one
- * backspace. Every gap is `step` unless the character is preceded by a number
- * in braces, which is that gap in milliseconds — so a test can put a four
- * second stare or a three millisecond key repeat exactly where it wants one
- * without arithmetic in the test body.
+ * A keystroke stream: `typed` is what went in, a `<` one backspace. Every gap
+ * is `step` unless the character is preceded by `{ms}`.
  */
 function stream(quote, typed, { start = 1000, step = 200 } = {}) {
     const events = [];
@@ -2020,13 +1985,9 @@ check('a stored race written by an older version cannot hand back nonsense', () 
 const TyperRead = require('../src/content/typeracer-read.js');
 
 /**
- * A page shaped like TypeRacer's, without a browser.
- *
- * `bySelector` maps one of the spellings in TyperRead.SELECTORS to the node
- * (or nodes) it finds. That is the whole seam: the readers are selector list
- * plus validation, and it is the validation these tests are about — whether
- * the real spelling is still current is the browser suite's question, and
- * beyond that, the site's.
+ * A TypeRacer-shaped page: `bySelector` maps a spelling in TyperRead.SELECTORS
+ * to what it finds. The validation is under test here; whether a spelling is
+ * still current is the browser suite's question.
  */
 function stubPage(bySelector) {
     const pick = (selector) => bySelector[selector] || null;
@@ -2167,16 +2128,9 @@ check('a finished quote has nothing left to point at', () => {
 const TyperUi = require('../src/content/typeracer-ui.js');
 
 /**
- * Drive a race without a browser.
- *
- * Only what createTyperUi actually touches is stubbed: the capture listener it
- * registers on `document`, the monotonic clock it timestamps with, and the
- * four readers it asks about the page. `record` is intercepted rather than
- * left to storage — what is written is the thing under test here, and the
- * store's own arithmetic has its own section above.
- *
- * `clock` is moved by hand. A typing test measured against a clock that some
- * test slept through would be a test of how fast this machine is.
+ * Drive a race without a browser: the capture listener, the clock and the
+ * page's readers are stubbed, and `record` is intercepted, as what is written
+ * is under test. `clock` moves by hand, or a test would time this machine.
  */
 function withTyperPage(run, { settings = {}, quote = '' } = {}) {
     const BB = globalThis.BB;
@@ -2197,10 +2151,8 @@ function withTyperPage(run, { settings = {}, quote = '' } = {}) {
     global.document = {
         addEventListener: (type, fn) => { handlers[type] = fn; },
         removeEventListener: (type) => { delete handlers[type]; },
-        // The caret is on its default ('site') through all of these, so it
-        // draws nothing — but tearing it down is unconditional, and a page
-        // with no <html> on it would fail there rather than in the code
-        // these tests are about.
+        // The caret draws nothing on its default, but its teardown is
+        // unconditional, and would fail on a page with no <html>.
         documentElement: { classList: { add() {}, remove() {}, contains: () => false, toggle() {} } },
     };
     global.location = { pathname: '/' };
@@ -2239,10 +2191,7 @@ function withTyperPage(run, { settings = {}, quote = '' } = {}) {
     });
     ui.install();
 
-    /**
-     * Type `text` into the box, one `beforeinput` per character, `step`
-     * milliseconds apart. A `<` is one backspace, as in the store's tests.
-     */
+    /** Type `text`, one `beforeinput` per character, `step` ms apart; `<` is a backspace. */
     const box = makeBox();
     const type = (text, { step = 200, into = box } = {}) => {
         for (const ch of text) {
@@ -2276,10 +2225,7 @@ function withTyperPage(run, { settings = {}, quote = '' } = {}) {
     }
 }
 
-/**
- * A stand-in for a text box, answering only what the keystroke path asks:
- * what it is, what it holds and which of the reader's spellings it matches.
- */
+/** A stand-in text box: what it is, what it holds, and which spellings it matches. */
 function makeBox(selector = 'input.txtInput') {
     return {
         nodeType: 1, tagName: 'INPUT', readOnly: false, disabled: false,
@@ -2524,11 +2470,8 @@ check('a page of the site with no race on it gets no race', () => {
 
 section('typeracer — what correcting cost');
 check('the window is the span from the wrong key to the restored prefix', () => {
-    // "the quick" typed as t, h, x, q, u, then three backspaces taking the
-    // x back off, then the right letters. The clock starts on the x and
-    // stops on the backspace that removed it — not on the retype, because
-    // the moment the box is a correct prefix again is the moment the
-    // correcting is over.
+    // t, h, x, q, u, three backspaces, then the right letters: the clock runs
+    // from the x to the backspace that removes it, when the box is right again.
     const at = (ms) => ms;
     const events = [
         { ch: 't', expected: 't', at: at(0), ok: true },
@@ -3573,10 +3516,7 @@ section('the lists that have to move together');
 const readRepo = (name) => require('fs').readFileSync(`${__dirname}/../${name}`, 'utf8');
 const SiteScripts = require('../src/background/site-scripts.js');
 
-/**
- * Every content-script entry a page can get, in the manifest's own shape:
- * the manifest's one, then each site's, which the worker registers.
- */
+/** Every content-script entry a page can get: the manifest's, then each site's the worker registers. */
 function contentScripts(name = 'manifest.json') {
     const doc = JSON.parse(readRepo(name));
     const registered = SiteScripts.scripts(SiteScripts.genericOf(doc)).map(({ matches, js, css, world, runAt }) =>
@@ -3768,10 +3708,8 @@ check('the skins\' faces are not a content-script stylesheet, and the injected U
     eq(require('../src/content/theme.js').FACES.map((face) => ({ ...face })), declared);
 });
 check('chrome is asked for unlimited storage, and firefox is not', () => {
-    // Without it Chrome caps storage.local at 10 MB, and Settings.set turns a
-    // full store into writes that quietly do nothing — checkpoints included.
-    // Chrome shows no warning for it; Firefox lists it at install, and has no
-    // such cap on storage.local to lift.
+    // Without it Chrome caps storage.local at 10 MB, and a full store's writes
+    // quietly do nothing. Firefox has no such cap, and would warn at install.
     eq(JSON.parse(readRepo('manifest.json')).permissions.includes('unlimitedStorage'), true);
     eq(JSON.parse(readRepo('manifest.firefox.json')).permissions.includes('unlimitedStorage'), false);
 });
@@ -3797,10 +3735,8 @@ check('every typeracer source the manifest loads is in the browser suite too', (
 const LoadOrder = require('./load-order.js');
 
 check('every load list has each module after what it takes off BB as it loads', () => {
-    // Load order is manual — there is no bundler — and getting it wrong fails
-    // in that one surface, at load. This used to be a hand-kept list of pairs
-    // for one feature; tests/load-order.js reads what each file needs instead,
-    // over every list in CLAUDE.md's table.
+    // Load order is kept by hand, and getting it wrong fails at load in that
+    // surface alone; load-order.js reads what each file needs, over every list.
     const problems = LoadOrder.lintAll();
     assert(!problems.length, `\n        ${problems.join('\n        ')}`);
 });
@@ -4002,10 +3938,7 @@ check('a binding turned off is a key the page keeps', () => {
 
 const PartyClock = require('../src/shared/party-clock.js');
 
-/**
- * A pong from a room whose clock is `skew` ahead of ours, with the two legs
- * taking `out` and `back` milliseconds and the far end holding it `hold`.
- */
+/** A pong from a room `skew` ahead of ours, the legs taking `out` and `back`, held `hold` at the far end. */
 function pongFrom({ c = 1000, skew = 500, out = 50, back = 50, hold = 10 } = {}) {
     const s = c + out + skew;
     const s2 = s + hold;
@@ -4611,12 +4544,8 @@ check('the notes say who came, went, stepped out or hosts, and never about yours
 
 // ------------------------------------------------ party protocol vectors
 
-/**
- * The cases in party-vectors.json, run against this authority. The same file
- * is what a party server is checked against, so a case here that needs this
- * implementation's internals to pass is a case the server cannot — which is
- * why these only ever look at messages sent.
- */
+// party-vectors.json against this authority. Servers are held to the same
+// file, so these look only at messages sent, never at internals.
 const PartyVectors = require('./party-vectors.json');
 
 /** "@a" becomes alias a's member id, wherever it appears in a value. */
@@ -4798,11 +4727,8 @@ require('../src/shared/activity.js');
 const Activity = globalThis.BB.Activity;
 const Feed = require('../src/shared/feed.js');
 
-// One o'clock today, not a fixed calendar date. The store prunes any day older
-// than KEEP_DAYS, and it prunes on write — so a hard-coded date quietly stops
-// being recorded at all once the suite is run more than sixty days after it was
-// written, and every tick starts the day over. One o'clock because these tests
-// add seconds and minutes to it and none of them should cross midnight.
+// One o'clock today, not a fixed date: the store prunes past KEEP_DAYS on
+// write, and these tests add minutes to it without crossing midnight.
 const T0 = new Date().setHours(13, 0, 0, 0);
 const secs = (n) => n * 1000;
 const tabAt = (url, title) => ({ url, title });
@@ -4881,10 +4807,8 @@ const storedDays = () => Object.keys(store)
         reset();
         await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
 
-        // What MV3 does between two alarms: the worker is discarded and the
-        // module is evaluated afresh, with only storage carrying over. The stub
-        // above has no chrome.storage.session, so this covers the local
-        // fallback too.
+        // As MV3 does between alarms: the module evaluated afresh, only storage
+        // carried over — and, the stub having no storage.session, local's fallback.
         delete require.cache[require.resolve('../src/shared/activity.js')];
         const restarted = require('../src/shared/activity.js');
 
@@ -4983,11 +4907,9 @@ check('a selector table takes the first spelling that matches, and steps over on
     eq(closest('row', element).id, 'drawn');
 });
 check('a streak across the night the clocks go forward is not broken by it', () => {
-    // The two practice stores walked back a day by subtracting 24 hours,
-    // and the day the clocks change is 23: the morning after, "yesterday"
-    // came out as the day before it, and a streak ended for nothing.
-    // Put back by name: deleting TZ again does not take Node back to the
-    // machine's own zone, and every later test reads local dates.
+    // A day back was once 24 hours back, and the night the clocks change has
+    // 23, so a streak ended for nothing. TZ is put back by name: deleting it
+    // does not restore the machine's own zone.
     const zone = process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
     process.env.TZ = 'America/New_York';
     try {
@@ -5181,11 +5103,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     section('feed — whose channel is this page?');
 
-    // A channel page names a dozen channels, and only three of those mentions
-    // are the page's own. The resolver used to take none of them: it took the
-    // first "channelId" in the document, which on a real page belongs to a
-    // recommendation. Every handle in the pouch therefore pulled a stranger's
-    // feed, which is how the pouch filled up with channels nobody had filed.
+    // A channel page names a dozen channels; the resolver once took the first
+    // "channelId" in it, a recommendation's, and filled the pouch with strangers.
     const OWN = 'UCHnyfMqiRRG1u-2MsSQLbXA';
     const OTHER = 'UCin0m13qWv3-051xlWlHamA';
 
@@ -5438,10 +5357,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
 
     check('ignores channel ids the page merely mentions', () => {
-        // A subscriptions page names a dozen channels it is not listing — the
-        // viewer's own account in the masthead, anything in a recommendation
-        // shelf. This is why it walks for the grid's own renderers rather than
-        // running a regex for "channelId" over the document.
+        // The page names channels it is not listing (the viewer's own, a
+        // shelf's), so it walks the grid's renderers rather than regex the page.
         const found = YtSubs.parseSubscriptionsPage(subsPage(
             [{ id: uc('a'), name: 'Subscribed', handle: '/@sub' }],
             {
@@ -6242,11 +6159,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(ChessContent.moveText(node), 'Nxe5+');
         eq(ChessContent.moveText(element(null, [text('e8='), element('Q')])), 'e8=Q');
 
-        // What chess.com actually ships: the figurine is an empty icon span
-        // and the square follows after a space, inside a wrapper. Splitting on
-        // that space and keeping the first token — which is what this did —
-        // turned every piece move on the site into its bare letter, so "Qg4"
-        // was read aloud as "Queen".
+        // chess.com's figurine is an empty icon span before the square, and
+        // splitting on the space once read "Qg4" aloud as "Queen".
         const real = element(null, [text(' '), element(null, [element('Q'), text(' g4 ')])]);
         eq(ChessContent.moveText(real), 'Qg4');
         eq(ChessContent.spokenMove(ChessContent.moveText(real)), 'Queen G 4');
@@ -6275,10 +6189,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
 
     check('an untimed game speaks whenever any speech is on', () => {
-        // The bug this fixes: Coach, bots and the analysis board have no clock,
-        // so they classify as no control at all. Gating them on a separate
-        // "Untimed" box, off by default, left a user with Blitz ticked hearing
-        // nothing on Coach.
+        // Coach, bots and analysis have no clock; behind a separate "Untimed"
+        // box, off by default, a user with Blitz ticked heard nothing there.
         const timed = { chessSpeakBlitz: true };
         eq(ChessSites.speaksFor(timed, 'chess', null), true);
         eq(ChessSites.speaksFor(timed, 'chess', 'bullet'), false);
@@ -6495,10 +6407,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     section('trials — the desk');
 
-    // tabs.move and tabGroups.move place a tab as if it were already lifted
-    // out of the strip. An off-by-one there throws nothing — it drops a tab in
-    // the wrong group — so the stubs are a strip that reorders itself the way
-    // Chrome's does, read back as `id:group`.
+    // tabs.move and tabGroups.move place a tab as if already lifted out, and an
+    // off-by-one throws nothing, so the stubs are a strip that reorders itself.
     {
         const NONE = -1;
         let tabs = [];
@@ -7409,10 +7319,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     section('the shared DOM watcher');
 
     await checkAsync('a task that asks for an interval runs at most that often, and is owed the pass it skipped', async () => {
-        // On X and the chat sites the page mutates on nearly every frame, and
-        // every task ran on each of them. The owed pass is the half that is
-        // easy to get wrong: without it, a mutation that landed inside the
-        // interval would wait for the next mutation, or for the 3s poll.
+        // X and the chat sites mutate nearly every frame. The owed pass matters:
+        // without it a mutation inside the interval waited for the next, or the 3s poll.
         const DomWatch = require('../src/content/dom-watch.js');
         const saved = ['requestAnimationFrame', 'cancelAnimationFrame', 'MutationObserver', 'document'].map((name) => [name, globalThis[name]]);
         let mutate = null;
@@ -7646,10 +7554,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     await checkAsync('a topic id from the wrong side files nothing anywhere', async () => {
         const ids = await seedPouch();
-        // Not a guard that throws — the two id spaces simply never meet, so a
-        // post filed under a PEOPLE topic id lands in a post topic that does
-        // not exist and shows up in no card. This pins the shape that makes
-        // that impossible to do by accident: the prefixes differ.
+        // Nothing throws: a post filed under a people topic id just shows in no
+        // card. Different prefixes keep the two id spaces from meeting.
         eq(ids.people.startsWith('xpt_'), true);
         eq(ids.posts.startsWith('xst_'), true);
     });
@@ -7687,10 +7593,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     check('the X surfaces are settings, and all of them are off', () => {
         const { DEFAULTS } = require('../src/shared/settings.js');
-        // Each of them reaches into a page somebody else designed, which is
-        // not a default to assume for anyone — and the dashboard binds a
-        // control by giving it the key's own id, so a typo here is a toggle
-        // that silently does nothing.
+        // Each reaches into a page somebody else designed, so none is on by
+        // default; and a typo in a key is a toggle that silently does nothing.
         const html = require('fs').readFileSync(`${__dirname}/../dashboard.html`, 'utf8');
         for (const key of ['twitterHideBookmark', 'twitterPouchPeople', 'twitterPouchPosts', 'twitterHideCounts']) {
             assert(html.includes(`id="${key}"`), `${key} has a control`);
@@ -7763,13 +7667,9 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
 
     await checkAsync('only a hash of our own shape survives into the URL', async () => {
-        // The worker's openDashboard branch, driven directly. The hash it
-        // appends arrives from a content script — that is, from a page we do
-        // not own — so the guard matters: without it, x.com could ask the
-        // worker to open our own extension URL with a fragment of its
-        // choosing. Everything that is not `#<word>/<word>` is dropped
-        // rather than rejected, so a caller that gets it wrong still lands
-        // on the dashboard.
+        // The hash comes from a content script, a page we do not own, so
+        // anything but `#<word>/<word>` is dropped (not rejected: the caller
+        // still lands on the dashboard).
         const opened = [];
         let onMessage = null;
         const saved = global.chrome;
@@ -11555,10 +11455,9 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         await session.control({ op: 'leave' });
     });
     await checkAsync('REGRESSION: welcomed as a new member, the session says again that the tab is solo and buffering', async () => {
-        // Past the resume grace, or into a tracker party's next room, the
-        // member is new and starts ready and in step. The tab only reports a
-        // change, so the room showed a solo, buffering member as "Ready" and
-        // started without waiting for them.
+        // Past the resume grace, or in a tracker party's next room, the member
+        // is new and starts ready; the tab reports only changes, so a buffering
+        // member read "Ready" and the room started without them.
         let deliver = null;
         const said = [];
         const room = (id) => ({ id, policy: {}, members: [], state: { seq: 1, paused: true, pos: 0, rate: 1, at: 0 } });
