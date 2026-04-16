@@ -375,8 +375,12 @@
             fetch: fetchState,
             label,
             slot,
-            /** Primer's own button, which every github.com page carries the styles for. */
-            buttonClass: 'Button Button--secondary Button--small',
+            /**
+             * Primer's own button, which every github.com page carries the
+             * styles for. Medium, as both its neighbours are: the small one
+             * stood 28px high in 12px type beside a pull request's Code.
+             */
+            buttonClass: 'Button Button--secondary Button--medium',
         },
         folder: {
             at: folderAt,
