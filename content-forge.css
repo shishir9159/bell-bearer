@@ -27,24 +27,25 @@
 .gap-2 > .bb-ci-watch,
 .page-heading-actions > .bb-ci-watch { margin-right: 0; }
 
-/* Watching: a dot that breathes, in the ink of the label beside it. */
-.bb-ci-watch.bb-ci-watching::before {
-    content: '';
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: currentColor;
+/* Watching: the bell filled in, and breathing. The fill alone says it where
+   motion is turned down. */
+.bb-ci-watch.bb-ci-watching .bb-ci-watch-icon {
     animation: bb-ci-breathe 1.6s ease-in-out infinite;
 }
 
 @keyframes bb-ci-breathe {
-    0%, 100% { opacity: .25; }
+    0%, 100% { opacity: .4; }
     50% { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .bb-ci-watch.bb-ci-watching::before { animation: none; opacity: .8; }
+    .bb-ci-watch.bb-ci-watching .bb-ci-watch-icon { animation: none; }
 }
+
+/* GitHub's own buttons ink an icon muted and the label not, as Merge status
+   does; a watch that is on lights the bell up in the label's ink. */
+.Button.bb-ci-watch .Button-leadingVisual { color: var(--fgColor-muted, #59636e); }
+.Button.bb-ci-watch.bb-ci-watching .Button-leadingVisual { color: inherit; }
 
 /* Download folder sits first in a row that spaces its own children; it only
    needs not to wrap while it counts the files it is zipping. */

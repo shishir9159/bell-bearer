@@ -108,9 +108,25 @@
             assertEqual(host.querySelector('.actions').firstElementChild, button());
             assertEqual(button().textContent, 'Watch');
             assertEqual(button().className, 'Button bb-ci-watch');
+            assertEqual(button().firstElementChild.getAttribute('class'), 'bb-ci-watch-icon', 'the bell comes before the word');
             settings.githubCiWatch = false;
             ui.refreshSurfaces();
             assertEqual(button(), null);
+            teardown();
+        });
+
+        test('a forge that names its own parts gets the bell and the word inside them, filled in while watching', async () => {
+            stage(runPage('running'));
+            const parts = { content: 'Button-content', visual: 'Button-visual Button-leadingVisual', label: 'Button-label' };
+            const { ui, button } = makeWatch({ adapter: fakeAdapter({ parts }) });
+            ui.install();
+            const bell = () => button().querySelector('.Button-content > .Button-leadingVisual > svg.bb-ci-watch-icon');
+            assert(bell(), 'no bell in the leading visual');
+            assertEqual(button().querySelector('.Button-content > .Button-label').textContent, 'Watch');
+            const idle = bell().innerHTML;
+            button().click();
+            await waitFor(() => button().textContent === 'Watching', 'the button to say so');
+            assert(bell() && bell().innerHTML !== idle, 'the bell is the filled one');
             teardown();
         });
 

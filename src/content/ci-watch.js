@@ -18,7 +18,7 @@
 (function (root) {
     'use strict';
 
-    const { ForgeSites, CiWatch } = root.BB;
+    const { ForgeSites, CiWatch, Icons } = root.BB;
 
     const BUTTON_ID = 'bb-ci-watch';
     const POLL_MS = 60 * 1000;
@@ -153,11 +153,21 @@
 
         // ---------------------------------------------------------- the button
 
+        /**
+         * A bell, then the word: inside the forge's own parts where its
+         * adapter names them, which lay an icon out as the buttons beside it
+         * have theirs, and plainly where it names none.
+         */
         function render() {
             const button = doc.getElementById(BUTTON_ID);
             if (!button) return;
             const on = !!watching;
-            button.textContent = on ? 'Watching' : 'Watch';
+            const icon = on ? Icons.svg('bell-ringing-fill', { cls: 'bb-ci-watch-icon' }) : Icons.svg('bell-ringing', { cls: 'bb-ci-watch-icon' });
+            const word = on ? 'Watching' : 'Watch';
+            const parts = adapter.ci.parts;
+            button.innerHTML = parts
+                ? `<span class="${parts.content}"><span class="${parts.visual}">${icon}</span><span class="${parts.label}">${word}</span></span>`
+                : `${icon}<span>${word}</span>`;
             button.classList.toggle('bb-ci-watching', on);
             button.setAttribute('aria-pressed', String(on));
             button.title = on
