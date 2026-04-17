@@ -58,29 +58,65 @@
             return watch && watch.key === message.key ? watch : null;
         }
 
-        function start(message, sender) {
+        /**
+         * A watched tab is kept from being discarded. Memory Saver unloads a
+         * tab left alone for a while, and with it the page doing the reading,
+         * so the watch could not end until the tab was looked at again. This
+         * costs nothing while the tab sits there: nothing runs to keep it
+         * awake, the browser just passes it over. True when this made it so,
+         * and so is the one to undo it; a tab kept already is left as it was.
+         */
+        async function hold(tabId) {
+            try {
+                if ((await api.tabs.get(tabId)).autoDiscardable === false) return false;
+                await api.tabs.update(tabId, { autoDiscardable: false });
+                return true;
+            } catch (_) {
+                return false; // Firefox before 115, or the tab is gone
+            }
+        }
+
+        async function release(watch, tabId) {
+            if (!watch || !watch.held) return;
+            try { await api.tabs.update(tabId, { autoDiscardable: true }); } catch (_) { /* closed since */ }
+        }
+
+        async function start(message, sender) {
             const tab = tabOf(sender);
             const watch = message && message.watch;
             if (tab === null || !watch || !watch.key) return { ok: false };
+            const held = await hold(tab);
             return change((watches) => {
                 // `known` are the failures on screen as it started, which do
                 // not end it; a reload must not forget them and end it at once.
                 const known = Array.isArray(watch.known) ? watch.known.slice(0, 100).map(String) : [];
+                // A watch that replaces this tab's last one finds the tab
+                // held already — by that one, which is the hold to undo.
+                const keep = held || !!(watches[tab] && watches[tab].held);
                 // `auto` is a watch started without a click, which gives up
                 // quietly on a repo that runs no checks, after a reload too.
                 watches[tab] = { key: String(watch.key), noun: String(watch.noun || 'Run'), label: String(watch.label || ''),
-                    repo: String(watch.repo || ''), known, since: Date.now(), ...(watch.auto === true ? { auto: true } : {}) };
+                    repo: String(watch.repo || ''), known, since: Date.now(), ...(watch.auto === true ? { auto: true } : {}),
+                    ...(keep ? { held: true } : {}) };
                 return { ok: true };
             });
         }
 
-        function stop(message, sender) {
-            const tab = tabOf(sender);
+        /** This tab's watch on `key`, taken out of the store; null when it has none. */
+        function take(tab, key) {
             return change((watches) => {
-                const had = tab !== null && watches[tab] && watches[tab].key === message.key;
-                if (had) delete watches[tab];
-                return { ok: !!had };
+                const watch = tab !== null && watches[tab];
+                if (!watch || watch.key !== key) return null;
+                delete watches[tab];
+                return watch;
             });
+        }
+
+        async function stop(message, sender) {
+            const tab = tabOf(sender);
+            const watch = await take(tab, message.key);
+            await release(watch, tab);
+            return { ok: !!watch };
         }
 
         /**
@@ -90,13 +126,9 @@
          */
         async function done(message, sender) {
             const tab = tabOf(sender);
-            const had = await change((watches) => {
-                const watch = tab !== null && watches[tab];
-                if (!watch || watch.key !== message.key) return false;
-                delete watches[tab];
-                return true;
-            });
-            if (!had) return { ok: false };
+            const watch = await take(tab, message.key);
+            if (!watch) return { ok: false };
+            await release(watch, tab);
             try {
                 await api.notifications.create(`${PREFIX}${tab}:${Date.now()}`, {
                     type: 'basic',

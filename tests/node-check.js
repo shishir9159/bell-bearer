@@ -8369,7 +8369,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     const CiWatchWorker = require('../src/background/ci-watch.js');
 
     /** The worker over fakes that write down what they were asked. */
-    function ciWorker({ session = true } = {}) {
+    function ciWorker({ session = true, tabs = {} } = {}) {
         const kept = {};
         const asked = { notes: [], cleared: [], tabs: [], windows: [] };
         const areaOf = { get: async (key) => ({ [key]: kept[key] }), set: async (values) => { Object.assign(kept, JSON.parse(JSON.stringify(values))); } };
@@ -8378,8 +8378,8 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             runtime: { getURL: (path) => `chrome-extension://bb/${path}` },
             notifications: { create: async (id, options) => { asked.notes.push({ id, ...options }); }, clear: async (id) => { asked.cleared.push(id); } },
             tabs: {
-                get: async (id) => { if (id === 404) throw new Error('No tab with id'); return { id, windowId: 9 }; },
-                update: async (id, props) => { asked.tabs.push([id, props]); },
+                get: async (id) => { if (id === 404) throw new Error('No tab with id'); return { id, windowId: 9, ...tabs[id] }; },
+                update: async (id, props) => { asked.tabs.push([id, props]); tabs[id] = { ...tabs[id], ...props }; },
             },
             windows: { update: async (id, props) => { asked.windows.push([id, props]); } },
         };
@@ -8427,6 +8427,19 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         await worker.closed(8);
         eq(await worker.all(), {});
         eq(asked.notes, []);
+    });
+    await checkAsync('a watched tab is kept from being discarded until its watch is over; one kept already is left as it was', async () => {
+        const { worker, asked } = ciWorker({ tabs: { 8: { autoDiscardable: false } } });
+        await worker.start({ watch: ciWatch }, fromTab(7));
+        await worker.start({ watch: { ...ciWatch, key: 'github:microsoft/vscode:pull:2' } }, fromTab(7));
+        await worker.start({ watch: ciWatch }, fromTab(8));
+        eq(asked.tabs, [[7, { autoDiscardable: false }]], 'once for the tab, and never for the one kept already');
+        eq(await worker.stop({ key: 'github:microsoft/vscode:pull:2' }, fromTab(7)), { ok: true });
+        eq(asked.tabs[1], [7, { autoDiscardable: true }], 'the replaced watch\'s hold is undone with the one that replaced it');
+        await worker.done({ key: ciWatch.key, title: 'Run passed', message: '' }, fromTab(8));
+        eq(asked.tabs.length, 2, 'tab 8 is left kept');
+        await worker.start({ watch: ciWatch }, fromTab(404));
+        eq(asked.tabs.length, 2, 'a tab that is gone is not asked to stay');
     });
     await checkAsync('two tabs starting at once both keep their watch', async () => {
         const { worker } = ciWorker();
