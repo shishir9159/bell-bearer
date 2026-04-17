@@ -390,6 +390,9 @@
         //   <forge>CiWatch — a Watch button on a CI run and on a pull
         //     request, for a desktop notification when it finishes. Off, by
         //     the rule every button put into a site's own page follows.
+        //   <forge>CiWatchOwn — the user's own pull request is watched
+        //     without the click, while its checks are still to finish. On:
+        //     it draws nothing, and does nothing until CiWatch is on.
         //   <forge>FolderDownload — a button that saves the folder on screen
         //     as a .zip, built here from its raw files. GitHub's alone: the
         //     other two forges' folder menus already do it. Off, by the same rule.
@@ -401,6 +404,7 @@
         //     repositories with several topics at once. GitHub's alone, and
         //     off: it goes into the page.
         githubCiWatch: false,
+        githubCiWatchOwn: true,
         githubFolderDownload: false,
         githubLinkRepo: true,
         githubTopicSearch: false,

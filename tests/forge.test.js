@@ -87,16 +87,17 @@
     const runPage = (run, jobs = []) => `<div class="actions"><button type="button">Re-run</button></div>
         <span data-run="${run}"></span>${jobs.map(([name, state]) => `<span data-job="${state}">${name}</span>`).join('')}`;
 
-    function makeWatch({ adapter = fakeAdapter(), worker = fakeWorker(), url = RUN_URL, on = true } = {}) {
-        const settings = { githubCiWatch: on };
+    function makeWatch({ adapter = fakeAdapter(), worker = fakeWorker(), url = RUN_URL, on = true, own = false } = {}) {
+        const settings = { githubCiWatch: on, githubCiWatchOwn: own };
         const notes = [];
         const win = { location: { href: url } };
+        const watcher = nowWatcher();
         const ui = BB().CiWatchContent.createCiWatch({
-            adapter, watcher: nowWatcher(), notify: (text, type) => notes.push([text, type]),
+            adapter, watcher, notify: (text, type) => notes.push([text, type]),
             getSettings: () => settings, ask: worker.ask, win,
         });
         const button = () => document.getElementById(BB().CiWatchContent.BUTTON_ID);
-        return { ui, worker, settings, notes, win, button };
+        return { ui, worker, settings, notes, win, button, watcher };
     }
 
     suite('forge ci watch: the button', () => {
@@ -229,6 +230,105 @@
         });
     });
 
+    const PULL_URL = 'https://github.com/a/b/pull/5';
+
+    suite('forge ci watch: your own pull request', () => {
+        test('one whose checks are running is watched with no click, says so, and a stop is not undone by the next redraw', async () => {
+            stage(runPage('running', [['test', 'running']]));
+            const { ui, worker, notes, button, watcher } = makeWatch({ adapter: fakeAdapter({ mine: () => true }), url: PULL_URL, own: true });
+            ui.install();
+            await waitFor(() => ui.isWatching(), 'the watch to start by itself');
+            const [start] = worker.said('ciWatchStart');
+            assertDeepEqual([start.watch.key, start.watch.noun, start.watch.auto], ['github:a/b:pull:5', 'Checks', true]);
+            assertEqual(button().textContent, 'Watching');
+            assertDeepEqual(notes, [['Watching your pull request — a notification comes when its checks finish', 'info']]);
+            button().click();
+            await waitFor(() => worker.said('ciWatchStop').length, 'the stop');
+            watcher.schedule();
+            await settle(10);
+            assertEqual(worker.said('ciWatchStart').length, 1);
+            assert(!ui.isWatching());
+            teardown();
+        });
+
+        test('one whose checks finished long ago is left alone without a word, even with the merge box not drawn yet', async () => {
+            stage('<div class="actions"></div>');
+            let fetched = 0;
+            const adapter = fakeAdapter({ mine: () => true, fetch: async () => { fetched++; return { state: null, jobs: [{ name: 'test', state: 'passed' }] }; } });
+            const { ui, worker, notes } = makeWatch({ adapter, url: PULL_URL, own: true });
+            ui.install();
+            await waitFor(() => fetched, 'the checks to be asked for');
+            await settle(10);
+            assertEqual(worker.said('ciWatchStart').length, 0);
+            assertDeepEqual(notes, []);
+            teardown();
+        });
+
+        test('someone else\'s, a run, or with the switch off, is not watched; a header not drawn yet is asked again', async () => {
+            let whose = false;
+            const adapter = fakeAdapter({ mine: () => whose });
+            for (const [url, own] of [[PULL_URL, true], [RUN_URL, true]]) {
+                stage(runPage('running'));
+                whose = url === RUN_URL;
+                const { ui, worker } = makeWatch({ adapter, url, own });
+                ui.install();
+                await settle(10);
+                assertEqual(worker.said('ciWatchStart').length, 0, url);
+            }
+            stage(runPage('running'));
+            whose = true;
+            const off = makeWatch({ adapter, url: PULL_URL, own: false });
+            off.ui.install();
+            await settle(10);
+            assertEqual(off.worker.said('ciWatchStart').length, 0, 'the switch is off');
+
+            stage(runPage('running'));
+            whose = null;
+            const later = makeWatch({ adapter, url: PULL_URL, own: true });
+            later.ui.install();
+            await settle(10);
+            assertEqual(later.worker.said('ciWatchStart').length, 0, 'nothing to go by yet');
+            whose = true;
+            later.watcher.schedule();
+            await waitFor(() => later.ui.isWatching(), 'the watch once the header says');
+            teardown();
+        });
+
+        test('a tab that was already watching picks that watch up rather than starting another', async () => {
+            stage(runPage('running'));
+            const stored = { key: 'github:a/b:pull:5', noun: 'Checks', label: 'A run', repo: 'a/b', known: [], since: Date.now() };
+            const { ui, worker } = makeWatch({ adapter: fakeAdapter({ mine: () => true }), worker: fakeWorker(stored), url: PULL_URL, own: true });
+            ui.install();
+            await waitFor(() => ui.isWatching(), 'the watch picked up');
+            await settle(10);
+            assertEqual(worker.said('ciWatchStart').length, 0);
+            teardown();
+        });
+
+        test('one that has seen no checks at all gives up quietly once the wait for them is over', async () => {
+            stage('<div class="actions"></div>');
+            const { OWN_GRACE_MS } = BB().CiWatchContent;
+            const stored = { key: 'github:a/b:pull:5', noun: 'Checks', label: 'A run', repo: 'a/b', known: [], auto: true, since: Date.now() - OWN_GRACE_MS - 1000 };
+            const adapter = fakeAdapter({ mine: () => true, fetch: async () => null });
+            const { ui, worker, watcher } = makeWatch({ adapter, worker: fakeWorker(stored), url: PULL_URL, own: true });
+            ui.install();
+            await waitFor(() => worker.said('ciWatchStop').length, 'the quiet stop');
+            assertEqual(worker.said('ciWatchDone').length, 0);
+            assert(!ui.isWatching());
+            watcher.schedule();
+            await settle(10);
+            assertEqual(worker.said('ciWatchStart').length, 0, 'started over by the next redraw');
+
+            stage('<div class="actions"></div>');
+            const young = makeWatch({ adapter, worker: fakeWorker({ ...stored, since: Date.now() }), url: PULL_URL, own: true });
+            young.ui.install();
+            await waitFor(() => young.ui.isWatching(), 'the watch picked up');
+            await young.ui.poll();
+            assert(young.ui.isWatching(), 'still waiting for its checks');
+            teardown();
+        });
+    });
+
     // ------------------------------------------------------------ github
 
     /** github.com's run page, October 2026: the header, then the job graph, then the sidebar listing the jobs again. */
@@ -316,6 +416,30 @@
             assertDeepEqual(summary, { state: 'running', failed: ['Code OSS / Compile & Hygiene (pull_request)', 'Code OSS / Linux / Electron (pull_request)'], left: 1 });
             assertEqual(GithubRead.adapter.ci.slot(document, PULL), host.querySelector('.d-flex.gap-2'));
             assertEqual(GithubRead.adapter.ci.label(document, PULL), 'chore: bump the sdk');
+            teardown();
+        });
+
+        test('a pull request is yours while its header names you as who wants to merge it, and it is not closed or merged', async () => {
+            // The header as github.com drew it in October 2026; merged, the
+            // first link is whoever merged it.
+            const header = (status, word, who, login = 'Octo') => `${login === null ? '' : `<meta name="user-login" content="${login}">`}
+                <div class="prc-PageHeader-PageHeader-YLwBQ"><div class="prc-PageHeader-Description-w-ejP d-flex flex-column">
+                    <div class="d-flex gap-2"><span class="prc-StateLabel-StateLabel-Iawzp" data-component="StateLabel" data-status="${status}">${word}</span></div>
+                    <div class="fgColor-muted d-flex"><a class="text-bold prc-Link-Link-9ZwDx" data-hovercard-type="user" href="/${who}">${who}</a>
+                        <div class="d-flex">wants to merge 4 commits into <a href="/a/b/tree/main">main</a></div></div>
+                </div></div>`;
+            const { mine } = BB().GithubRead.adapter.ci;
+            const said = [];
+            for (const args of [['pullOpened', 'Open', 'octo'], ['draft', 'Draft', 'octo'], ['pullClosed', 'Closed', 'octo'],
+                ['pullMerged', 'Merged', 'octo'], ['pullOpened', 'Open', 'someone'], ['pullOpened', 'Open', 'octo', ''], ['pullOpened', 'Open', 'octo', null]]) {
+                stage(header(...args));
+                said.push(mine(document, PULL));
+            }
+            assertDeepEqual(said, [true, true, false, false, false, false, false]);
+            stage('<meta name="user-login" content="octo">');
+            assertEqual(mine(document, PULL), null, 'the header is not drawn yet');
+            stage(header('pullOpened', 'Open', 'octo'));
+            assertEqual(mine(document, RUN), false, 'a run is nobody\'s pull request');
             teardown();
         });
 

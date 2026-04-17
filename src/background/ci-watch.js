@@ -66,8 +66,10 @@
                 // `known` are the failures on screen as it started, which do
                 // not end it; a reload must not forget them and end it at once.
                 const known = Array.isArray(watch.known) ? watch.known.slice(0, 100).map(String) : [];
+                // `auto` is a watch started without a click, which gives up
+                // quietly on a repo that runs no checks, after a reload too.
                 watches[tab] = { key: String(watch.key), noun: String(watch.noun || 'Run'), label: String(watch.label || ''),
-                    repo: String(watch.repo || ''), known, since: Date.now() };
+                    repo: String(watch.repo || ''), known, since: Date.now(), ...(watch.auto === true ? { auto: true } : {}) };
                 return { ok: true };
             });
         }

@@ -8160,11 +8160,13 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     check('every forge setting the registry can name has a default, and each button\'s is off', () => {
         // A button goes into the forge's own page, which is asked for. How
-        // a copied link reads puts nothing there, and is on.
-        eq(ForgeSites.allKeys(), ['githubCiWatch', 'githubFolderDownload', 'githubLinkRepo', 'githubTopicSearch', 'gitlabCiWatch', 'forgejoCiWatch']);
-        eq(ForgeSites.allKeys().map((key) => globalThis.BB.Settings.DEFAULTS[key]), [false, false, true, false, false, false]);
-        eq([ForgeSites.siteKey('gitlab', 'ciWatch'), ForgeSites.siteKey('gitlab', 'nonsense'), ForgeSites.siteKey('nowhere', 'ciWatch')],
-            ['gitlabCiWatch', null, null]);
+        // a copied link reads puts nothing there, and is on; so is watching
+        // your own pull request, which waits for the Watch button anyway.
+        eq(ForgeSites.allKeys(), ['githubCiWatch', 'githubCiWatchOwn', 'githubFolderDownload', 'githubLinkRepo', 'githubTopicSearch',
+            'gitlabCiWatch', 'forgejoCiWatch']);
+        eq(ForgeSites.allKeys().map((key) => globalThis.BB.Settings.DEFAULTS[key]), [false, true, false, true, false, false, false]);
+        eq([ForgeSites.siteKey('gitlab', 'ciWatch'), ForgeSites.siteKey('gitlab', 'ciWatchOwn'), ForgeSites.siteKey('gitlab', 'nonsense'),
+            ForgeSites.siteKey('nowhere', 'ciWatch')], ['gitlabCiWatch', null, null, null]);
     });
     check('only a forge without a folder download of its own has one from here', () => {
         // GitLab's and Forgejo's folder menus both zip a folder already.
@@ -8395,6 +8397,13 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(await worker.get({ key: ciWatch.key }, fromTab(8)), null, 'the same run in another tab');
         eq(await worker.get({ key: ciWatch.key }, {}), null, 'not from a tab at all');
         eq(await worker.start({ watch: {} }, fromTab(7)), { ok: false });
+    });
+    await checkAsync('a watch started without a click still says so after a reload; one clicked for says nothing of it', async () => {
+        const { worker } = ciWorker();
+        await worker.start({ watch: { ...ciWatch, auto: true } }, fromTab(7));
+        await worker.start({ watch: { ...ciWatch, auto: 'yes' } }, fromTab(8));
+        eq((await worker.get({ key: ciWatch.key }, fromTab(7))).auto, true);
+        eq('auto' in (await worker.get({ key: ciWatch.key }, fromTab(8))), false);
     });
     await checkAsync('the end of a run is said once, and only for a watch the worker knows', async () => {
         const { worker, asked } = ciWorker();

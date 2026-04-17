@@ -26,6 +26,12 @@
     const SETTLE_MS = 500;
     /** What a burst is made of: the icons' labels and classes change, not only the nodes. */
     const WATCHED_ATTRIBUTES = ['aria-label', 'class', 'data-testid', 'data-tooltip-content'];
+    /**
+     * How long a watch started on its own waits for checks to appear. One
+     * on a pull request opened a moment ago starts before its checks do;
+     * one on a repo that runs none would otherwise say Watching for ever.
+     */
+    const OWN_GRACE_MS = 10 * 60 * 1000;
 
     function createCiWatch({ adapter, watcher, notify, getSettings, ask, win = root, doc = root.document }) {
         const site = adapter.site;
@@ -38,8 +44,15 @@
         let observer = null;
         let timer = 0;
         let settle = 0;
+        /** Whether this watch has read any checks at all yet. */
+        let seen = false;
+        /** The page the worker has answered for: nothing starts on its own before it says this tab had no watch. */
+        let resumed = null;
+        /** Pull requests already watched on their own this visit, so a stop is not undone by the next redraw. */
+        const offered = new Set();
 
         const enabled = () => getSettings()[ForgeSites.siteKey(site, 'ciWatch')] === true;
+        const ownOn = () => enabled() && getSettings()[ForgeSites.siteKey(site, 'ciWatchOwn')] === true;
 
         function summary(from = doc) {
             try { return CiWatch.summarize(adapter.ci.read(from, page)); } catch (_) { return null; }
@@ -65,7 +78,13 @@
         async function poll() {
             if (!watching) return;
             const fetched = adapter.ci.fetch ? CiWatch.summarize(await adapter.ci.fetch(page)) : null;
-            check(fetched || summary());
+            const read = fetched || summary();
+            if (read) seen = true;
+            if (watching && watching.auto && !seen && Date.now() - watching.since > OWN_GRACE_MS) {
+                stop();
+                return;
+            }
+            check(read);
         }
 
         function onVisible() {
@@ -93,11 +112,16 @@
 
         // --------------------------------------------------------- the watch
 
-        async function start() {
-            const now = summary();
+        /** `auto` is a watch nobody clicked for, which says nothing when there is nothing to watch. */
+        async function start({ auto = false } = {}) {
+            const key = page.key;
+            // A merge box not drawn yet says nothing; asked, it may say the
+            // checks passed long ago, which a watch would announce at once.
+            const now = summary() || (auto && adapter.ci.fetch ? CiWatch.summarize(await adapter.ci.fetch(page)) : null);
+            if (auto && (watching || !page || page.key !== key)) return;
             const already = now && CiWatch.finished(now.state) ? now.state : null;
             if (already) {
-                notify(`${forge.nouns[page.kind]} already ${already === 'manual' ? 'stopped at a manual job' : already}`, 'info');
+                if (!auto) notify(`${forge.nouns[page.kind]} already ${already === 'manual' ? 'stopped at a manual job' : already}`, 'info');
                 return;
             }
             const watch = {
@@ -109,15 +133,18 @@
                 // at; a watch is for the rest of the run.
                 known: now ? now.failed : [],
             };
+            if (auto) watch.auto = true;
             const answer = await ask({ action: 'ciWatchStart', watch });
             if (!answer || !answer.ok) {
-                notify('Could not start watching — reload the page and try again', 'error');
+                if (!auto) notify('Could not start watching — reload the page and try again', 'error');
                 return;
             }
-            watching = watch;
+            watching = { ...watch, since: Date.now() };
+            seen = !!now;
             observe();
             render();
-            notify('Watching — a notification comes when it finishes', 'success');
+            notify(auto ? 'Watching your pull request — a notification comes when its checks finish' : 'Watching — a notification comes when it finishes',
+                auto ? 'info' : 'success');
         }
 
         async function stop() {
@@ -145,10 +172,33 @@
             if (!page) return;
             const key = page.key;
             const watch = await ask({ action: 'ciWatchGet', key });
-            if (!watch || !page || page.key !== key || watching) return;
-            watching = { known: [], ...watch };
-            observe();
-            render();
+            if (!page || page.key !== key) return;
+            resumed = key;
+            if (watch && !watching) {
+                // Picked up, it was this visit's: once it gives up waiting
+                // for checks, the next redraw must not start it over.
+                offered.add(key);
+                watching = { known: [], ...watch };
+                seen = false;
+                observe();
+                render();
+            }
+            watchOwn();
+        }
+
+        /**
+         * The user's own open pull request is watched without the click,
+         * once a visit, while its checks are still to finish — or still to
+         * start, for one opened a moment ago.
+         */
+        function watchOwn() {
+            if (watching || !page || page.kind !== 'pull' || resumed !== page.key || offered.has(page.key)) return;
+            if (!ownOn() || !adapter.ci.mine || !doc.getElementById(BUTTON_ID)) return;
+            const own = adapter.ci.mine(doc, page);
+            // The header is not drawn yet; the next redraw asks again.
+            if (own === null) return;
+            offered.add(page.key);
+            if (own) start({ auto: true });
         }
 
         // ---------------------------------------------------------- the button
@@ -186,6 +236,7 @@
             if (!slot) return false;
             if (placed) {
                 if (placed.parentElement !== slot) slot.prepend(placed);
+                watchOwn();
                 return false;
             }
             const button = doc.createElement('button');
@@ -199,6 +250,7 @@
             });
             slot.prepend(button);
             render();
+            watchOwn();
             return false;
         }
 
@@ -214,6 +266,7 @@
             }
             const stale = doc.getElementById(BUTTON_ID);
             if (stale) stale.remove();
+            resumed = null;
             watcher.add('ci-watch-button', place);
             resume();
         }
@@ -230,7 +283,7 @@
         return { install, onNavigate, refreshSurfaces, check, poll, isWatching: () => !!watching };
     }
 
-    const CiWatchContent = { BUTTON_ID, POLL_MS, SETTLE_MS, createCiWatch };
+    const CiWatchContent = { BUTTON_ID, POLL_MS, SETTLE_MS, OWN_GRACE_MS, createCiWatch };
 
     root.BB.CiWatchContent = CiWatchContent;
     if (typeof module !== 'undefined' && module.exports) module.exports = CiWatchContent;

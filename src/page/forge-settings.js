@@ -33,6 +33,22 @@
             </div>`;
     }
 
+    /** A forge's own-pull-request switch, for the forges whose headers are read for whose one is; nothing for the rest. */
+    function ownHtml(site) {
+        const key = ForgeSites.siteKey(site.id, 'ciWatchOwn');
+        if (!key) return '';
+        return `
+            <p class="settings-hint">With the Watch button on, a pull request you opened is watched as soon as you open its page,
+               with no click, while its checks are still running or yet to start. A click on Watching stops it, as any other.</p>
+            <div class="settings-option">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="${key}">
+                    <span class="toggle-slider"></span>
+                </label>
+                <label class="setting-label" for="${key}">Watch your own pull requests by default</label>
+            </div>`;
+    }
+
     /** A forge's link switch, for the forges whose titles are reworded; nothing for the rest. */
     function linkHtml(site) {
         const key = ForgeSites.siteKey(site.id, 'linkRepo');
@@ -87,6 +103,7 @@
                 </label>
                 <label class="setting-label" for="${key}">Watch button on ${esc(site.watches)}</label>
             </div>
+            ${ownHtml(site)}
 
             <h4 class="shortcut-heading">What it asks for</h4>
             <p class="settings-hint chess-settings-lead">The run is read from its open tab, so keep the tab open; it can be in the background. Nothing is

@@ -63,6 +63,17 @@
         checkCounts: ['section[aria-label="Checks"] h3 + p', 'section[aria-label="Checks"] p', '.branch-action-item .status-meta'],
         pullTitle: ['[data-component="PH_Title"] .markdown-title', 'h1 .markdown-title', 'bdi.js-issue-title', '.js-issue-title'],
         pullSlot: ['[class*="PageHeader-Actions"] .d-flex.gap-2', '[class*="PageHeader-Actions"]', '.gh-header-actions'],
+        /**
+         * Who opened a pull request, and whether it is still open: the
+         * header's first user link, "octo wants to merge…", and its state
+         * label, whose data-status is pullOpened, draft, pullClosed or
+         * pullMerged. Merged, the link is whoever merged it instead, which
+         * the state rules out first.
+         */
+        pullAuthor: ['[class*="PageHeader-Description"] a[data-hovercard-type="user"]', '.gh-header-meta a.author'],
+        pullState: ['[class*="PageHeader-Description"] [data-component="StateLabel"]', '.gh-header-meta .State'],
+        /** Who is signed in; empty when nobody is. */
+        userLogin: ['meta[name="user-login"]'],
 
         /**
          * A folder's own row of buttons — Go to file, Add file, its "…" —
@@ -191,6 +202,21 @@
     function slot(doc, page) {
         if (!page) return null;
         return find(page.kind === 'run' ? 'runSlot' : 'pullSlot', doc);
+    }
+
+    /**
+     * Whether a pull request is the signed-in user's own and still open — a
+     * draft is — as its header says; null until the header is drawn.
+     */
+    function mine(doc, page) {
+        if (!page || page.kind !== 'pull') return false;
+        const author = find('pullAuthor', doc);
+        if (!author) return null;
+        const state = find('pullState', doc);
+        if (state && /merged|closed/i.test(`${state.getAttribute('data-status') || ''} ${state.className} ${text(state)}`)) return false;
+        const user = find('userLogin', doc);
+        const login = String((user && user.getAttribute('content')) || '').toLowerCase();
+        return !!login && text(author).toLowerCase() === login;
     }
 
     // ------------------------------------------------------------ folders
@@ -375,6 +401,7 @@
             fetch: fetchState,
             label,
             slot,
+            mine,
             /**
              * Primer's own button, which every github.com page carries the
              * styles for. Medium, as both its neighbours are: the small one
