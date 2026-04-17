@@ -214,11 +214,12 @@
             const on = !!watching;
             const icon = on ? Icons.svg('bell-ringing-fill', { cls: 'bb-ci-watch-icon' }) : Icons.svg('bell-ringing', { cls: 'bb-ci-watch-icon' });
             const word = on ? 'Watching' : 'Watch';
-            const parts = adapter.ci.parts;
+            const { parts, buttonClass = '', watchingClass } = adapter.ci;
             button.innerHTML = parts
                 ? `<span class="${parts.content}"><span class="${parts.visual}">${icon}</span><span class="${parts.label}">${word}</span></span>`
                 : `${icon}<span>${word}</span>`;
-            button.classList.toggle('bb-ci-watching', on);
+            // A forge with a look of its own for a watch that is on wears it.
+            button.className = `${(on && watchingClass) || buttonClass} bb-ci-watch${on ? ' bb-ci-watching' : ''}`.trim();
             button.setAttribute('aria-pressed', String(on));
             button.title = on
                 ? 'Stop watching'
@@ -242,7 +243,6 @@
             const button = doc.createElement('button');
             button.type = 'button';
             button.id = BUTTON_ID;
-            button.className = `${adapter.ci.buttonClass || ''} bb-ci-watch`.trim();
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();

@@ -116,10 +116,10 @@
             teardown();
         });
 
-        test('a forge that names its own parts gets the bell and the word inside them, filled in while watching', async () => {
+        test('a forge that names its own parts gets the bell and the word inside them, filled in and in its own look while watching', async () => {
             stage(runPage('running'));
             const parts = { content: 'Button-content', visual: 'Button-visual Button-leadingVisual', label: 'Button-label' };
-            const { ui, button } = makeWatch({ adapter: fakeAdapter({ parts }) });
+            const { ui, button } = makeWatch({ adapter: fakeAdapter({ parts, watchingClass: 'Button Button--primary' }) });
             ui.install();
             const bell = () => button().querySelector('.Button-content > .Button-leadingVisual > svg.bb-ci-watch-icon');
             assert(bell(), 'no bell in the leading visual');
@@ -128,6 +128,10 @@
             button().click();
             await waitFor(() => button().textContent === 'Watching', 'the button to say so');
             assert(bell() && bell().innerHTML !== idle, 'the bell is the filled one');
+            assertEqual(button().className, 'Button Button--primary bb-ci-watch bb-ci-watching');
+            button().click();
+            await waitFor(() => button().textContent === 'Watch', 'the stop');
+            assertEqual(button().className, 'Button bb-ci-watch');
             teardown();
         });
 

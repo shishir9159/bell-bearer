@@ -408,6 +408,8 @@
              * stood 28px high in 12px type beside a pull request's Code.
              */
             buttonClass: 'Button Button--secondary Button--medium',
+            /** Watching, Primer's primary button: GitHub's own green, in either theme. */
+            watchingClass: 'Button Button--primary Button--medium',
             /** Primer's grid inside it, which sets a leading icon 8px before the label. */
             parts: { content: 'Button-content', visual: 'Button-visual Button-leadingVisual', label: 'Button-label' },
         },
