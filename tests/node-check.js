@@ -5292,6 +5292,79 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         }
     });
 
+    const StoreLocks = require('../src/background/store-locks.js');
+    /** A runtime port's two ends, each delivering to the other a task later, as Chrome's do. */
+    function portPair(name) {
+        const end = () => ({ name, heard: [], gone: [], onMessage: {}, onDisconnect: {} });
+        const [a, b] = [end(), end()];
+        let open = true;
+        for (const [from, to] of [[a, b], [b, a]]) {
+            from.onMessage.addListener = (fn) => from.heard.push(fn);
+            from.onDisconnect.addListener = (fn) => from.gone.push(fn);
+            from.postMessage = (msg) => {
+                if (!open) throw new Error('Attempting to use a disconnected port object');
+                setTimeout(() => to.heard.forEach((fn) => fn(msg)), 0);
+            };
+            from.disconnect = () => {
+                if (!open) return;
+                open = false;
+                setTimeout(() => to.gone.forEach((fn) => fn()), 0);
+            };
+        }
+        return [a, b];
+    }
+    const portTurn = () => new Promise((done) => setTimeout(done, 5));
+    await checkAsync('two pages changing one store at once both land, each holding the worker’s lock in turn', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        const locks = StoreLocks.createLocks();
+        global.chrome.runtime = {
+            id: 'bb',
+            connect: ({ name }) => {
+                const [page, worker] = portPair(name);
+                locks.connect(worker);
+                return page;
+            },
+        };
+        try {
+            // Two tabs: a chain each, so the lock is all that keeps their steps apart.
+            const [one, two] = [pair(), pair()];
+            const slow = (n) => (state) => new Promise((resolve) => setTimeout(() => resolve({ ...state, a: [...state.a, n] }), 10));
+            await Promise.all([one.update(slow(1)), two.update(slow(2))]);
+            eq(store.sa.slice().sort(), [1, 2], 'one tab’s change was written over');
+            await portTurn();
+            eq([locks.holding(), locks.queued()], [[], 0], 'a lock outlived its step');
+        } finally {
+            delete global.chrome.runtime;
+        }
+    });
+    await checkAsync('a page that goes away lets go of its lock, and one stuck holding it is let go of in the end', async () => {
+        let lapse = null;
+        const locks = StoreLocks.createLocks({ setTimer: (fn) => { lapse = fn; return 1; }, clearTimer: () => {} });
+        const [page, worker] = portPair(Store.LOCK_PORT);
+        locks.connect(worker);
+        page.postMessage({ names: ['sa'] });
+        await portTurn();
+        eq(locks.holding(), ['sa']);
+        const order = [];
+        const next = locks.acquire(['sa', 'sb']).then((go) => { order.push('two keys'); return go; });
+        const later = locks.acquire(['sb']).then((go) => { order.push('behind it'); go(); });
+        await portTurn();
+        eq(order, [], 'a step on sb went ahead of an earlier one waiting on sa and sb');
+        page.disconnect();
+        (await next)();
+        await later;
+        eq(order, ['two keys', 'behind it']);
+
+        const stuck = await locks.acquire(['sa']);
+        let waited = false;
+        const after = locks.acquire(['sa']).then((go) => { waited = true; go(); });
+        lapse();
+        await after;
+        assert(waited, 'a holder that never let go held the key for good');
+        stuck();
+        eq(locks.holding(), []);
+    });
+
     section('playlist ids');
     check('a real playlist is picked out of either URL form', () => {
         eq(YouTube.extractPlaylistId('https://www.youtube.com/watch?v=abc&list=PLabc123'), 'PLabc123');

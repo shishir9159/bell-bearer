@@ -8,13 +8,76 @@
  * dashboard was also saving lost whichever write finished first. Chaining
  * each step onto the last keeps them atomic with respect to each other.
  *
- * That holds within one context only; another tab has a chain of its own. So
- * a step writes only the keys it changed: a store kept under several keys
- * used to write all of them back on every change, and with them whatever
+ * A chain holds within one context only; another tab has a chain of its own,
+ * and two tabs adding a checkpoint at once still lost one of them. So a step
+ * also holds a lock on its keys, kept by the worker for every page of the
+ * extension (src/background/store-locks.js) and asked for over a port, which
+ * lets go of it by itself when the page holding it goes away. Where no worker
+ * answers — the extension reloaded under the page — the step goes ahead
+ * without one, as it always did.
+ *
+ * And a step writes only the keys it changed: a store kept under several
+ * keys used to write all of them back on every change, and with them whatever
  * another tab had just moved in a key this one never touched.
  */
 (function (root) {
     'use strict';
+
+    /** The port a page asks the worker for a lock on. */
+    const LOCK_PORT = 'bb:store-lock';
+    /**
+     * How long a lock is waited for before the step goes ahead without one.
+     * A worker that never answers — one from before the lock existed, still
+     * running a moment after an update — must not hang every write a page makes.
+     */
+    const LOCK_WAIT_MS = 5000;
+
+    /**
+     * A lock on `names` across the extension; resolves to the function that
+     * lets go of it. The worker holds the locks themselves, and is asked
+     * directly from inside it; anywhere else, over a port.
+     */
+    function acquire(names) {
+        const here = root.BB && root.BB.StoreLocks && root.BB.StoreLocks.here;
+        if (here) return here.acquire(names);
+        let port;
+        try {
+            if (!chrome.runtime || !chrome.runtime.id || typeof chrome.runtime.connect !== 'function') return Promise.resolve(() => {});
+            port = chrome.runtime.connect({ name: LOCK_PORT });
+        } catch (_) {
+            return Promise.resolve(() => {});
+        }
+        return new Promise((resolve) => {
+            let done = false;
+            const release = () => {
+                try { port.disconnect(); } catch (_) { /* already gone */ }
+            };
+            const go = () => {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                resolve(release);
+            };
+            const timer = setTimeout(go, LOCK_WAIT_MS);
+            port.onMessage.addListener((msg) => { if (msg && msg.granted) go(); });
+            // The worker went away before answering: nobody holds anything now.
+            port.onDisconnect.addListener(() => {
+                try { void chrome.runtime.lastError; } catch (_) { /* context gone */ }
+                go();
+            });
+            try { port.postMessage({ names }); } catch (_) { go(); }
+        });
+    }
+
+    /** Run `fn` holding a lock on `names` — for a writer that is not a store. */
+    async function lock(names, fn) {
+        const release = await acquire(names);
+        try {
+            return await fn();
+        } finally {
+            release();
+        }
+    }
 
     /** Each key's value as JSON, to tell afterwards which ones a step changed. */
     const snapshot = (values) => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, JSON.stringify(value)]));
@@ -72,9 +135,13 @@
             }
         }
 
-        /** Run `step` after every step queued before it, whether that one landed or not. */
+        /**
+         * Run `step` after every step queued before it, whether that one
+         * landed or not, holding the lock on this store's keys while it runs.
+         */
         function queue(step, onError) {
-            chain = chain.then(step, step).catch(onError);
+            const locked = () => lock(keys, step);
+            chain = chain.then(locked, locked).catch(onError);
             return chain;
         }
 
@@ -114,7 +181,7 @@
         return { keys, load, update, save, queue };
     }
 
-    const Store = { create };
+    const Store = { LOCK_PORT, LOCK_WAIT_MS, create, lock };
 
     root.BB = root.BB || {};
     root.BB.Store = Store;

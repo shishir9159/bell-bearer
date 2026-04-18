@@ -117,6 +117,7 @@
       "src/shared/chess-limits.js",
       "src/shared/trials.js",
       "src/shared/skim.js",
+      "src/background/store-locks.js",
       "src/background/router.js",
       "src/background/site-scripts.js",
       "src/background/proto.js",
