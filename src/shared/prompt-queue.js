@@ -84,7 +84,7 @@
         };
     }
 
-    const { load, update } = Store.create({
+    const { load, update, commit } = Store.create({
         keys: [KEY],
         read: (stored) => clean(stored[KEY]),
         clean,
@@ -252,7 +252,7 @@
 
     const PromptQueue = {
         KEY, KEYS: [KEY], LEASE_MS, STALE_MS, KEEP_DONE_MS, STATUSES, parseReset,
-        blank, clean, load, update, newId, chatKey, keyOf, itemsFor, next, nextWake, due,
+        blank, clean, load, update, commit, newId, chatKey, keyOf, itemsFor, next, nextWake, due,
         add, patch, remove, move, bind, hold, unhold, pause, holdStale, canClaim, claim, release,
     };
 

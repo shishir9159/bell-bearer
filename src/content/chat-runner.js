@@ -136,8 +136,8 @@
             if (!box) return fail(item, key, 'there is no prompt box on this page');
             if (!Composer.isEmpty(box)) return false;
 
+            if (!(await claim(item, key, conv))) return false;
             current = item.id;
-            await write((s) => PromptQueue.patch(PromptQueue.claim(s, key, pageId, now()), item.id, { status: 'sending', note: '' }));
             const renew = setInterval(() => write((s) => PromptQueue.claim(s, key, pageId, now())), RENEW_MS);
             try {
                 if (!(await Composer.insert(box, item.text, { copy: async () => false }))) return fail(item, key, 'the prompt box would not take the text');
@@ -184,6 +184,37 @@
                 clearInterval(renew);
                 current = null;
             }
+        }
+
+        /**
+         * Take the item for this page, or answer false and send nothing.
+         *
+         * Everything once() looked at is looked at again inside the step
+         * that writes the claim, which holds the store's lock across tabs. It
+         * used to be checked on a read and claimed by a write after it, with
+         * nothing between the two, so two tabs on one chat could both find
+         * the lease free and both send the prompt — and a claim that never
+         * reached storage was sent all the same.
+         *
+         * The page is looked at again once the claim is written, too: the
+         * reader may have gone to another chat, started typing or started an
+         * answer while it was. Then the item goes back as it was.
+         */
+        async function claim(item, key, conv) {
+            let claimed = false;
+            const { ok } = await PromptQueue.commit((s) => {
+                const head = PromptQueue.next(s, site, conv, now());
+                if (!head || head.id !== item.id || !PromptQueue.canClaim(s, key, pageId, now())) return s;
+                claimed = true;
+                return PromptQueue.patch(PromptQueue.claim(s, key, pageId, now()), item.id, { status: 'sending', note: '' });
+            });
+            if (!ok || !claimed) return false;
+            const box = adapter.composer();
+            const still = running && adapter.onChatPage() && (adapter.convIdOf() || null) === (conv || null) &&
+                !adapter.isStreaming() && box && Composer.isEmpty(box);
+            if (still) return true;
+            await write((s) => PromptQueue.release(PromptQueue.patch(s, item.id, { status: 'waiting' }), key, pageId));
+            return false;
         }
 
         /** The item this page is in the middle of sending, if any. */

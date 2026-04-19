@@ -185,6 +185,49 @@
             } finally { runner.stop(); teardown(); }
         });
 
+        /** A runner for the staged chat c1, as the page `pageId` — a tab of its own. */
+        const runnerAs = (pageId) => BB().ChatRunner.createRunner({
+            adapter: Object.assign({}, BB().ChatgptRead.adapter, { convIdOf: () => 'c1', isNewChat: () => false }),
+            pageId, notify() {}, getSettings: () => Object.assign({}, BB().Settings.DEFAULTS, fast), trusted: () => true,
+        });
+
+        test('two tabs on one chat send its prompt once between them', async () => {
+            // Each found the lease free on a read and claimed it on a write
+            // after, so both typed the prompt in and pressed send.
+            window.MockChrome.reset({ localStore: queued(item('o1', 'Only once')) });
+            const page = stagePage(conversation(4));
+            const runners = [runnerAs('tab-a'), runnerAs('tab-b')];
+            try {
+                runners.forEach((runner) => runner.start());
+                await waitFor(() => queue().items[0].status === 'sent', 'the prompt sent', 8000);
+                await settle(300);
+                assertDeepEqual(page.page.sent, ['Only once']);
+            } finally { runners.forEach((runner) => runner.stop()); teardown(); }
+        });
+
+        test('a claim the store could not write sends nothing', async () => {
+            window.MockChrome.reset({ localStore: queued(item('f1', 'Never written')) });
+            const page = stagePage(conversation(4));
+            const local = chrome.storage.local;
+            const set = local.set;
+            // Every write fails, the claim's first among them.
+            local.set = () => Promise.reject(new Error('QUOTA_BYTES quota exceeded'));
+            const error = console.error;
+            console.error = () => {};
+            const runner = runnerAs('tab-a');
+            try {
+                runner.start();
+                await settle(600);
+                assertDeepEqual(page.page.sent, [], 'it sent a prompt it had not claimed');
+                assertEqual(page.host.querySelector('#prompt-textarea').textContent.trim(), '', 'it typed the prompt in');
+            } finally {
+                local.set = set;
+                console.error = error;
+                runner.stop();
+                teardown();
+            }
+        });
+
         test('the strip above the composer lists what is queued and changes it', async () => {
             const later = Date.now() + 3 * 3600 * 1000;
             await onChat({ pairs: 4, settings: fast, store: queued(
