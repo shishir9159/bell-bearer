@@ -146,15 +146,20 @@
         }
 
         /**
-         * Read, change and write back as one step; resolves to the new state.
-         * `mutate` may change the state in place or return a new one, which
-         * is why what was read is put down before it runs.
+         * Read, change and write back as one step; resolves to `{ ok, state }`
+         * — the new state, or on a failure whatever `failed` gives. `mutate`
+         * may change the state in place or return a new one, which is why
+         * what was read is put down before it runs.
          *
          * Read with fresh(), never load(): a failed read used to come back as
          * blank(), and the step wrote that, changed, over everything stored —
          * one checkpoint added to an empty list, saved over all the others.
+         *
+         * `ok` is for whoever says "saved": update() alone resolves to a state
+         * on a failure too, and a checkpoint that never reached storage was
+         * announced as created — and its note let go of — all the same.
          */
-        function update(mutate, ...context) {
+        function commit(mutate, ...context) {
             return queue(async () => {
                 const state = await fresh();
                 const before = snapshot(toStorage(state));
@@ -164,21 +169,28 @@
                     if (JSON.stringify(values[key]) === before[key]) delete values[key];
                 }
                 if (Object.keys(values).length) await chrome.storage.local.set(values);
-                return next;
-            }, (error) => {
+                return { ok: true, state: next };
+            }, async (error) => {
                 if (!orphaned(error)) console.error(`Bell Bearer: could not update ${name}`, error);
-                return failed();
+                return { ok: false, state: await failed(), error };
             });
         }
 
-        /** Write `state` as it is, in its turn — for clearing, and for importing. */
+        /** commit(), for a caller that only draws what comes back. */
+        const update = (mutate, ...context) => commit(mutate, ...context).then((result) => result.state);
+
+        /** Write `state` as it is, in its turn — for clearing, and for importing. Resolves to whether it landed. */
         function save(state) {
-            return queue(() => chrome.storage.local.set(toStorage(state)), (error) => {
+            return queue(async () => {
+                await chrome.storage.local.set(toStorage(state));
+                return true;
+            }, (error) => {
                 if (!orphaned(error)) console.error(`Bell Bearer: could not save ${name}`, error);
+                return false;
             });
         }
 
-        return { keys, load, update, save, queue };
+        return { keys, load, commit, update, save, queue };
     }
 
     const Store = { LOCK_PORT, LOCK_WAIT_MS, create, lock };

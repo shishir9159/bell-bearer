@@ -128,8 +128,12 @@
                 Ui.toast('Give the template a name first', 'warning');
                 return;
             }
-            if (id === 'new') await LeetTemplates.create(form);
-            else await LeetTemplates.edit(id, form);
+            const saved = id === 'new' ? !!(await LeetTemplates.create(form)) : await LeetTemplates.edit(id, form);
+            // Not saved, the editor stays open with what was typed in it.
+            if (!saved) {
+                Ui.toast('Could not save the template — try again', 'error');
+                return;
+            }
             editing = null;
             await reload();
         }
@@ -144,8 +148,11 @@
                 danger: true,
             });
             if (!ok) return;
+            if (!(await LeetTemplates.remove(id))) {
+                Ui.toast('Could not delete the template', 'error');
+                return;
+            }
             if (editing === id) editing = null;
-            await LeetTemplates.remove(id);
             await reload();
         }
 

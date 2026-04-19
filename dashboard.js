@@ -755,12 +755,18 @@
          * could by then name a different checkpoint.
          */
         async deleteBookmark(videoId, key) {
-            this.videos = await Bookmarks.update((videos) => Bookmarks.removeBookmarkById(videos, videoId, key));
+            const { ok, state } = await Bookmarks.commit((videos) => Bookmarks.removeBookmarkById(videos, videoId, key));
+            this.videos = state;
             this.renderBookmarks();
+            if (!ok) Ui.toast('Could not delete the checkpoint', 'error');
         }
 
+        /** Resolves to whether it was saved, so the field can keep what was typed when it was not. */
         async saveBookmarkTitle(videoId, key, title) {
-            this.videos = await Bookmarks.update((videos) => Bookmarks.editBookmark(videos, videoId, key, { title }));
+            const { ok, state } = await Bookmarks.commit((videos) => Bookmarks.editBookmark(videos, videoId, key, { title }));
+            this.videos = state;
+            if (!ok) Ui.toast('Could not save the title', 'error');
+            return ok;
         }
 
         async clearAll() {
@@ -772,8 +778,11 @@
             });
             if (!confirmed) return;
 
+            if (!(await Bookmarks.save([]))) {
+                Ui.toast('Could not delete the checkpoints', 'error');
+                return;
+            }
             this.videos = [];
-            await Bookmarks.save(this.videos);
             this.renderBookmarks();
             Ui.toast('All checkpoints deleted', 'info');
         }

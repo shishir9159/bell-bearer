@@ -713,7 +713,10 @@
                     notify('Type a name in the box first, then save the selection', 'warning');
                     return;
                 }
-                await LeetTemplates.create({ name, lang, body: selection });
+                if (!(await LeetTemplates.create({ name, lang, body: selection }))) {
+                    notify('Could not save the template — try again', 'error');
+                    return;
+                }
                 notify(`Saved “${name}” as a ${LeetTemplates.labelFor(lang)} template`, 'success');
                 return;
             }

@@ -385,13 +385,15 @@
                 return;
             }
 
-            if (this.template === 'new') {
-                const id = await LeetTemplates.create(form);
-                this.template = id;
-            } else {
-                await LeetTemplates.edit(this.template, form);
-            }
+            const id = this.template === 'new' ? await LeetTemplates.create(form) : this.template;
+            const saved = this.template === 'new' ? !!id : await LeetTemplates.edit(this.template, form);
             if (!this.alive) return;
+            // Not saved, the form stays as it was typed.
+            if (!saved) {
+                this.notify('Could not save the template — try again', 'error');
+                return;
+            }
+            this.template = id;
             await this.refresh();
             if (this.alive) this.notify('Template saved', 'success');
         }
@@ -399,8 +401,12 @@
         async deleteTemplate() {
             const id = this.template;
             if (!id || id === 'new') return;
-            await LeetTemplates.remove(id);
+            const removed = await LeetTemplates.remove(id);
             if (!this.alive) return;
+            if (!removed) {
+                this.notify('Could not delete the template', 'error');
+                return;
+            }
             this.template = null;
             await this.refresh();
         }

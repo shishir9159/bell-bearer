@@ -454,7 +454,9 @@
          * the index could by then point at a different checkpoint.
          */
         async deleteBookmark(videoId, key) {
-            this.videos = await Bookmarks.update((videos) => Bookmarks.removeBookmarkById(videos, videoId, key));
+            const { ok, state } = await Bookmarks.commit((videos) => Bookmarks.removeBookmarkById(videos, videoId, key));
+            if (!ok) Ui.toast('Could not delete the checkpoint', 'error');
+            this.videos = state;
             if (!this.videos.some((video) => video.id === this.selectedVideoId)) {
                 this.selectedVideoId = null;
             }

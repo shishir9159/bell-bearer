@@ -38,7 +38,7 @@
         failed: () => store.load(),
     });
 
-    const { load, save, update } = store;
+    const { load, save, update, commit } = store;
 
     /** Drop anything that does not match the on-disk shape. */
     function normalizeVideos(raw) {
@@ -334,7 +334,7 @@
 
     const Bookmarks = {
         KEY, EXPORT_VERSION,
-        load, save, update,
+        load, save, update, commit,
         normalizeVideos, bookmarkTime, addBookmarks,
         newId, sameCheckpoint, bookmarkKey, removeBookmarkById, editBookmark, replaceBookmarks,
         lastSaved, sortVideos, SORTS,

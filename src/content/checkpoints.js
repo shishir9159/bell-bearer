@@ -79,7 +79,7 @@
             }
 
             const subtitle = await transcripts.textInRange(video.id, start, end);
-            await save(video, {
+            const saved = await save(video, {
                 time: Math.floor(start),
                 start: Math.floor(start),
                 end: Math.floor(end),
@@ -87,6 +87,7 @@
                 note: `Checkpoint ${Time.formatTime(start)} - ${Time.formatTime(end)}`,
                 subtitle,
             });
+            if (!saved) return;
 
             const preview = subtitle
                 ? ` — "${subtitle.slice(0, 40)}${subtitle.length > 40 ? '…' : ''}"`
@@ -122,7 +123,7 @@
             }
 
             const subtitle = await transcripts.textInRange(video.id, start, end);
-            await save(video, {
+            const saved = await save(video, {
                 time: start,
                 start,
                 end,
@@ -130,6 +131,7 @@
                 note: `Segment: ${Time.formatTime(start)} - ${Time.formatTime(end)}`,
                 subtitle,
             });
+            if (!saved) return;
             notify(`Segment saved: ${Time.formatTime(start)} - ${Time.formatTime(end)}`, 'success');
         }
 
@@ -149,19 +151,17 @@
          * racing the dashboard's save silently dropped one of them.
          *
          * Every path mints its id here, so a checkpoint cannot be saved
-         * without one. Resolves to the record as saved, or null.
+         * without one. Resolves to the record as saved, or null — and then
+         * it has said so: the store answers a failed write rather than
+         * throwing, so the catch this had never ran, and every caller went on
+         * to announce a checkpoint that was not there.
          */
         async function save(video, bookmark) {
             const record = { id: Bookmarks.newId(), ...bookmark };
-            try {
-                await Bookmarks.update((videos) =>
-                    Bookmarks.addBookmarks(videos, video, [record]).videos);
-                return record;
-            } catch (error) {
-                console.error('Bell Bearer: could not save checkpoint', error);
-                notify('Could not save the checkpoint', 'error');
-                return null;
-            }
+            const { ok } = await Bookmarks.commit((videos) => Bookmarks.addBookmarks(videos, video, [record]).videos);
+            if (ok) return record;
+            notify('Could not save the checkpoint', 'error');
+            return null;
         }
 
         return {

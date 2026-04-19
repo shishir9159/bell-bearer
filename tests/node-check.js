@@ -288,13 +288,13 @@ check('a merge swaps several checkpoints for one in a single write, and its undo
     eq(Bookmarks.replaceBookmarks(merged, { id: 'v' }, [], [{ id: 'c', time: 30 }])[0].bookmarks.length, 2,
         'a record already there was added twice');
 });
-check('the popup and the dashboard edit checkpoints by key, through update, never by index', () => {
+check('the popup and the dashboard edit checkpoints by key, through the store, never by index', () => {
     // Both used to change the list they had loaded, by index, and save the
     // whole of it back — erasing a checkpoint a YouTube tab saved meanwhile.
     for (const file of ['popup.js', 'dashboard.js']) {
         const source = require('fs').readFileSync(`${__dirname}/../${file}`, 'utf8');
         assert(!/bookmarkIndex|data-bookmark-index/.test(source), `${file} still addresses a checkpoint by index`);
-        assert(/Bookmarks\.update\(\(videos\) => Bookmarks\.removeBookmarkById\(/.test(source), `${file} deletes around update`);
+        assert(/Bookmarks\.commit\(\(videos\) => Bookmarks\.removeBookmarkById\(/.test(source), `${file} deletes around commit`);
         eq((source.match(/Bookmarks\.save\(/g) || []).length, file === 'dashboard.js' ? 1 : 0, `${file}: save is for clearing all only`);
     }
 });
@@ -5290,6 +5290,48 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             delete global.chrome.runtime;
             console.error = error;
         }
+    });
+
+    await checkAsync('a write that fails says so, where update() alone answers with a state either way', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        const one = pair();
+        const [set, error] = [global.chrome.storage.local.set, console.error];
+        global.chrome.storage.local.set = () => Promise.reject(new Error('QUOTA_BYTES quota exceeded'));
+        console.error = () => {};
+        try {
+            const failed = await one.commit((state) => ({ ...state, a: ['lost'] }));
+            eq([failed.ok, failed.state], [false, { a: [], b: [] }]);
+            eq(await one.save({ a: ['lost'], b: [] }), false);
+        } finally {
+            Object.assign(global.chrome.storage.local, { set });
+            console.error = error;
+        }
+        eq(await one.commit((state) => ({ ...state, a: ['kept'] })), { ok: true, state: { a: ['kept'], b: [] } });
+        eq(await one.save({ a: [], b: [] }), true);
+    });
+    await checkAsync('a segment the store could not write is not announced as saved', async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        const Checkpoints = require('../src/content/checkpoints.js');
+        const said = [];
+        let at = 10;
+        const recorder = Checkpoints.createRecorder({
+            player: { currentTime: () => at }, notify: (text, kind) => said.push(kind),
+            getVideo: () => ({ id: 'vid00000001', title: 'A talk', url: 'https://youtu.be/vid00000001' }),
+            transcripts: { textInRange: async () => 'what was said' },
+        });
+        const [set, error] = [global.chrome.storage.local.set, console.error];
+        global.chrome.storage.local.set = () => Promise.reject(new Error('QUOTA_BYTES quota exceeded'));
+        console.error = () => {};
+        try {
+            recorder.toggleSegment();
+            at = 20;
+            recorder.toggleSegment();
+            await new Promise((done) => setTimeout(done, 20));
+        } finally {
+            Object.assign(global.chrome.storage.local, { set });
+            console.error = error;
+        }
+        eq(said, ['info', 'error'], 'a checkpoint that never reached storage was said to be saved');
     });
 
     const StoreLocks = require('../src/background/store-locks.js');
@@ -10597,6 +10639,23 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(back.length, 11);
         eq(back.filter((t) => t.id === all[2].id).length, 1);
         eq(back[9].name, 'Mine', 'restoring reordered what was there');
+    });
+    await checkAsync('a template the store could not write is not given an id, and an edit says it failed', async () => {
+        clearStore();
+        const [mine] = await PromptTemplates.load();
+        const [set, error] = [global.chrome.storage.local.set, console.error];
+        global.chrome.storage.local.set = () => Promise.reject(new Error('QUOTA_BYTES quota exceeded'));
+        console.error = () => {};
+        try {
+            eq(await PromptTemplates.create({ name: 'Lost', body: 'never written' }), null);
+            eq(await PromptTemplates.edit(mine.id, { name: 'Renamed' }), false);
+            eq(await PromptTemplates.remove(mine.id), false);
+        } finally {
+            Object.assign(global.chrome.storage.local, { set });
+            console.error = error;
+        }
+        eq((await PromptTemplates.load()).length, 10);
+        eq(await PromptTemplates.edit(mine.id, { name: 'Renamed' }), true, 'the same edit again');
     });
     check('fields are asked for once each, in order, and the selection is never asked', () => {
         eq(PromptTemplates.fields('Compare {{options}} for {{ goal }} — {{options}} again, on {{selection}}'), ['options', 'goal']);

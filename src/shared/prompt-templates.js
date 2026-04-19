@@ -71,7 +71,7 @@
 
     const starters = (now = Date.now()) => STARTERS.map((starter) => clean({ ...starter, createdAt: now }));
 
-    const { load, update } = Store.create({
+    const { load, update, commit } = Store.create({
         keys: [KEY],
         read: async (stored) => {
             if (stored[KEY] !== undefined) return templatesOf(stored[KEY]);
@@ -86,19 +86,20 @@
         name: 'the prompt templates',
     });
 
+    /** The new template's id, or null when it was not saved. */
     async function create({ name, body, sites = [] }) {
         if (!text(name) || !text(body)) return null;
         const id = newId();
-        await update((state) => [...state, clean({ id, name, body, sites, createdAt: Date.now() })]);
-        return id;
+        const { ok } = await commit((state) => [...state, clean({ id, name, body, sites, createdAt: Date.now() })]);
+        return ok ? id : null;
     }
 
-    /** Only the fields passed are touched. */
-    function edit(id, changes) {
-        return update((state) => state.map((template) => (template.id === id ? clean({ ...template, ...changes, id }) : template)));
+    /** Only the fields passed are touched. Resolves to whether it was saved. */
+    async function edit(id, changes) {
+        return (await commit((state) => state.map((template) => (template.id === id ? clean({ ...template, ...changes, id }) : template)))).ok;
     }
 
-    const remove = (id) => update((state) => state.filter((template) => template.id !== id));
+    const remove = async (id) => (await commit((state) => state.filter((template) => template.id !== id))).ok;
 
     /** Move `id` to where `beforeId` sits; to the end when `beforeId` is not given. */
     function move(id, beforeId) {

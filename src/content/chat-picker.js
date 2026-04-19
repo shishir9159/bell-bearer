@@ -166,8 +166,12 @@
                     notify('Type a name in the filter first, then save', 'warning');
                     return;
                 }
+                // Closed once it is saved, so a failure leaves the name where it was typed.
+                if (!(await PromptTemplates.create({ name, body, sites: [site] }))) {
+                    notify('Could not save the prompt template — try again', 'error');
+                    return;
+                }
                 close();
-                await PromptTemplates.create({ name, body, sites: [site] });
                 notify(`Saved “${name}” as a prompt template`, 'success');
                 return;
             }

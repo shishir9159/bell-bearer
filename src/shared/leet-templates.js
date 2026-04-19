@@ -118,7 +118,7 @@
     /** Everything stored, cleaned, in display order. */
     const templatesOf = (state) => asArray(state).map(clean).filter((t) => t.name);
 
-    const { load, update } = Store.create({
+    const { load, update, commit } = Store.create({
         keys: [KEY],
         read: (stored) => templatesOf(stored[KEY]),
         clean: templatesOf,
@@ -126,24 +126,27 @@
         name: 'the LeetCode templates',
     });
 
+    /** The new template's id, or null when it was not saved. */
     async function create({ name, lang, body }) {
         const trimmed = text(name);
         if (!trimmed) return null;
         const id = newId();
-        await update((state) => [...state, clean({ id, name: trimmed, lang, body, createdAt: Date.now() })]);
-        return id;
+        const { ok } = await commit((state) => [...state, clean({ id, name: trimmed, lang, body, createdAt: Date.now() })]);
+        return ok ? id : null;
     }
 
+    /** Resolves to whether it was saved. */
     async function remove(id) {
-        await update((state) => state.filter((template) => template.id !== id));
+        return (await commit((state) => state.filter((template) => template.id !== id))).ok;
     }
 
     /**
      * Change a template in place. Only the fields passed are touched, so
      * saving an edited body cannot blank the name it was saved under.
+     * Resolves to whether it was saved.
      */
     async function edit(id, changes) {
-        await update((state) => state.map((template) => {
+        const { ok } = await commit((state) => state.map((template) => {
             if (template.id !== id) return template;
             const next = { ...template };
             if (changes.name !== undefined) next.name = text(changes.name).slice(0, NAME_CAP);
@@ -151,6 +154,7 @@
             if (changes.body !== undefined) next.body = String(changes.body).slice(0, BODY_CAP);
             return next;
         }));
+        return ok;
     }
 
     /** Move `id` to where `beforeId` sits. Array order is display order. */

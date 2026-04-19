@@ -423,13 +423,11 @@
 
         // ------------------------------------------------------- writing
 
+        /** A failed write is said, not thrown: the store answers one rather than rejecting. */
         async function write(change, failed = 'Could not save the highlight') {
-            try {
-                await Bookmarks.update(change);
-            } catch (error) {
-                console.error('Bell Bearer: could not save a highlight', error);
-                if (alive) toast(failed);
-            }
+            const { ok } = await Bookmarks.commit(change);
+            if (!ok && alive) toast(failed);
+            return ok;
         }
 
         const swap = (keys, add) => write((videos) => Bookmarks.replaceBookmarks(videos, video(), keys, add));
@@ -477,7 +475,13 @@
             state.hover = key;
             state.sel = kind === 'edit' ? key : null;
             render();
-            swap(removed.map((mark) => mark.id), [record]);
+            // Drawn before it is written; one that was not written is taken back off.
+            swap(removed.map((mark) => mark.id), [record]).then((ok) => {
+                if (ok || !alive) return;
+                state.marks = before;
+                state.hover = state.sel = state.edit = state.drag = null;
+                render();
+            });
             const verb = kind === 'new' && !result.merged ? 'Highlighted' : kind === 'edit' ? 'Changed to' : 'Extended to';
             toast(`${verb} ${spanLabel(record)}`, () => {
                 state.marks = before;
@@ -498,7 +502,12 @@
             state.hover = state.sel = null;
             if (state.edit === id) closeEditor();
             render();
-            write((videos) => Bookmarks.removeBookmarkById(videos, videoId, id));
+            write((videos) => Bookmarks.removeBookmarkById(videos, videoId, id), 'Could not remove the highlight').then((ok) => {
+                if (ok || !alive) return;
+                state.marks = before.marks;
+                state.stray = before.stray;
+                render();
+            });
             toast('Highlight removed', () => {
                 state.marks = before.marks;
                 state.stray = before.stray;

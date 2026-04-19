@@ -175,8 +175,12 @@
                     Ui.toast('A prompt needs a name and something to say', 'warning');
                     return;
                 }
-                if (template) await PromptTemplates.edit(template.id, form);
-                else await PromptTemplates.create(form);
+                const saved = template ? await PromptTemplates.edit(template.id, form) : !!(await PromptTemplates.create(form));
+                // Not saved, the dialog stays open with what was typed in it.
+                if (!saved) {
+                    Ui.toast('Could not save the prompt — try again', 'error');
+                    return;
+                }
                 modal.close();
             });
         }
@@ -191,7 +195,7 @@
                     title: 'Delete this prompt?', message: `"${template.name}" is deleted. A starter can be put back; your own cannot.`,
                     confirmLabel: 'Delete it', danger: true,
                 });
-                if (ok) await PromptTemplates.remove(template.id);
+                if (ok && !(await PromptTemplates.remove(template.id))) Ui.toast('Could not delete the prompt', 'error');
             }
         });
         host.querySelector('[data-chat-new]').addEventListener('click', () => edit(null));
