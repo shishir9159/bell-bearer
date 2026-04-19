@@ -31,6 +31,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
     const Hosts = ns.Hosts || req('./hosts.js');
 
     const KEY = Settings.DATA.limitSites;
@@ -195,24 +196,41 @@
      * deliberately deleted. Without it, anyone already holding themselves to
      * thirty minutes of x.com would have found the limit quietly gone.
      */
+    const WANTED = [KEY, ...LEGACY.flatMap((old) => [old.onKey, old.minutesKey])];
+
+    /** The list as stored, or the seed while it has never been written; `seeded` says which. */
+    function fromStored(stored) {
+        const sites = stored[KEY];
+        if (sites && typeof sites === 'object' && !Array.isArray(sites)) return { sites: { ...sites }, seeded: false };
+        const seed = {};
+        for (const old of LEGACY) {
+            const minutes = Number(stored[old.minutesKey]);
+            if (stored[old.onKey] === true && Number.isFinite(minutes) && minutes > 0) {
+                seed[old.host] = { minutes: Math.round(minutes), savedAt: Date.now() };
+            }
+        }
+        return { sites: seed, seeded: Object.keys(seed).length > 0 };
+    }
+
+    /**
+     * Changed through the store, whose steps hold a lock across tabs: the
+     * list in Settings and a page adding its own row each read, changed and
+     * wrote back on their own, and the later write dropped the other's row.
+     */
+    const store = Store.create({
+        keys: WANTED,
+        name: 'the limit list',
+        read: (stored) => fromStored(stored).sites,
+        write: (sites) => ({ [KEY]: sites }),
+        blank: () => ({}),
+        failed: () => load(),
+    });
+
     async function load() {
         try {
-            const wanted = [KEY];
-            for (const old of LEGACY) wanted.push(old.onKey, old.minutesKey);
-            const stored = await chrome.storage.local.get(wanted);
-
-            const sites = stored[KEY];
-            if (sites && typeof sites === 'object' && !Array.isArray(sites)) return sites;
-
-            const seeded = {};
-            for (const old of LEGACY) {
-                const minutes = Number(stored[old.minutesKey]);
-                if (stored[old.onKey] === true && Number.isFinite(minutes) && minutes > 0) {
-                    seeded[old.host] = { minutes: Math.round(minutes), savedAt: Date.now() };
-                }
-            }
-            if (Object.keys(seeded).length) await save(seeded);
-            return seeded;
+            const { sites, seeded } = fromStored(await chrome.storage.local.get(WANTED));
+            if (seeded) await store.save(sites);
+            return sites;
         } catch (_) {
             // The extension reloading invalidates every content script's
             // context. No limits is the safe answer: a page covered by a
@@ -221,24 +239,20 @@
         }
     }
 
-    const save = (sites) => Settings.set({ [KEY]: sites });
+    const save = (sites) => store.save(sites);
 
     /** Add a row, or replace the one that host already has. */
-    async function remember(fields, now = Date.now()) {
+    function remember(fields, now = Date.now()) {
         const row = rowFrom(fields, now);
-        if (!row) return null;
-        const sites = await load();
-        sites[row.host] = row.entry;
-        await save(sites);
-        return sites;
+        if (!row) return Promise.resolve(null);
+        return store.update((sites) => ({ ...sites, [row.host]: row.entry }));
     }
 
-    async function forget(hostname) {
+    function forget(hostname) {
         const host = normalizeHost(hostname);
-        const sites = await load();
-        delete sites[host];
-        await save(sites);
-        return sites;
+        return store.update((sites) => {
+            delete sites[host];
+        });
     }
 
     const LimitSites = {

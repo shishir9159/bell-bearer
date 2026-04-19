@@ -23,6 +23,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
     const Hosts = ns.Hosts || req('./hosts.js');
 
     /** How many groups run at once. A fourth one parks one of these. */
@@ -177,16 +178,23 @@
         }
     }
 
-    async function save(state) {
-        return Settings.set({ [KEY]: sanitize(state) });
-    }
+    /**
+     * Read, apply `change(state)`, write; resolves to what was written. Steps
+     * run one at a time through the store: the worker hears a tab move and a
+     * group close together, and the two used to read the same records, so
+     * the second write put back what the first had changed.
+     */
+    const store = Store.create({
+        keys: [KEY],
+        name: 'trials',
+        read: (stored) => sanitize(stored[KEY]),
+        clean: (state) => sanitize(state),
+        blank: () => ({}),
+        failed: () => load(),
+    });
 
-    /** Read, apply `change(state)`, write; returns what was written. */
-    async function update_(change) {
-        const next = sanitize(change(await load()));
-        await save(next);
-        return next;
-    }
+    const save = (state) => store.save(sanitize(state));
+    const update_ = (change) => store.update((state) => change(state));
 
     const Trials = {
         KEY, SLOT_LIMIT, LOCK_PRESETS, MAX_NAME,

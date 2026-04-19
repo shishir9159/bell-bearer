@@ -5554,6 +5554,19 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         await CookieSites.forget('docs.vulkan.org');
         eq(await CookieSites.load(), {});
     });
+    /** Run `fn` with reads that hand back copies, as Chrome's do; the stand-in above hands back what it holds. */
+    async function withCopiedReads(fn) {
+        const get = global.chrome.storage.local.get;
+        global.chrome.storage.local.get = async (keys) => structuredClone(await get(keys));
+        try { return await fn(); } finally { global.chrome.storage.local.get = get; }
+    }
+    await checkAsync('a site remembered while another is forgotten keeps both changes', () => withCopiedReads(async () => {
+        // Each read the list and wrote it back on its own; the later write won.
+        clearStore();
+        await CookieSites.remember('old.test', 'accept', 1);
+        await Promise.all([CookieSites.remember('new.test', 'decline', 2), CookieSites.forget('old.test')]);
+        eq(await CookieSites.load(), { 'new.test': { decision: 'decline', savedAt: 2 } });
+    }));
 
     await checkAsync('a page with no answer remembered and both chips off is not watched at all', async () => {
         // The observer used to go up on every page for twenty seconds,
@@ -6541,7 +6554,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const vm = require('vm');
         const sandbox = vm.createContext({ chrome, console, URL, Date, Math, JSON, setTimeout, clearTimeout });
         sandbox.self = sandbox.globalThis = sandbox;
-        for (const file of ['src/shared/settings.js', 'src/shared/trials.js', 'src/background/router.js', 'src/background/trials.js']) {
+        for (const file of ['src/shared/settings.js', 'src/shared/store.js', 'src/shared/trials.js', 'src/background/router.js', 'src/background/trials.js']) {
             vm.runInContext(readRepo(file), sandbox, { filename: file });
         }
         const Desk = sandbox.BB.TrialsWorker;
@@ -6563,6 +6576,13 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         const used = (...touches) => Kept.update(() => touches.reduce((state, [id, at]) => Kept.touch(state, id, at), {}));
         const openGroups = () => groups.filter((group) => !group.collapsed).map((group) => group.id);
 
+        await checkAsync('two changes to the records made together both land', async () => {
+            // A tab moving and a lock being set read the same records, and the later write won.
+            seed();
+            await Promise.all([Kept.update((state) => Kept.touch(state, 10, 1000)), Kept.update((state) => Kept.lock(state, 20, 25, 1000))]);
+            const kept = await Kept.load();
+            eq([!!kept[10], Kept.isLocked(kept, 20, 2000)], [true, true]);
+        });
         await checkAsync('the desk lists loose tabs, reads a collapsed group as parked, and starts unlocked', async () => {
             seed();
             const snap = (await Desk.snapshot()).desk;
@@ -6837,6 +6857,17 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             eq(old.minutesKey in Settings.DEFAULTS, true, old.minutesKey);
         }
     });
+
+    await checkAsync('the list seeds itself once, and two changes made together both stay', () => withCopiedReads(async () => {
+        Object.keys(store).forEach((k) => delete store[k]);
+        Object.assign(store, { twitterDailyLimit: true, twitterLimitMinutes: 25 });
+        eq(Object.keys(await LimitSites.load()), ['x.com']);
+        eq(store[LimitSites.KEY]['x.com'].minutes, 25, 'the seed was not written');
+        await Promise.all([LimitSites.remember({ host: 'news.test', minutes: 10 }), LimitSites.forget('x.com')]);
+        eq(Object.keys(await LimitSites.load()), ['news.test'], 'one of the two changes was written over');
+        await LimitSites.forget('news.test');
+        eq(await LimitSites.load(), {}, 'an emptied list seeded itself again');
+    }));
 
     section('what today has gone on, against the limit');
 
