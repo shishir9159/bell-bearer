@@ -42,8 +42,9 @@
                 Ui.toast('Could not read that file — check it is valid JSON', 'error');
                 return;
             }
-            if (!Backup.validate(backup)) {
-                Ui.toast('That is not a Bell Bearer export', 'error');
+            const problem = Backup.problem(backup);
+            if (problem) {
+                Ui.toast(problem, 'error');
                 return;
             }
 

@@ -5680,7 +5680,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
     await checkAsync('an import restores only keys Bell Bearer writes', async () => {
         clearStore();
-        const count = await Backup.importAll({ type: Backup.TYPE, data: {
+        const count = await Backup.importAll({ type: Backup.TYPE, version: 1, data: {
             skin: 'riso', youtubeBookmarks: [], bb_activity: { '2026-07-15': { total: 1 } }, 'bb_activity:2026-07-16': { total: 2 },
             somethingElse: 'x', __proto__junk: 1, bbPartyTab: { tabId: 1 },
         } });
@@ -5700,9 +5700,33 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     await checkAsync('importing writes the file back, still without caches', async () => {
         clearStore();
         store.skin = 'default';
-        await Backup.importAll({ type: Backup.TYPE, data: { skin: 'riso', bbFeedCache: { stale: true } } });
+        await Backup.importAll({ type: Backup.TYPE, version: 1, data: { skin: 'riso', bbFeedCache: { stale: true } } });
         eq(store.skin, 'riso');
         eq(store.bbFeedCache, undefined);
+    });
+
+    await checkAsync('a file from a newer version, or with a value of the wrong kind, writes nothing and says why', async () => {
+        clearStore();
+        store.skin = 'default';
+        const file = (data, version = 1) => ({ type: Backup.TYPE, version, exportedAt: '2026-10-01T00:00:00.000Z', data });
+        const refused = async (one) => {
+            try { await Backup.importAll(one); } catch (error) { return error.message; }
+            return null;
+        };
+        assert(/newer/.test(await refused(file({ skin: 'riso' }, 999))), 'version 999 was imported');
+        assert(/version/.test(await refused(file({ skin: 'riso' }, 'one'))), 'a version that is no number');
+        assert(/sitesOff/.test(await refused(file({ skin: 'riso', sitesOff: 'youtube' }))), 'a string for the list of sites off');
+        for (const data of [{ chessLimitBlitz: 'six' }, { chessLimitBlitz: Infinity }, { trackActivity: 'yes' }, { shortcuts: [] },
+            { youtubeBookmarks: {} }, { bbCookieSites: [] }, { 'bb_activity:2026-07-15': 5 }, { bbPromptQueue: 'x' }]) {
+            eq(Backup.validate(file(data)), false, JSON.stringify(data));
+        }
+        eq(store.skin, 'default', 'a refused file changed something');
+        eq(Backup.problem(file({ skin: 'riso', youtubeBookmarks: [], bbRosterJob: 'transient, so ignored', unknown: 1, bbTrials: null })), null);
+    });
+    check('every data key a backup carries has a shape to be checked against', () => {
+        const { DATA } = require('../src/shared/settings.js');
+        const carried = Object.values(DATA).filter((key) => !Backup.EXCLUDED.has(key) && !Backup.EXCLUDED_PREFIXES.includes(key) && key !== DATA.activityDay);
+        eq(carried.filter((key) => !(key in Backup.DATA_SHAPES)), [], 'a new store needs its shape in backup.js');
     });
 
     // --------------------------------------------------------- shortcuts
