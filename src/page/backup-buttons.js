@@ -48,15 +48,28 @@
                 return;
             }
 
-            const confirmed = await Ui.confirmDialog({
+            const made = new Date(backup.exportedAt);
+            const mode = await Ui.choiceDialog({
                 title: 'Import this export?',
-                message: `Settings, shortcuts, checkpoints, topics and remembered cookie sites are replaced by the ones in the file (exported ${new Date(backup.exportedAt).toLocaleString()}).`,
+                message: `It was exported ${Number.isNaN(made.getTime()) ? 'at an unknown time' : made.toLocaleString()}. `
+                    + 'Your setup as it is now is saved to a file first, which imports it back if this was a mistake.',
+                choices: [
+                    { value: 'replace', label: 'Replace everything', hint: 'Settings and data become the file’s; what it does not have is cleared.' },
+                    { value: 'merge', label: 'Merge into what is here', hint: 'What the file has replaces yours; everything else stays.' },
+                ],
                 confirmLabel: 'Import',
             });
-            if (!confirmed) return;
+            if (!mode) return;
 
-            await Backup.importAll(backup);
-            Ui.toast('Imported — settings and data restored', 'info');
+            const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+            try {
+                Ui.downloadJson(`bell-bearer-before-import-${stamp}.json`, await Backup.exportAll());
+                await Backup.importAll(backup, { mode });
+            } catch (error) {
+                Ui.toast(`Nothing was imported — ${(error && error.message) || 'storage refused it'}`, 'error');
+                return;
+            }
+            Ui.toast(mode === 'replace' ? 'Imported — your setup is now the file’s' : 'Imported — merged into your setup', 'info');
         });
     }
 

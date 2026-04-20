@@ -4702,7 +4702,8 @@ global.chrome = {
         local: {
             get: (keys, cb) => {
                 const out = {};
-                (Array.isArray(keys) ? keys : [keys]).forEach((k) => {
+                // null is everything, as Chrome has it.
+                (keys === null ? Object.keys(store) : Array.isArray(keys) ? keys : [keys]).forEach((k) => {
                     if (Object.prototype.hasOwnProperty.call(store, k)) out[k] = store[k];
                 });
                 if (cb) return void cb(out);
@@ -5680,11 +5681,11 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
     await checkAsync('an import restores only keys Bell Bearer writes', async () => {
         clearStore();
-        const count = await Backup.importAll({ type: Backup.TYPE, version: 1, data: {
+        const { written } = await Backup.importAll({ type: Backup.TYPE, version: 1, data: {
             skin: 'riso', youtubeBookmarks: [], bb_activity: { '2026-07-15': { total: 1 } }, 'bb_activity:2026-07-16': { total: 2 },
             somethingElse: 'x', __proto__junk: 1, bbPartyTab: { tabId: 1 },
         } });
-        eq(count, 4);
+        eq(written, 4);
         eq(Object.keys(store).sort(), ['bb_activity', 'bb_activity:2026-07-16', 'skin', 'youtubeBookmarks']);
     });
     check('the activity store\'s keys are named in the schema, like every other store\'s', () => {
@@ -5722,6 +5723,36 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         }
         eq(store.skin, 'default', 'a refused file changed something');
         eq(Backup.problem(file({ skin: 'riso', youtubeBookmarks: [], bbRosterJob: 'transient, so ignored', unknown: 1, bbTrials: null })), null);
+    });
+    await checkAsync('replacing leaves the file and nothing else; merging keeps what the file does not have', async () => {
+        const file = { type: Backup.TYPE, version: 1, data: { skin: 'riso', youtubeBookmarks: [] } };
+        const profile = () => {
+            clearStore();
+            Object.assign(store, { skin: 'deco', theme: 'dark', bbCookieSites: { 'a.test': { decision: 'accept' } }, 'bb_activity:2026-07-15': { total: 5 }, bbFeedCache: { kept: true } });
+        };
+        profile();
+        eq(await Backup.importAll(file, { mode: 'replace' }), { written: 2, removed: 3 });
+        eq(Object.keys(store).sort(), ['bbFeedCache', 'skin', 'youtubeBookmarks'], 'a cache is not the profile’s, and stays');
+        profile();
+        eq(await Backup.importAll(file, { mode: 'merge' }), { written: 2, removed: 0 });
+        eq([store.skin, store.theme, Object.keys(store.bbCookieSites)], ['riso', 'dark', ['a.test']]);
+    });
+    await checkAsync('an import whose write fails puts back what was there', async () => {
+        clearStore();
+        Object.assign(store, { skin: 'deco', bbCookieSites: { 'a.test': { decision: 'accept' } } });
+        const remove = global.chrome.storage.local.remove;
+        // The file's keys go in; taking the rest away fails.
+        global.chrome.storage.local.remove = (keys) => (keys.includes('bbCookieSites') ? Promise.reject(new Error('IO error')) : remove(keys));
+        let thrown = null;
+        try {
+            await Backup.importAll({ type: Backup.TYPE, version: 1, data: { skin: 'riso', theme: 'dark' } }, { mode: 'replace' });
+        } catch (error) {
+            thrown = error.message;
+        } finally {
+            global.chrome.storage.local.remove = remove;
+        }
+        eq(thrown, 'IO error');
+        eq(store, { skin: 'deco', bbCookieSites: { 'a.test': { decision: 'accept' } } });
     });
     await checkAsync('a restored prompt queue sends nothing until each prompt is sent by hand', async () => {
         clearStore();

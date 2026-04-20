@@ -71,6 +71,32 @@
         });
     }
 
+    /**
+     * One of several, as radio buttons: `choices` is [{ value, label, hint }],
+     * the first picked to start with. Resolves to the value chosen, or null
+     * if cancelled.
+     */
+    function choiceDialog({ title, message, choices, confirmLabel = 'Continue' }) {
+        return new Promise((resolve) => {
+            const modal = openModal(`
+                <h3>${Dom.escapeHtml(title)}</h3>
+                <p class="modal-message">${Dom.escapeHtml(message)}</p>
+                <div class="modal-choices" role="radiogroup">${choices.map((choice, at) => `
+                    <label class="modal-choice"><input type="radio" name="bb-choice" value="${Dom.escapeAttr(choice.value)}"${at === 0 ? ' checked' : ''}>
+                        <span><strong>${Dom.escapeHtml(choice.label)}</strong>${choice.hint ? ` <small>${Dom.escapeHtml(choice.hint)}</small>` : ''}</span></label>`).join('')}
+                </div>
+                <div class="import-modal-buttons">
+                    <button id="bb-choice-ok" class="btn-primary">${Dom.escapeHtml(confirmLabel)}</button>
+                    <button class="import-modal-close">Cancel</button>
+                </div>`, { onClose: (result) => resolve(typeof result === 'string' ? result : null) });
+
+            modal.element.querySelector('#bb-choice-ok').addEventListener('click', () => {
+                const picked = modal.element.querySelector('input[name="bb-choice"]:checked');
+                if (picked) modal.close(picked.value);
+            });
+        });
+    }
+
     /** A single-field prompt. Resolves to the trimmed text, or null if cancelled. */
     function promptDialog({ title, label, value = '', placeholder = '', confirmLabel = 'Save' }) {
         return new Promise((resolve) => {
@@ -185,7 +211,7 @@
         }
     }
 
-    const Ui = { openModal, confirmDialog, promptDialog, toast, copyText,
+    const Ui = { openModal, confirmDialog, choiceDialog, promptDialog, toast, copyText,
         downloadText, downloadJson, saveText, readFileAsText, installTheme };
 
     root.BB = root.BB || {};

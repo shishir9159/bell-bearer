@@ -13,6 +13,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const ns = root.BB || {};
     const Settings = ns.Settings || req('./settings.js');
+    const Store = ns.Store || req('./store.js');
 
     const TYPE = 'bell-bearer-backup';
     /** The newest file this reads. Every export so far has been version 1. */
@@ -134,12 +135,38 @@
         return build(await chrome.storage.local.get(null), now);
     }
 
-    async function importAll(file) {
+    /**
+     * Write `file` into storage; resolves to how many keys were written and
+     * how many were taken away. `replace` takes away every key a backup
+     * would carry that the file does not have, so what is left is the file;
+     * `merge` leaves those as they are. Import only ever merged, under a
+     * dialog that promised the file's settings and data replaced yours.
+     *
+     * Every store's key is locked while it runs, so a page saving a
+     * checkpoint cannot land in the middle of it, and a write that fails puts
+     * back what was there before it throws. The dashboard downloads the setup
+     * as it was before asking for any of this, for the way back after.
+     */
+    async function importAll(file, { mode = 'merge' } = {}) {
         const why = problem(file);
         if (why) throw new Error(why);
         const data = entries(file);
-        await chrome.storage.local.set(data);
-        return Object.keys(data).length;
+        return Store.lock([...KNOWN, ...Object.keys(data)], async () => {
+            const was = build(await chrome.storage.local.get(null)).data;
+            const gone = mode === 'replace' ? Object.keys(was).filter((key) => known(key) && !(key in data)) : [];
+            try {
+                await chrome.storage.local.set(data);
+                if (gone.length) await chrome.storage.local.remove(gone);
+            } catch (error) {
+                try {
+                    const added = Object.keys(data).filter((key) => !(key in was));
+                    await chrome.storage.local.set(was);
+                    if (added.length) await chrome.storage.local.remove(added);
+                } catch (_) { /* storage is failing outright: the file saved first is the way back */ }
+                throw error;
+            }
+            return { written: Object.keys(data).length, removed: gone.length };
+        });
     }
 
     const Backup = { TYPE, VERSION, RESTORED_NOTE, EXCLUDED, EXCLUDED_PREFIXES, DATA_SHAPES, build, problem, validate, entries, exportAll, importAll, known, fits };
