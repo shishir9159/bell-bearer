@@ -100,10 +100,33 @@
 
     const validate = (file) => problem(file) === null;
 
+    /** A prompt waiting in a restored queue: what it says instead of going. */
+    const RESTORED_NOTE = 'Restored from a backup — send it when you are ready';
+
+    /**
+     * Values that mean something on the machine that wrote them, made safe to
+     * restore. The prompt queue came back as it was exported: the leases of
+     * pages long closed, sites' holds, and every waiting prompt still
+     * waiting — so importing with a chat open sent them into it, at once.
+     * They come back held, for a press of Send each, and nothing holds them.
+     */
+    const RESTORE = Object.freeze({
+        [D.promptQueue]: (queue) => ({
+            ...queue,
+            items: (Array.isArray(queue.items) ? queue.items : []).map((item) => (item && (item.status === 'waiting' || item.status === 'sending')
+                ? { ...item, status: 'held', note: RESTORED_NOTE } : item)),
+            leases: {},
+            holds: {},
+        }),
+    });
+
     /** What a backup would write: its known keys, without anything excluded. */
     function entries(file) {
         const data = build(file.data).data;
-        for (const [key, value] of Object.entries(data)) if (!known(key) || empty(key, value)) delete data[key];
+        for (const [key, value] of Object.entries(data)) {
+            if (!known(key) || empty(key, value)) delete data[key];
+            else if (RESTORE[key]) data[key] = RESTORE[key](value);
+        }
         return data;
     }
 
@@ -119,7 +142,7 @@
         return Object.keys(data).length;
     }
 
-    const Backup = { TYPE, VERSION, EXCLUDED, EXCLUDED_PREFIXES, DATA_SHAPES, build, problem, validate, entries, exportAll, importAll, known, fits };
+    const Backup = { TYPE, VERSION, RESTORED_NOTE, EXCLUDED, EXCLUDED_PREFIXES, DATA_SHAPES, build, problem, validate, entries, exportAll, importAll, known, fits };
 
     root.BB = root.BB || {};
     root.BB.Backup = Backup;

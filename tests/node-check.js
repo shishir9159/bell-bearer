@@ -5723,6 +5723,23 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(store.skin, 'default', 'a refused file changed something');
         eq(Backup.problem(file({ skin: 'riso', youtubeBookmarks: [], bbRosterJob: 'transient, so ignored', unknown: 1, bbTrials: null })), null);
     });
+    await checkAsync('a restored prompt queue sends nothing until each prompt is sent by hand', async () => {
+        clearStore();
+        const PromptQueue = require('../src/shared/prompt-queue.js');
+        const item = (id, status, extra = {}) => ({ id, site: 'chatgpt', conv: 'c1', chain: 'pc_1', text: id, status, createdAt: Date.now(), ...extra });
+        await Backup.importAll({ type: Backup.TYPE, version: 1, data: { bbPromptQueue: {
+            items: [item('now', 'waiting'), item('later', 'waiting', { notBefore: Date.now() + 3600e3 }), item('mid', 'sending'), item('done', 'sent', { sentAt: Date.now() })],
+            leases: { 'chatgpt:c1': { by: 'a page on another machine', until: Date.now() + 60e3 } },
+            holds: { chatgpt: { until: Date.now() + 60e3 } },
+            paused: {},
+        } } });
+        const queue = await PromptQueue.load();
+        eq(queue.items.map((one) => one.status), ['held', 'held', 'held', 'sent']);
+        eq(queue.items[0].note, Backup.RESTORED_NOTE);
+        eq([queue.leases, queue.holds], [{}, {}]);
+        eq(PromptQueue.next(queue, 'chatgpt', 'c1', Date.now() + 7200e3), null, 'something would send by itself');
+        eq(PromptQueue.due(queue, Date.now() + 7200e3), [], 'the worker would wake a tab for it');
+    });
     check('every data key a backup carries has a shape to be checked against', () => {
         const { DATA } = require('../src/shared/settings.js');
         const carried = Object.values(DATA).filter((key) => !Backup.EXCLUDED.has(key) && !Backup.EXCLUDED_PREFIXES.includes(key) && key !== DATA.activityDay);
