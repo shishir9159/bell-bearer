@@ -191,20 +191,26 @@
 
         async function showSheet() {
             if (sheet) return;
-            sheet = doc.createElement('div');
-            sheet.id = SHEET_ID;
-            sheet.className = 'bb-themed bb-limit-sheet';
-            const look = await appearance();
-            sheet.dataset.bbTheme = look.theme;
-            sheet.dataset.bbSkin = look.skin;
-            sheet.innerHTML = sheetHtml(status());
+            const mine = doc.createElement('div');
+            sheet = mine;
+            mine.id = SHEET_ID;
+            mine.className = 'bb-themed bb-limit-sheet';
+            let look = {};
+            try { look = (await appearance()) || {}; } catch (_) { /* the default look, rather than no sheet */ }
+            // Taken down while the look was read — snoozed in another tab, or
+            // the limit lifted. This went on to the sheet regardless, which
+            // by then was null, and threw; or put up one nobody wanted.
+            if (sheet !== mine) return;
+            mine.dataset.bbTheme = look.theme || 'light';
+            mine.dataset.bbSkin = look.skin || 'default';
+            mine.innerHTML = sheetHtml(status());
             // Delegated to the sheet, which outlives every repaint of its
             // contents — sheetHtml is written over on each render, so a
             // listener on the button itself would be dropped with it.
-            sheet.addEventListener('click', (event) => {
+            mine.addEventListener('click', (event) => {
                 if (event.target.closest('[data-bb-snooze]')) onSnooze();
             });
-            doc.documentElement.append(sheet);
+            doc.documentElement.append(mine);
         }
 
         function hideSheet() {

@@ -7137,13 +7137,17 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
     });
 
     /** A page of `host` under a 30-minute limit, on a clock the check moves; `looking` is whether it is being looked at. */
-    async function limitedPage(host, clock) {
+    async function limitedPage(host, clock, { appearance = async () => ({}) } = {}) {
         const TimeLimitContent = require('../src/content/time-limit.js');
         await LimitSites.remember({ host, minutes: 30 });
-        const view = { looking: true };
-        const doc = { visibilityState: 'visible', hasFocus: () => view.looking };
-        view.page = TimeLimitContent.createTimeLimit({ site: 'other', host, appearance: async () => ({}), now: () => clock.at, doc, win: {} });
-        await view.page.reload();
+        const view = { looking: true, shown: [] };
+        const element = () => ({ dataset: {}, addEventListener() {}, remove() { view.shown = view.shown.filter((one) => one !== this); } });
+        const doc = {
+            visibilityState: 'visible', hasFocus: () => view.looking, createElement: element, addEventListener() {},
+            documentElement: { append: (one) => view.shown.push(one) },
+        };
+        view.page = TimeLimitContent.createTimeLimit({ site: 'other', host, appearance, now: () => clock.at, doc, win: { addEventListener() {} } });
+        await view.page.install();
         view.done = async () => {
             await LimitSites.forget(host);
             await view.page.reload();
@@ -7183,6 +7187,23 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             await view.page.bank();
             await written();
             eq(store[TimeLimits.KEY], { day: TimeLimits.dayKey(clock.at), seconds: { 'late.test': 20 }, snoozed: {} });
+        } finally {
+            await view.done();
+        }
+    });
+
+    await checkAsync('a sheet stood down while its look was still being read is never put up', async () => {
+        clearStore();
+        const clock = { at: Date.now() };
+        store[TimeLimits.KEY] = spent('spent.test', 1800, clock.at);
+        let looked = null;
+        const view = await limitedPage('spent.test', clock, { appearance: () => new Promise((done) => { looked = done; }) });
+        try {
+            assert(looked, 'a spent budget did not ask for the sheet');
+            await view.page.snooze();
+            looked({ theme: 'dark', skin: 'deco' });
+            await written();
+            eq(view.shown, [], 'the snoozed sheet went up anyway');
         } finally {
             await view.done();
         }
