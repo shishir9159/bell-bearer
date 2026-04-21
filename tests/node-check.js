@@ -7136,6 +7136,58 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([state.seconds['x.com'], TimeLimits.snoozesOn(state, 'x.com', now)], [30, 1]);
     });
 
+    /** A page of `host` under a 30-minute limit, on a clock the check moves; `looking` is whether it is being looked at. */
+    async function limitedPage(host, clock) {
+        const TimeLimitContent = require('../src/content/time-limit.js');
+        await LimitSites.remember({ host, minutes: 30 });
+        const view = { looking: true };
+        const doc = { visibilityState: 'visible', hasFocus: () => view.looking };
+        view.page = TimeLimitContent.createTimeLimit({ site: 'other', host, appearance: async () => ({}), now: () => clock.at, doc, win: {} });
+        await view.page.reload();
+        view.done = async () => {
+            await LimitSites.forget(host);
+            await view.page.reload();
+        };
+        return view;
+    }
+    const written = () => new Promise((done) => setTimeout(done, 20));
+
+    await checkAsync('a visit shorter than a tick is banked as the page stops being looked at, and once', async () => {
+        // Losing focus cleared the mark before anything was banked: ten
+        // seconds and then a blur counted for nothing.
+        clearStore();
+        const clock = { at: Time.startOfDay(Date.now()) + A_DAY / 2 };
+        const view = await limitedPage('brief.test', clock);
+        try {
+            clock.at += 10000;
+            view.looking = false;
+            view.page.sync(); // blur
+            view.page.sync(); // and the visibilitychange after it
+            await written();
+            eq(TimeLimits.spentOn(await TimeLimits.load(), 'brief.test'), 10);
+            view.looking = true;
+            view.page.sync();
+            clock.at += 8000;
+            await view.page.bank(); // pagehide
+            eq(TimeLimits.spentOn(await TimeLimits.load(), 'brief.test'), 18, 'a second short visit');
+        } finally {
+            await view.done();
+        }
+    });
+    await checkAsync('a visit across midnight counts only the part after it', async () => {
+        clearStore();
+        const clock = { at: Time.startOfDay(Date.now()) + A_DAY - 10000 };
+        const view = await limitedPage('late.test', clock);
+        try {
+            clock.at += 30000;
+            await view.page.bank();
+            await written();
+            eq(store[TimeLimits.KEY], { day: TimeLimits.dayKey(clock.at), seconds: { 'late.test': 20 }, snoozed: {} });
+        } finally {
+            await view.done();
+        }
+    });
+
     await checkAsync('a change whose read failed writes nothing, and answers null', async () => {
         clearStore();
         const now = Date.now();

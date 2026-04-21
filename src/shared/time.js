@@ -115,6 +115,12 @@
         return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
     }
 
+    /** The local midnight the day `ms` falls on began at. */
+    function startOfDay(ms = Date.now()) {
+        const at = new Date(ms);
+        return new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+    }
+
     /**
      * Seconds as a length of time, in one of the three shapes the views draw:
      *
@@ -179,7 +185,7 @@
         }
     }
 
-    const Time = { formatTime, parseTimestamp, relativeTime, shortAge, dayKey, duration, keepDays, runOfDays };
+    const Time = { formatTime, parseTimestamp, relativeTime, shortAge, dayKey, startOfDay, duration, keepDays, runOfDays };
 
     root.BB = root.BB || {};
     root.BB.Time = Time;

@@ -39,6 +39,7 @@
     const LimitSites = ns.LimitSites || req('../shared/limit-sites.js');
     const Settings = ns.Settings || req('../shared/settings.js');
     const Dom = ns.Dom || req('../shared/dom.js');
+    const Time = ns.Time || req('../shared/time.js');
 
     const SHEET_ID = 'bb-time-limit';
     /** How often the page banks what it has spent, and re-reads the clock. */
@@ -58,8 +59,9 @@
      * @param {string} deps.site         what detectSite() returned
      * @param {string} [deps.host]       the hostname to look the limit up by
      * @param {() => Promise<object>} deps.appearance
+     * @param {() => number} [deps.now]     the clock, for the tests
      */
-    function createTimeLimit({ site, host = location.hostname, appearance }) {
+    function createTimeLimit({ site, host = root.location.hostname, appearance, now: clock = () => Date.now(), doc = root.document, win = root }) {
         const at = LimitSites.normalizeHost(host);
         /** "Twitter" for a site with a workspace, the bare host otherwise. */
         const known = TimeLimits.get(site);
@@ -71,13 +73,21 @@
         let timer = 0;
         let since = 0;      // when the seconds now being counted started
 
-        const watching = () => document.visibilityState === 'visible' && document.hasFocus();
+        const watching = () => doc.visibilityState === 'visible' && doc.hasFocus();
         const status = () => TimeLimits.statusFor(state, limit, at);
 
-        /** Bank the gap since the last tick, if it was spent looking at this. */
+        /**
+         * Bank the gap since the last tick, if it was spent looking at this.
+         * The mark moves before the write is awaited, so a second bank in
+         * the meantime credits only what came after this one.
+         *
+         * A gap that started before midnight counts from midnight: the tally
+         * is today's, and the seconds before it went to a day that is gone.
+         */
         async function bank() {
-            const now = Date.now();
-            const spent = since ? Math.round((now - since) / 1000) : 0;
+            const now = clock();
+            const from = since ? Math.max(since, Time.startOfDay(now)) : 0;
+            const spent = from ? Math.round((now - from) / 1000) : 0;
             since = watching() ? now : 0;
             if (spent <= 0) return;
             // A failed update keeps what this page had. It used to hand back
@@ -110,7 +120,7 @@
             const on = status().on;
 
             if (on && !timer) {
-                since = watching() ? Date.now() : 0;
+                since = watching() ? clock() : 0;
                 timer = setInterval(tick, TICK_MS);
             } else if (!on && timer) {
                 clearInterval(timer);
@@ -118,9 +128,14 @@
                 bank();
             } else if (!on) {
                 since = 0;
-            } else {
-                // Still on. Start or stop counting according to what changed.
-                since = watching() ? (since || Date.now()) : 0;
+            } else if (since && !watching()) {
+                // Still on, and no longer looked at. What was spent since the
+                // last tick is banked first: this used to clear the mark and
+                // throw those seconds away, so a visit shorter than a tick
+                // counted for nothing, however many of them there were.
+                bank();
+            } else if (!since && watching()) {
+                since = clock();
             }
             render();
         }
@@ -176,7 +191,7 @@
 
         async function showSheet() {
             if (sheet) return;
-            sheet = document.createElement('div');
+            sheet = doc.createElement('div');
             sheet.id = SHEET_ID;
             sheet.className = 'bb-themed bb-limit-sheet';
             const look = await appearance();
@@ -189,7 +204,7 @@
             sheet.addEventListener('click', (event) => {
                 if (event.target.closest('[data-bb-snooze]')) onSnooze();
             });
-            document.documentElement.append(sheet);
+            doc.documentElement.append(sheet);
         }
 
         function hideSheet() {
@@ -233,12 +248,12 @@
                 sync();
             });
 
-            document.addEventListener('visibilitychange', sync);
-            window.addEventListener('focus', sync);
-            window.addEventListener('blur', sync);
+            doc.addEventListener('visibilitychange', sync);
+            win.addEventListener('focus', sync);
+            win.addEventListener('blur', sync);
             // The last few seconds before the tab goes are worth keeping;
             // pagehide is the one teardown event a bfcache'd page still gets.
-            window.addEventListener('pagehide', bank);
+            win.addEventListener('pagehide', bank);
 
             sync();
         }
