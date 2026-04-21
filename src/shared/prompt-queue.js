@@ -124,9 +124,14 @@
         return times.length ? Math.min(...times) : null;
     }
 
-    /** Scheduled items whose time has come — what the worker wakes a tab for. */
+    /**
+     * Scheduled items whose time has come — what the worker wakes a tab for.
+     * Not one in a paused chat, which no tab would send, and not one so late
+     * holdStale() holds it for a yes: a tab opened for those sent nothing.
+     */
     const due = (state, now = Date.now()) => state.items.filter((item) =>
-        item.status === 'waiting' && item.notBefore > 0 && item.notBefore <= now && !held(state, item.site, now));
+        item.status === 'waiting' && item.notBefore > 0 && item.notBefore <= now && now - item.notBefore <= STALE_MS &&
+        !held(state, item.site, now) && !state.paused[keyOf(item)]);
 
     // ------------------------------------------------------------ writing
 

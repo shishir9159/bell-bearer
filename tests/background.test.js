@@ -216,4 +216,29 @@ suite('background: the prompt queue worker', () => {
         await Worker().wake();
         assertEqual(M.state.created.length, 0, 'a tab was opened with the setting off');
     });
+
+    test('a prompt that came due while the browser was shut is woken for as it starts, and once', async () => {
+        // Only an alarm woke a chat, set for a time to come, and Chrome
+        // does not promise to keep one across a restart.
+        M.reset({ localStore: { bbPromptQueue: { items: [due()] } } });
+        Worker().forget();
+        M.fire.startup();
+        await M.settle();
+        assertDeepEqual(M.state.created, [{ url: 'https://chatgpt.com/c/abc12345', active: false }]);
+        await Worker().wake(); // the alarm Chrome did keep, fired late as it starts
+        assertEqual(M.state.created.length, 1, 'a second tab while the first was still loading');
+    });
+
+    test('a paused chat, a site switched off and a prompt long past its time open nothing', async () => {
+        Worker().forget();
+        const stale = due({ id: 'q3', conv: 'stale1', notBefore: Date.now() - 13 * 3600e3 });
+        M.reset({ localStore: {
+            sitesOff: ['claude'],
+            bbPromptQueue: { items: [due(), due({ id: 'q2', site: 'claude', conv: 'a0b1c2d3-e4f5-a6b7-c8d9-e0f1a2b3c4d5' }), stale], paused: { 'chatgpt:abc12345': true } },
+        } });
+        await Worker().wake();
+        assertEqual(M.state.created.length, 0);
+        const held = M.state.localStore.bbPromptQueue.items.find((one) => one.id === 'q3');
+        assertEqual(held.status, 'held', 'the stale one was not held for a yes');
+    });
 });
