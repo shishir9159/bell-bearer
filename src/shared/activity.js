@@ -58,9 +58,11 @@
     const IDLE_GAP_MS = 90 * 1000;
 
     /**
-     * The previous reading, `{ at, host, title }`, or null for "nothing was
-     * focused". `undefined` means it has not been read back yet in this
-     * process.
+     * The previous reading, `{ at, host, title, page, visit }`, or null for
+     * "nothing was focused" — `page` the address it was on, and `visit` the
+     * seconds already counted on it without a break. `undefined` means it has
+     * not been read back yet in this process. The address is held only here,
+     * with the reading, and never written into a day.
      *
      * It has to outlive the process. An MV3 service worker is torn down a few
      * seconds after it goes idle, which is most of the gap between two alarms:
@@ -80,6 +82,9 @@
      */
     const dayKey = (ms, back = 0) => Time.dayKey(ms, back);
     const blankDay = () => ({ total: 0, hours: new Array(24).fill(0), hosts: {}, top: null });
+
+    /** A page is its address without the fragment: a jump to a heading is the same page. */
+    const pageOf = (url) => String(url || '').split('#')[0];
 
     function hostOf(url) {
         try {
@@ -213,11 +218,19 @@
 
         const previous = await readLast();
         const host = tab && hostOf(tab.url || '');
-        await writeLast(host ? { at: now, host, title: tab.title || host } : null);
+        const page = host ? pageOf(tab.url) : null;
+        const seconds = previous ? Math.round((now - previous.at) / 1000) : 0;
+        const counted = seconds > 0 && now - previous.at <= IDLE_GAP_MS;
+        /**
+         * The visit to the page before this reading, this gap included. It
+         * runs on while the same page stays in front, and starts again on
+         * any other page or after a gap that was not counted.
+         */
+        const visit = counted ? (previous.visit || 0) + seconds : 0;
+        const going = counted && page && previous.page === page ? visit : 0;
+        await writeLast(host ? { at: now, host, title: tab.title || host, page, visit: going } : null);
 
-        if (!previous) return;
-        const seconds = Math.round((now - previous.at) / 1000);
-        if (seconds <= 0 || now - previous.at > IDLE_GAP_MS) return;
+        if (!previous || !counted) return;
 
         const key = dayKey(previous.at);
         const days = await index();
@@ -227,9 +240,12 @@
         day.hours[new Date(previous.at).getHours()] += seconds;
         day.hosts[previous.host] = (day.hosts[previous.host] || 0) + seconds;
 
-        const running = (day.top && day.top.title === previous.title ? day.top.seconds : 0) + seconds;
-        if (!day.top || running > day.top.seconds) {
-            day.top = { title: previous.title, host: previous.host, seconds: running };
+        // The visit, not the day's leader plus this gap. That carried on only
+        // for whichever page led already, so a page reached second never
+        // added up: B at ninety seconds lost to A at sixty, a tick at a time.
+        // And two pages that share a title are two visits.
+        if (!day.top || visit > day.top.seconds) {
+            day.top = { title: previous.title, host: previous.host, seconds: visit };
         }
 
         const { writes, gone } = days.includes(key) ? { writes: {}, gone: [] } : await prune(days, key, now);

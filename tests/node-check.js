@@ -4843,6 +4843,20 @@ const storedDays = () => Object.keys(store)
         eq([day.top.title, day.top.host, day.top.seconds], ['Long page', 'b.test', 60]);
         eq(day.total, 70);
     });
+    await checkAsync('a page reached second still wins when its visit runs longer', async () => {
+        // Only the day's leader added up: B at ninety seconds lost to A at
+        // sixty, because each of B's ticks started from nothing.
+        reset();
+        const visits = [['https://a.test/', 'A'], ['https://a.test/', 'A'], ['https://b.test/', 'B'], ['https://b.test/', 'B'], ['https://b.test/', 'B'], ['https://c.test/', 'C']];
+        for (const [at, [url, title]] of visits.entries()) await Activity.tick(tabAt(url, title), T0 + secs(30 * at));
+        eq([dayRecord().top.title, dayRecord().top.seconds], ['B', 90]);
+    });
+    await checkAsync('two pages with the same title are two visits, and a jump within a page is the same one', async () => {
+        reset();
+        const visits = [['https://w.test/one', 'Same'], ['https://w.test/one#part-2', 'Same'], ['https://w.test/two', 'Same'], ['https://w.test/two', 'Same'], ['https://x.test/', 'X']];
+        for (const [at, [url, title]] of visits.entries()) await Activity.tick(tabAt(url, title), T0 + secs(30 * at));
+        eq(dayRecord().top.seconds, 60, 'the two were added together, or the fragment started a new visit');
+    });
 
     await checkAsync('time lands in the hour it happened in', async () => {
         reset();
