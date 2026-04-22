@@ -28,6 +28,7 @@
     const req = (path) => (typeof require === 'function' ? require(path) : null);
     const Time = BB.Time || req('./time.js');
     const Settings = BB.Settings || req('./settings.js');
+    const Store = BB.Store || req('./store.js');
 
     /**
      * One key per day, and a list of which days there are.
@@ -213,7 +214,42 @@
      * elapsed time, and a test that has to sleep through that time in real
      * seconds is both slow and flaky. Callers in the extension never pass it.
      */
-    async function tick(tab, now = Date.now()) {
+    /**
+     * The gap from `from` to `to` cut where each local hour begins, as
+     * `{ day, hour, seconds }`. A gap was filed whole under the hour and the
+     * day it started in, so ten seconds before midnight and twenty after went
+     * to yesterday at 23:00. The seconds are rounded on the running total, so
+     * the pieces add up to the gap rounded once.
+     */
+    function pieces(from, to) {
+        const out = [];
+        let at = from;
+        while (at < to) {
+            const end = Math.min(to, Time.nextHour(at));
+            const seconds = Math.round((end - from) / 1000) - Math.round((at - from) / 1000);
+            if (seconds > 0) out.push({ day: dayKey(at), hour: new Date(at).getHours(), seconds });
+            at = end;
+        }
+        return out;
+    }
+
+    /**
+     * Steps on the store run one at a time, here and across pages. A tick
+     * reads the last reading, then writes its own: blur() landing between
+     * the two was written over, and the clock ran on into the next tick — and
+     * the dashboard's Clear, landing in a tick, had a day written back after it.
+     */
+    let chain = Promise.resolve();
+    function serial(step, locked = true) {
+        const run = () => (locked ? Store.lock([DAYS_KEY], step) : step());
+        const next = chain.then(run, run);
+        chain = next.catch(() => {});
+        return next;
+    }
+
+    const tick = (tab, now = Date.now()) => serial(() => tickNow(tab, now));
+
+    async function tickNow(tab, now) {
         if (!(await enabled())) return;
 
         const previous = await readLast();
@@ -226,45 +262,54 @@
          * runs on while the same page stays in front, and starts again on
          * any other page or after a gap that was not counted.
          */
-        const visit = counted ? (previous.visit || 0) + seconds : 0;
-        const going = counted && page && previous.page === page ? visit : 0;
+        const parts = counted ? pieces(previous.at, now) : [];
+        const keys = [...new Set(parts.map((part) => part.day))];
+        // A visit is a day's: one that crosses midnight starts again there.
+        const visitOn = (key) => parts.filter((part) => part.day === key).reduce((sum, part) => sum + part.seconds, key === keys[0] ? previous.visit || 0 : 0);
+        const going = counted && page && previous.page === page ? visitOn(keys[keys.length - 1]) : 0;
         await writeLast(host ? { at: now, host, title: tab.title || host, page, visit: going } : null);
 
-        if (!previous || !counted) return;
+        if (!parts.length) return;
 
-        const key = dayKey(previous.at);
         const days = await index();
-        const day = (await get([dayStore(key)]))[dayStore(key)] || blankDay();
-
-        day.total += seconds;
-        day.hours[new Date(previous.at).getHours()] += seconds;
-        day.hosts[previous.host] = (day.hosts[previous.host] || 0) + seconds;
-
-        // The visit, not the day's leader plus this gap. That carried on only
-        // for whichever page led already, so a page reached second never
-        // added up: B at ninety seconds lost to A at sixty, a tick at a time.
-        // And two pages that share a title are two visits.
-        if (!day.top || visit > day.top.seconds) {
-            day.top = { title: previous.title, host: previous.host, seconds: visit };
+        const stored = await get(keys.map(dayStore));
+        const records = {};
+        for (const key of keys) {
+            const day = stored[dayStore(key)] || blankDay();
+            for (const part of parts.filter((one) => one.day === key)) {
+                day.total += part.seconds;
+                day.hours[part.hour] += part.seconds;
+                day.hosts[previous.host] = (day.hosts[previous.host] || 0) + part.seconds;
+            }
+            // The visit, not the day's leader plus this gap. That carried on
+            // only for whichever page led already, so a page reached second
+            // never added up: B at ninety seconds lost to A at sixty, a tick
+            // at a time. And two pages that share a title are two visits.
+            const visit = visitOn(key);
+            if (!day.top || visit > day.top.seconds) day.top = { title: previous.title, host: previous.host, seconds: visit };
+            records[dayStore(key)] = day;
         }
 
-        const { writes, gone } = days.includes(key) ? { writes: {}, gone: [] } : await prune(days, key, now);
-        await set({ ...writes, [dayStore(key)]: day });
+        const { writes, gone } = keys.every((key) => days.includes(key))
+            ? { writes: {}, gone: [] } : await prune([...new Set([...days, ...keys])], keys[keys.length - 1], now);
+        await set({ ...writes, ...records });
         if (gone.length) await remove(gone);
     }
 
     /**
-     * Stop the clock. The in-memory copy is cleared synchronously, so a caller
-     * that does not await this still cannot have the next tick credit time to
-     * a window that has lost focus.
+     * Stop the clock, after any tick asked for before it — whose reading
+     * used to land on top of this, so that the clock ran on into the next
+     * tick — and before any asked for after it, so a caller that does not
+     * await this still cannot have the next tick credit time to a window that
+     * has lost focus.
      */
-    function blur() { return writeLast(null); }
+    const blur = () => serial(() => writeLast(null), false);
 
-    async function clear() {
+    const clear = () => serial(async () => {
         const days = await index();
         await remove([KEY, DAYS_KEY, ...days.map(dayStore)]);
         await writeLast(null);
-    }
+    });
 
     /**
      * Fold `days` days of the store, ending `offset` days before today, into

@@ -4868,12 +4868,43 @@ const storedDays = () => Object.keys(store)
         eq(day.hours.reduce((a, b) => a + b, 0), day.total);
     });
 
-    await checkAsync('a gap is filed under the day it started', async () => {
+    await checkAsync('a gap across midnight is cut there, each side filed under its own day and hour', async () => {
+        // It was filed whole under the day and the hour it started in.
         reset();
-        const beforeMidnight = new Date(2026, 6, 15, 23, 59, 40).getTime();
+        const beforeMidnight = new Date(2026, 6, 15, 23, 59, 50).getTime();
         await Activity.tick(tabAt('https://a.test/x', 'X'), beforeMidnight);
-        await Activity.tick(tabAt('https://a.test/x', 'X'), beforeMidnight + secs(40));
-        eq(storedDays(), [Time.dayKey(beforeMidnight)]);
+        await Activity.tick(tabAt('https://a.test/x', 'X'), beforeMidnight + secs(30));
+        await Activity.tick(tabAt('https://b.test/', 'B'), beforeMidnight + secs(40));
+        eq(storedDays(), ['2026-07-15', '2026-07-16']);
+        const [before, after] = ['2026-07-15', '2026-07-16'].map((day) => store[Activity.dayStore(day)]);
+        eq([before.total, before.hours[23], before.hosts['a.test']], [10, 10, 10]);
+        eq([after.total, after.hours[0], after.hosts['a.test']], [30, 30, 30]);
+        eq([before.top.seconds, after.top.seconds], [10, 30], 'a visit is the day’s it was spent in');
+    });
+    await checkAsync('a gap across the hour is cut there too', async () => {
+        reset();
+        const at = new Date(2026, 6, 15, 9, 59, 45).getTime();
+        await Activity.tick(tabAt('https://a.test/x', 'X'), at);
+        await Activity.tick(tabAt('https://a.test/x', 'X'), at + secs(45));
+        const day = store[Activity.dayStore('2026-07-15')];
+        eq([day.hours[9], day.hours[10], day.total], [15, 30, 45]);
+    });
+    await checkAsync('a blur landing in the middle of a tick is not written over by it', async () => {
+        // The tick wrote its reading after the blur had cleared it, and the
+        // clock ran on into the next tick.
+        reset();
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+        await Promise.all([Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(30)), Activity.blur()]);
+        eq(store[Activity.LAST_KEY], null, 'the tick’s reading was written over the blur');
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(60));
+        eq(dayRecord().total, 30, 'the half minute after the blur was counted');
+    });
+    await checkAsync('a clear while a tick is under way leaves nothing behind it', async () => {
+        reset();
+        await Activity.tick(tabAt('https://a.test/x', 'X'), T0);
+        const ticking = Activity.tick(tabAt('https://a.test/x', 'X'), T0 + secs(30));
+        await Promise.all([ticking, Activity.clear()]);
+        eq([storedDays(), store[Activity.DAYS_KEY]], [[], undefined]);
     });
 
     await checkAsync('a day is the local one at both ends of it, and its hours agree', async () => {

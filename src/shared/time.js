@@ -121,6 +121,13 @@
         return new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
     }
 
+    /** When the local hour after the one `ms` falls in begins — by the clock, so a daylight-saving hour is its own length. */
+    function nextHour(ms = Date.now()) {
+        const at = new Date(ms);
+        at.setMinutes(60, 0, 0);
+        return at.getTime();
+    }
+
     /**
      * Seconds as a length of time, in one of the three shapes the views draw:
      *
@@ -185,7 +192,7 @@
         }
     }
 
-    const Time = { formatTime, parseTimestamp, relativeTime, shortAge, dayKey, startOfDay, duration, keepDays, runOfDays };
+    const Time = { formatTime, parseTimestamp, relativeTime, shortAge, dayKey, startOfDay, nextHour, duration, keepDays, runOfDays };
 
     root.BB = root.BB || {};
     root.BB.Time = Time;
