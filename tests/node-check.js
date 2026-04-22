@@ -5102,6 +5102,34 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([0, 45, 90, 3600, 3720, 7 * 3600 + 1800].map((s) => Activity.human(s)), ['0m', '45s', '2m', '1h', '1h 2m', '7h 30m']);
     });
 
+    section('activity — the heartbeat');
+    await checkAsync('a reading with another application in front stops the clock, and one with the browser in front reads its tab', async () => {
+        // It read the active tab of the window that had last had focus,
+        // which Chrome goes on naming while another program is in front.
+        const said = [];
+        let alarm = null;
+        let win = { focused: false, tabs: [{ active: false, url: 'https://a.test/' }, { active: true, url: 'https://b.test/', title: 'B' }] };
+        const chrome = {
+            alarms: { get: async () => ({ periodInMinutes: 0.5 }), create() {}, clear: async () => true, onAlarm: { addListener: (fn) => { alarm = fn; } } },
+            runtime: {},
+            windows: { getLastFocused: async () => win, onFocusChanged: { addListener() {} }, WINDOW_ID_NONE: -1 },
+            tabs: { query: async () => win.tabs.filter((tab) => tab.active) },
+        };
+        const vm = require('vm');
+        const sandbox = vm.createContext({ chrome, console, setTimeout, clearTimeout });
+        sandbox.self = sandbox.globalThis = sandbox;
+        sandbox.BB = {
+            Activity: { SETTING: 'trackActivity', tick: async (tab) => said.push(['tick', tab && tab.url]), blur: async () => said.push(['blur']) },
+            Settings: { get: async () => ({ trackActivity: true }), watch() {} },
+        };
+        for (const file of ['src/background/router.js', 'src/background/activity-heartbeat.js']) vm.runInContext(readRepo(file), sandbox, { filename: file });
+        const fire = () => { alarm({ name: sandbox.BB.ActivityHeartbeat.ALARM }); return new Promise((done) => setTimeout(done, 10)); };
+        await fire();
+        win = { ...win, focused: true };
+        await fire();
+        eq(said, [['blur'], ['tick', 'https://b.test/']]);
+    });
+
     section('feed — whose channel is this page?');
 
     // A channel page names a dozen channels; the resolver once took the first

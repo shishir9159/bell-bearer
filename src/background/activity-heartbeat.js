@@ -67,10 +67,23 @@
         }
     }
 
+    /**
+     * Each reading asks whether the browser has the focus at all. The window
+     * that last had it is not one that has it: with another application in
+     * front, Chrome still names its last window, and that window's tab was
+     * read as the one being looked at — so losing focus stopped the clock
+     * only until the next alarm started it again, and an afternoon in
+     * another program was filed as browsing. A worker woken fresh by the
+     * alarm has missed the focus event, so it cannot go by that either.
+     */
     Router.alarm(ALARM, async () => {
         try {
-            const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-            await Activity.tick(tab);
+            const win = await chrome.windows.getLastFocused({ populate: true });
+            if (!win || !win.focused) {
+                await Activity.blur();
+                return;
+            }
+            await Activity.tick((win.tabs || []).find((tab) => tab.active));
         } catch (_) {
             // No focused window, or the tab went away mid-query. Skipping a
             // reading is harmless: the next tick measures from now.
