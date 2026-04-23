@@ -3737,6 +3737,15 @@ check('chrome is asked for unlimited storage, and firefox is not', () => {
     eq(JSON.parse(readRepo('manifest.json')).permissions.includes('unlimitedStorage'), true);
     eq(JSON.parse(readRepo('manifest.firefox.json')).permissions.includes('unlimitedStorage'), false);
 });
+check('firefox is asked for no older version than the page-world scripts run on', () => {
+    // It said 115, and Firefox only runs a script in the page's own world —
+    // what the chess, LeetCode, Claude and Netflix bridges are — from 128:
+    // installed on 115 to 127, each of those sites' features failed to load.
+    const SiteScripts = require('../src/background/site-scripts.js');
+    assert(SiteScripts.PAGE.length > 0, 'nothing runs in the page world any more: the floor can come down');
+    const floor = Number(JSON.parse(readRepo('manifest.firefox.json')).browser_specific_settings.gecko.strict_min_version.split('.')[0]);
+    assert(floor >= 128, `firefox ${floor} has no MAIN world`);
+});
 check('typeracer needs no page-world script, and has not grown one', () => {
     // chess.com and LeetCode each need one because the board object and
     // window.fetch only exist in the page's world. Keystrokes are DOM events,
