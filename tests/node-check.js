@@ -8938,6 +8938,64 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         try { await FetchPool.fetchBody('/raw/a.js', options); } catch (error) { message = error.message; }
         eq([message, asked], ['Could not fetch a.js (404)', ['same-origin', 'same-origin', 'same-origin']]);
     });
+    await checkAsync('a body that breaks partway is asked for again, and one that stalls is dropped and asked for again', async () => {
+        // The body was read outside the retry, so a connection that dropped
+        // mid-file failed the whole download on its first try.
+        const answers = [
+            () => ({ ok: true, status: 200, arrayBuffer: async () => { throw new TypeError('network error'); } }),
+            () => ({ ok: true, status: 200, arrayBuffer: () => new Promise(() => {}) }),
+            () => ({ ok: true, status: 200, arrayBuffer: async () => new Uint8Array([1, 2]).buffer }),
+        ];
+        const fetchImpl = async () => answers.shift()();
+        const body = await FetchPool.fetchBody('/a', { fetchImpl, as: 'arrayBuffer', retryMs: 0, stallMs: 20 });
+        eq([Array.from(new Uint8Array(body)), answers.length], [[1, 2], 0]);
+
+        const silent = async () => ({ ok: true, status: 200, arrayBuffer: () => new Promise(() => {}) });
+        let message = '';
+        try { await FetchPool.fetchBody('/b', { fetchImpl: silent, as: 'arrayBuffer', retryMs: 0, stallMs: 10 }); } catch (error) { message = error.message; }
+        eq(message, 'The connection stalled');
+    });
+    await checkAsync('a streamed body counts as alive while pieces arrive, and a cancel ends a wait between tries', async () => {
+        const piece = (bytes, ms) => new Promise((done) => setTimeout(() => done({ done: false, value: new Uint8Array(bytes) }), ms));
+        const streamed = async () => {
+            const pieces = [piece([1], 8), piece([2], 16), piece([3], 24)];
+            let at = 0;
+            return { ok: true, status: 200, body: { getReader: () => ({ read: () => (at < pieces.length ? pieces[at++] : Promise.resolve({ done: true })) }) } };
+        };
+        // 24 ms in all, but never 12 without a piece.
+        eq(Array.from(new Uint8Array(await FetchPool.fetchBody('/c', { fetchImpl: streamed, as: 'arrayBuffer', stallMs: 12 }))), [1, 2, 3]);
+
+        const stop = new AbortController();
+        const started = Date.now();
+        setTimeout(() => stop.abort(), 10);
+        let name = '';
+        try {
+            await FetchPool.fetchBody('/d', { fetchImpl: async () => ({ ok: false, status: 503 }), signal: stop.signal, retryMs: 60000 });
+        } catch (error) { name = error.name; }
+        eq(name, 'AbortError');
+        assert(Date.now() - started < 1000, 'the cancel waited out the retry');
+    });
+    await checkAsync('a folder past the size a zip may hold stops, and stops the files still coming', async () => {
+        const said = [];
+        const saved = [];
+        const aborted = [];
+        const fetchImpl = (url, init) => new Promise((resolve) => {
+            if (url.endsWith('big')) resolve({ ok: true, status: 200, arrayBuffer: async () => new Uint8Array(64).buffer });
+            init.signal.addEventListener('abort', () => aborted.push(url));
+        });
+        const adapter = { site: 'github', folder: {
+            at: () => ({ repo: 'o/r', url: '/o/r/tree/main/x' }), read: async () => ({ oid: 'f'.repeat(40), path: 'x' }),
+            list: async () => ['x/big', 'x/slow-1', 'x/slow-2'], rawUrl: (here, at, path) => `/raw/${path}`,
+        } };
+        const download = FolderDownload.createFolderDownload({
+            adapter, watcher: { add() {} }, notify: (text, kind) => said.push([kind, text]), getSettings: () => ({}), fetchImpl,
+            save: (name) => saved.push(name), win: { location: { pathname: '/o/r/tree/main/x' } }, doc: { getElementById: () => null }, maxBytes: 32,
+        });
+        await download.download();
+        eq(saved, []);
+        assert(said.length === 1 && said[0][0] === 'error' && /more than/.test(said[0][1]), JSON.stringify(said));
+        eq(aborted.sort(), ['/raw/x/slow-1', '/raw/x/slow-2'], 'the other files went on downloading');
+    });
 
     section('the github topic search');
 

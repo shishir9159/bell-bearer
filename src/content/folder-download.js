@@ -22,6 +22,12 @@
      * the files are.
      */
     const MAX_FILES = 2000;
+    /**
+     * And past this many bytes, for the same reason: two thousand files was
+     * the only limit, and two thousand large ones held the tab's memory until
+     * it gave out. Counted as the files land, and the rest are stopped then.
+     */
+    const MAX_BYTES = 512 * 1024 * 1024;
 
     /** "src/shared/zip.js" under "src/shared" as "shared/zip.js": the zip opens to the folder itself. */
     function entryName(folderPath, path) {
@@ -29,7 +35,7 @@
         return `${folder}/${String(path).slice(String(folderPath).length + 1)}`;
     }
 
-    function createFolderDownload({ adapter, watcher, notify, getSettings, fetchImpl = root.fetch, save = Dom.download, win = root, doc = root.document }) {
+    function createFolderDownload({ adapter, watcher, notify, getSettings, fetchImpl = root.fetch, save = Dom.download, win = root, doc = root.document, maxBytes = MAX_BYTES }) {
         const site = adapter.site;
         let busy = false;
 
@@ -57,10 +63,22 @@
                 if (paths.length > MAX_FILES) throw new Error(`${paths.length} files is more than a zip built in the browser should hold — clone it instead`);
 
                 let done = 0;
+                let bytes = 0;
+                // The first file to fail stops the ones still coming: they
+                // went on downloading into a zip that was never to be made.
+                const stop = new AbortController();
                 const entries = await FetchPool.mapLimit(paths, PARALLEL, async (path) => {
-                    const data = new Uint8Array(await FetchPool.fetchBody(adapter.folder.rawUrl(here, at, path), {
-                        fetchImpl, init: { credentials: 'same-origin' }, as: 'arrayBuffer', refused: (status) => `Could not fetch ${path} (${status})`,
-                    }));
+                    let data;
+                    try {
+                        data = new Uint8Array(await FetchPool.fetchBody(adapter.folder.rawUrl(here, at, path), {
+                            fetchImpl, signal: stop.signal, init: { credentials: 'same-origin' }, as: 'arrayBuffer', refused: (status) => `Could not fetch ${path} (${status})`,
+                        }));
+                        bytes += data.byteLength;
+                        if (bytes > maxBytes) throw new Error(`This folder is more than ${Math.round(maxBytes / 2 ** 20)} MB — a zip built in the browser should not hold it; clone it instead`);
+                    } catch (error) {
+                        stop.abort();
+                        throw error;
+                    }
                     render(`Zipping ${++done}/${paths.length}`);
                     // Summed as it lands, and kept as a Blob from then on. The
                     // whole folder summed at the end held the page still, and
@@ -112,7 +130,7 @@
         return { install: onNavigate, onNavigate, refreshSurfaces: onNavigate, download };
     }
 
-    const FolderDownload = { BUTTON_ID, MAX_FILES, entryName, createFolderDownload };
+    const FolderDownload = { BUTTON_ID, MAX_FILES, MAX_BYTES, entryName, createFolderDownload };
 
     root.BB.FolderDownload = FolderDownload;
     if (typeof module !== 'undefined' && module.exports) module.exports = FolderDownload;
