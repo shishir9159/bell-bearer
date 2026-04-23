@@ -64,6 +64,14 @@
     const GLASS_BAR = 52;
     /** The band's closed height: three sentences, the middle one large. */
     const BAND = 144;
+    /**
+     * Narrower than this, a layout that sets two things side by side stacks
+     * them. Side by side, dock's column alone wanted 330 pixels and the video
+     * was given what was left — at 344 wide, nothing: a 0 by 0 player.
+     */
+    const NARROW = 720;
+    /** Shorter than this, the docked video's title and chapters give their room to the video. */
+    const SHORT = 480;
 
     /**
      * The transcript's type in each layout: size in px, leading, the gutter
@@ -123,14 +131,23 @@
             type: Object.assign({}, TYPE[L]),
         };
 
+        const narrow = W < NARROW;
         if (L === 'float') {
             const v = fit(W, H - BAR);
-            const cw = Math.round(clamp(W * 0.29, 320, 392));
-            const ch = Math.max(160, H - BAR - 22 - 92);
+            const m = narrow ? 12 : 22;
+            const cw = Math.round(Math.min(clamp(W * 0.29, 320, 392), W - m * 2));
+            const ch = Math.max(Math.min(160, H - BAR - m * 2), H - BAR - m - 92);
             g.stage = rect(0, BAR, W, H - BAR);
             g.video = rect((W - v.vw) / 2, BAR + (H - BAR - v.vh) / 2, v.vw, v.vh);
-            g.panel = rect(clamp(W - cw - 22 + card.dx, 0, W - cw), clamp(BAR + 22 + card.dy, BAR, H - ch), cw, ch);
+            g.panel = rect(clamp(W - cw - m + card.dx, 0, W - cw), clamp(BAR + m + card.dy, BAR, H - ch), cw, ch);
             Object.assign(g, { tabs: true, grip: true, corner: true });
+        } else if (L === 'glass' && narrow) {
+            // The video across the top, and the slim column under it with its tools.
+            const v = fit(W, Math.round(H * 0.45));
+            g.stage = rect(0, 0, W, v.vh);
+            g.video = rect((W - v.vw) / 2, 0, v.vw, v.vh);
+            g.bar = rect(0, v.vh, W, GLASS_BAR);
+            g.panel = rect(0, v.vh + GLASS_BAR, W, Math.max(0, H - v.vh - GLASS_BAR));
         } else if (L === 'glass') {
             const pw = Math.round(clamp(W * 0.24, 280, 340));
             const v = fit(W - pw, H);
@@ -147,6 +164,14 @@
             g.panel = bandOpen ? rect(vx, H - 16 - open, v.vw, open) : rect(vx, vy + v.vh + 12, v.vw, BAND);
             Object.assign(g, { band: true, corner: true });
             if (!bandOpen) g.type.pad = '0 170px 0 10px';
+        } else if (L === 'focus' && narrow) {
+            // The transcript across the page, and the player pinned under it;
+            // the highlights list has no room of its own.
+            const v = fit(W - 24, Math.round((H - BAR) * 0.4));
+            g.panel = rect(0, BAR, W, Math.max(0, H - BAR - v.vh - 24));
+            g.video = rect(clamp((W - v.vw) / 2 + vcard.dx, 0, W - v.vw), clamp(H - v.vh - 12 + vcard.dy, BAR, H - v.vh), v.vw, v.vh);
+            g.vgrip = true;
+            g.type.gutter = TYPE.dock.gutter;
         } else if (L === 'focus') {
             // The pinned player is as wide as what the transcript's side
             // leaves: at 62% for the transcript it was too small to follow.
@@ -159,13 +184,22 @@
             g.video = rect(clamp(leftW + 6 + vcard.dx, 0, W - sw), clamp(H - sh - 22 + vcard.dy, BAR, H - sh), sw, sh);
             g.side = rect(leftW + 6, BAR + 14, sw, Math.max(0, H - BAR - 14 - sh - 40));
             g.vgrip = true;
+        } else if (narrow) {
+            // Dock, stacked: the video over the column, its title and chapters left out.
+            const pad = 12;
+            const top = BAR + BAR_GAP;
+            const v = fit(W - pad * 2, Math.round((H - top - pad) * 0.45));
+            g.video = rect((W - v.vw) / 2, top, v.vw, v.vh);
+            g.panel = rect(pad, top + v.vh + 12, W - pad * 2, Math.max(0, H - top - v.vh - 12 - pad));
+            Object.assign(g, { tabs: true, corner: true });
         } else {
             const pad = 16;
             const pw = Math.round(clamp(W * 0.34, 330, 440));
             const top = BAR + BAR_GAP;
-            const v = fit(W - pw - pad * 3, H - top - pad - 150);
+            const under = H < SHORT ? 0 : 150;
+            const v = fit(W - pw - pad * 3, H - top - pad - under);
             g.video = rect(pad, top, v.vw, v.vh);
-            g.under = rect(pad, top + v.vh + 16, v.vw, Math.max(0, H - top - v.vh - 16 - pad));
+            g.under = under ? rect(pad, top + v.vh + 16, v.vw, Math.max(0, H - top - v.vh - 16 - pad)) : null;
             g.panel = rect(W - pw - pad, top, pw, H - top - pad);
             Object.assign(g, { tabs: true, corner: true });
         }
@@ -175,7 +209,7 @@
         return g;
     }
 
-    const ReaderLayout = { LAYOUTS, LAYOUT_IDS, LEGACY, BAR, BAR_GAP, GLASS_BAR, BAND, TYPE, layoutOf, fit, geometry };
+    const ReaderLayout = { LAYOUTS, LAYOUT_IDS, LEGACY, BAR, BAR_GAP, GLASS_BAR, BAND, NARROW, SHORT, TYPE, layoutOf, fit, geometry };
 
     root.BB = root.BB || {};
     root.BB.ReaderLayout = ReaderLayout;

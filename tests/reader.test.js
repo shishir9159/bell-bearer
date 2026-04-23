@@ -178,6 +178,17 @@
         return { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 };
     };
 
+    /**
+     * Words `from` to `to` scrolled into the transcript's view, as a reader
+     * would have them before pressing on them. The pen finds a word by where
+     * the pointer is, and a narrow window's stacked column shows fewer lines.
+     */
+    function within(reader, from, to) {
+        // The middle, clear of the toast and the toolbar at the column's edges.
+        word(reader, to).scrollIntoView({ block: 'center' });
+        word(reader, from).scrollIntoView({ block: 'nearest' });
+    }
+
     /** A pointer event of `type` at the middle of `node`, from the left button. */
     function point(node, type, extra = {}) {
         node.dispatchEvent(new PointerEvent(type, Object.assign({
@@ -187,6 +198,7 @@
 
     /** Draw the pen from word `from` to word `to`, and lift it. */
     function stroke(reader, from, to, extra = {}) {
+        within(reader, from, to);
         point(word(reader, from), 'pointerdown', extra);
         point(word(reader, from + (to > from ? 1 : -1)), 'pointermove', extra);
         point(word(reader, to), 'pointermove', extra);
@@ -195,6 +207,7 @@
 
     /** A click of the pen: down and up on one word. */
     function tap(reader, i, extra = {}) {
+        within(reader, i, i);
         point(word(reader, i), 'pointerdown', extra);
         point(word(reader, i), 'pointerup', extra);
     }
@@ -537,7 +550,9 @@
             const at = centre(grip);
             window.dispatchEvent(new PointerEvent('pointermove', { clientX: at.clientX - 120, clientY: at.clientY + 30 }));
             window.dispatchEvent(new PointerEvent('pointerup', { clientX: at.clientX - 120, clientY: at.clientY + 30 }));
-            assertEqual(Math.round(before.left - panel.getBoundingClientRect().left), 120, 'the card did not follow the grip');
+            // As far as it was dragged, or as far as the reader's edge lets it go in a narrow window.
+            const room = before.left - reader.element.getBoundingClientRect().left;
+            assertEqual(Math.round(before.left - panel.getBoundingClientRect().left), Math.round(Math.min(120, room)), 'the card did not follow the grip');
             point(grip, 'pointerdown');
             window.dispatchEvent(new PointerEvent('pointerup', { clientX: -5000, clientY: -5000 }));
             assertEqual(Math.round(panel.getBoundingClientRect().left), 0, 'the card went off the screen');

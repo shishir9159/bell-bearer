@@ -497,6 +497,30 @@ check('at any size the player is 16:9 and every piece is on the screen', () => {
         }
     }
 });
+check('narrow and short, every layout still gives the player room, and keeps every piece on the screen', () => {
+    // At 344 wide dock's column took everything and drew a 0 by 0 player.
+    for (const [W, H] of [[320, 568], [344, 550], [375, 667], [600, 420], [719, 900], [800, 320], [1024, 360], [1440, 900]]) {
+        for (const id of ReaderLayout.LAYOUT_IDS) {
+            const g = ReaderLayout.geometry(id, W, H);
+            const where = `${id} at ${W}x${H}`;
+            assert(Math.abs(g.video.width / g.video.height - 16 / 9) < 0.02, `${where}: the player is not 16:9`);
+            if (H >= 500 && id !== 'band') assert(g.video.width >= Math.min(300, W * 0.85), `${where}: the player is ${g.video.width} wide`);
+            assert(g.panel.height >= 80, `${where}: the transcript has ${g.panel.height} pixels`);
+            for (const piece of [g.bar, g.video, g.panel, g.under, g.side].filter(Boolean)) {
+                assert(piece.width >= 0 && piece.height >= 0 && piece.left >= 0 && piece.top >= 0 &&
+                    piece.left + piece.width <= W && piece.top + piece.height <= H, `${where}: ${JSON.stringify(piece)} is off the screen`);
+            }
+        }
+    }
+    eq(ReaderLayout.geometry('dock', 344, 550).under, null, 'the title and chapters squeeze a stacked dock');
+});
+check('a narrow float card and pinned player still move, and stop at the edge', () => {
+    const card = ReaderLayout.geometry('float', 344, 550, { card: { dx: -5000, dy: 5000 } }).panel;
+    eq([card.left, card.top + card.height], [0, 550]);
+    const home = ReaderLayout.geometry('focus', 344, 550).video;
+    const moved = ReaderLayout.geometry('focus', 344, 550, { vcard: { dx: 0, dy: -100 } }).video;
+    eq(home.top - moved.top, 100);
+});
 check('a docked video and its column stand clear of the bar, and level with each other', () => {
     // Both started on the bar's last pixel, where a skin rules the bar off.
     for (const [W, H] of [[800, 500], [1280, 760], [1920, 1080]]) {
