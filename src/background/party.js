@@ -131,15 +131,34 @@
     }
 
     function createParty({ api, loader, host }) {
-        async function leave() {
-            await api.alarms.clear(LINGER_ALARM);
-            if (host && (await host.exists())) {
-                try { await host.ask({ op: 'leave' }); } catch (_) { /* the document went first */ }
-                await host.close();
-            }
-            await loader.unbind();
+        /**
+         * Starting, leaving and the two ends the worker brings about itself
+         * take turns. A Leave pressed while a start was still opening the
+         * document closed it, and the start went on to bind a tab to a party
+         * that was gone; a start that failed, cleaning up after itself late,
+         * closed the party started after it.
+         */
+        let turn = Promise.resolve();
+        function serial(step) {
+            const run = turn.then(step, step);
+            turn = run.catch(() => {});
+            return run;
+        }
+
+        /** Each part let go of whatever became of the others: one that threw left the rest open. */
+        async function leaveNow() {
+            try { await api.alarms.clear(LINGER_ALARM); } catch (_) { /* no alarm to clear */ }
+            try {
+                if (host && (await host.exists())) {
+                    try { await host.ask({ op: 'leave' }); } catch (_) { /* the document went first */ }
+                    await host.close();
+                }
+            } catch (_) { /* gone already */ }
+            try { await loader.unbind(); } catch (_) { /* nothing bound */ }
             return { ok: true };
         }
+
+        const leave = () => serial(leaveNow);
 
         /**
          * `how` is empty for a party in this browser alone, `{server}` to
@@ -147,32 +166,43 @@
          * `{codes}` or `{tracker}` to host one peer to peer, or `{code}` to
          * join the room an invite names.
          */
-        async function start(tabId, url, how = {}) {
+        async function startNow(tabId, url, how) {
             if (!host) return { ok: false, error: 'unsupported' };
             if (!PartyLoader.siteOf(url)) return { ok: false, error: 'site' };
             const mode = modeOf(how);
             if (!mode) return { ok: false, error: 'code' };
             const s = await Settings.get(['partyName', 'partyControl', 'partyWaitForAll', 'partyServerUrl', 'partyIceServers', 'partyTurn', 'partyTrackers']);
-            await host.open();
-            const answer = await host.ask({
-                op: 'start', mode, name: s.partyName,
-                url: how.server || s.partyServerUrl, code: how.code,
-                ice: { stun: s.partyIceServers, turn: s.partyTurn }, trackers: s.partyTrackers,
-                policy: { control: s.partyControl, wait: s.partyWaitForAll },
-            });
-            if (!answer || !answer.ok) {
-                await leave();
-                return answer || { ok: false };
+            // A step that throws — the document refused, the session gone
+            // before it answered, the tab closed under the injection — is
+            // cleaned up after like a refusal. Only an answer was, and a
+            // throw left the document open with nothing in it.
+            try {
+                await host.open();
+                const answer = await host.ask({
+                    op: 'start', mode, name: s.partyName,
+                    url: how.server || s.partyServerUrl, code: how.code,
+                    ice: { stun: s.partyIceServers, turn: s.partyTurn }, trackers: s.partyTrackers,
+                    policy: { control: s.partyControl, wait: s.partyWaitForAll },
+                });
+                if (!answer || !answer.ok) {
+                    await leaveNow();
+                    return answer || { ok: false };
+                }
+                await api.alarms.clear(LINGER_ALARM);
+                // Only now, with the session listening: the injected code's first
+                // act is to connect, and a port nobody answers means "no party".
+                if (!(await loader.bind(tabId, url))) {
+                    await leaveNow();
+                    return { ok: false, error: 'inject' };
+                }
+                return answer;
+            } catch (_) {
+                await leaveNow();
+                return { ok: false, error: 'start' };
             }
-            await api.alarms.clear(LINGER_ALARM);
-            // Only now, with the session listening: the injected code's first
-            // act is to connect, and a port nobody answers means "no party".
-            if (!(await loader.bind(tabId, url))) {
-                await leave();
-                return { ok: false, error: 'inject' };
-            }
-            return answer;
         }
+
+        const start = (tabId, url, how = {}) => serial(() => startNow(tabId, url, how));
 
         async function status() {
             if (!host || !(await host.exists())) return { ok: true, status: { active: false } };
@@ -198,11 +228,19 @@
             return ask({ op: 'chat' });
         }
 
-        /** The authority ended the party: keep why, for the popup, then tidy up as for a leave. */
-        async function ended(code) {
+        /**
+         * The authority ended the party: keep why, for the popup, then tidy up
+         * as for a leave — unless a party is on again by the time it is this
+         * one's turn, which is a newer party than the one that ended.
+         */
+        const ended = (code) => serial(async () => {
+            try {
+                const now = host && (await host.exists()) ? await host.ask({ op: 'status' }) : null;
+                if (now && now.ok && now.status && now.status.active) return { ok: true };
+            } catch (_) { /* nothing to ask: tidy up */ }
             try { await api.storage.session.set({ [ENDED_KEY]: { code: String(code || ''), at: Date.now() } }); } catch (_) { /* the popup just will not say why */ }
-            return leave();
-        }
+            return leaveNow();
+        });
 
         return {
             start, leave, status, ended, showChat,
@@ -212,10 +250,13 @@
             control: (msg) => ask(msg),
             onTabClosed: () => api.alarms.create(LINGER_ALARM, { delayInMinutes: LINGER_MIN }),
             /** Half a minute on: started again from another tab, the party stays; otherwise it is over. */
-            async onAlarm(alarm) {
-                if (!alarm || alarm.name !== LINGER_ALARM || (await loader.current())) return false;
-                await leave();
-                return true;
+            onAlarm(alarm) {
+                if (!alarm || alarm.name !== LINGER_ALARM) return Promise.resolve(false);
+                return serial(async () => {
+                    if (await loader.current()) return false;
+                    await leaveNow();
+                    return true;
+                });
             },
         };
     }

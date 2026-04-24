@@ -13133,7 +13133,7 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
 
     /** A party over fakes: the document, the loader and the alarm, each writing down what it was asked. */
     /** `more` is the rest of chrome.* a case needs, laid over the fakes. */
-    function partyWith({ answer = { ok: true }, bound = null, more = {} } = {}) {
+    function partyWith({ answer = { ok: true }, bound = null, more = {}, starting = null, binding = null, status = null } = {}) {
         const calls = [];
         const alarms = {};
         let open = false;
@@ -13141,10 +13141,15 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
             exists: async () => open,
             open: async () => { calls.push('open'); open = true; },
             close: async () => { calls.push('close'); open = false; },
-            ask: async (msg) => { calls.push(`ask ${msg.op}`); calls.asked = msg; return msg.op === 'start' ? answer : { ok: true }; },
+            ask: async (msg) => {
+                calls.push(`ask ${msg.op}`);
+                calls.asked = msg;
+                if (msg.op === 'start') return starting ? starting() : answer;
+                return msg.op === 'status' && status ? status() : { ok: true };
+            },
         };
         const loader = {
-            bind: async (tabId) => { calls.push(`bind ${tabId}`); return true; },
+            bind: async (tabId) => { calls.push(`bind ${tabId}`); return binding ? binding() : true; },
             unbind: async () => { calls.push('unbind'); },
             current: async () => bound,
         };
@@ -13231,8 +13236,36 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(await PartyWorker.handle({}, party, { action: 'partyEnded' }, { tab: { id: 7 } }), { ok: false });
         eq(calls, []);
         await PartyWorker.handle({}, party, { action: 'partyEnded', code: 'kicked' }, { url: 'chrome-extension://x/offscreen.html' });
-        eq(calls, ['ask leave', 'close', 'unbind']);
+        eq(calls, ['ask status', 'ask leave', 'close', 'unbind']);
         eq(session[PartyWorker.ENDED_KEY].code, 'kicked');
+    });
+    await checkAsync('a start that throws partway leaves no document, binding or alarm', async () => {
+        // Only a refusal was cleaned up after; a throw left the document open.
+        for (const failing of [{ starting: () => Promise.reject(new Error('Could not establish connection')) },
+            { binding: () => Promise.reject(new Error('No tab with id: 7')) }]) {
+            const { party, calls, alarms } = partyWith(failing);
+            eq(await party.start(7, partyVideo), { ok: false, error: 'start' });
+            eq(calls.slice(-3), ['ask leave', 'close', 'unbind'], JSON.stringify(calls));
+            eq([await party.status(), Object.keys(alarms)], [{ ok: true, status: { active: false } }, []]);
+        }
+    });
+    await checkAsync('a leave pressed while a start is under way waits for it, and leaves nothing behind', async () => {
+        let answer = null;
+        const { party, calls } = partyWith({ starting: () => new Promise((done) => { answer = done; }) });
+        const starting = party.start(7, partyVideo);
+        const leaving = party.leave();
+        await new Promise((done) => setTimeout(done, 5));
+        answer({ ok: true });
+        await Promise.all([starting, leaving]);
+        eq(calls, ['open', 'ask start', 'bind 7', 'ask leave', 'close', 'unbind'], 'the start bound a tab to a party already left');
+    });
+    await checkAsync('the end of a party does not close the one started after it', async () => {
+        const { party, calls, session } = partyWith({ status: () => ({ ok: true, status: { active: true } }) });
+        await party.start(7, partyVideo);
+        calls.length = 0;
+        await party.ended('kicked');
+        eq(calls, ['ask status']);
+        eq(session[PartyWorker.ENDED_KEY], undefined, 'the popup would say a party on now had ended');
     });
     await checkAsync('the popup\'s host controls are passed on as they are, and nothing else is', async () => {
         const { party, calls } = partyWith();
