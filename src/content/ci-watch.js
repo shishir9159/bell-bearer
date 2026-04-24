@@ -74,17 +74,44 @@
             }, SETTLE_MS);
         }
 
-        /** The adapter's request when it has one; the page as it stands when that says nothing. */
-        async function poll() {
-            if (!watching) return;
-            const fetched = adapter.ci.fetch ? CiWatch.summarize(await adapter.ci.fetch(page)) : null;
-            const read = fetched || summary();
-            if (read) seen = true;
-            if (watching && watching.auto && !seen && Date.now() - watching.since > OWN_GRACE_MS) {
-                stop();
-                return;
+        /** The adapter's request, or null when there is none or it failed: a failed request is a look that saw nothing. */
+        async function fetched() {
+            if (!adapter.ci.fetch) return null;
+            try {
+                return CiWatch.summarize(await adapter.ci.fetch(page));
+            } catch (_) {
+                return null;
             }
-            check(read);
+        }
+
+        /** The watch a look is in flight for, so the timer does not start a second on top of a slow one. */
+        let polling = null;
+
+        /**
+         * The adapter's request when it has one; the page as it stands when
+         * that says nothing.
+         *
+         * The answer is for the watch the request was made for. It was read
+         * against whichever watch there was when it came back, so a slow
+         * answer about one run, landing after the tab had moved on to watch
+         * the next, ended that one with the first run's outcome.
+         */
+        async function poll() {
+            const watch = watching;
+            if (!watch || polling === watch) return;
+            polling = watch;
+            try {
+                const read = (await fetched()) || (watching === watch ? summary() : null);
+                if (watching !== watch) return;
+                if (read) seen = true;
+                if (watch.auto && !seen && Date.now() - watch.since > OWN_GRACE_MS) {
+                    stop();
+                    return;
+                }
+                check(read);
+            } finally {
+                if (polling === watch) polling = null;
+            }
         }
 
         function onVisible() {
@@ -117,7 +144,7 @@
             const key = page.key;
             // A merge box not drawn yet says nothing; asked, it may say the
             // checks passed long ago, which a watch would announce at once.
-            const now = summary() || (auto && adapter.ci.fetch ? CiWatch.summarize(await adapter.ci.fetch(page)) : null);
+            const now = summary() || (auto ? await fetched() : null);
             if (auto && (watching || !page || page.key !== key)) return;
             const already = now && CiWatch.finished(now.state) ? now.state : null;
             if (already) {
@@ -139,6 +166,9 @@
                 if (!auto) notify('Could not start watching — reload the page and try again', 'error');
                 return;
             }
+            // Gone to another page while the worker answered: the watch waits
+            // there for this tab to come back to its run, as any other does.
+            if (watching || !page || page.key !== key) return;
             watching = { ...watch, since: Date.now() };
             seen = !!now;
             observe();

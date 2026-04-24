@@ -217,6 +217,28 @@
             teardown();
         });
 
+        test('a slow answer about one run cannot end the watch on the next, and a failed one ends nothing', async () => {
+            stage(runPage('running'));
+            const answers = [];
+            const adapter = fakeAdapter({ fetch: () => new Promise((resolve, reject) => answers.push({ resolve, reject })) });
+            const { ui, worker, win, button } = makeWatch({ adapter });
+            ui.install();
+            button().click();
+            await waitFor(() => ui.isWatching() && answers.length === 1, 'run 1 watched, its request out');
+            ui.poll();
+            assertEqual(answers.length, 1, 'a second look started on top of the first');
+            win.location.href = 'https://github.com/a/b/actions/runs/2';
+            ui.onNavigate();
+            button().click();
+            await waitFor(() => ui.isWatching() && answers.length === 2, 'run 2 watched, its request out');
+            answers[0].resolve({ state: 'cancelled', jobs: [] });
+            answers[1].reject(new Error('offline'));
+            await new Promise((done) => setTimeout(done, 50));
+            assert(ui.isWatching(), 'the answer about run 1 ended the watch on run 2');
+            assertEqual(worker.said('ciWatchDone').length, 0);
+            teardown();
+        });
+
         test('leaving the run stops the reading here, and leaves the watch with the worker', async () => {
             stage(runPage('running'));
             const { ui, worker, win, button } = makeWatch();
