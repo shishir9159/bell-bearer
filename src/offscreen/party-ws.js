@@ -42,6 +42,12 @@
     const PREFIX = 'bbp1s.';
     const VERSION = 1;
     const MAX_FRAME = 8192;
+    /**
+     * The most the server is listened to in one message. Ours sends a frame
+     * of at most 64 KiB; anything larger is not from it, and parsing it
+     * whole on the way to finding that out is what such a message is for.
+     */
+    const MAX_INBOUND = 65536;
     const BACKOFF_MIN_MS = 500;
     const BACKOFF_MAX_MS = 15000;
     /** How long the first connection may take before the address is called unreachable. */
@@ -146,7 +152,7 @@
             welcome(msg, send) {
                 mine.add(msg.you);
                 const room = msg.room || {};
-                const me = (room.members || []).find((m) => m.id === msg.you) || {};
+                const me = (Array.isArray(room.members) ? room.members : []).find((m) => m && m.id === msg.you) || {};
                 resent = {};
                 const ready = said.ready;
                 if (ready && (me.ready !== (ready.ready !== false) || (ready.ready === false && me.why !== ready.why))) {
@@ -310,7 +316,11 @@
         }
 
         function receive(data) {
-            listen();
+            // Before the first welcome the deadline to connect stands: a
+            // server that talked without ever welcoming us kept a start
+            // waiting for as long as it went on talking.
+            if (joined) listen();
+            if (typeof data !== 'string' || data.length > MAX_INBOUND) return;
             let msg;
             try { msg = JSON.parse(data); } catch (_) { return; }
             if (!msg || typeof msg !== 'object' || typeof msg.t !== 'string') return;
@@ -318,6 +328,7 @@
                 case 'created':
                     // Kept for the invite and for joining again past the
                     // grace; the session has no use for the secret.
+                    if (typeof msg.room !== 'string' || typeof msg.secret !== 'string') return;
                     room = msg.room;
                     secret = msg.secret;
                     return;
@@ -326,6 +337,7 @@
                     joined = true;
                     up = true;
                     attempt = 0;
+                    listen();
                     // What the room is missing goes before the session hears
                     // it is back, so the session saying the same is a copy.
                     holding.welcome(msg, transmit);
@@ -382,7 +394,7 @@
     }
 
     const PartyWs = {
-        PREFIX, VERSION, MAX_FRAME, BACKOFF_MIN_MS, BACKOFF_MAX_MS, CONNECT_MS, SILENT_MS, HELD,
+        PREFIX, VERSION, MAX_FRAME, MAX_INBOUND, BACKOFF_MIN_MS, BACKOFF_MAX_MS, CONNECT_MS, SILENT_MS, HELD,
         HISTORY_WAIT_MS, serverUrl, inviteCode, readInvite, holdLine, createHoldBuffer, createTransport,
     };
 

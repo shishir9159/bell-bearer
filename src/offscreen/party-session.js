@@ -58,6 +58,28 @@
         kick: ({ member }) => ({ t: 'kick', member }),
     });
 
+    const isObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+    const isMember = (member) => isObject(member) && typeof member.id === 'string';
+    const isState = (state) => isObject(state) && Number.isFinite(state.seq) &&
+        (state.hold == null || (isObject(state.hold) && (state.hold.waiting == null || Array.isArray(state.hold.waiting))));
+
+    /**
+     * What the session reads out of each kind of message, checked before any
+     * of it changes the party. The authority may be a server anyone runs, or
+     * — in a peer-to-peer party — another member's browser, and a welcome
+     * whose room was not an object threw in the middle of the session's own
+     * state; a members list that was not a list, at the first note.
+     */
+    const SHAPES = Object.freeze({
+        welcome: (msg) => typeof msg.you === 'string' && isObject(msg.room) && typeof msg.room.id === 'string' &&
+            Array.isArray(msg.room.members) && msg.room.members.every(isMember) &&
+            (msg.room.state == null || isState(msg.room.state)) && (msg.room.policy == null || isObject(msg.room.policy)),
+        state: isState,
+        members: (msg) => Array.isArray(msg.list) && msg.list.every(isMember),
+        error: (msg) => msg.code == null || typeof msg.code === 'string',
+    });
+    const wellFormed = (msg) => isObject(msg) && typeof msg.t === 'string' && (!SHAPES[msg.t] || SHAPES[msg.t](msg));
+
     const TRANSPORTS = Object.freeze({
         loopback: PartyLoopback.createLoopback, server: PartyWs.createTransport, codes: PartyHost.createTransport,
         tracker: PartyTracker.createTransport,
@@ -147,7 +169,14 @@
         }
 
         function fromAuthority(msg) {
-            if (!party || !msg || typeof msg.t !== 'string') return;
+            if (!party) return;
+            if (!wellFormed(msg)) {
+                // Nothing else is let past, but a welcome is what a start
+                // waits for: one that will never be read ends it here, rather
+                // than leaving it waiting for good.
+                if (isObject(msg) && msg.t === 'welcome') end('protocol');
+                return;
+            }
             switch (msg.t) {
                 case 'welcome': {
                     // Another room — a tracker party's next host, a server
@@ -408,7 +437,7 @@
         return session;
     }
 
-    const PartySession = { PORT, TARGET, HEARTBEAT_MAX_MS, FROM_TAB, HOST_OPS, TRANSPORTS, createSession, boot };
+    const PartySession = { PORT, TARGET, HEARTBEAT_MAX_MS, FROM_TAB, HOST_OPS, TRANSPORTS, wellFormed, createSession, boot };
 
     root.BB = root.BB || {};
     root.BB.PartySession = PartySession;

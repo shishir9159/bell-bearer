@@ -11868,6 +11868,31 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         return { session, started, you, leave };
     }
 
+    /** A session on a transport that answers its create with `welcome`, and lets the test say anything after. */
+    async function onTransport(welcome) {
+        let deliver = null;
+        const fake = () => ({ open: (to) => { deliver = to; return { send: (msg) => { if (msg.t === 'create') deliver(welcome); }, close() {} }; }, close() {} });
+        const session = PartySession.createSession({ transports: { fake }, now: () => 50000 });
+        const started = await session.control({ op: 'start', mode: 'fake', name: 'Ana' });
+        return { session, started, say: (msg) => deliver(msg) };
+    }
+    await checkAsync('a malformed welcome ends the start rather than leaving it waiting, and throws nothing', async () => {
+        for (const room of [null, 'r1', { id: 'r1', members: 'everyone' }, { id: 'r1', members: [null] }, { id: 'r1', members: [], state: { seq: 1, hold: { waiting: 'm2' } } }]) {
+            const { started, session } = await onTransport({ t: 'welcome', v: 1, you: 'm1', room });
+            eq(started, { ok: false, error: 'protocol' }, JSON.stringify(room));
+            eq(session.status(), { active: false });
+        }
+    });
+    await checkAsync('after a good welcome, a malformed message changes nothing and throws nothing', async () => {
+        const room = { id: 'r1', policy: { control: 'everyone' }, members: [{ id: 'm1', name: 'Ana' }], state: { seq: 1, paused: true } };
+        const { started, session, say } = await onTransport({ t: 'welcome', v: 1, you: 'm1', room });
+        eq(started.ok, true);
+        for (const msg of [{ t: 'members', list: 'x' }, { t: 'members', list: [7] }, { t: 'state', seq: 'two' },
+            { t: 'state', seq: 2, hold: { waiting: 5 } }, { t: 'welcome', you: 'm1', room: {} }, null, 'text', { t: 7 }]) {
+            say(msg);
+        }
+        eq(session.status().active, false, 'a malformed welcome later on still ends the party');
+    });
     await checkAsync('a tab joining is handed the room, and its play comes back acknowledged', async () => {
         const { session, started, you, leave } = await inParty();
         eq([started.ok, started.status.members.map((m) => [m.name, m.role])], [true, [['Ana', 'host']]]);
@@ -12140,6 +12165,18 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq([PartyWs.readInvite('bbp1s.@@@'), PartyWs.readInvite('bbp1i.abc')], [null, null]);
         eq([PartyWs.serverUrl(' ws://192.168.1.5:7070 '), PartyWs.serverUrl('192.168.1.5:7070')], ['ws://192.168.1.5:7070/', null]);
         eq(PartyWs.createTransport({ url: 'http://x', WebSocket: fakeSockets().Fake }), null);
+    });
+    check('a message past the size the server sends, or a created with no room in it, is not taken', () => {
+        const w = wsLink({ url: 'ws://127.0.0.1:7070' });
+        w.link.send({ t: 'create', v: 1, name: 'Ana', policy: {} });
+        w.last().accept();
+        w.last().onmessage({ data: JSON.stringify({ t: 'chat', id: 'x', text: 'y'.repeat(PartyWs.MAX_INBOUND) }) });
+        w.last().onmessage({ data: new ArrayBuffer(8) });
+        w.last().say({ t: 'created', room: { id: 'r1' }, secret: 'k' });
+        w.last().say({ t: 'welcome', v: 1, you: 'm1', room: { id: 'r1', members: 'everyone' } });
+        eq(w.heard.map((msg) => msg.t), ['welcome'], 'the session is handed the welcome to judge');
+        eq(w.transport.invite(), null, 'an invite was made of a room that is not a string');
+        w.transport.close();
     });
     check('starting a room says create, and the secret that comes back stays in the transport', () => {
         const w = wsLink({ url: 'ws://127.0.0.1:7070' });
