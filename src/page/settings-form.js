@@ -13,15 +13,20 @@
     const ns = root.BB || {};
     const Settings = ns.Settings || req('../shared/settings.js');
 
+    /** A bound from the control's attribute, or none where it has none. */
+    const limit = (text, none) => (text === '' || !Number.isFinite(Number(text)) ? none : Number(text));
+
     function readControl(element) {
         if (element.type === 'checkbox') return element.checked;
         // A range's value is a string like a text input's, but what it stands
         // for is a number — stored as one, so that comparing it with what is
-        // in storage does not come out unequal on every change.
+        // in storage does not come out unequal on every change. Held to the
+        // field's max as well as its min: a typed 9999 went into storage as
+        // 9999 days for a field that says it stops at 365.
         if (element.type === 'number' || element.type === 'range') {
             const value = Number(element.value);
-            const min = element.min === '' ? -Infinity : Number(element.min);
-            return Number.isFinite(value) ? Math.max(min, value) : Settings.DEFAULTS[element.id];
+            if (element.value === '' || !Number.isFinite(value)) return Settings.DEFAULTS[element.id];
+            return Math.min(limit(element.max, Infinity), Math.max(limit(element.min, -Infinity), value));
         }
         return element.value;
     }
@@ -38,15 +43,25 @@
     function bindAll({ keys } = {}) {
         const wanted = keys || Settings.KEYS;
         const bound = [];
+        let disposed = false;
 
         Settings.get(wanted).then((values) => {
+            // Torn down while the read was out: binding now would leave
+            // listeners nothing will ever take off again.
+            if (disposed) return;
             for (const key of wanted) {
                 const element = document.getElementById(key);
                 if (!element) continue;
 
                 writeControl(element, values[key]);
 
-                const onChange = () => Settings.set({ [key]: readControl(element) });
+                const onChange = () => {
+                    const value = readControl(element);
+                    // What was stored, shown: a number held to its bounds, or
+                    // a field left empty, put back as the value that is kept.
+                    if (element.type !== 'checkbox' && String(value) !== element.value) writeControl(element, value);
+                    Settings.set({ [key]: value });
+                };
                 element.addEventListener('change', onChange);
                 bound.push(() => element.removeEventListener('change', onChange));
             }
@@ -61,6 +76,7 @@
         });
 
         return () => {
+            disposed = true;
             bound.forEach((off) => off());
             unwatch();
         };

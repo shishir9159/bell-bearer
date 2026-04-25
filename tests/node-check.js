@@ -5441,6 +5441,28 @@ check('Time.dayKey names the local day, and walks back by the calendar', () => {
         eq(said, ['info', 'error'], 'a checkpoint that never reached storage was said to be saved');
     });
 
+    await checkAsync('a typed number is held to its field’s bounds, and a form torn down before its read binds nothing', async () => {
+        // Only the minimum was applied, so 9999 went in for a field that stops at 365.
+        const SettingsForm = require('../src/page/settings-form.js');
+        const field = (value, more = {}) => ({ id: 'leetMaxInterval', type: 'number', value, min: '1', max: '365', ...more });
+        eq(['9999', '0', '30', '', 'x'].map((value) => SettingsForm.readControl(field(value))), [365, 1, 30, 365, 365]);
+        eq(SettingsForm.readControl(field('9999', { max: '' })), 9999, 'a field with no max');
+        eq(SettingsForm.readControl({ id: 'readerFontSize', type: 'range', value: '40', min: '12', max: '26' }), 26);
+
+        const added = [];
+        const element = { id: 'skin', type: 'select-one', value: 'default', addEventListener: (type) => added.push(type), removeEventListener() {} };
+        const saved = globalThis.document;
+        globalThis.document = { getElementById: (id) => (id === 'skin' ? element : null) };
+        try {
+            const teardown = SettingsForm.bindAll({ keys: ['skin'] });
+            teardown();
+            await new Promise((done) => setTimeout(done, 10));
+        } finally {
+            globalThis.document = saved;
+        }
+        eq(added, [], 'the form was bound after it was torn down');
+    });
+
     const StoreLocks = require('../src/background/store-locks.js');
     /** A runtime port's two ends, each delivering to the other a task later, as Chrome's do. */
     function portPair(name) {
