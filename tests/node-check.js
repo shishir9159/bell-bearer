@@ -3746,6 +3746,21 @@ check('firefox is asked for no older version than the page-world scripts run on'
     const floor = Number(JSON.parse(readRepo('manifest.firefox.json')).browser_specific_settings.gecko.strict_min_version.split('.')[0]);
     assert(floor >= 128, `firefox ${floor} has no MAIN world`);
 });
+check('the test server answers with the extension’s own files alone, and a bad address cannot throw', () => {
+    // A sibling folder whose name began with this one's passed the
+    // startsWith test, and a malformed escape threw out of the handler.
+    const Serve = require('./serve.js');
+    const path = require('path');
+    eq(Serve.resolve('/tests/index.html'), path.join(Serve.ROOT, 'tests', 'index.html'));
+    eq(Serve.resolve('/tests/?suite=reader'), path.join(Serve.ROOT, 'tests', 'index.html'));
+    eq(Serve.resolve('/fonts/Fraunces.woff2'), path.join(Serve.ROOT, 'fonts', 'Fraunces.woff2'));
+    for (const url of ['/..%2fbell-bearer-before-rewrite.bundle', '/..%2f..%2fWindows%2fwin.ini', '/%2e%2e%2fbell-bearer-old%2fx.js', '/%E0%A4%A',
+        '/.git/config', '/.github/workflows/ci.yml', '/.claude/settings.json', '/fix.md', '/README.md', '/a%00.js', '/dist/x.zip']) {
+        eq(Serve.resolve(url), null, url);
+    }
+    eq(Serve.HOSTS, ['127.0.0.1', '::1'], 'it answers other machines');
+    assert(readRepo('tests/serve.js').includes('.listen(PORT, host,'), 'it listens on every interface');
+});
 check('typeracer needs no page-world script, and has not grown one', () => {
     // chess.com and LeetCode each need one because the board object and
     // window.fetch only exist in the page's world. Keystrokes are DOM events,
