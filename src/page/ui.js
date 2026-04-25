@@ -18,10 +18,24 @@
 
     // ------------------------------------------------------------- modals
 
+    const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), '
+        + 'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    /** The dialogs open, the newest last: only that one answers a key. */
+    const stack = [];
+    let made = 0;
+
     /**
      * Open a modal built from `contentHtml`. Returns { element, close }; every
      * teardown path goes through the same close(), so the Escape listener is
      * always removed.
+     *
+     * A dialog to a keyboard and a screen reader as much as to a pointer. It
+     * had no name, focus stayed on the button behind it, and Tab walked out
+     * into the page, which went on taking clicks and keys: a confirm could be
+     * answered by pressing a button it was asking about. So it is named by
+     * its heading and described by its message, the page behind it is inert
+     * until it closes, Tab goes round inside it, and focus goes back to what
+     * had it. A live region is left alone, so a toast is still read out.
      */
     function openModal(contentHtml, { onClose } = {}) {
         const modal = document.createElement('div');
@@ -29,18 +43,50 @@
         modal.setAttribute('role', 'dialog');
         modal.setAttribute('aria-modal', 'true');
         modal.innerHTML = `<div class="import-modal-content">${contentHtml}</div>`;
+        const id = `bb-modal-${++made}`;
+        const heading = modal.querySelector('h1, h2, h3');
+        if (heading) {
+            heading.id = heading.id || `${id}-title`;
+            modal.setAttribute('aria-labelledby', heading.id);
+        }
+        const message = modal.querySelector('.modal-message');
+        if (message) {
+            message.id = message.id || `${id}-message`;
+            modal.setAttribute('aria-describedby', message.id);
+        }
+
+        const opener = document.activeElement;
+        const behind = Array.from(document.body.children).filter((node) => !node.inert && !node.hasAttribute('aria-live'));
+        // A group of radio buttons is one stop, its checked one, as Tab treats it anywhere else.
+        const otherRadio = (node) => node.type === 'radio' && !node.checked &&
+            !!modal.querySelector(`input[type="radio"][name="${CSS.escape(node.name)}"]:checked`);
+        const focusables = () => Array.from(modal.querySelectorAll(FOCUSABLE)).filter((node) => !node.hidden && !otherRadio(node));
 
         let closed = false;
         const close = (result) => {
             if (closed) return;
             closed = true;
             document.removeEventListener('keydown', onKeyDown, true);
+            stack.splice(stack.indexOf(modal), 1);
+            behind.forEach((node) => { node.inert = false; });
             modal.remove();
+            if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
             if (onClose) onClose(result);
         };
 
         function onKeyDown(event) {
-            if (event.key === 'Escape') close(undefined);
+            if (stack[stack.length - 1] !== modal) return;
+            if (event.key === 'Escape') {
+                close(undefined);
+                return;
+            }
+            if (event.key !== 'Tab') return;
+            const items = focusables();
+            const at = items.indexOf(document.activeElement);
+            event.preventDefault();
+            if (!items.length) return;
+            const next = event.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at < 0 || at === items.length - 1 ? 0 : at + 1);
+            items[next].focus();
         }
 
         modal.addEventListener('click', (event) => {
@@ -48,10 +94,15 @@
         });
         document.addEventListener('keydown', onKeyDown, true);
         document.body.appendChild(modal);
+        stack.push(modal);
+        behind.forEach((node) => { node.inert = true; });
 
         modal.querySelectorAll('.import-modal-close').forEach((button) => {
             button.addEventListener('click', () => close(undefined));
         });
+        // Where to start: what the dialog marks, or the first thing in it.
+        const start = modal.querySelector('[data-autofocus]') || focusables()[0];
+        if (start) start.focus();
 
         return { element: modal, close };
     }
@@ -64,7 +115,7 @@
                 <p class="modal-message">${Dom.escapeHtml(message)}</p>
                 <div class="import-modal-buttons">
                     <button id="bb-confirm-yes" class="btn-primary${danger ? ' btn-danger' : ''}">${Dom.escapeHtml(confirmLabel)}</button>
-                    <button class="import-modal-close">${Dom.escapeHtml(cancelLabel)}</button>
+                    <button class="import-modal-close"${danger ? ' data-autofocus' : ''}>${Dom.escapeHtml(cancelLabel)}</button>
                 </div>`, { onClose: (result) => resolve(result === true) });
 
             modal.element.querySelector('#bb-confirm-yes').addEventListener('click', () => modal.close(true));
