@@ -1,8 +1,11 @@
 name: CI
 
+# Pull requests too: run only on pushes to master, a change was checked after
+# it had already landed.
 on:
   push:
     branches: [master]
+  pull_request:
 
 permissions:
   contents: read
@@ -20,3 +23,31 @@ jobs:
           package-manager-cache: false
       - name: Run pure-logic and load-order checks
         run: node tests/node-check.js
+
+  browser:
+    name: Browser suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Run tests/index.html in headless Chrome
+        run: node tests/run-browser.js index.html
+
+  package:
+    name: Packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Pack for Chrome, checking everything the manifest names is in it
+        run: node tools/pack.js
+      - name: Pack for Firefox
+        run: node tools/pack.js --firefox

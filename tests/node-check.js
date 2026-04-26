@@ -3759,7 +3759,7 @@ check('the test server answers with the extension’s own files alone, and a bad
         eq(Serve.resolve(url), null, url);
     }
     eq(Serve.HOSTS, ['127.0.0.1', '::1'], 'it answers other machines');
-    assert(readRepo('tests/serve.js').includes('.listen(PORT, host,'), 'it listens on every interface');
+    assert(readRepo('tests/serve.js').includes('.listen(port, host,'), 'it listens on every interface');
 });
 check('typeracer needs no page-world script, and has not grown one', () => {
     // chess.com and LeetCode each need one because the board object and

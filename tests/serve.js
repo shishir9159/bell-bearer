@@ -64,18 +64,20 @@ function handle(req, res) {
     });
 }
 
-function start() {
-    for (const host of HOSTS) {
+/** Listen on this machine's loopback addresses; the servers, for tests/run-browser.js to close. */
+function start(port = PORT, { quiet = false } = {}) {
+    return HOSTS.map((host) => {
         const server = http.createServer(handle);
         server.on('clientError', (_, socket) => socket.destroy());
         // A machine without IPv6 has no ::1 to listen on; 127.0.0.1 serves alone.
         server.on('error', (error) => { if (host === '127.0.0.1') throw error; });
-        server.listen(PORT, host, () => {
-            if (host === '127.0.0.1') console.log(`bell-bearer: serving ${ROOT} at http://localhost:${PORT}/tests/`);
+        server.listen(port, host, () => {
+            if (host === '127.0.0.1' && !quiet) console.log(`bell-bearer: serving ${ROOT} at http://localhost:${port}/tests/`);
         });
-    }
+        return server;
+    });
 }
 
 if (require.main === module) start();
 
-module.exports = { ROOT, TYPES, HOSTS, resolve };
+module.exports = { ROOT, TYPES, HOSTS, resolve, start };
