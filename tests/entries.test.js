@@ -4,7 +4,7 @@
  * that reaches for another site's module throws on that site alone, which the
  * other specs, loading everything at once, never see. A site switched off
  * gets the core list alone. Over file:// the manifest cannot be read, and
- * these pass without checking.
+ * these are skipped, saying so; serve the repo to run them.
  */
 (function () {
     'use strict';
@@ -25,7 +25,10 @@
         chess: 'src/content/chess.js', lichess: 'src/content/chess.js', leetcode: 'src/content/leet-ui.js',
         typeracer: 'src/content/typeracer-ui.js', chatgpt: 'src/content/chat-ui.js', claude: 'src/content/chat-ui.js',
         netflix: 'src/content/netflix-ui.js', wikipedia: 'src/content/wiki-read.js',
+        github: 'src/content/ci-watch.js', gitlab: 'src/content/ci-watch.js', forgejo: 'src/content/ci-watch.js',
+        vimeo: 'src/content/vimeo-download.js',
     };
+    const SERVE = 'the manifest is read over http: run node tests/serve.js';
 
     /** Every isolated-world entry, with the sites in `off` switched off. */
     async function entries(off = []) {
@@ -78,7 +81,7 @@
     suite('content script entries — each boots on its own', () => {
         for (const site of ['other', ...Object.keys(MARKS)]) {
             test(`a ${site} page`, async () => {
-                if (location.protocol === 'file:') return; // reading ../manifest.json needs http
+                if (location.protocol === 'file:') skip(SERVE);
                 const entry = await entryFor(site);
                 assert(entry, `no entry loads ${MARKS[site]}`);
                 const { booted, errors } = await boot(entry, site);
@@ -91,7 +94,7 @@
     suite('a site switched off — boots as any other page', () => {
         for (const site of Object.keys(MARKS)) {
             test(`a ${site} page, switched off`, async () => {
-                if (location.protocol === 'file:') return; // reading ../manifest.json needs http
+                if (location.protocol === 'file:') skip(SERVE);
                 const entry = (await entries([site])).find((one) => one.id === 'bb-plain');
                 assert(entry && !entry.js.includes(MARKS[site]), 'its own files are still registered');
                 const { booted, errors } = await boot(entry, site);

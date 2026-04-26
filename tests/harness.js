@@ -24,6 +24,14 @@
     };
 
     class AssertionError extends Error {}
+    class Skipped extends Error {}
+
+    /**
+     * A test that cannot run here says so, and is counted as skipped. A
+     * return in its place counted as a pass: over file:// every entry spec
+     * passed without having loaded anything.
+     */
+    window.skip = function (why) { throw new Skipped(why); };
 
     function fail(msg) { throw new AssertionError(msg); }
     const prefix = (msg) => (msg ? msg + ': ' : '');
@@ -61,6 +69,7 @@
         const results = [];
         let passed = 0;
         let failed = 0;
+        let skipped = 0;
 
         for (const s of suites) {
             for (const t of s.tests) {
@@ -72,6 +81,11 @@
                     results.push({ suite: s.name, name: t.name, ok: true, ms: performance.now() - started });
                     passed++;
                 } catch (e) {
+                    if (e instanceof Skipped) {
+                        results.push({ suite: s.name, name: t.name, skipped: true, detail: e.message });
+                        skipped++;
+                        continue;
+                    }
                     results.push({ suite: s.name, name: t.name, ok: false, detail: (e && e.message) || String(e) });
                     failed++;
                 }
@@ -86,18 +100,19 @@
                 lastSuite = r.suite;
             }
             const slow = r.ok && r.ms > 900 ? `  (${Math.round(r.ms)}ms)` : '';
-            lines.push((r.ok ? '  PASS  ' : '  FAIL  ') + r.name + slow);
+            lines.push((r.skipped ? '  SKIP  ' : r.ok ? '  PASS  ' : '  FAIL  ') + r.name + slow);
             if (!r.ok) lines.push('        ' + r.detail);
         }
         lines.push('', '='.repeat(52));
-        lines.push(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green'));
+        lines.push(`${passed}/${passed + failed} passed` + (failed ? `  (${failed} FAILED)` : '  — all green')
+            + (skipped ? `, ${skipped} skipped` : ''));
 
         const text = lines.join('\n');
         if (outEl) {
             outEl.textContent = text;
             outEl.className = failed ? 'failed' : 'passed';
         }
-        window.__testResults = { passed, failed, text };
+        window.__testResults = { passed, failed, skipped, text };
         return window.__testResults;
     };
 
