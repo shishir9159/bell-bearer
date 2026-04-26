@@ -197,7 +197,9 @@
     function mockFetch(url, opts) {
         state.fetchCalls.push({ url, opts });
         if (state.failFetch) return Promise.reject(new Error('connection refused'));
-        return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+        // An HTTP status other than 200, for a server that answers with an error.
+        const status = state.fetchStatus || 200;
+        return Promise.resolve({ ok: status < 300, status, text: () => Promise.resolve('') });
     }
 
     window.chrome = chrome;
@@ -221,6 +223,7 @@
             state.alarms = {};
             state.created = [];
             state.failFetch = !!opts.failFetch;
+            state.fetchStatus = opts.fetchStatus || 0;
             state.moveErrorsRemaining = opts.moveErrorsRemaining || 0;
             chrome.tabGroups = opts.tabGroups;
         },

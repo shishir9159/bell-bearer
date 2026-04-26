@@ -58,6 +58,23 @@ suite('background: sowon focus reporting', () => {
         await M.settle();
         assert(M.state.fetchCalls.length <= 4, `kept hammering localhost: ${M.state.fetchCalls.length} attempts`);
     });
+
+    test('an error from sowon is not taken as delivered: it goes again, and once through is not repeated', async () => {
+        // A 503 counted as sent, and the same report was never sent again.
+        window.BB.Sowon.forget();
+        M.reset({ tabs: tabAt('https://ziglang.org/learn/'), fetchStatus: 503 });
+        await integration(true);
+        M.fire.activated(1, 100);
+        await M.settle();
+        assertEqual(M.state.fetchCalls.length, 1);
+        M.state.fetchStatus = 0;
+        await M.settle(window.BB.Sowon.RETRY_MS + 300);
+        assertEqual(M.state.fetchCalls.length, 2, 'the failed report was not sent again by itself');
+        M.fire.activated(1, 100);
+        await M.settle(200);
+        assertEqual(M.state.fetchCalls.length, 2, 'a report that went through was sent twice');
+        window.BB.Sowon.forget();
+    });
 });
 
 suite('background: copy-as-Markdown context menus', () => {

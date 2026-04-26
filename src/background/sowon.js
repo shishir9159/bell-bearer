@@ -26,11 +26,16 @@
 
     const MAX_FAILURES = 3;
     const BACKOFF_MS = 60000;
+    /** A report not answered in this long has failed: a sowon that hangs must not hold the next one. */
+    const REQUEST_MS = 3000;
+    /** A failed report is sent again by itself this long after, times the failures so far, until the back-off takes over. */
+    const RETRY_MS = 1000;
 
     let failures = 0;
     let nextAttempt = 0;
     let lastRun = 0;
     let trailingTimer = 0;
+    let retryTimer = 0;
 
     /** Skip a report identical to the last one that actually went out. */
     let lastSent = '';
@@ -83,20 +88,44 @@
         const signature = `${group}\u0000${tab.title}\u0000${domain}`;
         if (signature === lastSent) return;
 
+        const abort = new AbortController();
+        const timeout = setTimeout(() => abort.abort(), REQUEST_MS);
+        let delivered = false;
         try {
-            await fetch(FOCUS_URL, {
+            const response = await fetch(FOCUS_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/grpc-web+proto',
                     'X-Grpc-Web': '1',
                 },
                 body: encodeFocusUpdateFrame(group, tab.title, domain),
+                signal: abort.signal,
             });
+            // An answer is not a delivery. A 404 or a 503 used to count as
+            // one — and, being the last thing sent, kept the same report from
+            // ever going again — and so did gRPC's own refusal, which comes
+            // back as HTTP 200 with a status other than 0 in its header.
+            const status = response.headers && response.headers.get ? response.headers.get('grpc-status') : null;
+            delivered = !!response.ok && (status === null || status === '0');
+        } catch (_) {
+            delivered = false;
+        } finally {
+            clearTimeout(timeout);
+        }
+        if (delivered) {
             failures = 0; // sowon is up — resume the normal cadence
             lastSent = signature;
-        } catch (_) {
-            failures++;
-            nextAttempt = Date.now() + BACKOFF_MS;
+            return;
+        }
+        failures++;
+        nextAttempt = Date.now() + BACKOFF_MS;
+        // Again by itself, a few times, rather than waiting for the next
+        // tab switch to happen to go: what is on screen may not change for an hour.
+        if (failures < MAX_FAILURES && !retryTimer) {
+            retryTimer = setTimeout(() => {
+                retryTimer = 0;
+                send();
+            }, RETRY_MS * failures);
         }
     }
 
@@ -134,5 +163,5 @@
         chrome.tabGroups.onUpdated.addListener(reportFocus);
     }
 
-    globalThis.BB.Sowon = { report: reportFocus, FOCUS_URL };
+    globalThis.BB.Sowon = { report: reportFocus, FOCUS_URL, RETRY_MS, forget: () => { failures = 0; nextAttempt = 0; lastSent = ''; } };
 })();
