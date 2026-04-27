@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "bell bearer",
   "version": "1.0",
-  "description": "bell bearer",
+  "description": "YouTube checkpoints and a transcript reader, daily site limits, chat prompt queues, watch parties and reading tools.",
   "browser_specific_settings": {
     "gecko": {
       "id": "bell-bearer@example.com",
