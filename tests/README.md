@@ -7,6 +7,7 @@ driven by real events.
 | --- | --- |
 | `node tests/node-check.js [word]` | Pure logic, in seconds. Run it on every change; `word` keeps only sections whose name has it |
 | `tests/index.html` | The browser suite. Run it before committing |
+| `node tests/installed.js` | The extension installed in a throwaway headless Chrome: its site scripts registered, switched off, refused, and still there after the worker is stopped and the extension reloaded |
 | `node tests/run-browser.js [page…]` | The browser suite in headless Chrome, as CI runs it; `SIZE=344x550` for a narrow window, `CHROME=<path>` where Chrome is elsewhere |
 | `node tests/serve.js` | Serves the repo at <http://localhost:5601/tests/> when `file://` loads are blocked. `entries.test.js` needs it, and over `file://` its specs say SKIP |
 

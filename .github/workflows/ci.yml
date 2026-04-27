@@ -36,6 +36,8 @@ jobs:
           package-manager-cache: false
       - name: Run tests/index.html in headless Chrome
         run: node tests/run-browser.js index.html
+      - name: Install the extension, then stop its worker and reload it
+        run: node tests/installed.js
 
   package:
     name: Packages
